@@ -1,0 +1,3465 @@
+# Производительность ay: принципы, рычаги, история
+
+## Зачем этот текст
+
+ay строит граф сборки за доли секунды там, где ymake тратит секунды. Это не следствие одного трюка, а сумма нескольких сотен решений, принятых с мая по август 2026 года, каждое из которых проверялось измерением на реальных графах и байт-точным гейтом. Позже, с сентября, модельная работа (парити с ymake) шла без перф-контроля, и к концу октября Go-часть генерации devtools/ya/bin стала медленнее почти втрое по user CPU (0.16 s → 0.46 s при том же графе). Чтобы такое не повторялось и чтобы ускорение можно было вернуть осмысленно, здесь собрано всё, что мы знаем о производительности ay.
+
+Текст составлен по истории master до 2026-09-01: 2313 коммитов, из них 738 признаны перф-рычагами (612 действуют, 85 заменены более поздними, 26 отвергнуты измерением, 15 откачены). Полный машиночитаемый каталог — `dev/perf_levers.jsonl`, одна строка на рычаг: коммиты, категория, место, механизм, эффект, статус. Приложение в конце — развёртка того же каталога по категориям в хронологии; это сводки, собранные агентами по телам коммитов и диффам, числа в них цитируются как есть.
+
+Что мы оптимизируем: **user CPU генерации графа** (`ay make -j 0` без `-G`, то есть без сериализации). Не wall-clock: wall легко спрятать за параллелизмом и overlap'ом (prewarm и подобное запрещены сознательно), а CPU — нет. Память оптимизируется как второй критерий (max-rss, total alloc), и только там, где это не стоит CPU.
+
+Эталонные кейсы в истории: tools/archiver (M1, ~3.7k узлов), devtools/ymake/bin (M3, ~8.8k), devtools/ya/bin (sg3, ~14.6k), ydb/apps/ydbd (sg5, ~22k CC-узлов), yabs/server/daemons/bs_static (~71k узлов). Когда ниже стоит число без кейса — оно из коммита, и кейс указан в приложении.
+
+---
+
+## Часть I. Принципы, на которых держится perf
+
+Эти семь правил — не стиль, а инварианты: нарушение любого из них в одном месте откатывает выигрыш, достигнутый в десятках других.
+
+### 1. Одна вселенная идентификаторов
+
+Каждая строка, с которой работает генератор, интернируется один раз в append-only таблицу и дальше существует как `STR` — плотный `uint32`. Все остальные типы — оверлеи над той же таблицей:
+
+- `VFS = rel-STR<<1 | root` — путь с битом корня ($(S)/$(B)) в младшем разряде. Младший бит, а не старший: так id остаются плотными в `[0, 2·len(strs))`, и любой id-индексируемый массив (IdSet, Tarjan scratch, DenseMap) адресуется напрямую. Проверка корня — голый бит-тест, без чтения таблицы.
+- `ARG`, `ENV`, `TOK` — флаги компилятора, имена переменных, имена макросов; конверсия в `STR` — загрузка из массива.
+- `ANY = STR<<1 | VFS<<1|1` — тегированный токен команды: JSON-писатель и uid знают, что рендерить как путь, а что как строку.
+
+Следствия. Любая структура ключуется id, не строкой. Сравнение — целочисленное. Строка материализуется ровно на стоках: JSON, uid-preimage (и там не строка, а 8-байтовый xxh3-lo из таблицы), exec. Границы, где строка превращается в id, — только парсинг (лексер ya.make, парсеры include, конфиг платформы). Там, где нужна только проверка «есть ли такая строка», используются lookup-only пробы (`interned*`, `internedV`), которые не вставляют фантомов: однажды eager-индекс всех префиксов путей добавил в таблицу миллион несуществующих композитов.
+
+Констант в теле функций нет: `ay dev refac consts` выносит все `intern("...")`/`source("...")`/`build("...")` литералы в `*_consts.go`, где они интернируются один раз при инициализации. Счётчик размера таблицы (strs/args/envs) служил детектором регрессий: каждый id-рефакторинг отчитывался дельтой.
+
+### 2. Single-writer intern и lock-free чтение
+
+Таблица пишется только потоком генерации, без блокировок. Это названо в истории «самой важной оптимизацией»: глобальный лок сериализовал бы ~850k обращений за прогон. Executor никогда не интернирует (он резолвит пути из строк), а параллельные читатели (uid-воркеры) ходят через `PageVec` — страницы фиксированного массива, которые никогда не переезжают. Для самого генератора при этом сохранён плоский массив ячеек: страничный доступ стоил +1.5% wall.
+
+Измерение, которое определило архитектуру: интернирование на 84% происходит в эмиссии (пути выходов, токены команд), а не в сканере (16%). Поэтому «заморозить таблицу после скана и параллельно эмитить только чтениями» невозможно; параллельная генерация потребовала бы локальных интернеров с отложенной канонизацией, и до этого не дошли.
+
+### 3. Контекстно-независимый парс-кеш
+
+Файл читается, парсится и резолвится **ровно один раз за прогон**, и результат (список директив, разрешённые дети, окно замыкания) ключуется только файлом — никаким scan-context, модулем или компилируемым корнем. Это зеркало ymake (`OnceProcessedAsFile`, `TParsersCache`): первый достигший файла контекст резолвит его, все последующие пользуются готовым.
+
+Это дало крупнейшие выигрыши в истории (sg5: 2m53 → 40 s → 11 s), и за это же платится дисциплиной порядка. Кеш нельзя «починить» задним числом: если сосед обошёл заголовок до того, как его сгенерированный выход зарегистрирован, в кеше навсегда останется пустое «не найдено». Поэтому все codegen-выходы модуля регистрируются в реестре **до** любого обхода замыканий (register-then-walk, двухфазная эмиссия flatc/bison/proto/cython), а фильтрованные обходы (например, pyx-only) не пишут в кеш окон. Попытка добавить scan-context в ключ, чтобы «исправить» расхождение, была задокументирована как неверное решение: она схлопывает кеширование.
+
+### 4. Дедуп обязан доказываться
+
+Любой `dedup`, `filter`, `seen`-набор живёт только если на корпусе гейта он реально что-то удаляет. Проверка стандартна: пробой-счётчик или `panic`-on-drop на гейте, затем снос всех сайтов, где ничего не сработало. Так ушли: dedup+sort deps на каждой ноде (62 MB churn), `dropOwnOutputs` (169k проб — сайт №1 по мапам), `resolveCodegenDepRefsExcl` (refsDropped=0 на всех 8 кейсах), per-stmt dedup PEERDIR, парсерный dedup директив, десятки одиночных `dedupVFS` над свежими окнами. Там, где dedup нужен (cython CY: 7481 → 1263), это измерено и записано.
+
+Причина не только в CPU дедупа: dedup — полный материализующий проход по спискам в тысячи элементов и мешает zero-copy (чанки). Единственный законный дедуп на стоке — нормализатор, который и так сортирует и схлопывает inputs.
+
+### 5. Арены для долгоживущего, скретч для короткоживущего, идиома fill→commit
+
+Всё, что живёт до конца прогона — Node, его слайсы (Cmds, Env, Outputs, DepRefs, Inputs, чанки), AST ya.make, записи реестра codegen, директивы, байты интернированных строк — лежит в bump-аренах (`BumpAllocator[T]`, chunk ~2 MB по байтам, растёт с 128 элементов). Проверяется в рантайме: `AY_DEBUG_OWNERSHIP` сверяет backing каждого Node-слайса с зарегистрированными диапазонами арен и глобалов; 0 нарушений на всех кейсах.
+
+Идиома заполнения: `block := arena.alloc(hint)` → писать в `block[k]` → `arena.commit(k)`. Никаких «собрать во временный слайс и скопировать точно». Strict-режим аллокатора ловит вложенный alloc при открытом окне (реентерабельные fill'ы из pending-эмиттеров).
+
+В арену нельзя аппендить: `append` в арена-слайс однажды переписал соседние аллокации и подменил флаг чужого модуля (поймано гейтом). Поэтому результаты, к которым потребитель может аппендить, отдаются cap-clamped (`s[:k:k]`), а защитные клампы на read-only результатах, наоборот, сняты как лишние.
+
+Короткоживущее — в reused скретчах: один буфер чтения FS (553 → 7 MB churn), per-scanner скретчи резолва, пулы Parser/Lexer/EnvStore/ScanCtx, пул ModuleData по глубине рекурсии с генерированным capacity-preserving `reset()`.
+
+### 6. Порядок inputs не несёт смысла
+
+Нормализатор сортирует inputs/deps/tags, гейт сравнивает нормализованное. Отсюда свобода: замыкания хранятся бакетами, uid считается мультимножественным хешем (сумма/xor/квадраты), а не сортировкой; сортировки на стороне генератора удалены как мёртвые. Исключения, где порядок значим и это записано: `-I` на командной строке CC (порядок видов пиров), порядок линковки (SliceCache хеширует с сохранением порядка), члены AR (StatementPriority).
+
+### 7. Мерить end-to-end, решать по числам
+
+Протокол: 10 прогонов эталонного кейса без `-G`, слитый CPU-профиль (`go tool pprof` суммирует несколько профилей), interleaved A/B в одной сессии, затем байт-точный гейт. Батчевый шум ±100–200 ms на 10 прогонов задаёт порог «ниже разрешения». Для памяти доверять max-rss и total alloc, не inuse-at-exit (±12 MB между прогонами). `dev/perf.py` сравнивает два бинаря по `instructions:u` с перестановочным тестом; `dev/perf_history.py` прогоняет каждый коммит диапазона против родителя.
+
+Микробенчи вводят в заблуждение: SoA-переписывание IntMap давало 1.46× в микробенче и ноль на sg5 (ключ и значение разошлись по двум кеш-линиям). Решает число проб (probe count), дизассемблер (зависимые перезагрузки инвариантов в цикле) и профиль, а не рассуждение о кешах: битсет «плотнее IdSet» оказался на 34% медленнее, bulk-splice «без проверок» перенёс стоимость из `has` в `memmove`.
+
+---
+
+## Часть II. Рычаги по областям
+
+### 1. Алгоритмы: убрать работу, а не ускорить её
+
+Самые крупные выигрыши в истории — не микрооптимизации, а исчезновение целых классов работы.
+
+**Сложность.** Heap-Kahn вместо O(N²) топосорта (28.3 → 11.8 s); Tarjan SCC для замыканий вместо повторных обходов «заражённых» подграфов (dfsID 55.5M → 347k); memo генерации модуля по ModuleInstance, где исправление асимметрии ключа (seed vs post-overlay FlagSet) дало 14× (28 s → 2.19 s — модули пересчитывались 7–138 раз).
+
+**Индексы вместо проб.** Поиск заголовка по ADDINCL-путям перебирал ~54 префикса на цель (3.6M map-lookup'ов на 67k промахов). Инвертированный глобальный индекс target → каталоги, которые физически содержат файл, строится один раз на каталог и пересекается с рангами конфигурации. Два промежуточных варианта отвергнуты: per-file (мало промахов на файл, не амортизируется) и per-config (470 MB перестраивалось на каждую конфигурацию). Тот же приём для sysincl: один header-first индекс для всех записей заменил перебор ~33 includer-записей и инлайн-скан source-записей (683k map-ops, 23% прогона).
+
+**Префильтры и гейты.** Битсет «может ли sysincl вообще претендовать на этот заголовок» отсёк 87% lookup'ов. First-component фильтр: `<prefix>/<target>` может существовать только если первая компонента target есть в уже закешированном листинге prefix — проверка без конкатенации. Регекс-фильтры sysincl приведены к `HasPrefix`/`Contains`/литеральным альтернативам через разбор `regexp/syntax` AST (MatchString 0.15 → 0.03 s).
+
+**Прекомпьют по уровню владения данными.** Платформенно-постоянное считается в `NewPlatform` (IF-env, StatsTags, CCHead, флаги отладки, tool env, resource vectors); модульно-постоянное — один раз на модуль (блоки -I/флагов, protoc/objcopy/AR-головы, ScanContext); постоянное — при init (списки runtime-заголовков protobuf, константные спаны команд). Правило: работа выполняется на том уровне, где меняются её входы, и ни разу ниже.
+
+**Удалённые пассы.** Агрегация header-замыканий членов в inputs AR/LD (нормализатор всё равно оставляет только объекты); per-node скан inputs на wrapper-скрипты (17% CPU, ~1 GB churn → таблица замыканий скриптов, append по месту); per-node скан argv на паттерны ресурсов (`strings.Contains` × паттерны → декларация у строителя команды); второй collect PROTO_LIBRARY; предпарс каждого пира для определения языка (880 ms, 9.6% → reentry genModule с исправленным вариантом); eager-эмиссия всех producer'ов (PendingEmit: продюсер эмитится по первому use; demand-sliced: недемандированные пиры не генерируют компилы).
+
+**Антирычаги (измерены).** Roaring-битсеты для замыканий: +30% wall (замыкания разрежены в id-пространстве, контейнеры деградируют в sorted arrays). Плотный битсет на замыкание: 2.6 GB. Замыкание как DAG ссылок на детей: выигрывает только при fan-out < 2.46, реальный 5–30. Регекс-рескан boost-макросов: 5.8 → 61 s. Starlark front-end: 6–7× медленнее нативного парсера.
+
+### 2. Контейнеры
+
+Правило выбора: плотный id → `DenseMap` / `BitSet` / `TwoBitSet` / `IdSet`; равномерный 64-битный хеш → identity-hashed `IntMap` / `IntValueMap` / `IntSet`; Go `map` остаётся только на холодных путях; строковых ключей нет.
+
+- **DenseMap[K~uint32, V]**: массив `idx` по ключу хранит 1-based слот в компактном массиве значений. Lookup — bounds check и две загрузки, без хеширования. Codegen-реестр (0.15 → 0.02 s на lookup), scanCache (две мапы → одна, map-runtime 15.6% → 11.5%), dir cache, parsed cache, addinclIndex, memo `-I`-строк (1M проб). Несколько колонок с независимым присутствием делят один `idx` (`DenseMapN`, генератор `dev/gen_densemap.py`).
+- **IdSet (epoch-stamped)**: `gen[id]==epoch` вместо хеша; `reset()` — инкремент эпохи. Основа visited-наборов DFS и splice замыканий. u16-штампы (reset'ов ~4000 ≪ 65536) и STR-ключ вдвое уменьшают массив. Геометрический рост при reset вместо точного — 3.09 GB (34% аллокаций) исчезли.
+- **DeDuper**: один глобальный epoch-набор для всех dedup-проходов, scoped (`dedupers.with`), только leaf-использование: reset → scan → return. Никогда не удерживается через рекурсию genModule (глубина живых дедуперов 34 → 3; > 2 = panic). Пришёл на смену сотням `map[VFS]struct{}` (826k проб, 12.5 MB churn на модуль).
+- **BitSet/TwoBitSet**: set-once членство и first-touch memo (ciMemo, strHasDollar, srcExtClass: 2 бита на id, первый touch платит строковую проверку). Но в горячем splice битсет **медленнее** IdSet (+34%): shift/and/test на пробу и RMW на add против одной записи эпохи; рабочее множество IdSet уже кеш-резидентно.
+- **IntMap/IntValueMap/IntSet**: open addressing, `key & mask`, без перемешивания. Ключ обязан быть равномерным: xxh3-hi для intern-таблицы (1.76 пробы), `splitMix64(a<<32|b)` для пар id. Morton-interleave — биекция, но не хеш: над плотными последовательными id давал 364 пробы на Get (231M проб); splitmix64 → 1.66 (IntMap.Get 1380 → 550 ms). IntValueMap хранит индекс в таблице, значения — в боковом массиве (16-байтовые слоты вместо 40). IntSet пакует bool по биту (8.125 байта на слот).
+- **PageVec**: для shared-читателей; генератору — плоский массив. **Vec** с ростом 2× (append на 1.25× давал 5× churn на больших массивах).
+- **Darts** (double-array trie): longest-prefix match autoinclude (10 ns против 86 ns per-ancestor хеширования), ext dispatch.
+- **Typed struct вместо map**: KV/Requirements/TargetProperties/Env как структуры и слайсы (413k map-ops на uid-пути), KV.P/PC как uint8-enum.
+
+Антирычаги: `map[VFS]` со struct-ключом (+40% M3: generic `mapaccess2` вместо специализированного `faststr`; микробенч показывал +11%), `sync.Map`, packed-string ключи, STR-keyed dir cache (intern +35%, wall flat — урок: решает число проб, не дешевизна ключа), SoA split ячеек intern (две холодные линии), unsafe BCE в `PageVec.at` (+0.6%, шум; реальная цена — двойная индирекция), row-inline DenseMap2, pair-keyed dirEntryMap.
+
+### 3. Схема идентификаторов (подробности)
+
+- Второе id-пространство в сканере удалено: round-trip `vfsByID → Source()` стоил 1.5 GB — 97% всех аллокаций `Source()`. Один интернер для всего (sg5 alloc 4063 → 2489 MB).
+- Корень VFS в младшем бите: `Root()` был 2.6% flat (чтение `strs[id][2]`), стал бит-тестом (gen 3.02 → 2.86 s).
+- Границы интернирования сдвинуты к парсингу: токены лексера несут STR; макро-аргументы — `[]STR`/`[]ANY` (identity fast-path при отсутствии `$`); ModuleData целиком в STR-пространстве; флаги — ARG/ANY end-to-end (38 сайтов конверсий ушли); Environment — ENV-индексированные слайсы вместо трёх строковых мап (Clone был 15.5 MB churn; имена IF-переменных интернируются при парсе, вычисление условий не хеширует).
+- Константные значения env предынтернированы (strYes/strNo, intSTR[0..1023], per-platform ClangVer/BuildType): Environment была потребителем №1 internString (232k/прогон), стала нулевым.
+- Lookup-only пробы с 0-сентинелом (0 слот зарезервирован во всех id-пространствах): `interned`, `internedPrefixed`, `internedV`, `internedEnv`; `${VAR}`-экспансия не раздувает ENV-таблицу чужими токенами.
+- Не хранить полную форму `$(S)/rel`, где достаточно rel: CURDIR/BINDIR как `envVFS` с ленивым рендером (8.9k per-module interns, читаемых редко); пути тулчейна, скриптов, env-значений — VFS из rel.
+- `internV`/`build(a, "/", b)`: конкатенация прямо в арену интернера, хеш по месту, commit только на miss (−10% alloc_objects на 299 сайтах); lookup-only пробы строятся в незакоммиченном хвосте пула.
+
+### 4. Мемоизация
+
+Все кеши — pure-function по id и контекстно-свободны:
+
+- per-file: директивы, дети, окно замыкания, существование (один TwoBitSet на FS, общий для host/target — «и корректнее, и теплее»);
+- по паре id: `resolveSourceUnder(prefix, target)` (quoted-резолвы были 92% вызовов; listdir hits −53%, exists misses −77%), search-tier по (config, target), induced `.pb.h` по target, класс расширения по STR, `mightClaim`, `strHasDollar`;
+- per-module: ScanContext с хешем, посчитанным один раз при создании (не на каждый walk), `-I`-строки, PbModuleEmission/ObjcopyEmitCtx, yapyc-суффикс, тулчейн;
+- per-GenCtx: AST ya.make (каждый файл парсился 2.55 раза: target/host/варианты), module memo по path-id с короткой цепочкой вариантов.
+
+Снесённые как не окупающиеся: глобальный кеш полной формы VFS-строк (once-per-module строки), кеш codegen-deps по чанку, moduleTypeCache (заменён reentry), персистентный srchash.json (кеши между прогонами — отдельная тема, не решалась), sysincl class/result cache (снят ради простоты за +0.25 s, затем стоимость возвращена индексом).
+
+### 5. Замыкания include — ядро CPU сканера
+
+Эволюция представления: per-context subgraph cache → Tarjan SCC + глобальный per-file кеш → плоские окна `[]VFS` в bump-арене → subsumption при splice → 16 бакетов по `strID&15` с hash-consing → 1 build-бакет + 8 source-бакетов, splice напрямую в бакеты, hash-consed список бакетов.
+
+Рычаги, которые работают:
+- **Subsumption**: окна транзитивно замкнуты, поэтому если ребёнок уже в блоке, его окно — подмножество; одна проба `has(child)` вместо прохода по ~700 элементам. Поглощается 52.5% сплайсов, `dfs.func2` −40%. Листья (`ClosureLeaves`, не расширяемые члены) требуют страховки `leafEver`: присутствие листа не означает присутствия его окна.
+- **Splice-цикл по дизассемблеру**: хойст `gen`/`epoch` в локалы (компилятор не мог — запись `gen[id]` могла алиасить поля), без grow-fallback (callers presize к vfsBound) — −6.3% total.
+- **Hash-consing бакетов**: соседние замыкания вложены, малый дифф затрагивает немногие из 16 бакетов; 92.7M хранимых элементов → 17M уникальных (~370 → 80 MB); общий BucketCache для host и target (−34% уникальных).
+- **Build-leaf frontier** расширяет только собственные листья корня (дочерние уже в дочерних окнах): −2.2%.
+- **Потребители без flatten**: бакеты идут прямо в `Node.Inputs` как чанки (live heap −33%), dedup по бакетам, root-однородные бакеты классифицируются по первому элементу.
+- **Bulk-splice первого бакета** в пустой бакет-назначения (известно, что дизъюнктен) — копия блоком; при этом bulk-splice первого **окна** без проверок (`45f8b43`) отвергнут: стоимость переехала из `has` в `memmove`.
+
+Антирычаги: SIMD/prefetch/branchless в splice (латентность уже скрыта OoO, ветка предсказана), positional-16 direct build (+2.7…+21% — `windowSubsumed` заставляет идти children-outer), zero-copy intern бакетов (hit-rate высок, copy-on-miss дешевле записи в холодный пул), любое сжатие арены (read amplification 12.77×: +23…47% CPU).
+
+### 6. Churn аллокаций
+
+Кампания июня–июля снизила alloc_objects на bs_static с 3.13M до 1.40M, пользуясь точным профилем (`YATOOL_MEMPROFRATE=1`). Приёмы в порядке отдачи:
+
+1. Убрать работу (§1) и мёртвые dedup'ы (§4 принципов).
+2. Transient-конкатенация перед интернированием → `internV`/`sourceJoined`/`buildClean` строят прямо в арене (единственный крупный источник после п. 1).
+3. Reuse: один буфер чтения FS; per-scanner скретчи резолва; пулы Parser/Lexer/EnvStore/IncludeState/ScanCtx; ModuleData по глубине рекурсии; EmitContext-скретчи `[:0]`.
+4. Правильный размер: точный cap из pre-pass суммы (peer closures, `cmdArgs` — retained, поэтому slack = live RSS: 30% over-estimate); presize только при измеренном распределении (`parseStmts` cap 8 покрывает 91% — да; `parseMacroArgs` при 36% пустых — нет, регресс).
+5. Escape analysis: структуры по значению вместо `&x` в горячих вызовах (27k аллокаций на макро-стейтмент), `(STR, bool)`/0-сентинел вместо `*STR`, конкретный receiver вместо `io.Writer` (каждый `[4]byte` уходил в heap), `atomVal` вместо `any`, указатель на ModuleCompileEnv вместо копии структуры на каждый исходник.
+6. Aliasing вместо копии, когда источник fresh и потребитель read-only (Platform.Tags, поля результата genModule, `concat` одного непустого входа).
+7. Арены для всего retained (§5 принципов): Node structs (−72k), слайсы Node (826k → 707k), AST, реестр, директивы, байты строк (172k mallocs → 7 чанков).
+8. Hash-consing retained копий: `SliceCache` для полей ModuleEmitResult — 48 MB живого heap при ~7 MB уникального содержимого.
+9. Хойст константных слайсов (EnvVars, resource vectors, спаны аргументов) на package/platform.
+10. Мелочь: `slices.SortFunc` вместо `sort.Slice` (reflect Swapper), стековые буферы вместо `strings.Builder`/`fmt`, `strings.Cut` вместо `Split`, `bytes.IndexByte` вместо побайтового скана.
+
+Урок: flat-line prealloc часто просто переносит аллокацию к вызывающему через escape analysis (`depRefs` fast-path дал net-zero); выигрыш — в устранении transient'а, а не в его переносе.
+
+### 7. Строки против id (string views)
+
+Пробой `--probe=str` ранжировал места, где `STR.string()` вызывается в горячих путях; лечение — перенести строковый вывод за cache-hit gate (307k → 64k views в search tier), принимать id там, где caller его уже держит (137k round-trip'ов `id→string→id` в codegenUnder), сравнивать `==` вместо `.rel()`. Байтовое сканирование в парсерах без `string(line)`; `internBytes` для view'ов в reused буфер (`internStr` zero-copy на таком view — порча данных, поймано гейтом yamaker).
+
+### 8. Хеширование
+
+- uid: SHA-1 (19.6% flat) → xxh3-128 (−22% wall); токены в preimage — 8-байтовый `lo` из intern-таблицы, не байты строки; целочисленные append'ы как инлайн-сторы (memmove на каждые 8 байт); мультимножественный fold inputs (sum/xor/sq) вместо сортировки (40% executor CPU на no-op build); memo аккумулятора по `(ptr, len)` чанка.
+- Ключи пар id — `splitMix64`, не Morton; хеш ScanContext — цепочка `lo` через `mix64`, не FNV по байтам (580 ms → <60).
+- bucketHash: моментные схемы (Σv, Σv², ⊕v) оказались коллизионными ({512,672,832,992} vs {544,608,896,960}); итог — per-element `mix64` sum/xor с AVX2/AVX512 ядрами и overflow-таблицей для пар.
+- intern: xxh3-128 hi как ключ identity-мапы, lo — верификация и одновременно uid-хеш строки.
+
+### 9. IO и сисколлы
+
+Run-wide кеш листингов: `Exists` через листинг родителя (N stat → 1 readdir + N lookup); `DirView` над общим packed name store (имена интернируются один раз глобально). Сырые сисколлы без `os.File` (нет объекта, финализатора, poll.FD); `openat` от pinned root fd и кольца dir fd; `getdents64` в reused буфер, one-pass decode; чтение ровно stat-размера (минус EOF-read), затем фиксированный 1 MiB чанк + mmap хвоста (`readChunkSize` — часть формата content-hash). Файлы не читаются повторно: proto/ev imports из parse-cache, EN cross-deps из scanner-cache, CONFIGURE_FILE из бакета C-парсера. Антирычаги: кешировать размер файла в Listdir (`getdents64` не даёт размера — lstat на каждую запись), unsorted `ReadDir(-1)` (сортировка 0.2%).
+
+### 10. Парсинг
+
+'#'-anchored single-scan C-парсер: `IndexByte` прыгает к следующему `#` SIMD-шагами, директива — только если `#` первый не-ws байт строки вне `/* */`; 351 → 137 ms/pass на 897 MB (6.5 GB/s), байт-в-байт с прежним на 74k файлах. Остальные парсеры (yasm/swig/cython/flatc/proto/go) — байтовые, без regexp. Макро-include'ы boost ловятся в том же проходе и резолвятся через `sysincl/macro.yml` (не второй регекс-проход). Собственный потоковый парсер YAML-подмножества sysincl (yaml.v3 строил дерево: 137k аллокаций). Условия IF — плоский `[]CondNode` вместо дерева интерфейсов. Dedup одинаковых директив вводился и был снят: closure-слой и кеши резолва делают его лишним.
+
+### 11. Сборка команд и inputs
+
+`Node.Inputs` и `Cmd.CmdArgs` — списки чанков (`[][]VFS`, `[][]STR`): эмиттер отдаёт ссылки на общие блоки, никакого flatten/copy на пути генерации; флаттен — только в JSON/uid/exec. Блоки строятся у владельца данных: per-platform (`CCHead`, sysroot, wrapcc), per-module (`-I`-блок, флаги, хвосты c/cxx, protoc/objcopy/AR/yapyc головы), per-init (константные спаны flatc/ev/yasm/cython/antlr/ragel/swig/rodata). Per-node остаётся `[-c -o out] [in]` и per-source флаги (EmitCC: 50.9 → 24.8 MB). Модульные блоки флаттенятся один раз в мегачанки (заголовки `[]STR` 34.8 → 14.3 MB). Чанки root-однородны. Не применять к головам ≤ 3 токенов — overhead списка больше копии.
+
+### 12. UID и сериализация
+
+Ручной потоковый JSON-писатель вместо `json.Encoder` (300 → 50 ms на 63 MB); компактный JSON; per-STR кеш экранированной формы (`appendStringEscapedBody` был 27% CPU; sg5 3.25 → 2.18 s); `appendVFS` через кеш, не через `v.String()`. UID — 128-битное значение, base64 только на границе. UID вынесен из построения графа в executor и считается лениво по NodeRef; `-j 0` uid не считает. В preimage не входит то, чего нет в upstream self_uid (kv, requirements; stats_uid удалён). Deps не материализуются — читаются через paged vec по id.
+
+### 13. GC и runtime
+
+Для `-j 0` GC отключался (−19% user), для сборки — GOGC=400 (плато от 400); Codex в июле вернул политику runtime по умолчанию. Все июльские замеры памяти сняты при GC off; `dev/perf.py` по умолчанию ставит GOGC=off детям — A/B не видит GC-регрессий текущего бинаря. Pool hygiene: очищать только грязный префикс пулов с указателями, не `clear(s[:cap])` на каждый модуль.
+
+### 14. Executor (user time `ay make`, вне генерации)
+
+Uidization на одном event-loop потоке в порядке эмиссии, goroutine только на cache miss (тёплый no-op — ноль execution-горутин); батчевые посты с рампой 1 → 128 (futex на каждый узел → один на батч); hard-link из CAS (10 µs против 28 µs копии); O(1) rename в graveyard и фоновый сборщик; снимок uid-кеша вместо per-node stat; OAuth-токен через `sync.Once` и только для `sbr:`.
+
+---
+
+## Часть III. Тулинг
+
+Что есть в дереве:
+
+| Инструмент | Назначение |
+|---|---|
+| `YATOOL_CPUPROFILE`, `YATOOL_CPUHZ=1000` | CPU pprof на весь процесс; 1 ms разрешение; сливать 10 прогонов |
+| `YATOOL_MEMPROFILE`, `YATOOL_MEMPROFRATE=1` | точный alloc_objects по строкам |
+| `ay dev probe mapinstr` + `--probe=map` | AST-инъекция счётчиков на каждую индексацию/удаление в Go-мапах; tally reads/writes по месту — главный инструмент поиска лишних индексаций. Применять в worktree, откатывать |
+| `ay dev probe callsite` + `CALLSITE_OUT` | reachability функций на корпусе гейта → мёртвый код |
+| `AY_DEBUG_OWNERSHIP` | каждый Node-слайс в арене или зарегистрированном глобале; strict bump-window checker (alloc без commit) |
+| `AY_DEBUG_DEDUP` | живые дедуперы по месту захвата (вложенность, утечки через defer в циклах) |
+| `dev/cov_annotate.py` | never-executed строки по go-cover корпуса гейта (мёртвые guards/dedup) |
+| `ay dev refac consts / lint / reset / case`, `lint.sh` | интерн-константы, линтеры, capacity-preserving `reset()` |
+| `dev/gen_densemap.py` | генератор DenseMapN в build tree |
+| `ay dev perf parser / darts / buckethash / link` | микробенчи; валидировать только end-to-end |
+| `dev/perf.py` | paired A/B двух бинарей: `instructions:u`, перестановочный тест, group-sequential; CPU pinning |
+| `dev/perf_history.py` | per-commit A/B по диапазону истории |
+| `ay dev maxrss` | peak RSS поддерева процессов |
+| `ay make --stat` | длинные таски, critical path executor |
+
+Что было и удалено (`8495f62`, 2026-07-03, «debug-only counters polluted hot paths»): `--probe=str` (хук в `STR.string()`, ранжировал материализации строк), `YATOOL_PERF_STATS`/`SCANNER_STATS` (hit/miss сканера, FS, парсера, размеры intern-таблицы), `AY_CLOSURE_DUMP` + `dev perf merge`. Разовые пробы по месту вызова через `runtime.Caller` (normalisePath changed=0; dirKey 404k; internAppend full-form; anyList/chunkList callers; idle-call dedup; panic-on-drop) — паттерн, повторяемый по необходимости.
+
+---
+
+## Часть IV. Как искать регрессию
+
+1. `dev/perf_history.py` по диапазону на фиксированном дереве (например, yatool от 2026-08-11 для devtools/ya/bin): коммиты-ступени по `instructions:u`.
+2. 10× pprof старого и нового бинаря без `-G`; `go tool pprof -top -lines` до 90% cum; дифф: новые функции в топе, рост `mapaccess*`/`matchH2`, `growslice`/`memmove`/`mallocgc`, `gcBgMarkWorker` (GC теперь включён).
+3. `--probe=map` на текущем дереве: новые map-сайты в горячих путях; `grep 'map\['` по диффу подозрительного периода.
+4. alloc_objects: сравнить top-30 сайтов, искать новые grow-chains, `string(b)`, конкатенации перед intern.
+5. Размер intern-таблицы до/после (нужно вернуть счётчик).
+6. Ревью новых коммитов на нарушение принципов: scan-context в ключах кеша, парсинг вне кеша, dedup без доказательства, append в арену, строковые ключи, `intern(literal)` в теле функции, построение блоков per-node вместо per-module, flatten чанков, Go `map` на горячем пути.
+
+---
+
+## Приложение. Покоммитные сводки
+
+Ниже — все 738 рычагов из `dev/perf_levers.jsonl`, по категориям, в хронологии. Формат строки: дата, коммиты, статус (если не kept), название рычага @ место; затем механизм, эффект (числа цитируются из коммитов), заметки. Сводки собраны агентами по телам коммитов и диффам; для коммитов без тела (в основном Codex, июль) механизм восстановлен по диффу, эффект пуст.
+
+### Алгоритмические (68)
+
+- **2026-05-08** `7909c61` — literal-prefix fast path for sysincl source_filter regexes @ sysincl.go compileSourceFilter / extractLiteralAnchoredPrefix / filterAlt.matches  
+  Filter alts of shape ^literalChars (no RE2 metacharacters) store a literalPrefix and match with strings.HasPrefix instead of RE2 MatchString; a `.*` residual after a ^(?!P) lookahead leaves re nil so only the exclude prefixes apply. Loop over alts by index to avoid struct copies.  
+  Эффект: time ./yatool gen --target tools/archiver: 11.659s -> 11.027s avg (5.42% lift, >=5% gate met); covers 129/169 patterns in build/sysincl/*.yml  
+  Заметки: Regex compiled once at YAML load and nil-filter skip were already in place (options 1+2, preserved). Measured on a pre-PR-34b base.
+
+- **2026-05-08** `b64c10a` — heap-based Kahn topo-sort in Finalize @ emitter.go Finalize (topological order used for Merkle UID computation)  
+  Replaced the O(N^2) linear scan-for-min + slice-shift Kahn topo-sort (stable tie-break, introduced in PR-02 eec3578) with a container/heap min-heap, making the ordering O(N log N).  
+  Эффект: time ./yatool gen --target tools/archiver: 28.319s -> 11.848s (2.4x speedup; warm-cache 3-run avg); profiler: topo-sort took 17.4s of 28s gen time on N=235,257 buffered nodes  
+  Заметки: Output sha256 identical. N=235,257 buffered nodes reflects the pre-PR-34b memo amplification (real graph 3730 nodes). 54896fd (PR-L4-C/06) switched graph[] OUTPUT order to DFS preorder from result[0], but the Kahn order is still computed for leaves-first UID hashing.
+
+- **2026-05-11** `7155f21` — O(1) exact $(BUILD_ROOT)/<target> lookup for the codegen registry tier @ scanner.go codegenLocator, resolveSearchPath VFS-fallback tier  
+  The registry is probed with the exact canonical key built from the include target (strategy beta) instead of basename/suffix matching, and the tier runs only after the on-disk search path is exhausted.  
+  Эффект: gen wall on devtools/ymake/bin: 4.82-4.97s (registry lookup is O(1))  
+  Заметки: Consumer #includes of generated headers carry the full BUILD_ROOT-relative path (verified against sg2.json), so exact lookup suffices.
+
+- **2026-05-13** `b2624b7`, `9530a57`, `a590f70`, `0b4a70a`, `e141f95`, `c5d94d9`, `8b5ec1b` — tool-path / runtime-header constants as VFS package vars with .String() cached at init @ pb.go/ev.go runtime header []VFS, antlr4Jar/configureFilePy/... VFS vars, pbWrapper/pbProtocBinary, objcopyScript/rescompressor/rescompiler, py3cc/ragel/enumParser canonical paths, ld.go ldVcsInfo/ldLinkExe/..., js.go joinSrcs  
+  Constant paths are constructed once at package init (VFS plus a cached string form) instead of being concatenated or ParseVFSOrSource'd at each emit call site.  
+  Заметки: 8b5ec1b fixed the last multi-chunk objcopy site still using inline literals.
+
+- **2026-05-13** `c8c623c` — Platform boolean shadows (PIC, LibcMusl) derived once from Flags @ platform.go Platform struct  
+  Hot-path dispatch reads precomputed bool fields set at construction instead of looking up the Flags map each time; Platform is immutable after construction.  
+  Заметки: Introduced as part of the platform-pair refactor; motive stated in body ('hot-path dispatch avoids the map lookup').
+
+- **2026-05-22** `129631e` — Dump-graph pruning with one reused topo order and linear incoming-ref drop queue @ dump_graph.go finalizeDumpGraph/dumpGraphIncomingRefs/dumpGraphDropNodeRefs; emitter.go finalizeOrder/finalizeNodesInOrder/finalizeGraphInOrder  
+  Topo order is computed once (with Finalize's validation) and reused after an in-place prune; dump-only FETCH/standalone PR nodes are dropped via incoming-ref counts and a BFS queue rather than re-finalizing, keeping the -G dump path linear for the full sg5 surface.  
+  Заметки: Body only says 'keeping the dump path efficient enough for the full sg5 validate surface'; main intent is modelling (drop over-emitted nodes). Later fate not checked.
+
+- **2026-05-24** `0e3bbb1` **[superseded]** — Stop aggregating header closures into AR/LD member inputs @ gen.go addMemberInputs (skip isHeaderSource)  
+  Header closures are still walked once for CC node.Inputs, but no longer re-stored into memberInputs -> combinedMemberInputs (AR) and ldMemberInputs (LD).  
+  Эффект: sg5 build allocations 4.16 -> 3.49GB (-0.66GB): emitARNode 455 -> 116MB, addMemberInputs 296MB -> negligible. peakRSS 1.99 -> 1.73GB.  
+  Заметки: Followed by a0d9a5c (objects only) and deletion ff97288.
+
+- **2026-05-24** `a0d9a5c` **[superseded]** — Member-input aggregation keeps only objects/archives/scripts @ gen.go arLDMemberKept filter on member inputs  
+  CcIns is all sources/headers, so it now contributes nothing and the member closure is never stored.  
+  Эффект: sg5 build allocations 3.47 -> 3.31GB; emitARNode and addMemberInputs drop out of the top allocators. peakRSS 1.68 -> 1.64GB.  
+  Заметки: Deleted in ff97288.
+
+- **2026-05-24** `fa51dde` — Remove vestigial sorts of node.Inputs (normalized away) @ emit_en, emit_pr, emit_py_run, emit_dynamic_library, emit_ld, emit_ar_node, fetch, emit_archives (x2)  
+  The gate compares normalized output and canonContent sorts Inputs/Tags, so all nine VFS sorts feeding node.Inputs were dead work; deleted (SortVFS removed).  
+  Заметки: Exposed a latent nondeterminism: buildRootSet ranged a map; replaced by order-preserving dedup.
+
+- **2026-05-24** `ff97288`, `015667a`, `36d8409` — Delete the AR/LD member-input aggregation tier @ gen.go addMemberInputs/addGlobalMemberInputs/regularPrimariesSet; per-SRCS-header walkClosure loop; memberInputs/ldMemberInputs params of emitARNode/EmitAR*/EmitLD; emit_proto/emit_py_proto/emit_py_aux accumulators; sourceEmit.CcIns  
+  AR/LD nodes take inputs directly (objects/peer archives + own scripts); removes a per-member closure scan, a per-header walkClosure, a written-but-never-read primaries map and a 3rd 'member-inputs' return from several emitters.  
+  Эффект: wall ~7.0s -> ~5.9s on the mem-profiled sg5 build; raw sg5 graph shrinks 16.6 MB.  
+  Заметки: Relies on the normalizer AR/LD keep-set (5549492..22162ef).
+
+- **2026-05-25** `3a917bc` — First-component filter for the $(S) search tier @ scanner resolveContextSearchTier source branch / resolveSourceUnder; fs.go back to plain string-keyed dir cache  
+  <prefixRel>/<target> can be a file only if target's leading component is an entry of prefixRel's (already cached) listing; check that first and reject with no path concat; only a real match pays the concat for the full check; a leading '..' falls through to the full check.  
+  Эффект: Source-branch candidate concat (~210MB churn) gone; alloc 2275MB->2057MB, inuse back to the 282MB baseline (eager/STR had pushed it to 370-447MB). sg5 7.34s.  
+
+- **2026-05-26** `009d3dc` — Header could-claim bitset gating sysincl lookups @ sysinclLookup; per-scanner STR-indexed []bool (+ lower-cased map for case-insensitive windows.yml records)  
+  Precompute the set of headers any sysincl record keys on; targets outside it return (nil,false,false) immediately, skipping both class computations and both (class,target) cache probes.  
+  Эффект: ~87% of sysincl lookups gated out (sysinclSourceHits 446k -> 60k, misses 30k -> 2k); includerClass 0.17s -> 0.03, sourceClass 0.09 -> 0.02, computeActiveIncluderRecords 0.14 -> 0.03. Serial scan wall 3.41s -> 3.21s (3.62 -> 3.21 cumulative).  
+  Заметки: Suppression markers (keys with empty values) are in the set, so output is unchanged.
+
+- **2026-05-26** `8a56f32` — Sysincl source filters: `.*LIT.*` -> strings.Contains; LiteralPrefix HasPrefix guard before RE2 @ sysincl filterAlt (literalContainsPattern, reGuard)  
+  Metachar-free `.*LIT.*` filters compile to substring checks; every other regex caches re.LiteralPrefix() and rejects with HasPrefix before MatchString. Both are necessary-condition shortcuts equivalent to the regex.  
+  Эффект: 43/172 filters fell through to RE2; MatchString 0.15s -> 0.03s, filterAlt.matches 0.18 -> 0.03; cumulative scan wall 3.62s -> 3.41s with the cleanRel + ReadInto changes.  
+
+- **2026-05-26** `b6eb693` — pathIsClean fast path before path.Clean in cleanRel @ fs.go cleanRel (every Listdir/Exists probe, 3.6M+ calls)  
+  A single conservative O(n) check (no leading/trailing '/', no empty/'.'/'..' segment) returns the input untouched; only non-clean rels go through path.Clean and its lazybuf allocation.  
+  Эффект: path.Clean+lazybuf 0.21s -> pathIsClean 0.03s on sg5, wall ~3.62s -> ~3.45s, lazybuf allocations eliminated.  
+  Заметки: Serial CPU on the scan critical path, so it moves wall. Verified by differential check against the old cleanRel.
+
+- **2026-05-26** `d640e2d` — Anchored literal-alternation regex filters expanded to HasPrefix alternatives @ sysincl compileSourceFilter / literalAltsFromRegex (regexp/syntax AST)  
+  `^P(A|B)`-shaped filters built only from literals/concat/alternation/capture denote a finite prefix set; each branch becomes a literalPrefix alt, leaving only genuinely non-literal patterns on RE2.  
+  Эффект: MatchString drops out of the profile, filterAlt.matches 0.04s; wall flat at 3.21s.  
+  Заметки: Small now because the could-claim gate already skips ~87% of lookups. Parity locked by unit test vs regex.MatchString.
+
+- **2026-05-26** `f7d9395`, `14cf87e` **[reverted]** — Three-phase batchable resolveAll (search tier per file instead of per target) @ scanner resolveAll / resolveSearchPathLocal / resolveContextSearchTier / resolveSearchPathFallback / applyResolveTail  
+  Behavior-preserving refactor exposing a seam to run the ADDINCL tier once per file over all its directives (target: inverted basename index), since the tier re-probed ~54 prefixes per target (3.6M listdir lookups across 67k misses).  
+  Заметки: Reverted by 14cf87e (pre-rebase 1ba883c). The inversion landed instead as a global index in 1e05383.
+
+- **2026-05-27** `1e05383` — Inverted global target -> ADDINCL-dirs index @ includeParserManager.addinclIndex (map[STR][]VFS) + indexAddincl(dir); collectModule; NewScanCtx cfgResolveIndex (per-config rank set)  
+  Walk each source ADDINCL dir once and index target rel -> dirs that physically contain it (shared by both scanners); resolution intersects a target's 0-2 candidates with the config's ADDINCL ranks and takes the highest priority instead of probing ~54 prefixes per target. BUILD-root ADDINCL via codegen registry; repo-root $(S)/ ADDINCL never inverted (falls back to probe).  
+  Эффект: resolveContextSearchTier ~0.30s hot cost before. ydb/apps/ydbd gen: wall 2.86s -> 2.68s (-6%), peak RSS 745MB -> 697MB.  
+  Заметки: Outside the slice git log shows addinclIndex moved to DenseMap (d486cbe) and BitSet-backed addinclIndexed (640b82a).
+
+- **2026-05-27** `1e05383` **[rejected-by-measurement]** — Per-file inverted ADDINCL index @ scanner search tier (earlier shape of 1e05383)  
+  Build the inverted index per includer file over its directives.  
+  Эффект: Regressed (stated in 1e05383 body; no numbers): too few misses per file to amortize.  
+  Заметки: Mentioned only in the 1e05383 body.
+
+- **2026-05-27** `1e05383` **[rejected-by-measurement]** — Per-config flat inverted ADDINCL map @ scanner search tier (earlier shape of 1e05383)  
+  Build a flat target->dir map per distinct include config.  
+  Эффект: Regressed: 470MB rebuilt per distinct config (stated in 1e05383 body).  
+  Заметки: Per-config rebuild was 'the killer'; the global index is built once per ADDINCL dir (idempotent).
+
+- **2026-05-28** `fdf6d55` — Do not walk .proto/.swg sources in the C/C++ include scanner @ parsedIncludes (scanner-facing) returns nil for proto/SWIG extensions  
+  The C scanner tried to resolve import/%include in .proto/.swg files reached as codegen inputs; their deps are owned by dedicated resolvers (protoTransitiveImports, swigIncludeClosure), so the walk was redundant.  
+  Эффект: sg5 gen 3.37s->3.30s (less walk); sg3 unresolved warnings 80->0, sg5 106->11.  
+  Заметки: Primary motive was spurious unresolved-include warnings; perf is a side effect stated in the body.
+
+- **2026-05-29** `c192c16` — unified-rank addincl resolve index with pre-interned Build prefixes @ buildCfgResolveIndex / indexable resolve fast path (scanner)  
+  Every addincl entry gets a unified rank; Build-rooted prefixes are collected with pre-interned ids into buildEntries and probed with a cheap codegen.LookupSplit pass (typically 0-2 per module) next to the existing Source inverted-index lookup; the smaller rank wins, so the separate Build fallback inside the indexable block is removed.  
+  Заметки: Parity-motivated (first-declared addincl wins, OMP.inc case); designed to keep the inverted-index fast path rather than fall back to a linear walk.
+
+- **2026-05-31** `9590259`, `2ba611b`, `dc3d619` — VFS script-closure table appended at emit sites (precompute once per gen) @ script_deps.go buildScriptTable / genCtx.scripts; LD/CP/JV/fetch/dynlib/js emitters  
+  build/scripts/*.py is parsed once per gen into a table VFS -> [self, transitive imports...] as VFS; emit sites that add a script do append(inputs, ctx.scripts[v]...), so a wrapper and its helpers land in one append with no per-node input scan and no new strings.  
+  Эффект: sg5 gen 5.66s -> 3.99s, alloc 2.19GB -> ~1.16GB  
+  Заметки: 2ba611b/dc3d619 route the hand-listed static script lists through the same table; duplicate helpers across wrappers are tolerated because normalize dedups (53ce26a).
+
+- **2026-05-31** `a14a92f`, `3c3e3aa` **[superseded]** — per-node build/scripts import-closure expansion pass @ script_deps.go expandScriptClosures (finalizeDumpGraph) -> expandNodeScriptClosure at BufferedEmitter/StreamingEmitter.Emit  
+  The build/scripts/*.py import closure was built once at gen startup, then every input of every node was scanned to append the helper closure of any wrapper-script input (first as a buffered post-pass, then per node at Emit so streaming nodes are complete).  
+  Эффект: Cost measured when replaced (9590259): 17% gen CPU and ~1GB alloc churn for ydbd  
+  Заметки: Replaced by the VFS script table appended at emit sites (9590259).
+
+- **2026-06-02** `4dc6536` — gated interning in FS Exists @ fs.go Exists  
+  Exists checks that the first suffix component exists under the prefix before listing (and interning) the deeper directory, so dead candidate include paths never grow the intern table; suffixes with ../././ fall back to a joint-normalised lookup.  
+  Заметки: Commit names the durable wins as the VFS-prefix API and gated interning that bounds the dir-cache footprint.
+
+- **2026-06-02** `4dc6536` — compute includer directory once per file @ scanner forEachResolvedChild -> resolve/resolveSearchPath incDir VFS argument  
+  The includer dir VFS is computed once per file and threaded through resolution instead of dirKey(pathDir(includerAbs.Rel())) per include directive.  
+  Эффект: dirKey cum 40ms -> 20ms on sg5  
+
+- **2026-06-02** `78b1b99` — declare resource fetch-deps at the command splice site; delete the per-node cmd scan @ fetch resource emitter: nodeUsesResourcePattern deleted; withResources(node, ...) at ~25 builders; plan.byPattern  
+  The emitter scanned every node's whole argv with strings.Contains against every resource pattern on every emit; now each builder that splices a known tool path declares the pattern where it builds the command, and the emitter turns declarations into fetch deps.  
+  Эффект: nodeUsesResourcePattern was the single biggest str/mem CPU item (~0.11s); strings.Contains 0.19s -> 0.06s; wall ~2.3s -> 1.94s; RSS 660 -> 632 MB  
+  Заметки: Declaration is also content-precise (py_objcopy declares CLANG, py_run does not).
+
+- **2026-06-02** `857170e` — precompute constant runtime-header include directives once at init @ emit_proto emitCPPProtoSrcs; quotedDirectives package vars (protobufRuntimeHeaders, 187-entry pbCcDeepRuntimeHeaders, grpc*, eventRuntimeHeaders)  
+  The parsed-include directive lists for every generated pb.cc/grpc.pb.cc/ev output were rebuilt per output by re-interning each constant header's Rel(); they are built once at init and appended (append copies, so the shared backing is read-only).  
+  Эффект: ~260k internString/run on sg5 removed  
+
+- **2026-06-03** `6404da4` — EN producer refs via the registry; drop bespoke cross-module aggregation @ emit_en.go (enOutputs map, crossCppClosure, depENOutputs removed)  
+  The EN path iterated the whole ctx.enOutputs map to index every *_serialized.h across all modules and intersected it with each header's closure; dep edges now fall out of the same single per-input reg.Lookup used for PB/EV/CP/CF.  
+  Заметки: Motive framed as refactor; resolveCodegenDepRefsExt has no per-kind side maps left.
+
+- **2026-06-03** `95853fa`, `2ceced7` — dense split-prefix presence gate before the bySplit probe @ codegen_registry.go LookupSplit / putSplit; splitPrefixSeen  
+  LookupSplit probed the bySplit hash map on every quoted-include resolve though most addincl prefixes hold no split entry; putSplit marks each registered prefix and LookupSplit checks the dense flag first, skipping the hash probe for the common no-entry prefix.  
+  Заметки: 95853fa used a bool DenseMap3 column; 2ceced7 replaced it with a 1-bit idBitSet[STR] (the column's idx+row+vals indirection was overkill for a presence flag), collapsing byStr to DenseMap. Gate survives the morton IntMap move (58eebc3).
+
+- **2026-06-04** `b41783f` **[superseded]** — merged header-first index over includer-keyed sysincl records @ sysincl mergedIncluderIndex (sysinclIncluderLookup miss path)  
+  unionIncluderMappings fanned out over ~33 active includer-keyed records probing each record's Mappings (almost all misses); one index keyed by ToLower(header), built once per scanner, holds the contributing records in order with filter/CI/raw-key flags, so a lookup is one probe + a tiny bucket scan.  
+  Эффект: per-record probe (186,127) collapses to a 5,585 index probe + a ~10k one-time build; total map ops 5,099,264 -> 4,939,321  
+  Заметки: Generalized to all records (source-keyed too) in 58eb9db.
+
+- **2026-06-04** `e4a7a27` — sound prefilter for the case-insensitive sysincl probe (no ToLower) @ scanner sysinclMightClaim: sysinclCIMaxLen + sysinclCIGate idBitSet[uint16]  
+  Targets not in the case-sensitive bitset fell through to sysinclKeyCI[ToLower(target)] (lowercase + string hash, almost always a miss; only 85 CI headers exist). A length bound plus a bitset keyed by uint16(raw[0])*len + uint16(raw[1]) over both case variants rejects non-matches on raw bytes with no false negatives.  
+  Эффект: sysinclKeyCI probe 579,314 -> 31,993 (-94.5%); total map ops 5,646,583 -> 5,099,264  
+  Заметки: idBitSet widened to ~uint16|~uint32.
+
+- **2026-06-05** `0e32d6d` — precompute StatsTags once per platform @ platform NewPlatform (statsFlags param) / bindNodePlatform  
+  statsTagsForPlatform (map walk + alloc + sort) ran once per emitted node though it is a platform constant; it is computed in NewPlatform into a Platform field and copied per node.  
+  Эффект: ~57k identical recomputations and ~142k statsFlagsMapping probes removed; now invoked twice per run; sg5 3.15s  
+
+- **2026-06-05** `58eb9db` — one header-first sysincl index for source- and includer-keyed records @ sysincl_ctx.go sysinclIndex (renamed from mergedIncluderIndex); sourceLookup/includerLookup removed  
+  All records fold into one index probed once by byLower[header], short-circuiting when the header is uncovered; filters are matched against the includer path per bucket entry, so source/includer split needs no separate scan.  
+  Эффект: sourceLookup was the single biggest map-op site (683k, 23% of the run)  
+  Заметки: Order irrelevant because canonInputs sorts node inputs; both kinds share one index and one dedup.
+
+- **2026-06-06** `0b5f3f1` — delete resolve branches that never fire on any gate graph @ scanner resolve()/resolveSearchPath(): buildRootFallbackRel, fallbackLocators/pathLocator/fsLocator/codegenLocator, resolveCythonPy2Override, includeDirective.next  
+  Per-branch tracing across the five gating graphs found dead branches and dead per-resolve work (a fallback rel computed on every resolve and never used); removing them drops that work and the dependent code.  
+  Эффект: buildRootFallbackRel: assigned 385,350x, used 0x (searchPathFound is always set before its branch)  
+  Заметки: Unresolved-include warn path kept. A mock-only test relying on the build-root fallback was adjusted.
+
+- **2026-06-06** `2e2d18c` **[superseded]** — gate per-file macro-include fixup probes on a 2-byte 'co' (contrib/) prefix @ cIncludeDirectiveParser.Parse probes of macroIncludeDrops / macroIndirectIncludes  
+  All five fixup keys live under contrib/, so a 2-byte prefix check lets non-contrib files skip both map lookups entirely; a non-key 'co' path does a harmless not-found probe.  
+  Эффект: probed ... by rel for every parsed C file (~44k each)  
+  Заметки: Superseded by 14344e6, which deletes both fixup tables and handles computed includes in parseDirectiveInline behind a one-byte gate.
+
+- **2026-06-06** `c19469c` — drop preEmitted map from the codegen/non-codegen source split @ gen.go two-pass AR member split  
+  preEmitted map[string]*sourceEmit was probed twice per source (has, then get). Codegen-ness is exactly isCodegenProducingSrc(src) (cheap suffix check), so pass 1 collects pre-emitted codegen nodes into an SRCS-ordered slice and the non-codegen loop tests the predicate directly.  
+  Эффект: Drops ~21kx2 map probes on sg5  
+  Заметки: Emission order unchanged. The suffix predicate itself is later memoized per src id (srcExtClassOf, d5cde3d).
+
+- **2026-06-06** `e239c61` — len-gate sparse per-source attribute map probes @ moduleData getters perSrcCFlagsFor (*[]string, nil=absent) and flatSrc (bool) over d.perSrcCFlags / d.flatSrcs  
+  Most modules declare no SRC-level CFLAGS or flat-output markers; the getters short-circuit on an empty map so those modules skip the lookups entirely.  
+  Эффект: probed once per source across several loops (~62k probes on sg5)  
+  Заметки: 49e6191 later changes the getters to take the STR the maps are keyed by (callers had re-interned the viewed string).
+
+- **2026-06-07** `1401fd4` — drop normalisePath at call sites that only ever pass normalized paths @ resolveContextSearchTier addBuildPath / d.target build branch, sysincl mappingsToVFS, quoted-include sameDirRel  
+  normalisePath does three strings.Contains scans; instrumenting it via runtime.Caller on sg5 showed changed=0 at four sites, so the call is pure overhead there and the path is passed through directly.  
+  Эффект: resolveContextSearchTier addBuildPath / d.target build branch (~327k each); sysincl mappingsToVFS (~85k); the quoted-include sameDirRel build (~63)  
+  Заметки: Genuinely-normalizing sites keep the call.
+
+- **2026-06-10** `1b4c780` — inline the IsBuild bit test in the loop before calling the probe closure; hoist codegenRegForInstance @ resolveCodegenDepRefsExt (gen)  
+  probe() was a non-inlinable closure call per element of an include closure just to bounce off the IsBuild bit for the $(S) majority; the bit test now sits in the loop and probe runs only for $(B) elements; the per-call-invariant registry lookup is hoisted.  
+  Эффект: 10x sg5: resolveCodegenDepRefsExt 490 -> 180 ms cum.  
+
+- **2026-06-10** `6c02892` — precompute constant include-directive arrays once at init @ pbDescriptorImporterHeaders, evExtraProtobufHeaders, evAbseilCleanupHeaders, bisonCppSkeletonInputs, protobufRuntimeHeaders loops (emit_*)  
+  Constant VFS header lists were re-interning their Rel() paths per generated output; directive slices are now built once via quotedDirectives. The two ev-only lists are built lazily via sync.OnceValue so targets without .ev sources don't grow the intern table at init.  
+
+- **2026-06-10** `8e97940` — re-enter genModule with corrected variant instead of pre-parsing every peer @ derivePeerInstance/peerLanguageFor/moduleInfoForInstance removed; peerEntryLanguage; genModule reentry  
+  Every peer was fully ParseFile+collectModule'd (duplicating genModule's own parse) plus a peerYaMakeExists probe per edge just to learn if it is a PROTO_LIBRARY. Now the variant is requested from the consumer alone and genModule, after its own collectModule, re-enters itself as LangCPP when there is no python variant, aliasing the py memo key to the C++ result.  
+  Эффект: 10x sg5: the 880 ms (9.6%) peerLanguageFor shelf is gone, total -4.7%, warm user 0.65 -> 0.61-0.64 s.  
+  Заметки: PERF.md item 11. The reentry decision must happen before any emission (streaming emitter cannot retract nodes). moduleTypeCache/moduleTypeInfo removed.
+
+- **2026-06-10** `e4762a9` — vfsHasPrefix gates on the two-byte '$(' prefix @ vfsHasPrefix (vfs)  
+  Every '$('-prefixed string seen by the classifiers is a rooted $(S)/$(B) path, so a length check plus s[0]=='$' && s[1]=='(' replaces two 5-byte substring compares.  
+
+- **2026-06-11** `49e6191` — reuse already-resolved inputs in prEmitsIncludes; drop the Contains('/') pre-gate before a DenseMap probe @ prEmitsIncludes (emit_pr); resolveSearchPath build-includer arm  
+  prEmitsIncludes reuses the inVFSs emitRunProgram resolved instead of re-resolving per output; a registered bare-rel always contains a slash, so the DenseMap probe itself is the cheaper gate.  
+
+- **2026-06-11** `867d148` — RUN_PROGRAM head loop reads the parallel inVFSs slice instead of re-probing the token map @ emitRunProgram / emitPR  
+  inVFSByToken and inVFSs are filled side by side; the input head is built from the slice passed as a parameter instead of re-probing the map with the same keys in the same order.  
+  Эффект: 6.4k redundant reads in sg5  
+  Заметки: The map stays for cmd-arg token matching.
+
+- **2026-06-11** `b619ed3`, `f6f4723` — count displaced window roots, then drop windowImports' value-keyed root strip for walkClosureTail[1:] @ windowImports (sources) -> walkClosureTail callers (proto/ev/flatc/swig)  
+  Counters measured how often an import-walk root is not first in its window; zero across cases, so the value-keyed strip and its counters were removed and callers take the tail directly.  
+  Эффект: sg2 9/0, sg3 83/0, sg5 890/0 calls/rootNotFirst  
+  Заметки: Measurement-driven removal; relies on import-walk roots never being SCC members.
+
+- **2026-06-11** `e9a279e` **[superseded]** — codegenUnder reduced to one interned-prefix split probe @ codegenUnder (scanner)  
+  The canRelFilter gating + lookupRel(normalisePath(joinRel(...))) fallback duplicated work lookupSplit covers; the function takes the incDir VFS and target id and does a single probe. Defensive codegen nil guard removed.  
+  Заметки: Superseded by 7787f54, where codegenUnder disappears and the call site probes lookupSplit(incDir, target) directly.
+
+- **2026-06-11** `ea1230a` **[superseded]** — merge ctxNumByHash + resolveIndexByConfig into one configByHash map @ newScanCtx (scanner)  
+  The two maps were probed back-to-back with the same ctxHash; one map of ScanConfigEntry halves the probes.  
+  Эффект: 24.8k duplicate probes  
+  Заметки: Superseded by ea087d4: ScanContext carries its resolved *ScanConfig and the per-walk configByHash probe is gone.
+
+- **2026-06-12** `169f242` — drop the no-op per-bucket sort in buildSysinclIndex @ buildSysinclIndex (sysincl)  
+  The index is built in declaration order and only appends, so each bucket is already in record order; sort.Slice sorted sorted data. The order field existed only for it.  
+  Эффект: ≈11k reflective Swapper allocations per scanner  
+
+- **2026-06-12** `e55424d` — delete swigFilterExistingSources and swigResolveCandidates; swigTool returns VFS @ emit_swig_c  
+  Instrumented: the existence filter over CC inputs never fired (the scanner never resolves to non-existent sources) and the candidate search had no callers; swigTool hands the VFS through instead of a string re-interned by the emitter.  
+  Эффект: fires 0 times on sg5 and sg3  
+
+- **2026-06-17** `1de5841`, `5c97459`, `2b45f40` — packed uint64 (Generated, Prio, Seq) key + one stable sort for AR/LD member order @ gen.go reorderARMembers, modules.go SrcMeta.sortKey / nextDeclSeq; LD own-object order (2b45f40)  
+  Each object's ordering key is packed into one comparable uint64 (gen<<60 | prio<<32 | uint32(seq)) and members are ordered by a single SortStableFunc, replacing per-codegen-kind buckets; 2b45f40 points LD at the same function and drops the ad-hoc partition on the "/_/_/" output-path substring.  
+  Заметки: Motive parity with ymake StatementPriority order; representation is the perf-relevant part. Byte-exact sg2..sg6.
+
+- **2026-06-23** `61d7ec3` — drop target_properties field and its attribution machinery @ node.go, uid.go, gjson_write.go, scanner.go, gen.go, attribute_generated.go (deleted)  
+  target_properties is no longer emitted, hashed into the UID, or compared; deletes generatedFirstClaim/generatedNodeClaim/generatedENIncluderDirs maps, record*/mark* recorders (incl. scanner-side EN includer-dir recording) and overrideGeneratedModuleDir/overrideENSubmoduleModuleDir passes.  
+  Заметки: Motive is scope reduction, not perf; no numbers given. Removes per-node field, maps and passes as a side effect.
+
+- **2026-06-23** `b9cfa49` — single StreamingEmitter for -G; drop buffered topo finalize and prune pass @ emitter.go graphFromEmitter; dump_graph.go (deleted)  
+  The -G dump path builds its Graph from the StreamingEmitter (same results/dedup/DFS order) instead of a separate BufferedEmitter with topological finalize (finalizeOrder, cycle detection, seen map); the dump_graph.go standalone-LLVM-PR prune pass was redundant with normalize's target closure and is removed. Emitter interface removed (direct *StreamingEmitter calls).  
+  Заметки: Motive stated as simplification; no perf numbers. Gate byte-exact sg2..sg6.
+
+- **2026-06-23** `fe8d9a2` — precompute AR member sort keys @ reorderARMembers (gen.go)  
+  The sort comparator looked up declMeta[path] on every compare (O(n log n) map reads per archive); the sortKey is now computed once per member before sorting.  
+  Эффект: gen.go map-read hotspot ~89.9k -> ~43.9k  
+  Заметки: Graph output byte-identical.
+
+- **2026-06-25** `36ba428`, `41d05ee` — coalesce post-register set*/add* into register literal; hoist codegenFor @ codegen_registry.go register(); emitters (bison, flatc, proto, cython, ...)  
+  Outputs were register()'d partially then back-filled by setSourceInputs/setProducerMainOut/setProtoImportRels/setBuildParsed/addClosureLeaf/setCompileSpec, each redoing the byStr map lookup; values are now folded into the register(&GeneratedFileInfo{...}) literal and one reg := ctx.codegenFor(instance) is reused per cluster.  
+  Эффект: one fewer map lookup + mutation per generated source (per removed setter)  
+  Заметки: register() seeds leafEver from info.ClosureLeaves. addClosureLeafNoSubsume and pr's setProducerSourceClosure stay separate.
+
+- **2026-06-26** `72e9f77` — set proto IF-env during collect; drop PROTO_LIBRARY re-collect @ modules.go collectModule/collectStmts; gen.go  
+  PROTO_LIBRARY was collected twice (plain env to discover type, then env rebuild + full re-collect with CPP_PROTO/GEN_PROTO/MODULE_TAG or PY3_PROTO); collectModule now takes the ModuleInstance and collectStmts sets the proto flags when it reaches the PROTO_LIBRARY statement.  
+  Эффект: total alloc_objects 1970156 -> 1922250 (a full second collect per proto module, plus its env clone, eliminated); Environment.clone 10363 -> 8011 calls  
+
+- **2026-06-26** `7a0dff6`, `9ba9dd1` — platform IF-env built once at newPlatform @ platform.go buildPlatformIfEnv / Platform.ifEnv; modules.go buildIfEnv  
+  buildIfEnv re-derived the platform-dependent IF environment (clone DefaultIfEnv, Platform.Flags, ~40 conditional derivations incl. a CLANG resource path concat) per module; it is now computed once per platform and buildIfEnv clones it and applies only CURDIR/BINDIR/MODDIR.  
+  Эффект: the body work (notably the OBJCOPY string build, ~10363 allocs) moves to 2 per-platform calls; total alloc_objects 1980464 -> 1970156  
+  Заметки: Per-module clone stays (SET mutates env). Path bindings feed no platform-body conditional, so applying them last is equivalent. 9ba9dd1 is a pure relocation.
+
+- **2026-06-26** `e4512b9` — emitArchive accumulation: amortized append instead of quadratic dedup rebuild @ emitArchive  
+  The loop rebuilt a deduped slice on every iteration (quadratic); it is now a plain amortized append.  
+
+- **2026-06-28** `a7fd962` — pyYapycSuffix computed once per py module @ modules.go collectModule -> ModuleData.pyYapycSuffix; resource.go buildPySrcEntriesFor; emit_py_codegen; emit_py_aux  
+  pySrcYapycSuffix (md5 + base32 over "$S/<modulePath>") depends only on the module dir but was recomputed per py source containing '/'; computed once, guarded by len(d.pySrcs) > 0.  
+  Эффект: alloc_objects 1,723,422 -> 1,700,418 (-23,004, -1.33%); base32 encodes 13,315 -> 3,589  
+  Заметки: Non-py modules never pay.
+
+- **2026-07-02** `2dfa0a6` — cheap-predicate-first reorder @ requireProducedInput  
+  Registered build inputs are the dominant case, so the codegen-registry lookup runs before the module-prefix memcmp and short-circuits it.  
+  Заметки: Pure predicate reorder.
+
+- **2026-07-09** `483a048`, `80bef14`, `e8ec093`, `dbfd58b`, `5f5fe93`, `49fb9cc`, `3b7f397`, `483f0ef`, `fcc2028`, `673c655`, `8247387`, `576a47b`, `1c634e3`, `c55de31`, `e1c745f`, `07d540f`, `579db17`, `f6d55ef`, `0184789`, `e2a29e0`, `641b681` — PendingEmit: producer nodes emitted on first use @ GeneratedFileInfo.OnUse functor; CodegenRegistry.use()  
+  Producer node emission is deferred into a once-only functor attached to the generated file's registry entry and fired by the first consumer (compile/scan/resolve/AR member use); registered-but-never-consumed producers are never emitted.  
+  Заметки: e2a29e0: the module self-sweep was 'pass2 revived under a new name'; gate showed it bought nothing. Firing from child resolution required reentrant scans (07d540f: TarjanCtx pooled per ScanCtx frame). Functor storage later arena-backed / typed (f2fea95, 6c5b5ac).
+
+- **2026-07-09** `6758397` — demand-sliced module emission @ ModuleInstance.Demand (in memo key), EmitContext.producersOnly, peerDemand  
+  Undemanded peers (not linked by a linking module) emit only their producer slice: compile leaves (C/asm/cuda/rodata/go, py3 proto) and AR/LD assembly are skipped, so non-linking roots do not generate the whole transitive compile graph.  
+  Заметки: Executor stays eagerly streaming. Demand still present at HEAD.
+
+- **2026-07-11** `946c1b6`, `b95d97b` — collect producer refs while firing (single registry pass) @ useProducers / resolveCodegenDepRefs* (+ SliceScratchPool), CodegenRegistry.useBuild  
+  use() returns the GFI, so producer refs are collected in the same pass that fires pending emitters (into a pooled NodeRef scratch) instead of a second lookup pass; output blocks sized by refs found rather than input count; build inputs looked up by rel STR directly.  
+  Заметки: Generic SliceScratchPool replaces VFSScratchPool.
+
+- **2026-07-13** `69b1e48` — skip empty peer aggregation work @ genModuleImpl peer closure folding (ldplugin/archive/global/sbom/whole-archive/dynamic blocks)  
+  Exact per-category capacities are computed in one pass and each aggregation block (alloc + dedup + intern) is skipped when its capacity is zero; sbom aggregation runs only when sbom is enabled.  
+
+- **2026-07-13** `6b6dac2` — skip AR member sort when already ordered @ reorderARMembers  
+  Keys are checked for monotonicity while building members; ordered input returns as-is without SortStableFunc.  
+
+- **2026-07-13** `86cf8e3` — no defer closure per include resolution @ ScanCtx.resolve / warnUnresolved; cythonPy2SiblingOverride  
+  The missing-include warning moved from a deferred closure (installed on every resolve) to explicit calls on the two unresolved paths; the cython py2 sibling override runs only for the cython parser.  
+
+- **2026-07-13** `a88aaab`, `5195d57`, `c785a62` — propagate known cleanliness instead of re-checking/cleaning paths @ resolveSourceUnderClean, isFileClean, FS.read(clean rel), parseFileClean, forEachResolvedChild  
+  Callers that already know a path is clean pass that fact down (no pathIsClean/normalise/cleanRel per probe or read); dirKey replaced by internStr where the dir is already clean.  
+
+- **2026-07-13** `bccb3a2`, `5f6e868`, `f555519` — merged producer-position resolution @ srcPosition (outs+ins), resolveInducedDeps early exit, resolveNodeCodegenDeps lazy scratch  
+  One function computes outs and ins with a single extension-class lookup and protoSourceRelPath call; induced-deps resolution returns early when the GFI has no generator refs; the scratch is acquired only when a build chunk is found; proto imports are taken from parsed directives without a separate isFile probe.  
+
+- **2026-07-15** `f555519` — eliminate scanner resolution round trips @ IncludeScanner.parsedIncludes (returns GFI), IncludeParserManager.sourceParsed/sourceParsedWalkable, FS.readPath(STR)  
+  One registry lookup per build file serves both its parsed includes and induced deps; the parser registry is consulted once to get both the parsed set and the walkable bucket; reads take the STR so content hashes are recorded without re-interning the path.  
+
+
+### Контейнеры (71)
+
+- **2026-05-08** `725efbd` **[rejected-by-measurement]** — sync.Map for the includer-filter cache @ sysincl.go includerFilterCache  
+  Tried sync.Map as the concurrent memo table instead of map + RWMutex.  
+  Эффект: sync.Map proved slower in PR-35e's experiments for this access pattern (many small subsets, frequent reads); no numbers given  
+  Заметки: Plain map + sync.RWMutex chosen.
+
+- **2026-05-08** `af43a2f` **[rejected-by-measurement]** — packed-string cache keys (byte-builder + unsafe.String) instead of struct keys @ scanner.go resolve/sysincl caches  
+  Idea: pack composite keys into one string so map lookups take mapaccess2_faststr.  
+  Эффект: benchmarked: the per-call buffer alloc exceeded the savings from mapaccess2_faststr even on cache hits (which dominate)  
+  Заметки: Struct keys retained. 5457e60 later reached faststr through 2-level maps instead of packing.
+
+- **2026-05-11** `5457e60` **[superseded]** — 2-level subgraphCache with string-keyed inner maps + activeBucket @ scanner.go subgraphByClass map[classKey]*classBucket  
+  Outer key (ctxHash, srcClassHash) selects a bucket holding string-keyed cache/tainted/inProgress maps, so the 1.67M per-run probes use Go's mapaccess2_faststr instead of composite-keyed mapaccess2; activeBucket caches the outer lookup for all recursive subgraph calls in one WalkClosure.  
+  Эффект: PR total (median of 15 runs, /usr/bin/time, M3): 5.07 s -> 4.37 s (-700 ms, -14%)  
+  Заметки: fe4e728 (next commit) replaced the 2-level maps and activeBucket with interned scanCtx objects whose subgraphCache is keyed by a 2-field subgraphInnerKey struct.
+
+- **2026-05-11** `5457e60` **[superseded]** — 2-level resolveCache (uint64 ctxHash outer) + activeResolveBucket; drop next from key @ scanner.go resolveCache map[uint64]map[resolveInnerKey][]string  
+  Outer map keyed by uint64 ctxHash takes the fast64 path; inner key resolveInnerKey{includer, target, kind}; the active WalkClosure caches its inner map. The next field was removed from the key because resolve() returns early for #include_next, so no next=true entry ever reaches the cache.  
+  Эффект: part of PR total 5.07 s -> 4.37 s (M3)  
+  Заметки: fe4e728 moved the inner map into per-ctxHash scanCtx objects (ctxHash becomes object identity).
+
+- **2026-05-13** `947f4da` — VFSMap[T] = [2]map[string]T bucketed by VFS.Root @ vfs.go VFSMap/VFSSet; scanner pc.parsed, visitedPool  
+  Dispatch on Root to one of two string-keyed maps so every lookup hits Go's specialised mapaccess2_faststr (inlined strhash/memequal) instead of the generic struct-key path.  
+  Эффект: M3 gen 7.95s → 5.61s (matches 5.69s pre-VFS baseline); gen 5.60–5.64s, tools/archiver 0.78–0.83s; bench 9.1ns generic VFSMap vs 9.2ns hand-rolled vs 10.6ns string-key baseline vs 11.9ns VFS-struct-key  
+  Заметки: Applied to pc.parsed and visitedPool only; resolveCache/subgraphCache compound keys left as-is (later moved to numeric interned keys in d253495). 76a4a40 reused VFSMap for CodegenRegistry.byOutput.
+
+- **2026-05-13** `df53972` **[rejected-by-measurement]** — map[VFS]V struct-keyed scanner caches @ scanner.go pc.parsed, visitedPool, resolveCache, subgraphCache  
+  Keying the hot scanner maps by the VFS struct sends lookups through generic mapaccess2 with type-descriptor hash/eq dispatch instead of the specialised mapaccess2_faststr.  
+  Эффект: M3 gen 5.69s → 7.95s (+40%); walkSubgraph.func1 mapaccess2_faststr 373ms (PREV) vs generic mapaccess2 1047ms (HEAD), 2.8× per op; microbench in isolation only +11% per op  
+  Заметки: Replaced by VFSMap 2-bucket dispatch in 947f4da. Lesson: isolated microbench (+11%) badly understated production cost (2.6–2.8×).
+
+- **2026-05-15** `d49d23a` **[superseded]** — VFSMap.AddIfAbsent single-probe insert @ vfs.go VFSMap.AddIfAbsent; scanner dfs/plainDfs/walkSubgraph/walkSubgraphTainted merges  
+  Replaces visited.Has(p) + visited.Add(p) (two hash probes) with one bucket lookup-then-insert that reports newness.  
+  Заметки: fef2d29 moved DFS visited to idSet map[uint32]struct{} and went back to a lookup + separate insert per id.
+
+- **2026-05-23** `8fb7b20` — Generation-stamped slice visited set (idSet) instead of map[uint32]struct{} @ scanner.go idSet (DFS visited set)  
+  Two generation-stamped slices indexed by dense relID (source/build split because build IDs carried a high bit): O(1) array membership with no hashing, reset is an O(1) epoch bump, no per-walk map churn.  
+  Эффект: Combined with the child memo: sg5 2m53s -> ~40s (~4x); removes the dominant remaining flat cost (map lookups).  
+  Заметки: Geometric growth fix in f571434; collapsed to one slice indexed by VFS id in 6745623; sized by vfsBound() after e30db8f.
+
+- **2026-05-25** `8982efe` — Merge codegen byOutput+byRel into one STR-keyed byStr map @ codegen_registry.go byStr; dead All()/Len() removed  
+  Each output stored under two non-colliding STR ids (full Build VFS id and bare rel id) in one map instead of two parallel maps.  
+  Заметки: e30db8f had to re-key byStr by OutputPath.strID() once VFS ids no longer equal STR ids.
+
+- **2026-05-25** `9a8c8bb`, `623b937` **[superseded]** — FS dirsSplit all-splits index for concat-free <addinclDir>/<target> existence probes @ fs.go dirsSplit/indexDirSplits/IsFileAt/childrenAt  
+  When Listdir(d) caches d's children, index the same set under every prefix/suffix split of d so the $(S) search tier does a two-level map read instead of prefix+"/"+target concat then re-split; 623b937 drops the empty-side splits.  
+  Эффект: Source-branch concat (~210MB churn) gone, but inuse 283MB->447MB; 623b937: inuse 447MB->370MB, alloc 2360MB->2230MB.  
+  Заметки: Eager all-splits indexing was resident-heavy (mostly never-read entries; with STR keys ~1M phantom composite paths interned, 99.6% nonexistent). Replaced by the first-component filter 3a917bc.
+
+- **2026-05-25** `a49e115`, `66a0ba3` — Codegen split index bySplit[prefix][suffix] for concat-free (dir,target) probes @ codegen_registry.go bySplit / LookupSplit; scanner resolveContextSearchTier $(B) branch  
+  Every output indexed under all internal prefix/suffix splits of its rel (keys share the interned rel's backing); the search tier asks bySplit[addinclDir][target] with no candidate concat. 66a0ba3: STR keys, non-empty-prefix splits only, *-return lookups (nil = miss), and the target id is resolved once per call (loop-invariant) so a never-interned target skips the whole $(B) branch.  
+  Эффект: $(B) candidate-path concat (scanner.go:1242) gone from the profile; cost internString +13.6MB (interning split fragments).  
+  Заметки: Works because the codegen registry is complete/bounded (unlike the lazy FS; see 9a8c8bb). Outside the slice git log shows 7787f54 'key the registry off ids - bySplit by source-dir VFS'.
+
+- **2026-05-26** `b0acb53` — Epoch-stamped slices for Tarjan SCC state (tarjanScratch) @ scanner strongconnect/closureOf (tjIndex/tjLow map[uint32]int32, tjOnStack map[uint32]bool -> stamp/index/low/onStack slices)  
+  Node visited this run iff stamp[id]==epoch; reset is an O(1) epoch bump (full zero only on 2^32 wrap); access is a bounds-checked index, no hashing; slices grow geometrically. The three ~400k-entry maps were clear()'d on every top-level miss.  
+  Эффект: sg5: inuse 199MB -> 180MB, scanobject 6.4% -> 4.5%, CPU samples 4.24s -> 4.19s; alloc unchanged.  
+  Заметки: Mirrors idSet. discover() grows defensively for paths interned mid-exploration.
+
+- **2026-06-01** `a76bb8f` — paged uidVec; drop materialized Node.Deps/ForeignDeps @ uid_vec.go uidVec; uid canon writeRefUIDs, JSON appendRefUIDs, executor nodeFuture  
+  Instead of allocating a []UID per node at finalize, consumers resolve DepRefs through an append-only vector of 64 lazily allocated geometric pages (page p holds 1<<p entries). Pages never move, so get/set on distinct ids are lock-free across goroutines (executor reads while gen appends).  
+  Эффект: alloc 936MB -> 924MB (resolveAndUID flat 10.5MB -> 0)  
+
+- **2026-06-01** `b6dd2d9` **[superseded]** — bySplit outer level to DenseMap @ codegen_registry.go bySplit DenseMap[STR, map[STR]*GeneratedFileInfo]  
+  The prefix->suffix-table outer lookup becomes a DenseMap.Get instead of a hash probe; inner stays a small map.  
+  Эффект: LookupSplit / mapaccess1_fast32 drop below the profile cutoff; total CPU 2.34s -> 2.28s  
+  Заметки: Flattened to one composite-key map in 5ada418, then a morton IntMap in 58eebc3.
+
+- **2026-06-01** `d1640d3` — DenseMap[K ~uint32, V] for CodegenRegistry.byStr @ dense_map.go DenseMap; codegen_registry.go byStr (Lookup once per scanned include)  
+  STR is a dense interned id, so an idx array indexed by K holds a 1-based slot into a compact vals array (0 = absent): lookup is a bounds check plus two loads, no hashing or probing; idx stays 4 bytes/key while values pack densely.  
+  Эффект: Lookup map cost 0.15s -> 0.02s; total CPU 2.67s -> 2.34s; RSS 660 -> 646 MB  
+  Заметки: byStr later became DenseMap2 (4acf491), DenseMap3 (95853fa), DenseMap2 (5c16d57) and back to DenseMap + idBitSet (2ceced7).
+
+- **2026-06-01** `fc610e6` — ForeignDeps/ForeignDepRefs map -> flat slice @ Node.ForeignDeps / ForeignDepRefs; gjson_write.appendToolForeignDeps  
+  Foreign deps only ever had the single 'tool' key, so per-node map literals and per-node map builds in resolveAndUID become plain slices; the {"tool": [...]} shape is reconstructed only at JSON write.  
+  Заметки: uid preimage drops the 'tool' key framing (gate re-uids from content).
+
+- **2026-06-02** `207c4c1` — parsed-include cache backed by DenseMap[STR] @ sharedParseCache.parsed  
+  map[VFS]parsedIncludeSet becomes DenseMap[STR, parsedIncludeSet] keyed by strID (parsed sources are Source-rooted, so STR is lossless and halves idx vs VFS); present-slot with nil value preserves the negative cache.  
+  Эффект: Gate byte-exact, sg5 within budget  
+
+- **2026-06-02** `40b22a6` — fold subgraphCache + childrenCache into one DenseMap[STR] @ scanner scanCache (scanCacheEntry)  
+  The two per-includer VFS-keyed maps become one DenseMap keyed by v.strID() - one vfsBound-sized idx array instead of two and no hashing; each field self-sentinels (children nil = absent with a shared non-nil empty slice for resolved-empty; closure 0 = absent with subgraphClosures[0] reserved).  
+  Эффект: map-runtime CPU ~15.6% -> ~11.5% (matchH2 110ms->30ms); wall neutral within box noise  
+  Заметки: strID is unique per VFS ($(S)/$(B) prefix is in the interned string). Converted to generated DenseMap3 in f5ee6c0.
+
+- **2026-06-02** `8bef600` — dir cache backed by DenseMap[STR] @ fs.go osFS dir cache (~750k Listdir lookups)  
+  Bounds check + two loads instead of a hash probe; keyed by dir.strID() (a source dir is always Source-rooted, VFS == STR<<1, so STR is lossless) which halves the idx array versus the 2x-wider VFS space.  
+  Эффект: Perf-neutral on sg5 (below measurement noise); idx ~720KB vs ~1.4MB  
+  Заметки: Kept for the cleaner dense-keyed representation.
+
+- **2026-06-02** `ace47b3` — idBitSet (1 bit/id) for the dfs in-flight guard @ idbitset.go idBitSet; scanner dfsActive  
+  dfsActive membership is permanent and binary, so the epoch idSet's uint32 per id was 32x overkill; a grow-on-demand bit vector with zero-value-empty and no epoch replaces it.  
+  Эффект: sg5 alloc_space 919MB -> 905MB (full parity with the prior all-strongconnect path)  
+  Заметки: idBitSet later made generic over ~uint32 (3fe042d) and ~uint16 (e4a7a27).
+
+- **2026-06-03** `3fe042d` **[superseded]** — flatten searchTier cache to a composite key + dense presence gate @ scanner resolveContextSearchTier: searchTierFlat map[uint64] (ctxNum<<32 | target STR), ctxNumByHash, searchTierSeen idBitSet[STR]  
+  The two-level map[ctxHash]map[STR] becomes one scanner-wide map keyed by a dense per-config id and the target; targets never cached in any config skip the hash map entirely via a 1-bit-per-target presence gate.  
+  Эффект: ~633k inner-map probes/run on sg5  
+  Заметки: Map moved to a morton-keyed IntValueMap in 32a56e0 (searchTierSeen gate kept). idBitSet made generic over ~uint32 here.
+
+- **2026-06-03** `41b64cf`, `f5ee6c0`, `46d5c70` — generated multi-column DenseMapN sharing one idx array @ dev/gen_densemap.py -> dense_map_3.go; scanner scanCache DenseMap3[STR, []VFS, closureRef, bool]  
+  N value columns with independent presence share one K-sized idx array (the expensive part) via 1-based row slots, replacing either N separate DenseMaps or a struct value with hand-rolled in-band sentinels; scanCache drops the noChildren sentinel and existState enum and collapses read-modify-write to PutN.  
+  Заметки: 46d5c70 removes unused DenseMap2/4/5 and makes the generator emit only used arities ([3]).
+
+- **2026-06-03** `4acf491` **[superseded]** — merge CodegenRegistry byStr + closureLeaves into one DenseMap2 @ codegen_registry.go byStr DenseMap2[STR, *GeneratedFileInfo, []VFS]  
+  Both maps keyed the same path-STR space; folding them shares one idx array instead of two (closureLeaves had been VFS-keyed out of a disproven collision worry - strID encodes the root).  
+  Заметки: 5c16d57 moved closure leaves onto GeneratedFileInfo (byStr DenseMap3 -> DenseMap2), and 2ceced7 reduced byStr to a plain DenseMap.
+
+- **2026-06-03** `5ada418`, `6756c50` **[superseded]** — bySplit flattened to one composite-key map[uint64] @ codegen_registry.go bySplit, splitKey(prefix<<32|suffix)  
+  The two-level DenseMap-then-inner-map lookup becomes one fast64 probe on a packed (prefix, suffix) key.  
+  Заметки: 6756c50 saves this change as dev/by_lines.diff. Moved to a morton-keyed identity IntMap in 58eebc3.
+
+- **2026-06-03** `86beab5` — fold PB/EV producer refs into the codegen registry; drop struct-key side maps @ gen resolveCodegenDepRefsExt; pbOutputs/evOutputs removed; GeneratedFileInfo.ProducerRef  
+  Each build input probed three side maps (enOutputs, and pbOutputs/evOutputs keyed by a hashed {platform,path} struct) before the registry; registering outputs with their producer ref lets the existing per-platform reg.Lookup answer directly.  
+  Эффект: ~568k x3 probes on sg5  
+  Заметки: EN followed in 6404da4.
+
+- **2026-06-03** `b383c6b` — -I<path> arg memo backed by a genCtx DenseMap[VFS,string] @ emit_cc inclArgMemo -> genCtx.inclArgValues  
+  map[VFS]string replaced by a plain array probe; inclArgMemo holds a pointer so it stays copyable and the ModuleCCInputs.InclArgs threading is unchanged.  
+  Эффект: ~1.0M hash probes on sg5  
+
+- **2026-06-04** `32a56e0` — morton-keyed searchTierFlat in an identity-hashed IntValueMap @ scanner searchTierFlat (ctxNum, target STR)  
+  Shift-packing put only the target in the low bits, which would cluster under identity hashing; Morton/Z-order interleaving mixes both dense ids into the low bits so IntValueMap spreads them; the searchTierResult value lives in the side slice.  
+  Эффект: ~672k probes leave the Go map (total map ops 4,939,321 -> 4,266,631); CPU within run-to-run noise (dropped maps.h2 roughly equals IntValueMap probe + morton)  
+  Заметки: Key 0 never occurs (target STR >= 1).
+
+- **2026-06-04** `4a240fa`, `63f5d2f` — IntMap.Cell find-or-insert, IntValueMap side []V, Get returns *V @ int_map.go Cell; int_value_map.go IntValueMap[V]  
+  Cell returns a writable pointer to the value cell in one probe (grows before returning); IntValueMap keeps only a uint32 index in the table (8B key + 4B index) with values packed in a side slice; Get returning *V avoids materializing a zero V on miss and copying V on hit.  
+  Заметки: Pointer valid until next mutating call. IntValueMap tested with 200k-op differential fuzz.
+
+- **2026-06-04** `58eebc3` — morton-keyed bySplit and sourceUnderCache on identity IntMaps @ codegen bySplit -> IntMap[*GeneratedFileInfo] (splitKey = morton(prefix, suffix)); sourceUnderCache -> IntValueMap[string] keyed morton(incDir, target)  
+  Same transform as searchTierFlat: interleaved keys let identity-hashed open addressing spread pairs without clustering, removing Go map key re-hash.  
+  Эффект: bySplit ~656k and sourceUnderCache ~599k probes off the Go-map count; CPU within noise (count reduction, not a speedup)  
+  Заметки: bySplit still gated by splitPrefixSeen; key 0 never occurs.
+
+- **2026-06-04** `f25d9a6` — identity-hashed open-addressing IntMap for the intern table @ int_map.go IntMap[V]; vfs.go intern hi-keyed lookup  
+  Linear-probing power-of-two table indexed by key & mask with no mixing (hash(x) == x), valid because the xxh3-128 hi half is already uniform; skips the per-probe key re-hash Go's runtime map does even for uint64 keys (maps.h2).  
+  Эффект: sg5 -G, 10 runs: total maps.h2 1.11s -> 0.42s; IntMap.Get/Put adds 0.52s, net ~0.2s; gen 2.94s  
+  Заметки: Other uint64 maps (bySplit, searchTierFlat, sourceUnderCache) deliberately NOT migrated: shift-packed sequential ids would cluster under identity indexing (fixed later with morton keys). Tested with 300k-op differential fuzz.
+
+- **2026-06-04** `fcb49ec` — IntMap key 0 reserved as empty sentinel (drop freeVal/hasFree) @ int_map.go Get/Put hot path  
+  The intern table already absorbs a 0 hi-hash via lo-verify + overflow, so key 0 never needs storing; dropping the out-of-band zero-key slot removes a per-call k==0 branch.  
+
+- **2026-06-05** `b9ffce2` — Env / Cmd.Env as ordered []EnvVar instead of map @ Node.Env, Cmd.Env (EnvVars); appendEnv/writeEnv; executor  
+  Env is only iterated (serialize, hash, child env), never looked up by key, so an ordered slice avoids the per-node empty-map alloc, map reads and key sort (nil for the common empty case).  
+  Эффект: uid.go ~246k m[k] reads removed; sg5 2.99s  
+  Заметки: Gate re-parses env JSON into a map before hashing, so emission order is free.
+
+- **2026-06-05** `dc263ab` — typed structs for KV / Requirements / TargetProperties instead of maps @ node_attrs.go; uid.go canonical hash; gjson appendKV/appendRequirements/appendTargetProperties  
+  String-keyed maps (map[string]interface{} / map[string]string) were iterated, key-sorted and type-asserted per node on the canonical-hash path; fixed-field structs with hand-rolled sorted-key JSON appenders remove the map ops, canonKeysOf alloc+sort and interface boxing.  
+  Эффект: ~413k map ops on the make path (uid.go:254/264/288) removed; sg5 2.89s  
+  Заметки: Field set mirrors exactly what upstream emits in sg* refs; Env stays a map in this commit.
+
+- **2026-06-06** `1649a75` — parsedIncludeSet as a fixed array indexed by a uint8 bucket enum @ parsedIncludeSet / parsedIncludeBucket (parser_manager, parsers.go)  
+  The bucket set is static, so the per-file Go map becomes [parsedIncludeBucketCount][]includeDirective: bucket access is an array index, not a hash probe, and parsing no longer allocates a per-file map. Negative cache stores an empty array; the DenseMap present/absent bool gates the re-stat.  
+  Эффект: drops the hottest parser_manager map site, ~55k map-ops on sg5  
+  Заметки: Also dropped unused parsedIncludesCPP bucket and a dead nil guard. Buckets later reshaped to Header/Cpp (8f84afc) and share one buffer (3e20b85).
+
+- **2026-06-06** `49d8a09` — BitSet (1 bit/id) replaces dense id-indexed []bool membership sets @ bit_set.go BitSet; sysinclCtx.keyBits, StreamingEmitter.resolved, resourceAwareEmitter.seen, tarjanScratch.onStack  
+  Generic idBitSet renamed to a plain uint32-keyed BitSet with remove/set(v,on); dense set-once id lookups store 1 bit per id instead of 1 byte, has() folds in the bounds check (no manual len guard) and StreamingEmitter.resolved no longer appends false per node.  
+  Заметки: Positional attribute vectors zipped by index (ccIsFlatNoLto, reorderARMembers params, pyRegisterExplicit) intentionally left []bool. BitSet is later reused for addinclIndexed (640b82a), ARG flag dedup (a854772), leafEver (252441e), strKeySet (40e250c). A BitSet for tjc.closure (replacing the epoch IdSet) was measured slower (99b9bd3).
+
+- **2026-06-06** `640b82a` — addinclIndexed as BitSet instead of map[VFS]struct{} @ addinclIndexed (parse; 'already walked this addincl dir?')  
+  Set-once membership keyed by VFS becomes 1 bit/id with no hashing.  
+  Эффект: drops the map[VFS]struct{} and its ~47k probes on sg5 out of the map-op accounting  
+
+- **2026-06-06** `d486cbe` — addinclIndex on DenseMap[STR, []VFS] instead of map[STR] @ addinclIndex probed in resolveContextSearchTier (parse)  
+  Hot Go map probed once per indexable resolve becomes a DenseMap: a bounds check plus two loads, no hashing. Build appends via Get+Put; absent key yields a nil slice so the range is empty.  
+  Заметки: Drops out of the map-op accounting (map-probe counter driven campaign).
+
+- **2026-06-07** `2c89ae5` — tool emit-result cache keyed by ARG module path in a DenseMap @ genCtx.tools DenseMap[ARG, *moduleEmitResult]; genCtx.moduleByRef DenseMap[NodeRef]  
+  ctx.tool/toolResult take an interned ARG module-path key and cache results in an id-indexed DenseMap; moduleByRef maps a tool's LD node to its emit result by NodeRef.  
+  Заметки: 651fe52: only memoize once the tool really built (LDRef != 0) so a PEERDIR-cycle stub doesn't poison the cache.
+
+- **2026-06-10** `99b9bd3` **[rejected-by-measurement]** — denseBitSet (1 bit/id, dirty-word clearing) instead of epoch IdSet for tjc.closure @ tjc.closure in the closure splice (dfs.func2)  
+  Hypothesis: has() dominated by LLC misses, so a denser set would help. Measured slower: ids are clustered (interned in discovery order, shared headers get low ids) so the IdSet working set is already cache-resident, and the bitset adds shift+and+test per probe and an RMW + dirty branch per add versus one epoch store.  
+  Эффект: 10x sg5: dfs.func2 cum 1290→1730 ms (+34%), has 490→540, add 120→300 (+2.5x), user 0.71→0.75 s.  
+  Заметки: PERF.md item 9; rolled back.
+
+- **2026-06-11** `2e9e109` — generated perfect-hash extension -> parser dispatch @ dev/gen_parsers.py -> parsers_generated.go; registeredParserFor  
+  The extension set is static, so a generator searches a per-length perfect hash (linear combination of 1-3 extension bytes mod the group's size, minimized tables) and emits a 120-slot table plus lookup with inlined constants; a single string compare rejects unregistered extensions.  
+  Эффект: The probe ranked registeredParserFor's byExt map probe the hottest map site (135.5k of 1.03M ops, 13.1%).  
+  Заметки: Deletes the byExt map, registration calls and the parserFor one-entry memo (82d10da). Adding an extension = edit the generator and re-run.
+
+- **2026-06-11** `767e3e7` — sysincl records stage mappings as pair slices, not maps @ sysincl record parsing / index merge (SysinclPair)  
+  Per-record staging maps were written once at parse and read once by the index merge; records now append SysinclPair slices and the index build reproduces last-wins duplicate semantics with a reverse scan over the global epoch deduper, tombstoning earlier occurrences.  
+  Эффект: 5k entries x 2 platform loads = 10k writes ... another 10k reads  
+  Заметки: YAMLs carry 96 intra-record duplicate headers.
+
+- **2026-06-11** `ea1230a` — genModule memo keyed by a packed uint64 instanceKey in an IntValueMap @ genModule memo (map[ModuleInstance]); Language enum  
+  map[ModuleInstance] hashed the whole struct per probe; instanceKey packs Path|Kind|Language|platform-bit into a uint64 for an identity IntValueMap (fails fast on an unknown platform). Language becomes an int enum.  
+  Эффект: (30.9k)  
+
+- **2026-06-12** `40e250c` — keyword membership as a BitSet over keyword STR ids @ strKeySet; RUN_PROGRAM / RUN_PYTHON / RUN_ANTLR section parsers  
+  kw constants intern first at init (tiny dense ids), so per-argument service-keyword checks become one array bit-load instead of a map[STR]bool probe.  
+  Эффект: ~12k probes per run, the parser's map-op leader  
+  Заметки: Relies on keyword consts being interned before anything else (small ids).
+
+- **2026-06-12** `6d42678` — listdir returns a DirView over a shared packed name store; membership via IntMap[bool] keyed by splitMix64(dir, name) @ OsFS listdir / DirView; bump-arena name store; MemFS mirror  
+  The per-directory map[string]bool allocated a key string per entry per directory plus the map; now names are interned once globally from dirent bytes, the directory holds a packed (STR<<1|isDir) window into one bump-arena store, and membership is one exact IntMap probe (splitmix64 is a bijection over the id pair, no verify).  
+  Эффект: Exact-rate profile: 1,071,579 -> 1,025,967 objects/run; the listdir layer's per-entry cost drops to first-touch intern copies (45.9k, unique basenames only; intern table 212,416 -> 247,339).  
+  Заметки: nil-vs-empty preserved as nil names vs shared emptyDirNames.
+
+- **2026-06-12** `c68fbf1` **[superseded]** — usesResources as []STR and the fetch registry as DenseMap[STR, NodeRef] @ Node.usesResources, fetchRefs, attachResourceDeps, emitResourceFetch  
+  The per-node probe becomes an id-indexed load instead of a string hash; emitResourceFetch keys by decl.Name (already a STR).  
+  Эффект: attachResourceDeps' per-node probe (28k/run, the map-op leader)  
+  Заметки: attachResourceDeps and its per-node append removed by 10321b4 (deps resolved on the fly).
+
+- **2026-06-15** `3b4f0af`, `e521efb`, `73a7bbc` — remove shadow maps duplicating the codegen registry (prOutputProducer, pyGeneratedSrcs, prOutputInputs) @ modules.go ModuleData maps; emitArchive, llvmBcSourceInfo, llvmBcRootRelArcSrc, emitResourceObjcopy, emit_swig_c/emit_py_codegen/emit_py_aux/resource.go buildPySrcEntriesFor; resource.go prResourceExtraInputs  
+  Readers resolve through reg.lookup(copyFileOutputVFS(modPath,name)) / reg.lookupSplit, so the old dual-key (full + rel) map probe collapses to one canonical lookup. prOutputInputs, which stored each PR/PY producer node's full materialized input closure per output, is deleted along with its writers (the over-emit it reproduced is now neutralized in --ref-graph normalize via filterObjcopyInputs).  
+  Заметки: Motive single-source-of-truth/parity, not measured. 3b4f0af net -31 lines; LLVM_BC optimized .bc registered as pkOP so nothing lives outside the registry.
+
+- **2026-06-16** `7b33cf1` — byte double-array trie (Darts, Aoe'89) for longest-prefix match @ darts.go NewDarts / longestMatch; AutoincludeIndex (autoinclude root -> linters.make.inc)  
+  Static base/check/value arrays built once over the key set; longestMatch walks the concatenated byte stream of its parts without concatenating (longestMatch(dir, "/")) by pure array indexing - no hashing - and fails fast on the first byte without a transition. Replaces per-ancestor full-path hashing.  
+  Эффект: darts ~10 ns/op vs ancestor-walk ~86 ns/op (~8.5x) (6c08c29)  
+  Заметки: Keys are "<root>/" (trailing slash = component boundary, arc/ does not match arcfoo/). Codes are b+1 so slot 0 is a free/non-key sentinel. darts.go still in HEAD; later tuned by commits outside slice (e74a9ca, 722a93b, 9d290fc, a054239).
+
+- **2026-06-23** `27a428d` — build-output parsed includes stored in CodegenRegistry DenseMap @ CodegenRegistry setBuildParsed/buildParsedFor; IncludeScanner parsedIncludes  
+  registerBuildParsedIncludes kept a separate Go map[VFS][]IncludeDirective on the shared IncludeParserManager; parsed includes now live on GeneratedFileInfo in the per-scanner codegen registry, already keyed by strID via a DenseMap, removing the duplicate Go map.  
+  Эффект: ~35k writes + ~26k reads per sg7 gen (moved off the Go map)  
+  Заметки: Also fixes a latent host/target key collision (parsers were shared, codegen is per-scanner). Graph byte-identical.
+
+- **2026-06-25** `17ccd25` — Darts longest-suffix ExtMatcher replaces perfect-hash ext table and HasSuffix chains @ darts.go longestSuffixMatch; ext_matcher.go ExtMatcher[T]; parser_ext.go; emit_sources.go emitOneSource  
+  A double-array trie of reversed keys walks the input from the end; the parser registry drops the hand-rolled perfect-hash table (extSlots[124] + per-length modulo hashing in parsers_generated.go) and emitOneSource drops its strings.HasSuffix chain + switch, yielding the emitter function directly.  
+  Заметки: Motive stated as unification; no numbers. Undoes the earlier generated perfect-hash lever (generator dev/gen_parsers.py deleted in 5381beb).
+
+- **2026-06-26** `b484a64` — searchTierFlat/sourceUnderCache: IntValueMap -> IntMap[VFS] inline @ scanner.go searchTierFlat, sourceUnderCache  
+  With a uint32-shaped value, the IntValueMap indirection (IntMap index + separate vals slice) is replaced by a direct IntMap storing VFS inline; presence keyed (k==0 sentinel) so a cached 0/not-found stays distinct from absent.  
+  Эффект: (combined with the SearchTierResult change) total alloc_objects 2016060 -> 1980464  
+
+- **2026-06-28** `034a157` — one ExtMatcher table with class bitmask for ext predicates @ ext_class.go  
+  Nine independent HasSuffix-chain predicates replaced by a single ext -> extClass lookup (bitmask cxx/cc/asm/header/carriesIncl/codegen/copyAuto + flatc variant + SrcExtClass); each predicate is one bit test.  
+  Заметки: ext_class_test pins byte-for-byte equivalence with former predicates. Motive: consolidation.
+
+- **2026-07-02** `37411c1`, `65fbde2`, `e06b8d5` — flat span-based producer scheduler @ emitDeclaredProducers / ProducerPos (GenCtx.prodOuts IdValueMap)  
+  Producer ordering uses one flat []ProducerPos whose ins/outs are spans of a single backing slice, an epoch-stamped IdValueMap (IdSet shape) for out->position, and stable Kahn as linear sweeps; no string keys, no per-module maps. No-edge modules keep the fast path byte-identical by construction.  
+  Заметки: Positions' ins/outs later moved into the EmitContext prodVFS span buffer (54b2a35, df36b65).
+
+- **2026-07-02** `51f4828` — cap PageVec/UidVec page array at 32 @ PageVec, UidVec  
+  Ids are uint32 so the page index never exceeds 31; the [64] page array wasted 32 slice headers per vec.  
+  Заметки: UidVec keeps the [32] cap after the intern PageVec revert (c080c42).
+
+- **2026-07-02** `9fb7cfe`, `c080c42` **[reverted]** — paged intern table (PageVec) @ internTable strs/los -> PageVec[internEntry]  
+  Element i lives in page floor(log2(i+1)), allocated once at final size and never moved, removing doubling memmove of the two parallel slices past 1<<16.  
+  Эффект: Net CPU (10x yabs): samples 51.44s -> 50.08s (-2.6%), memmove 2.84 -> 1.89s  
+  Заметки: Reverted in c080c42: 'Min wall-clock (interleaved, drift-controlled) showed PageVec ~+1.5% (+72ms) slower than flat: the per-access paged double-indirection ... outweighs the append-growth memmove it removed'. Paging came back for concurrent readers in 9d4efbc, and 60d1540 kept a flat array for the generator plus PageVec for shared readers. Note pprof samples improved while min wall regressed.
+
+- **2026-07-02** `a13b58c` — u16 stamp + STR-key IdSet @ IdSet (closure / JS-visited)  
+  Keying by STR id (v>>1) and narrowing the generation stamp u32->u16 shrinks gen[] from 2*len(strs)*4 to len(strs)*2 bytes; reset() still zeroes on wraparound.  
+  Эффект: 4x reduction (4.7MB -> 1.18MB on the yabs case); CPU-neutral on spliceNew  
+  Заметки: u16 safe: 'measured epoch resets (closure/SCC builds) ~4000 << 65536'. TarjanScratch and producers IdValueMap stayed VFS-keyed.
+
+- **2026-07-02** `ae01d5a`, `1acc113` **[rejected-by-measurement]** — unsafe bounds-check elision in PageVec.at @ PageVec.at  
+  Masked page index (&31) plus unsafe.Add into the page made at() bounds-check-free (confirmed by check_bce).  
+  Эффект: interleaved min wall-clock (same session) had unsafe at 4.919s vs the bounds-checked PageVec at 4.892s (+0.6%, within noise)  
+  Заметки: Lesson from 1acc113: 'The paged access cost is the double indirection ... plus bits.Len64, not the bounds check'. Contrast: Codex later added unsafeAt BCE across containers (ae6a0b4, 9d290fc, 6b6dac2) and in spliceBucket (2ef1670) without published numbers.
+
+- **2026-07-03** `9d4efbc` **[superseded]** — paged intern/arg/env/content-hash tables for lock-free readers @ internTable, argTable, envTable, OsFS.contentHashes -> PageVec  
+  With uidization concurrent to generation, growable slices would tear headers; PageVec's fixed [32] top array never moves, so single-writer appends are safe for lock-free readers. CanonBuf drops its OsFS specialization; unrecorded content hashes go to a per-executor mutex cache via os.ReadFile.  
+  Эффект: bs_static -j0 min 5.12s -> 4.89s (the paged intern read path is no slower — internCell locality offsets the paging)  
+  Заметки: Reintroduces paging after the c080c42 revert, motivated by data races. 60d1540 then split generator reads (flat) from shared readers (PageVec); 309dfa8 publishes pages via atomic.Pointer.
+
+- **2026-07-06** `309dfa8` — publish PageVec pages via atomic.Pointer @ PageVec pages [32]atomic.Pointer[[]T]  
+  Page header is built fully then published with one word store; readers pay one dependent load. Fixes torn 24-byte header reads by shared readers.  
+  Эффект: wall unchanged, 4.58 vs 4.61 min-of-10  
+  Заметки: Correctness fix with measured zero cost; part of the lock-free audit (de78080).
+
+- **2026-07-06** `4b1ecd0` — single growth policy on Vec @ BitSet.add, TwoBitSet.set, StreamingEmitter node table  
+  Hand-rolled make-double-copy loops ride Vec.ensureLen/pushBack.  
+  Эффект: bs_static: max-rss -0.9 MB  
+  Заметки: Epoch-reset structures excluded (they allocate fresh without copying).
+
+- **2026-07-06** `5e86684` — freshLen for epoch structures; pure 2x growth @ DeDuper, IdSet, IdValueMap, TarjanScratch leading epoch arrays  
+  freshLen ensures length with a fresh zeroed array and no copy (the epoch-reset contract); slaved value arrays stay plain slices sized from the leader; Vec growth becomes plain doubling everywhere.  
+  Эффект: bs_static: max-rss 812.2 -> 797.7 MB, wall neutral  
+  Заметки: Trade-off stated: '+14 MB of final-capacity overshoot in GC-on builds for -14.5 MB of never-collected churn under -j0'.
+
+- **2026-07-06** `bec7819` — store closures in the scan cache's dead column @ IncludeScanner closures DenseMap merged into scanCache DenseMap3[STR, []VFS, Closure, bool]  
+  Both maps were keyed by the same file STR; closures move into the unused uint32 column of the scan cache, eliminating a second strBound-sized sparse index per scanner and its doubling churn.  
+  Эффект: bs_static: max-rss -7.1 MB, dense_map allocations -10.1 MB  
+
+- **2026-07-06** `c094781` — IntMap -> IntValueMap for bucket cache @ BucketCache intern/overflow maps; IntValueMap.cell()  
+  Probe array shrinks from 40-byte {k, bucketVal} entries to 16-byte {k, uint32} index entries with values stored densely on the side; insert-or-get cell() added.  
+  Эффект: Measured on bs_static: wall min-of-10 −1.7% (overlapping distributions), bucketVal storage inuse −5.2 MB against +4.1 MB of index growth, max-rss +0.75%  
+  Заметки: intern.cell hit path carries one extra dependent load.
+
+- **2026-07-06** `c6817c7` **[superseded]** — Vec[T] with controlled growth for dense maps @ Vec.pushBack/reserve/ensureLen; DenseMap, DenseMap2/3, IntValueMap  
+  Go's ~1.25x growth for large slices costs ~5x final size in cumulative allocations; Vec doubles up to 1 MB then 1.5x, reserve preallocates, ensureLen zero-extends index arrays.  
+  Эффект: bs_static: max-rss 835.3 -> 813.0 MB (-22.2 MB), inuse-at-exit +2.2 MB, wall neutral  
+  Заметки: 'the parse cache's vals alone threw away 28 MB on a 7.5 MB array'. The 1.5x tier was removed in 5e86684 (pure 2x).
+
+- **2026-07-06** `f07c749` — packed IntSet for dir-entry caches @ OsFS dirEntries (IntMap[bool] -> IntSet)  
+  Open-addressed bare uint64 keys with the bool packed one bit per slot in side words: 16 bytes per slot become 8.125, probe array twice as dense, bit words 64x smaller so the hit path's second read stays cache-resident.  
+  Заметки: A pair-keyed dirEntryMap replacement was tried and reverted (76366a2 -> 52f8824).
+
+- **2026-07-08** `722a93b`, `9d290fc`, `2a55011`, `6b6dac2` — Darts trie construction/lookup layout @ newDarts / findBase / longestMatch (darts.go)  
+  722a93b: trie built in a flat node slice with [256]int32 edges and an index queue (no per-node maps/code slices). 9d290fc: per-node edges become a linked edge list (first/next) instead of [256]int32 children, findBase uses max code. 2a55011: findBase starts from a remembered baseHint. 6b6dac2: unsafeAt in match loops.  
+  Заметки: No numbers stated.
+
+- **2026-07-13** `2ef1670`, `ae6a0b4`, `9d290fc`, `6b6dac2`, `76366a2`, `76b828d` — unsafe bounds-check elision in hot container probes @ spliceBucket gen probe, IntMap/IntSet key probes, DenseMap/DenseMap2, BitSet/TwoBitSet, Darts, PageVec, DeDuper (unsafeAt)  
+  Index arithmetic through unsafe.Add/unsafeAt where the index is in range by construction removes bounds checks from probe loops.  
+  Заметки: No numbers published; the earlier Claude attempt on PageVec.at measured no gain and was reverted (1acc113).
+
+- **2026-07-13** `3693551`, `21c8774` — IntMap probe/grow tightening @ IntMap.get/cell/grow  
+  data/mask hoisted into locals in probe loops; grow() reinserts entries with a direct linear probe into the new arrays instead of put() per entry with count/resize checks.  
+
+- **2026-07-13** `76366a2`, `52f8824` **[reverted]** — exact pair-keyed dir-entry map @ OsFS.dirEntries dirEntryMap  
+  Open-addressing table storing (dir<<32|name) with the isDir flag in bit 63, replacing the hashed-key IntSet.  
+  Заметки: Reverted 15 minutes later in 52f8824 back to IntSet with splitMix64 keys; no numbers.
+
+- **2026-07-13** `9cb5b30`, `69b1e48`, `4dddde4`, `5195d57` — presize then right-size hot hash tables @ OsFS.sourceUnder, GenCtx.memo, searchTierFlat, internTable.ids, codegen bySplit, BucketCache.intern, dirEntries  
+  Initial capacities raised to avoid rehash growth (sourceUnder 1<<16 -> 1<<19, memo 4096 -> 1<<14, searchTierFlat 4096 -> 1<<16, intern ids 1<<16 -> 1<<19, bySplit 1<<14 -> 1<<17), then trimmed (BucketCache.intern 1<<18 -> 1<<17, sourceUnder 1<<19 -> 1<<18, dirEntries 1<<18 -> 1<<17).  
+  Заметки: No numbers published.
+
+- **2026-07-13** `af431b9`, `76366a2` **[reverted]** — DenseMap2 row-inline values @ DenseMap2 rows {v1, v2, set}  
+  Values stored inline in rows instead of indexes into side value arrays.  
+  Заметки: 76366a2 went back to columnar set/vals1/vals2 arrays the same evening; no numbers.
+
+- **2026-07-13** `fc03738` — IntMap keys and values in separate arrays @ IntMap  
+  Probe loops scan a dense []uint64 key array; values live in a parallel array touched only on hit.  
+  Заметки: Opposite layout choice to the intern cells (60d1540 kept str+lo merged after measuring); no numbers here.
+
+
+### Схема идентификаторов (65)
+
+- **2026-05-17** `d253495` — scanner-local interner: string→uint32, VFS = relID | bit31 root; numeric hot cache keys @ scanner.go scannerInterner; resolveInnerKey{includer,target uint32, flags uint8}, subgraphInnerKey{abs,sourceClass uint32}, sysinclSourceKey, sysinclIncluderKey  
+  Hot scanner maps hashed string bytes and compared struct keys with strings/VFS; interning each string once and keying by small integer structs removes aeshash/matchH2/eq work. SOURCE vs BUILD fits in the reserved high bit, so VFS needs no second table; IDs are scanner-local.  
+  Эффект: devtools/ya/bin (make -j 0 -k -G): wall 8.16s → 8.03s; user CPU 10.71s → 10.47s; max RSS 1457860 kB → 1209140 kB; go test 4.313s → 4.179s; matchH2 21.21% → 10.09%; aeshashbody 12.82% → 7.08%; eq.resolveInnerKey 4.16% → 0.85%; eq.sysinclIncluderKey dropped from top; interner cost internString 0.69s cum, internVFS 0.50s cum; in-use heap ~300MB → 187.49MB  
+  Заметки: PLAN_1. Chose scanner-local IDs over a repo-wide VFS representation change. Panics on 31-bit ID exhaustion. Remaining scanner cost after: subgraph, resolveSearchPath, generic DFS/materialisation.
+
+- **2026-05-18** `fb710de` — subgraph cache values as []uint32 interned IDs @ scanner.go subgraphCache map[subgraphInnerKey][]uint32; scannerInterner.strings + vfsByID  
+  Cached closures store 4-byte IDs instead of 24-byte VFS (string header + root) per element, shrinking the retained subgraph cache and its copy cost; interner keeps an id→string slice so VFS is reconstructed without allocation.  
+  Заметки: PERF.md step 4. No numbers in commit.
+
+- **2026-05-18** `fef2d29` — DFS visited/order on interned uint32 IDs @ scanner.go dfsID/plainDfsID/walkSubgraphID/walkSubgraphTaintedID, idSet map[uint32]struct{}, visitedIDPool/orderIDPool; sources.go joinSrcsIncludeClosure  
+  The include DFS works on uint32 IDs end to end (int-keyed map for visited, []uint32 order, pooled), merging cached subgraphs by plain copy; VFS is materialised only when WalkClosure builds its output slice.  
+  Заметки: PERF.md step 5. Gave up VFSMap.AddIfAbsent single-probe (lookup + insert on idSet). No numbers in commit.
+
+- **2026-05-24** `dba4c99` **[superseded]** — One VFS interner shared by host and target scanners @ genCtx.vfsInterner (*scannerInterner) created in GenWith  
+  Run-wide ID space so interned IDs are usable as cross-scanner keys; per-file caches remain per scanner. Serial scanner, no locking.  
+  Заметки: Enabler for fd67a58. scannerInterner deleted in 6745623 once VFS itself became a global interned id.
+
+- **2026-05-24** `fd67a58` **[superseded]** — AR member-input dedup keyed by interned uint32 id instead of map[VFS] @ gen.go addMemberInputs  
+  VFS key (Root uint8 + Rel string = 24B) went through Go's generic struct hasher; the interned uint32 id uses mapaccess_fast32; internVFS is injective so set and order are identical.  
+  Эффект: addMemberInputs allocations 502MB -> 272MB; sg5 build total 4.60 -> 4.37GB.  
+  Заметки: The whole member-input aggregation was deleted (ff97288/015667a/36d8409).
+
+- **2026-05-25** `0459511` **[superseded]** — VFS as an interned uint32 id (bit 31 = BUILD_ROOT) instead of {Root, Rel string} @ vfs.go (process-global append-only rel intern table)  
+  24B -> 4B per VFS; map keys go through mapaccess_fast32; equality is an integer compare; Rel()/Root() via O(1) slice index; ids never reach the graph.  
+  Эффект: 24B -> 4B per VFS; map[VFS]T native fast32 beats both the VFSMap two-bucket faststr workaround (9.1 ns/op) and the old struct key (11.9 ns/op).  
+  Заметки: VFSMap two-bucket workaround removed here; VFSMap/VFSSet wrappers dropped in 1dc6936. Encoding changed by 146a81e (full-string intern, no bit) and e30db8f (root in low bit).
+
+- **2026-05-25** `10dd621` — Intern literal paths as compile-time constants (Intern("$(S)/X")) @ all literal Source("...")/Build("...") call sites  
+  Literal-argument calls no longer concat per call; ParseVFS renamed Intern.  
+  Эффект: Barely changes allocation: literal calls were only ~13 MB of Source's 1.58 GB.  
+  Заметки: Remaining churn identified as Source(runtimeVar) in the scanner/resolver (needs a bare-rel lookup).
+
+- **2026-05-25** `66f1828` — Thread the target STR into sysinclLookup keys; materialize string only on miss @ scanner sysinclLookup (sysinclSourceKey/sysinclIncluderKey)  
+  Keys take the directive's STR directly; target.String() is computed only on a cache miss for the sysincl regex. Cache hits do zero target string work; the target is interned once at parse time.  
+  Эффект: CPU samples 5.66s->5.44s, alloc 1918MB->1858MB; gen 6.59s.  
+
+- **2026-05-25** `6745623` — Delete the scanner's second id space; DFS directly in VFS-id space; one global string interner @ scannerInterner (internVFS/vfsByID/relIDBound) deleted; idSet; internString  
+  The scanner re-interned each rel into a local id and recovered VFS via vfsByID -> Source()/Build() concat on every node recovery. Now uint32(v) is the node id, idSet collapses to one slice indexed by VFS id sized by internBound(), and internString provides compact uint32 keys reused across resolve caches.  
+  Эффект: The vfsByID round-trip was 1.5 GB - 97% of all Source() allocation. sg5 gen total allocation 4063 MB -> 2489 MB (-1.57 GB, ~39%).  
+  Заметки: Also removes the dead run-wide vfsInterner threaded through gen.go.
+
+- **2026-05-25** `85e7589` — STR type + read-only interned() probe; codegen lookups never intern phantom candidates @ internString -> STR; interned(s) *STR; CodegenRegistry.byRel/LookupRel; resolveContextSearchTier/resolveSearchPath; sysincl + searchTier keys  
+  Search-tier codegen probes did Build(rel), interning "$(B)/<dir>/<target>" just to ask Lookup; most miss, so each miss allocated a concat and left a permanent phantom string (inflating internBound and every id-indexed scratch set). A lookup-only probe returns nil for never-interned strings with no alloc; hits reuse the VFS interned at Register time.  
+  Эффект: main.Build allocations 101MB->10MB, total alloc_space 2489MB->2264MB (-225MB); intern table no longer accumulates one-shot probe strings.  
+
+- **2026-05-25** `f693c18` — Parsers return interned STR targets; non-allocating internBytes @ includeDirective.target (STR); C parser internBytes; resolver searchTier key  
+  The C parser interns target bytes via a non-allocating []byte lookup (only first-sight misses copy), so recurring targets across thousands of files cost one alloc; the resolver reuses the id instead of re-interning d.target up to 3x per directive. Parse cache targets become 4-byte ids deduplicated across files.  
+  Эффект: CPU samples 6.6s->5.66s (-14%), alloc 1964MB->1918MB; gen 6.57s.  
+
+- **2026-05-26** `93edfa6`, `54c601d` **[rejected-by-measurement]** — STR-keyed FS directory cache (dirs map[STR]map[STR]bool) @ fs.go dirs/listdirSTR/existsSTR; resolveSourceUnder dirKey memo  
+  Re-key the directory cache and children by interned ids so the dominant first-component probe is integer-keyed.  
+  Эффект: sg5 wall flat (3.51s); intern table +51400 strings (+35%: 148319 -> 199719), retaining ~3.7MB.  
+  Заметки: Reverted by 54c601d (pre-rebase 22087d9). Lesson stated: Go SwissMaps make faststr ~= fast32 apart from string hashing (both pay ctrlGroup.matchH2, ~3.7%); the real lever is probe COUNT (3.6M matchH2), which needs fewer lookups, not cheaper keys; eager interning of every basename pollutes the table.
+
+- **2026-05-26** `e30db8f` — Pack VFS root into the low bit of the id @ vfs.go (v = internId<<1 | root); vfsBound(); codegen_registry byStr re-keyed by strID  
+  Root() becomes a register bit test instead of reading internTable.strs[id][2]; String()/Rel() stay zero-alloc reads at strs[v>>1]. Low (not high) bit keeps ids dense in [0, 2*internBound) so idSet/Tarjan scratch arrays can index them directly.  
+  Эффект: Root() was 2.6% of gen flat (0.10s -> ~0); gen wall ~3.02s -> 2.86s.  
+  Заметки: Breaks VFS==STR identity; byStr keyed by STR(OutputPath) aliased other rel-STRs and spuriously resolved system headers as generated, fixed by keying on strID().
+
+- **2026-05-31** `5486730` — executor never interns (keeps the intern table single-writer) @ make.go restoreInto (mountVFS removed; mountString resolves $(B)/ meta paths from the string)  
+  restoreInto interned a dep's $(B)/ meta path only to feed mountVFS; resolving the path straight from the string means execution goroutines never write the global intern map while the generator goroutine is still interning.  
+  Заметки: Motive was a crash ('fatal error: concurrent map read and map write'), not speed; it preserves the lock-free single-writer intern-table invariant the gen relies on.
+
+- **2026-05-31** `d4542c1`, `066a2f8`, `e7ff1a2`, `767a381`, `9c31d99` — hoist literal Intern/Source/Build/internString calls into package vars @ `ay refac consts` AST tool (refac.go); applied to 16 files (gen.go, sources.go, emit_*) + internString literals in 3 files  
+  Constant path literals passed to Intern/Source/Build/internString inside function bodies are deduplicated into package-level vars, so each is interned once at package init instead of hashed and probed on every call.  
+  Заметки: Commit bodies state no perf motive or numbers (framed as refactoring); later explicitly perf-motivated hoists (529c783, 64815e6, 49e0f7b, 857170e) apply the same idea. Literals only inside file-level composite literals are left inline; internString gets its own str-prefixed namespace.
+
+- **2026-06-01** `51bf5fd` — ENV intern space; Environment as ENV-indexed []STR @ macros Environment envStore{val []STR, kind []envKind}; ExprIdent.Env interned at parse  
+  Three string-keyed maps (bools/strings/ints) become dense ENV-indexed slices; bool folds into the string slot as yes/no; Clone is two slice copies; IF identifiers are interned to ENV at parse time so EvalCond/evalAtom index the array without string hashing.  
+  Эффект: Clone deep-copied ~15.5MB churn; Environment/Clone drop out of both CPU and MEM profiles; RSS 656 -> 642 MB  
+  Заметки: ENV 0 reserved as 'not interned'; ENV table single-writer like internTable.
+
+- **2026-06-02** `400ba37` — route parse-gate existence through the root-relative IsFile @ parser sourceParsedBuckets  
+  The bespoke (dir, base) split with IsFile(dirKey(dir), base) interned the parent dir at a separate site (~44k/run); IsFile(srcRootVFS, vfsPath.Rel()) funnels directory interning through the standard gated Exists path so it can be cached in one place.  
+  Эффект: dirKey here ~44k/run  
+  Заметки: Behaviour identical; preparatory for 8296b72.
+
+- **2026-06-02** `49e0f7b` — hoist dirKey("") to a srcRootVFS constant @ fs IsFile(dirKey(""), rel) at 12 sites (parser_manager fileExistsByRel, emit_proto, emit_pr, swig/flatc/en/py_run/modules/make/mine/sysincl)  
+  The constant source root '$(S)/' was re-interned on every root-relative existence probe; a package var Source("") interns it once.  
+  Эффект: dirKey("") re-interned ~118k/run (fileExistsByRel 62k, emit_proto 43k, emit_pr 13k, ...)  
+  Заметки: Found by attributing internString past the dirKey wrapper.
+
+- **2026-06-02** `4dc6536` **[superseded]** — dir cache keyed by directory VFS with (prefix VFS, suffix) FS API @ fs.go osFS.dirs / Listdir(dir VFS) / Exists/IsFile/IsDir(prefix VFS, suffix string); ~30 call sites  
+  The hot resolve path (resolveSourceUnder) keys Listdir with the addincl/includer VFS it already holds - a fast32 probe - instead of a dirs[string] faststr probe on a concatenated rel string.  
+  Эффект: Perf-neutral-to-slightly-better on the serial path (faststr->fast32 saving partly offset by dirKey interning); gen 2.46s  
+  Заметки: Backing map replaced by DenseMap[STR] in 8bef600.
+
+- **2026-06-02** `529c783` — ENV-typed Environment API with pre-interned constants @ macros Environment Set*/Get*; env_consts.go (~58 envX = internEnv(...)); strYes/strNo; intSTR[0..1023]  
+  The whole Set/Get API takes a pre-interned ENV name; SetBool uses package STR vars strYes/strNo, SetInt uses intSTR[n] pre-interned at init, SetStringID takes hoisted constant STRs, so per-module buildIfEnv no longer re-interns names and constant values.  
+  Эффект: Environment was the #1 internString consumer (~232k/run); afterwards internString has no env/setStr caller  
+  Заметки: Remaining dynamic names (SET/DEFAULT/ENABLE/DISABLE, var expansion, platform flags) moved to parse time in efa5f0a.
+
+- **2026-06-02** `64815e6` — hoist constant SetString values to SetStringID @ buildIfEnv; strSSE41CFlags etc.; Platform.ClangVerSTR / BuildTypeUpperSTR; strCPPProto  
+  A raw per-call dump of SetString showed most calls bind constant values re-interned per module; they are interned once (package vars or per platform) and bound by STR.  
+  Эффект: sg5: 63811 SetString calls, ~80% constant: *_CFLAGS ~42k, COMPILER_VERSION 4.2k, BUILD_TYPE 4.2k, MODULE_TAG=CPP_PROTO 152; only MODDIR/CURDIR/BINDIR (~13k) genuinely computed  
+
+- **2026-06-02** `88cd00d` — lookup-only (intern-free) env probe for ${VAR} expansion @ macros Environment HasBinding(string) / Lookup(name) via internedEnv  
+  Variable expansion probed tokens via HasBinding(internEnv(name)), interning every probed token (mostly not env vars); a read-only internedEnv lookup reports un-interned names as unbound without growing the ENV table, and Lookup returns value+bound in one probe.  
+
+- **2026-06-02** `efa5f0a` — Platform.Flags as map[ENV]STR; SET/DEFAULT names interned at parse @ platform NewPlatform internFlags; SetStmt/DefaultVarStmt.NameEnv; buildIfEnv  
+  The raw CLI/conf flag map is interned once at the string boundary; downstream readers key by ENV const and compare STR (strYes/strNo); the per-module buildIfEnv loop does SetFromStringID with no interning; SET()/DEFAULT() use the parse-time NameEnv.  
+
+- **2026-06-03** `8d7e7b2` — NodeRef as a uint32 typedef (was struct{int64}) @ emitter core (BufferedEmitter/StreamingEmitter results/pendingIdx/pendingSet), uidVec, dump_graph prune/remap  
+  A node's buffer index becomes a dense 4-byte id usable directly as a slice index and dedupable through idSet/idBitSet without a side map.  
+  Эффект: 4 bytes (half)  
+  Заметки: ^NodeRef(0) 'dropped' sentinel replaces -1. Enables ff97f6d.
+
+- **2026-06-05** `feed93f` — KV.P / KV.PC as uint8 enums, stringified only at emit @ node_attrs KV ProcKind/PColor; procKindStr[k] array; attribute_generated dispatch  
+  29 process kinds and 7 colours stored as 1-byte enums instead of 16-byte string headers; integer compares/switches; strings produced by direct array index only at JSON emit, hash and executor display.  
+  Эффект: ~30 bytes/node saved on the kv block (~1.7MB on sg5)  
+  Заметки: pkNone/pcNone (zero) = absent.
+
+- **2026-06-07** `a854772` — intern compiler/linker argument tokens as ARG ids end to end @ arg.go ARG table; moduleData flag vectors, ModuleCCInputs, Platform.CFlags/CXXFlags, moduleEmitResult, peerGlobalContribs  
+  All flag vectors carry []ARG (uint32) interned at the parse/construction boundary and are materialized to strings only when a node's CmdArgs are built, so flag copying/merging/dedup works on ints.  
+  Заметки: ARG table initially plain map+vector (args are few); later backed by the STR table (1a4ac70) and CmdArgs became []STR (7663858).
+
+- **2026-06-07** `b550806` **[superseded]** — CmdArgs as []ANY tagged union of interned ids instead of []string @ Cmd.CmdArgs; ANY (uint32: low 3 bits tag ENV/TOK/ARG/STR/VFS); sinks canon/gjson_write/executor  
+  Command args hold interned ids with cheap boxing and are materialized to strings only at sinks (uid canon, JSON writer, executor).  
+  Заметки: Superseded by 7663858: every interned kind converts to STR for free, so CmdArgs became plain []STR and ANY was removed.
+
+- **2026-06-07** `dbb78ae`, `0c83fb9` — macro names as a closed numeric TOK enum instead of strings @ yamake_tok.go TOK; ModuleStmt.Name / UnknownStmt.Name, applyUnknownStmt dispatch, module-kind predicates  
+  Macro-name tokens are interned at parse into a 168-const enum; every switch/compare on a macro name becomes an int compare and the string form is recovered only at diagnostic edges. tokName is then held as []STR via the intern table.  
+  Заметки: Unknown macro names now fail fast at parse.
+
+- **2026-06-07** `f0d9310`, `25d6908` — static internArgs([]string{...}) flag bundles become []ARG vectors of pre-interned consts @ flags.go flag bundles; arg_consts.go  
+  Static flag bundles become []ARG{argA, ...} of consts, so no runtime internArgs over a string slice at init.  
+  Эффект: the 16 static internArgs([]string{...}) flag bundles in flags.go become []ARG{...} vectors of pre-interned arg consts; the 83 new element strings ... are declared in arg_consts.go (203 -> 286). No runtime internArgs over a string slice at init  
+
+- **2026-06-07** `f9e8a56`, `df8e4a4`, `f19bd98`, `e888d69`, `515d4ec`, `0d8f88c`, `8945710` — hoist constant intern-literal calls into pre-interned package-level consts (ay refac consts) @ vfs_consts.go/str_consts.go/arg_consts.go/env_consts.go (+any_consts.go aliases); refac consts/lint  
+  internStr/internArg/internEnv/internAny/intern/source/build calls on string literals are lifted to package vars interned once at init, so call sites stop paying hash+probe per call; lint forbids constant-string internAny.  
+  Заметки: Duplicate-value vars keep distinct names (e888d69). The internAny lint and any_consts.go were dropped when ANY was removed (7663858).
+
+- **2026-06-08** `1408a0a` — Cmd.Cwd as STR and Node.Platform as *Platform; drop dead per-node platform string writes @ Cmd.Cwd, Node.Platform, bindNodePlatform, platformTarget  
+  Working-dir token interned once and rendered at the sink; node literals no longer set a platform string that bindNodePlatform immediately overwrote (41 sites); the graph writer/UID render the target via platformTarget(p), a free cast of the PlatformID built once in NewPlatform.  
+  Заметки: bindNodePlatform itself later removed (0689fb7).
+
+- **2026-06-08** `1a4ac70` — back ARG/ENV intern tables by the STR table; uniform free str() conversions @ argTable/envTable (DenseMap[STR,uint32] + []STR); str() on STR/ARG/ENV/VFS/TOK  
+  The STR intern table becomes the single string store; ARG/ENV drop their own []string + map[string], and ARG->STR / ENV->STR are O(1) array loads, enabling heterogeneous tokens to be boxed as plain STR.  
+  Заметки: Precondition for replacing ANY with STR (7663858).
+
+- **2026-06-08** `6fba2af` — platform/node tag lists as []STR @ Platform.Tags/TestTags, Node.Tags, sandboxingNodeTags, nodeHasHostTag  
+  Tags are interned once at NewPlatform; host-tag check compares an interned id; writer/UID render via appendStrSlice/writeStrSlice so tags hash by their .los.  
+
+- **2026-06-08** `7663858` — CmdArgs as plain []STR; ANY tagged union removed @ Cmd.CmdArgs, cmd_args.go helpers, inclArgValues, Platform.CC/CXX/TargetArg  
+  Every interned token converts to its backing STR for free, so command args are a flat []STR and boxing call sites use .str() instead of tagged-union helpers; 185 anyX aliases inlined.  
+  Заметки: Supersedes b550806. CmdArgs later chunked into argChunks [][]STR (1dc57a0).
+
+- **2026-06-09** `8e712bf` — EnvVars typed (ENV, STR); DYLD_LIBRARY_PATH interned once per platform @ EnvVar{Name ENV; Value STR}; uid writeEnv; Platform.MultiarchLibPathSTR; m4Tool  
+  Env bindings are interned at construction; uid hashes them via writeSTR (.los) instead of writeBytes on name and value; JSON/executor materialize via a slice lookup; the DYLD value is interned once in NewPlatform instead of rebuilt and carried per ToolEnv() call.  
+  Заметки: 19f7b2b later precomputes the whole ToolEnvVars per platform.
+
+- **2026-06-10** `19dd15c` — STR.vfs(): convert a rooted STR to VFS by shift + root bit, no re-interning @ STR.vfs(); sc.resolve rooted targets; INDUCED_DEPS handler  
+  VFS is STR<<1|root over the same table slot, so a STR holding a full rooted path converts to its VFS without a table probe (0 when not rooted); rooted INDUCED_DEPS targets bind directly ahead of the include search.  
+  Эффект: intern strs 200431 -> 200404 (the rel spellings of rooted induced deps are no longer interned).  
+  Заметки: Also a parity fix (98 CC nodes regained protoc wire_format.h).
+
+- **2026-06-10** `2176e1c` — single-pass upstream argument expansion stops interning intermediate partial expansions @ expandStmtTokens / expandBracedVars (macros)  
+  Args without '$' pass through verbatim; ${NAME} refs resolve left-to-right in one pass (unresolved stay literal), replacing multi-pass partial expansion that interned intermediates.  
+  Эффект: sg5 intern strs 204222 -> 200431 (-3791): the multi-pass partial expansions no longer intern intermediates; envs +1 (ARCADIA_ROOT).  
+  Заметки: Modelling commit (ymake TEvalContext::Deref semantics); the intern-table shrink is incidental.
+
+- **2026-06-10** `3e05c71` — ModuleInstance.Path string -> VFS @ ModuleInstance.Path, protoCPPModulePath  
+  Module dir is Source-rooted: bare Source(instance.Path) sites become the field itself; string contexts read .Rel().  
+  Эффект: Intern table grows by 55 strs (204175 -> 204230); args/envs/overflow and all other perf counters unchanged.  
+
+- **2026-06-10** `4d45130` — Platform.SystemLibs/LinkPreludeExtra interned once as []STR @ NewPlatform; composeProgramLinkTrailer  
+  Constant string slices were re-interned on every link node via appendInternStrs; they are interned once at Platform construction and appended directly.  
+
+- **2026-06-10** `51efb4c` — GeneratedFileInfo.ProducerKvP string -> ProcKind enum @ GeneratedFileInfo.ProducerKvP and register* helpers (codegen)  
+  Producer kinds pass pk* constants; the antlr CF check becomes an integer compare.  
+
+- **2026-06-10** `5247d6e`, `4f95cc7`, `0272fb1` — node attribute strings retyped to bool / uint8 enums @ KV.ShowOut (bool), Requirements.Network (NetworkMode), TargetProperties.ModuleLang/ModuleType (uint8 enums)  
+  Fields that only ever held a few literals become bool/uint8 enums (zero = absent), stringified only at JSON emit; uid encoding switches writeBytes -> writeBool/writeByte.  
+
+- **2026-06-10** `b045374` — key buildParsed by VFS @ buildParsed register/lookup (parser)  
+  Drops the .Rel() stringification on both register and lookup; VFS is an interned uint32, a free identity key.  
+  Заметки: Every registered output verified Build()-rooted; fe3ac93 makes a source-rooted registration fail fast.
+
+- **2026-06-10** `d04ff1f` — pre-intern constant ragel flags; Platform.MarchArgs computed once @ EmitR6 (-CG2/-CT0); compileFlagBundleFor (-march=<March>)  
+  EmitR6 re-interned the constant flags per .rl source and compileFlagBundleFor re-interned -march (plus a fresh slice) per compile node on aarch64; both are now hoisted (package-level vars, per-platform field).  
+  Эффект: eager is safe: the sg5 intern counter stays at args=2042  
+
+- **2026-06-10** `e19c991` — sysincl mappings keyed by STR with values pre-cooked to VFS at parse @ SysIncl.Mappings map[STR][]VFS + MappingsCI; sysinclContribution.paths []VFS; absifyRels removed  
+  Keys are interned at parse; values are converted to Source() VFS once at parse with empty suppression entries dropped there, so the lookup path no longer absolutizes rels per lookup.  
+  Эффект: Pre-cooking interns every mapping value including never-fired ones: sg5 intern strs 201975 -> 204175 (+2200); all other perf counters and all validate.py gating cases byte-identical.  
+  Заметки: Staging maps later replaced by pair slices (767e3e7); lookup moved fully to id space (2260e28).
+
+- **2026-06-10** `f6155e9` — TargetProperties.ModuleTag as pre-interned STR (0 = absent) @ TargetProperties.ModuleTag and plumbing (EmitAR*Tagged, EmitEN/EV/PB, EmitCF, EmitLD, ModuleCCInputs.ModuleTag)  
+  14 compile-time tag constants are pre-interned; string/*string params become STR with 0 as absent (replacing nil-pointer presence checks); uid encodes via writeSTR (xxh3 lo).  
+  Эффект: sg5 intern growth: strs 201962 -> 201975 (+13; one of the 14 consts was already interned). args/envs/overflow and all other perf counters unchanged.  
+
+- **2026-06-11** `2260e28` — sysincl merged-index lookup addressed purely by target id @ sysincl merged index: flat bucket slice + byID IntValueMap; SysinclContribution.rawKeyID; lookup(path, target STR)  
+  ToLower for the bucket probe and a string compare for case-exactness are replaced by one IntValueMap probe from target id to bucket slot plus the bucket scan; case-variant targets are bound at ciClaims' first touch; CS exactness is id equality.  
+  Эффект: 74,456 views on sg5, the table's #1  
+
+- **2026-06-11** `6a70e3f` — ModuleData lives in STR space @ ModuleData token-list fields ([]STR), STR-keyed maps (perSrcCFlags, flatSrcs, ...), ModuleCCInputs DefaultVars/SetVars, PySrcGroup, AntlrRunInfo  
+  Collect-layer outputs follow the parser into ids; emit-layer string work reads .string() views; membership probes use interned ids (strsContain probes without polluting the table).  
+  Эффект: sg5 intern strs: 229,513 -> 229,522 (+9) — the collect layer was already interning these tokens downstream.  
+
+- **2026-06-11** `7787f54` — codegen registry keyed off ids: bySplit by Source-dir VFS, byStr by STR; lookup-only intern probes @ CodegenRegistry bySplit/byStr; lookupSplit, lookupSTR; internedPrefixed/internedBytes (lookup-only); lookupRel deleted  
+  The hot includer-dir split lookup holds the dir VFS already, so the per-call rel() view + interned() xxh3 probe disappear; cold sides use lookup-only twins that probe without inserting; registration interns '$(S)/'+prefix so bare-prefix strings vanish.  
+  Эффект: the intern table nets smaller (229,522 -> 229,317 on sg5); the includer-dir quoted split lookup, ~137k/run  
+  Заметки: Also collapses a duplicate probe of the same key on the firstClaim path.
+
+- **2026-06-11** `83cea8f` — ya.make macro-argument parser emits []STR with an identity fast path in expansion @ ~25 statement structs; expandStmtTokensSTR/expandStmtTokenSTR; strKeySet / kw* consts  
+  Every macro-call argument token is interned at collection, forcing downstream into id space: a token without '$' passes through as the same id with zero string work; keyword recognition compares interned ids; text needs use .string() views into the intern table (no allocation).  
+  Эффект: sg5 intern strs: 209,085 -> 229,513 (+20,428) — the arg tokens that never reached the intern table before (IF args, RESOURCE keys, unhandled-macro args) now live there once instead of as transient strings per use.  
+  Заметки: Intern-table growth traded for no transient strings per use.
+
+- **2026-06-12** `a98872f`, `f61a9b6` — 0-sentinel for interned/lookup probes instead of (id, bool) @ interned()/internedBytes/internedPrefixed*, internedEnv, resolveSourceUnder  
+  The reserved 0 slot of each id space doubles as 'never interned/unknown/does not resolve', so probes return a single id; resolveSourceUnder's miss caches directly as VFS 0 in sourceUnderCache.  
+  Заметки: Codebase-wide sweep for (STR|VFS|ENV|ARG, bool) returns.
+
+- **2026-06-14** `8f4e7a0` — VFS root bit tested inline (drop VFS.root()) @ vfs.go VFS.isSource/isBuild; callers in parser_manager, scanner (x3 + addincl switch), emit_proto; test bucket helpers  
+  The source/build root lives in the low bit of the VFS uint32. The root() method (uint32(v)&1 -> VFSRoot, then compared with VFSRootSource/Build) was removed; isSource/isBuild are now bare bit tests (uint32(v)&1 == 0 / != 0) and every direct .root() comparison routes through them.  
+  Эффект: sg5 CPU profile: VFS.root 0.12s/1.68% flat -> VFS.isBuild 0.05s/0.7% (isSource sub-threshold)  
+  Заметки: VFSRootSource/VFSRootBuild constants kept for the VFS factories. Gate byte-exact sg2/sg2_x86_64/sg3/sg4/sg5.
+
+- **2026-06-16** `7fc6cee` **[superseded]** — autoinclude index as IntValueMap[VFS] + lookup-only internedPrefixed ancestor probe @ autoinclude.go loadAutoincludeIndex / lintersMakeIncFor  
+  Deepest-first ancestor walk of the module dir; each ancestor is probed with internedPrefixed("$(S)/", d), a lookup-only intern probe that returns 0 for a non-interned prefix, over substrings - allocation-free on the fast path; longest prefix wins.  
+  Эффект: ancestor-walk ~86 ns/op (measured later in 6c08c29)  
+  Заметки: Replaced the same day by the Darts double-array trie (7b33cf1): the probe hashed the full path at every ancestor.
+
+- **2026-06-26** `069fb6e` — sourceInputVFS/copyFileInputVFS take the module-dir VFS @ modules.go sourceInputVFS, copyFileInputVFS  
+  The module path arrived as a string and was re-interned (source(modulePath), dirKey(modulePath)) every call; callers pass instance.Path, the string form comes from .rel() (substring, no alloc); prefix test by index compare instead of modulePath+"/"; moduleRel computed lazily via variadic source when clean has no '..'.  
+  Эффект: sourceInputVFS hot lines 524(13645)+529(21009) eliminated; total alloc_objects 1903394 -> 1869160  
+
+- **2026-07-02** `ca761bf` — constant STR instead of per-node re-interned string @ ModuleUnit.SbomLang -> sbom cmd in emitLD  
+  SbomLang had two constant values carried as a string re-interned on every LD node; it becomes STR consts (unitSbomCpp/unitSbomPy3) flowing straight into the command.  
+
+- **2026-07-04** `37b5c98` — lookup-only probes built in the intern bump pool @ internBuild -> internBlock/internFill; internedBuild; internBuildBytes; sourceBytes  
+  vfsPrefixScratch is dropped: lookup-only probes are built in the uncommitted tail of the intern byte pool, prefix+bytes interning commits on miss, and sourceBytes loses its double copy.  
+
+- **2026-07-06** `60d1540` — flat intern cells for the generator + PageVec for shared readers @ internTable flat []internCell + PageVec; shared* accessors (STR/VFS/ARG/ENV)  
+  Single-threaded generator reads str/lo with one indexed load from a flat array; executor goroutines read the PageVec whose pages never move.  
+  Эффект: bs_static: PageVec cell reads 0.49s cum -> 0, total samples 28.2s -> 27.3s, wall at parity, max-rss +14MB (the duplicated cells)  
+  Заметки: Duplicates every cell (+14MB). Appends to the shared PageVec later go through a tracked current page (bccb3a2).
+
+- **2026-07-06** `60d1540`, `3a3d4b6` **[rejected-by-measurement]** — split intern str and lo into separate arrays @ internTable flat cells  
+  Separate []string and []uint64 arrays instead of one []internCell{str, lo}.  
+  Эффект: wall 4.62s vs 4.55s merged  
+  Заметки: 60d1540: 'the lookup touches lo then str of one id, and separate arrays cost two cold cache lines'. Codex re-did the split in 3a3d4b6 (flatStr/flatLo, internLo/internString) without published numbers; flatLo still exists at HEAD.
+
+- **2026-07-07** `f06ad5e`, `cb70a48`, `3c0155f` — VFS = rel-STR<<1 | root bit @ VFS layout, intern()/source()/build(), CodegenRegistry byVFS/byRel, VFS-keyed caches  
+  Only the rel part is interned; rel() is bit math, STR.source()/.build() mint VFS without re-interning, the full '$(S)/rel' form is rendered on demand; strID() becomes identity; registry keyed by rel STR alone (only $(B) outputs); parse/scanner/listdir caches typed by VFS.  
+  Заметки: Index-sensitive spots fixed by hand (uid inputVal hashes rel-lo xor root bit, etc.). Id spaces sized by vfsBound().
+
+- **2026-07-08** `14e1dd9`, `ad51ef1` — statement tokens carry ANY classified at expansion @ expandStmtTokens/internAny, ModuleData token lists, section machines  
+  The token expander classifies each token once ($(S)/$(B) forms get the VFS tag with only the rel interned); downstream code works on ANY instead of re-interning renderings.  
+
+- **2026-07-08** `465f344` — Cmd env values ANY; toolchain paths VFS @ EnvVar.Value, ModuleToolchain path fields, wrapper scripts, CUDA_ROOT/OBJCOPY_TOOL, ResourceDecl.Value  
+  Env values and toolchain/script paths become VFS built from rels (JSON via appendVFS cache, uid writes the tag, executor mounts via mountANY); full-form string twins dropped.  
+  Заметки: Full-form interning remains only at the parse boundary and in glued composite args.
+
+- **2026-07-08** `522123b` — flag lists carry ANY end-to-end; ARG scalar-only @ ModuleData flag accumulators, ModuleCompileEnv/ModuleEmitResult/CompileSpec, Platform bundles  
+  All []ARG flag lists store []ANY from parse onward, killing per-node/per-module ARG->ANY conversions (appendArgAny/argAnyList at 38 sites, ~10 platform-constant lists per LD/BI/BC node, PerSourceCFlags per CC node).  
+  Заметки: DeDuper.add grows on demand since ANY-tagged keys can exceed the reset-time bound.
+
+- **2026-07-08** `83b7f69` — rekey root-invariant stores by rel STR @ FS interface keys, dirs DenseMap, DirView.dir, contentHashes, SharedParseCache.parsed, resolveSourceUnder key, ScriptDeps  
+  Stores that only ever see source paths (root bit irrelevant) key by rel STR; conversion at call sites is free bit math and the addressed id space halves.  
+
+- **2026-07-08** `bfc17cc` — store env values as VFS; render lazily (envVFS) @ Environment (CURDIR/BINDIR), yasm in/out args, archive file args  
+  A runtime probe at internAppend showed CURDIR/BINDIR dominated full-form interns (8.9k per-module interns read only when ya.make references them); Environment gains an envVFS kind rendered on read; yasm/archive args become VFS-tagged ANYs.  
+  Эффект: 8.9k per-module interns for values read only when a ya.make references them  
+  Заметки: Measurement: caller-location probe at internAppend for every new full-form entry.
+
+- **2026-07-13** `bccb3a2` — direct current-page append for the shared intern PageVec @ internAppend (internTable.cellPage/cellBase)  
+  The shared-reader PageVec is appended through a tracked current page instead of PageVec.set per append (page computation + atomic load each time).  
+
+- **2026-07-15** `3a3d4b6` — lexer tokens carry STR ids @ Token{id STR}, parseMacroArgs, parseMacroInto/buildStmtForID  
+  Tokens store the interned id instead of a string; macro args append tok.id.any() with no re-intern, keywords compare by id (kwIF/kwELSE/...).  
+
+
+### Мемоизация и кеши (65)
+
+- **2026-05-07** `4ba9b6e` — include-scanner parse cache, stat cache and ctxHash-keyed resolve cache @ scanner.go IncludeScanner{parsed, exists, resolveCache}, hashScanContext  
+  parsed caches #include directives per file; exists caches os.Stat results (the per-resolution hot loop); resolveCache memoizes (ctxHash, includer, target, kind) -> resolved set, where ctxHash is FNV-1a over OwnAddIncl + PeerAddInclSet + BaseSearchPaths with SourceRel deliberately excluded so all CCs sharing a search-path context reuse resolves.  
+  Заметки: Foundation for all PR-34/M3-perf scanner work. Mutex protection removed in af43a2f; parsed/exists shared across target+host scanners in 9e0f772; resolveCache restructured in 5457e60 then fe4e728 (scanCtx).
+
+- **2026-05-07** `c346c72`, `41bf849` — memoized PEERDIR walk keyed by ModuleInstance @ gen.go genCtx.memo (D19 -> D34: keyed by ModuleInstance{Path,Language,Target,Flags})  
+  Each module instance's emission result (archive refs/paths, LD refs) is computed once per Gen and reused by every consumer; a walking set gives cycle detection.  
+  Заметки: Foundation lever. 81cdb38 (D41 audit) found 0 memo-key bypasses. d880db3 fixed the seed/overlay key asymmetry that silently defeated this memo.
+
+- **2026-05-08** `698d68d` — per-half sysincl lookup caches + per-source view cache @ scanner.go sysinclSourceCache (sourceRel,target), sysinclIncluderCache (includerRel,target), viewCache (sourceRel -> PerSourceView), sysinclLookup  
+  After splitting sysincl records into source-keyed and includer-keyed halves, each half is memoized independently: the includer-keyed half is reused across every CC reaching the same (includer, target) and the source-keyed half within one source's closure; per-source views are cached by sourceRel.  
+  Эффект: PR total (with the modelling change): perf 1.74s -> 1.87s (+7.5%, over +5% budget but justified by 1.7x stretch L2 win and still well under 5s gate)  
+  Заметки: The source-vs-includer routing itself was a parity fix that cost time; the split caches preserve the cross-source hit rate PR-34d's refactor had. Cache capacities re-tuned in 766aa55/af43a2f.
+
+- **2026-05-08** `725efbd` — includer-filter match cache @ sysincl.go PerSourceView.includerFilterCache / activeIncluderRecords  
+  Memoizes, per includerPath, the subset of includer-keyed sysincl records whose filters accept that path (header-independent), replacing ~25 regex/prefix matches per (includerPath, header) miss with one map probe plus iteration over the pre-filtered subset. Pointer-typed so value copies of PerSourceView share one table.  
+  Эффект: time ./yatool gen --target tools/archiver: 1.907s -> 1.717s (9.97% lift, >=5% gate met); 80.88% hit rate  
+  Заметки: Implemented as plain map + sync.RWMutex (sysincl.go; untouched by af43a2f's scanner.go mutex removal).
+
+- **2026-05-08** `766aa55`, `af43a2f` **[superseded]** — emittedRelCache: intern $(SOURCE_ROOT)/<rel> output strings @ scanner.go WalkClosure output (emittedRel)  
+  Output path strings for headers included by 3000+ CCs (libcxx __config and friends) are concatenated once and reused across consumers instead of rebuilt per consumer.  
+  Эффект: ~30 MB / run (part of PR-34k total); af43a2f resized it 16384 -> 4096 (observed ~2k) and removed emittedRelMu  
+  Заметки: Removed in 2331a1e: with VFS-rooted scanner paths emittedRel is the identity, so no concat and no cache.
+
+- **2026-05-08** `af43a2f` — remove sync.Mutex from the single-goroutine IncludeScanner @ scanner.go IncludeScanner.mu, emittedRelMu  
+  Every cache access paid an uncontended Lock/Unlock pair (pure runtime overhead) although the scanner runs on one goroutine; locks dropped.  
+  Эффект: With the cache rightsize, taskset -c 0 pinned 3-warm-run: real 1.37/1.40/1.35 -> 1.20/1.24/1.24, user 1.26/1.30/1.23 -> 1.06/1.12/1.11 (real 10.7%, user 13.1%); non-pinned avg 1.220s -> 1.140s (6.6%)  
+  Заметки: Tagged for M3 reintroduction if scanning is parallelized. Output sha256 e9d4dd4b... preserved.
+
+- **2026-05-08** `d880db3` — memo-key alias fix: write module memo under both seed and post-overlay ModuleInstance @ gen.go genModule / genCtx.memo  
+  Memo lookups used the SEED FlagSet (from derivePeerInstance) while writes used the POST-OVERLAY FlagSet (after applyUnknownStmt mutated instance.Flags), so every consumer missed and re-executed the module body. Capturing originalInstance at entry and writing the result under both keys at every memo-write site makes lookups hit.  
+  Эффект: time ./yatool gen --target tools/archiver: 28-31s -> 2.19s (~14.4x speedup); 45 of 54 modules amplified 7-138x via this asymmetry; cycles 6 -> 1  
+  Заметки: 16 LOC; output sha256 identical. Measured on a base without PR-34a (PR-34 levers were developed in parallel worktrees, so 34d/34e numbers below are on ~12s bases).
+
+- **2026-05-11** `7155f21`, `aec2b03` — codegen-first emission order so cached scanner results are never poisoned @ gen.go per-source emission (Pass A codegen-producing sources first, Pass B declaration order reusing Pass A results); emitEnumSrcs and emitMiscNodes hoisted before the per-source loop  
+  resolveCache/subgraphCache entries are reused by every later consumer, so a miss cached before the codegen registry knew a generated header (display.cpp scanning trace.h -> trace.ev.pb.h before trace.ev registered) propagated a stale subgraph to all consumers. Registering every codegen output before any WalkClosure keeps the shared caches valid.  
+  Заметки: Invariant for all context-keyed scanner caches: the codegen registry must be complete before scanning starts.
+
+- **2026-05-11** `9e0f772` — parse/exists cache shared between target and host scanners @ scanner.go sharedParseCache, newIncludeScannerWith; gen.go GenWith  
+  File bytes and #include directives are architecture-neutral, so the parsed and exists maps are factored into one sharedParseCache used by both scanners, removing redundant file reads, stats and regex parses for common headers. resolveCache, subgraphCache and sysincl caches stay per-scanner because sysincl YAMLs differ by arch.  
+  Эффект: tools/archiver: host scanner parsed cache peaked at 3559 entries and exists at 14494, largely overlapping the target scanner's 4354/14195; M2 wall=0.89s  
+  Заметки: Option U1 (full cache unification) rejected as incorrect: scan output is architecture-dependent (e.g. bits/alltypes.h records). No before/after timing given.
+
+- **2026-05-11** `fe4e728` — interned scanCtx per (scanner, ctxHash) @ scanner.go scanCtx, IncludeScanner.walkClosureCache map[uint64]*scanCtx  
+  The per-ctxHash resolution context becomes an object owning resolveCache/subgraphCache/subgraphTaintedKnown/subgraphInProgress; ctxHash is the object's identity rather than a field of every key (resolveKey 5 -> 4 fields, subgraphKey 3 -> 2), and one object per (scanner, ctxHash) lives for the whole Gen so modules with equal ctxHash reuse caches.  
+  Эффект: interleaved 10 runs each, devtools/ymake/bin: baseline median 5.02s (min 4.91, max 5.27) -> interned median 4.91s (min 4.70, max 5.16) (~2.2% win); 100 allocations, 100 peak in-flight  
+  Заметки: Default via defaultScanCtxMode = "interned"; --scan-ctx-mode flag kept for A/B. Its parent 5457e60 had reported 4.37 s for the same code that is this commit's 5.02 s baseline.
+
+- **2026-05-11** `fe4e728` **[rejected-by-measurement]** — per-genModule-frame local scanCtx (push/pop stack) @ scanner.go scanCtx, --scan-ctx-mode=local  
+  One scanCtx per genModule frame, discarded on pop; no cross-module cache reuse (227 allocations, 2 peak in-flight).  
+  Эффект: local median 6.42s (min 6.17, max 6.55) vs baseline 5.02s (REGRESSION); recomputes ~38% more subgraph misses, ~28% slower than baseline  
+  Заметки: Shows the scanner caches must outlive a module (context-keyed, cross-module). Variant kept behind the flag so it stays exercised in tests.
+
+- **2026-05-16** `967c380`, `57d613f` **[superseded]** — moduleTypeCache: memoise peer ya.make module type @ gen/modules moduleTypeForInstance, genCtx.moduleTypeCache keyed by (Path, *Platform, FlagSet)  
+  Peer language routing needs the peer's module type; the parse + collectModule result is cached per instance key so each peer ya.make is pre-parsed once rather than per consuming edge.  
+  Заметки: 8e97940 (2026-06-10, outside slice) dropped the peer pre-parse and moduleTypeCache/moduleTypeInfo entirely (re-enter genModule for variant correction): '10x sg5: the 880 ms (9.6%) peerLanguageFor shelf is gone, total -4.7%'. 57d613f widened the value to moduleTypeInfo.
+
+- **2026-05-17** `22d9216` — one shared source-only sysincl view per equivalence class @ scanner.go sourceClass/prepareSourceView/sameSourceClassView; removed viewCache + perSourceView  
+  Instead of retaining a full PerSourceView (includerKeyed + includerFilterCache) per source path, build a view with only activeSourceKeyed and store one per class; sourceClassBuckets compares record-pointer lists so signature collisions never merge classes; includer-side state lives only in anySrcView.  
+  Эффект: devtools/ya/bin: wall 8.05s, user CPU 10.03s, max RSS 1081440 kB, go test 4.077s; vs PLAN 1 state in-use heap ~187.49MB → 100.37MB, max RSS 1209140 kB → 1081440 kB; CPU 'same broad range'  
+  Заметки: PLAN_2; primarily a memory optimisation. Retained heap afterwards dominated by includer side (newIncludeScannerWith, resolveSearchPath.func3, computeActiveIncluderRecords, sysinclIncluderLookup).
+
+- **2026-05-17** `d253495` — sysincl source-keyed cache by (sourceClass, target) instead of (sourceRel, target) @ scanner.go sysinclSourceCache, sourceClassCache, sourceClassID  
+  Sources whose active SOURCE-keyed sysincl record set is identical share one class ID (FNV signature of record pointers, memoised per source path), so the source-keyed lookup result is cached per class instead of per source file.  
+  Эффект: previous sysinclSourceLookup retained about 150MB; after switching to (sourceClass, target) keys that retention no longer dominates the heap profile  
+  Заметки: Collision guard added in 22d9216 (pointer-list compare before reusing a class ID).
+
+- **2026-05-18** `0905817` — per-scanCtx search-tier cache keyed by target ID @ scanner.go scanCtx.searchTierCache map[uint32]searchTierResult, resolveContextSearchTier  
+  The OwnAddIncl → PeerAddInclSet → BaseSearchPaths probe result depends only on (scanCtx, target), not on the includer, so it is resolved once per target and reused across includers, cutting repeated prefix+"/"+target concats, normalisePath and fileExistsByRel calls; same-dir and BUILD-root handling stay per includer.  
+  Заметки: PERF.md step 3. Counters searchTierHits/Misses/Entries added to YATOOL_PERF_STATS. No numbers in commit.
+
+- **2026-05-18** `20623a8` — CONFIGURE_FILE template includes from the C parser's cached bucket @ emit_cf.go cfIncludeDirectives / buildCFGVars; EmitCF  
+  cfIncludeDirectives consumes the c parser's cached parsedIncludesLocal bucket (the parser already strips the .in suffix) and filters to quoted-only: no second file read, no second line scan.  
+
+- **2026-05-18** `fc78f9e` — proto/ev import closure from the cached parser buckets (drop duplicate file walk) @ emit_proto.go protoTransitiveImports/protoDirectPbHIncludes/evTransitiveImports; protoIncludeDirectiveParser; EmitPB/EmitEV  
+  Primitive emitters no longer re-read and line-scan .proto/.ev files; import extraction uses the parser manager's cached per-file parses (one parser pass per file, shared with the include scanner). The duplicate file walk that paralleled scanner+parser is deleted.  
+  Заметки: genCtx gains a parsers *includeParserManager field.
+
+- **2026-05-23** `0f49a68` — Drop the sourceClass cache dimension (key sysincl on the immediate includer) @ scanner sysincl source/includer keys; closure + children caches  
+  Upstream keys sysincl on the immediate includer, not the compile root; after re-keying, a file's resolution is a pure function of (file, ADDINCL ctx), so closure/children caches key by absID alone.  
+  Эффект: Raw sg5 output identical before/after (redundant key).  
+  Заметки: Prerequisite for the per-run (scanner-global) closure cache d9552a2.
+
+- **2026-05-23** `21997d7` — Remove interned scanCtx machinery and the vestigial resolveCache @ scanCtx (shrunk to {scanner, cfg, searchTierCache}), genCtx scanCtx interning, resolveCache  
+  With global per-file caches the per-ctxHash scanCtx cached nothing reusable; delete interning/lifecycle (ctxHash, local stack, walkClosureCache) and resolveCache (0.4% hit) - each file is resolved once via childrenCache.  
+  Эффект: Net -257 lines. sg5 ~13s (vs ~11s): dropped cross-walk searchTier reuse recomputes the ADDINCL tier more (deliberate trade); peak RSS 2.43GB.  
+  Заметки: The searchTier regression was recovered by a02d54d then ce3e75a.
+
+- **2026-05-23** `8fb7b20` — Memoize resolved-child ID list per (absID, sourceClass) @ scanner.go forEachResolvedChildID (children cache)  
+  Resolution is a pure function of (absID, sourceClass) within a scanCtx, so tainted (cycle-containing) subgraph re-walks reuse the resolved child list instead of re-running resolve() for every parsed include on every visit.  
+  Эффект: resolve calls: 521M -> 9.7M (54x). Combined with the epoch idSet: sg5 2m53s -> ~40s (~4x), peak RSS unchanged (~5.4GB).  
+  Заметки: Key later reduced to absID alone (0f49a68) and the cache moved scanner-global (d9552a2). Also sets curSourceClass on the JOIN_SRCS path so the key is not stale.
+
+- **2026-05-23** `a02d54d` **[superseded]** — searchTier cache owned per module @ moduleData.searchTier threaded via ModuleCCInputs into NewScanCtx  
+  A module's source walks share one config's ADDINCL/peer/base tier resolutions instead of recomputing per walk.  
+  Эффект: sg5: ~13s -> ~11.4s, peak RSS 2.48GB.  
+  Заметки: A target-keyed GLOBAL searchTier cache was rejected: tier resolution is config-dependent and sharing across configs mis-resolved ~32% of nodes (fails gate). Superseded by per-config keying ce3e75a.
+
+- **2026-05-23** `ce3e75a` — searchTier cache keyed by exact include-config hash @ scanner.searchTierByConfig (hashScanContext over OwnAddIncl+PeerAddInclSet+BaseSearchPaths)  
+  NewScanCtx hashes the walk's include config and binds to that config's target->resolution map; two walks share a map iff their config is byte-identical (no cross-config leak, more reuse than per-module); the hot lookup stays target-keyed.  
+  Эффект: sg5: ~11.4s -> ~11s, searchTier misses 87k -> 56k (minimal distinct (config,target) count); peak RSS 2.48GB.  
+  Заметки: Drops moduleData.searchTier threading. The tier probe itself was later inverted into a global index (1e05383).
+
+- **2026-05-23** `d9552a2` — Per-run scanner-global closure/children caches (first-reacher-wins) @ IncludeScanner.subgraphCache / childrenCache (moved from per-ctxHash scanCtx)  
+  A header reached from N modules with different ADDINCL configs was resolved and stored N times; caches now live on IncludeScanner keyed by absID and are populated by the first scanCtx that reaches the file, mirroring ymake's once-per-file ProcessFile. Host and target scanners stay separate.  
+  Эффект: sg5: closure entries 1.13M -> 26k, resolve calls 9.7M -> 462k, wall ~40s -> 11s (173s -> 11s vs the original), peak RSS 7.3GB -> 2.7GB.  
+  Заметки: resolveCache/searchTierCache stayed per scanCtx here (only consulted on the one-time miss).
+
+- **2026-05-25** `c7ac334` — Sysincl includer cache keyed by equivalence class instead of raw includer path @ sysincl includerClass / sysinclIncluderCache / unionIncluderMappings (recordSliceSignature/sameRecordSlice)  
+  The includer-keyed result is a pure function of (active-record-set, header); interning the active record set into a class id (FNV-of-pointers signature + slice compare, same machinery as sourceClass) makes (classId, target) keys reusable across includers.  
+  Эффект: Includer cache hit rate 4%->93%, misses 645k->44k. CPU samples 5.31s->4.73s (wall 4.22->3.75s), alloc 1396MB->1245MB, inuse 270MB->216MB, sysincl CPU 18%->10%.  
+  Заметки: Before: each miss re-ran the union loop and an absifyRels []VFS allocation (104MB, 12% CPU).
+
+- **2026-05-26** `d7c4637` — Run-level memo of the rendered -I flag per ADDINCL dir (inclArgMemo) @ emit_cc composeTargetCC, composeASIncludes, appendCythonAddIncl; genCtx inclArgMemo via ModuleCCInputs.InclArgs/ccComposeArgs.InclArgs  
+  The -I block is module-invariant but includeArg re-rendered "-I"+path.String() per source; a content-addressed VFS->string cache returns the same string.  
+  Эффект: includeArg was 969k allocations (~14% of all objects). sg5: alloc objects ~6.73M -> 6.10M, alloc bytes 1226MB -> 1184MB, inuse 203MB -> 197MB, scanobject 6.6% -> 4.9%. Wall flat (GC marking parallel, off critical path).  
+  Заметки: Resource reduction, not a wall win. Outside the slice git log shows 126e0e2 'build CC arg spans once at their owners, reference as chunks' touching inclArgMemo.
+
+- **2026-05-28** `2f68069`, `0da1c76`, `cf90c65`, `913126c` — context-free per-file parse/resolve caches (no scan-context key) @ IncludeScanner.childrenCache / subgraphCache (keyed by includer absID), sharedParseCache  
+  Each file is parsed and resolved exactly once per run (mirrors upstream TUpdEntryStats::OnceProcessedAsFile and TParsersCache (parserId,fileId)), so closures are shared across all modules and scan contexts. Divergences are fixed without touching the key: 2f68069 emits codegen-producing srcs before header walks so no stale empty 'not found' children are cached; cf90c65 records generatedFirstClaim in a side table; 913126c resolves COPY_FILE(TEXT) includes on the per-module dst node.  
+  Эффект: cf90c65: 'the claim doesn't touch the scan cache key, so per-file parse+resolve stays O(1)'; gen time unchanged at 3.50s  
+  Заметки: 0da1c76 documents that adding a scan-context key collapses subgraph caching and is the wrong fix for over/under-emit divergences.
+
+- **2026-06-02** `8296b72` — memoize source-file existence per file VFS @ scanner sourceFileExists; scanCacheEntry existState (unknown/no/yes)  
+  sysincl resolve loops and fsLocator re-checked the same interned mapping VFS on every use, each re-interning the parent dir to probe the FS; a context-free three-valued memo in the scan cache resolves each file's existence once.  
+  Эффект: ~30k/run re-checks removed  
+  Заметки: Existence is global, so the memo is context-free like the rest of the scanCache. Became a bool column of DenseMap3 in f5ee6c0 (tri-state via column presence).
+
+- **2026-06-03** `a0eb095` — run-wide cache of includer-local quoted-include resolution @ scanner sourceUnderCache keyed (incDir VFS << 32 | target STR)  
+  resolveSourceUnder(incDir, target) for quoted includes was re-resolved per include per context; its result is a pure function of (incDir, target) and the read-only FS, so it is memoized run-wide (value = resolved rel or "" for no).  
+  Эффект: quoted resolves were 92% of all resolveSourceUnder calls (~505k/run); FS probes on sg5: listdirHits 873k -> 407k (-53%), existsMisses 516k -> 119k (-77%); recurring negative gates (e.g. 'contrib' under ydb/core/protos, 146k) resolved once  
+  Заметки: 91% of incDir are not in OwnAddIncl, so the addincl index could not cover it. Backing store moved to a morton-keyed IntValueMap in 58eebc3.
+
+- **2026-06-05** `4d21dab` **[reverted]** — sysincl source/includer class + result cache mechanism @ scanner sourceClass/includerClass caches, sysinclSource/IncluderCache (removed)  
+  The class machinery was a pure performance cache (a class = dedup token over which sysincl rules apply to a path, plus a memo of the full lookup); it was removed and sysincl applied fully on every resolve.  
+  Эффект: Removal costs ~+0.25s on sg5 (within budget); -370 LOC  
+  Заметки: Removed deliberately for simplicity; cost then recovered by 071ec30 (3.12 -> 3.01s) and 58eb9db. Also retires the 1360201 scratch-reuse lever.
+
+- **2026-06-06** `82d10da` **[superseded]** — one-entry last-resolution (ext -> parser) cache in parserFor @ parserFor on the global parser registry (parsers.go)  
+  Parsed files arrive in scan order with one extension running consecutively, so caching the previous extension->parser resolution skips the byExt map probe on repeats. lastValid distinguishes not-cached from a cached empty extension.  
+  Эффект: parsers.go's hottest parser-registry site, ~44k probes on sg5  
+  Заметки: Relies on gen being single-goroutine (no locking). Superseded by 2e9e109 (generated perfect-hash extension dispatch), which deletes the byExt map and this memo.
+
+- **2026-06-10** `0b7cb38` — sourceUnderCache stores the interned $(S) VFS instead of the rel string @ sourceUnderCache (scanner)  
+  Every cache hit re-interned the resolved rel via Source(rel) (xxh3 + table probe, several hundred k per run); the VFS is now interned once on the miss (0 = does not resolve).  
+  Эффект: Measured effect on 10x sg5 is below batch noise (total 8750 -> 8760 ms)  
+  Заметки: PERF.md item 12-A, kept as cleanup. f61a9b6 later caches the miss as VFS 0 directly.
+
+- **2026-06-10** `3706a11` — per-(file, parser) parse cache for unregistered extensions; swig induced set from the warmed cache @ sharedParseCache.ambiguous; ScanContext.RootParser; collectSwigInducedIncludes  
+  A file with an unregistered extension parses under the context's parser with results cached per (file, parser); collectSwigInducedIncludes reads the warmed parse cache (every closure member was parsed by the walk) instead of re-reading files from disk per call.  
+
+- **2026-06-11** `999ba98` — first-touch TwoBitSet memo over sysincl mightClaim's case-insensitive arm @ sysincl mightClaim / ciClaims; new TwoBitSet container  
+  The rule set is immutable per scanner so mightClaim(target) is constant per id; a TwoBitSet (grow-on-demand dense id -> 2-bit cells, 32 per word, zero value = unset) caches ciUnseen/ciNo/ciClaimed so repeats answer from one 2-bit probe and only the first touch views the string.  
+  Эффект: 279,049 views on sg5 (#1 in the --probe=str table) over only 29,596 unique target ids (~9x repeat). ... sg5: 35,921 views remain (one per unique target per scanner), total .string() 918,666 -> 648,953.  
+  Заметки: Pattern reused for strHasDollar (fcd2014) and srcExtClassOf (d5cde3d).
+
+- **2026-06-11** `d5cde3d` — srcExtClassOf: first-touch []uint8 memo of a src token's extension class @ SRCS .h.in/.y routing, collectModule .ev/.proto/.fbs pass, genModule isCodegenProducingSrc gates, appendCC markers  
+  Four sites ran suffix triage over the same src ids; the class is a pure function of the id, so the first touch pays one view and every other site switches on the cached class.  
+  Эффект: ~90k views on sg5  
+  Заметки: appendCC no longer needs the string at all.
+
+- **2026-06-11** `fcd2014` — strHasDollar: first-touch TwoBitSet memo of the '$' predicate per STR @ expandStmtTokensSTR / expandStmtTokenSTR (expand)  
+  Tokens repeat heavily and an interned string is immutable, so Contains('$') is constant per id; repeats answer from a 2-bit probe and only the first touch views the string.  
+  Эффект: 56k views on sg5, #3 in the --probe=str table  
+  Заметки: Same pattern as ciMemo (999ba98); reused as the ${-check gate in SRCS/PEERDIR (d5cde3d).
+
+- **2026-06-12** `4311fb3`, `ea087d4` — sealed ScanContext: config hash computed once at construction; ScanContext carries its resolved *ScanConfig @ newScanContext / newScanCtx; IncludeParserManager.resolveScanConfig; ModuleCCInputs.ScanCfg; walkClosure(scanner, vfsPath, cfg)  
+  newScanContext seals the config hash once (seeded non-zero) and binds the *ScanConfig (dense id + resolve index) deduped by content hash on first sight, so newScanCtx does no table lookups and no per-walk hash mix; variant sites (asm, cython, JOIN_SRCS per-arch rebase) reseal. The config id space is global on the shared parser manager, so host/target dedupe the same content.  
+  Эффект: the per-walk configByHash probe (24.8k/run) and the scanner-side config table are gone  
+  Заметки: Supersedes configByHash merge (ea1230a) and the reverted memo (a8bc60a).
+
+- **2026-06-12** `a8bc60a`, `6371507` **[reverted]** — module-level ScanCtxMemo in ModuleCCInputs + configByHash on an identity IntMap @ walkClosure / newScanCtx; ModuleCCInputs.ScanCtxMemo  
+  The first walk in a module resolves the config and later walks reuse the ScanCtx (keyed by scanner, root parser); mutating copies drop the memo. hashScanContext got a non-zero seed so the empty context cannot hit IntMap's reserved 0 key.  
+  Эффект: (~24.8k/run — the map-op runner-up, plus the ScanCtx allocation and the hashScanContext mix over every addincl slice)  
+  Заметки: Reverted by 6371507 (Codex revert, no reason in body). Replaced by sealed ScanContext configs (4311fb3, ea087d4).
+
+- **2026-06-14** `ebccc8d`, `b18a192`, `bf43ae1`, `916bf80` — register-then-walk two-phase codegen emission (scan-cache correctness invariant) @ flatc pre-pass (gen.go), emitBisonProducer pre-pass, YMAPS_SPROTO first-pass output registration, two-pass emitCythonCpp  
+  The file-id-keyed scanCache memoizes a file's closure on first walk and never repairs it; a sibling walked before a generated header is registered would cache an empty closure. Registering every generated output in the codegen registry before any closure is walked keeps the memo complete and include resolution order-independent.  
+  Заметки: Correctness constraint of the scan memo rather than a speed-up; the alternative (re-walk/repair) would defeat the cache.
+
+- **2026-06-18** `190c9b0`, `4dcaf3f` — DESC_PROTO peer closure computed from already-memoized genModule results @ descPeerClosure (DESC_PROTO submodule / PROTO_DESCRIPTIONS)  
+  The DESC peer span (ProtoAddInclGlobal / ProtoNamespaceTail) is read from genModule results already memoized for the platform, adding no new traversal; the DESC traversal deliberately does not genModule the CPP peer closure to avoid memo poisoning.  
+  Заметки: Bodies disagree on the memo key: 190c9b0 says 'the genModule memo key ignores Platform'; 4dcaf3f says genModule is memoized for (path, kind, language, platform).
+
+- **2026-06-19** `c10e87a` — filtered pyx-language closure walk reuses scanner per-file resolution without writing a window-cache entry @ emit_cython_cpp.go cythonPyxLangClosure / cythonHeaderToolInputs  
+  The header _H/_API_H CY node needs a closure that follows only .pyx/.pxd/.pxi/.py; it reuses the scanner's cached per-file child resolution and builds no closure-window cache entry, so the context-free window cache is not polluted by a filtered, use-specific closure.  
+  Заметки: Invariant: the window cache stays context-free (keyed only by file), so filtered walks must not populate it.
+
+- **2026-06-25** `abf4e6f` — cache parsed ya.make ASTs per GenCtx @ gen.go moduleStmts  
+  moduleStmts re-parsed every ya.make on each genModule call (target+host, kinds, Py->CPP re-entry); *MakeFile is now cached by cleaned rel on GenCtx, and moduleStmts copies into a fresh slice when appending the linters make-include so the shared AST stays read-only.  
+  Эффект: measured 2.55x per file (11507 parseFile calls / 4509 files); gen alloc_objects on bs_static 2,741,741 -> 2,499,124 (-243k, -8.8%); max RSS 1240 -> 1192 MB (fewer total allocs under -j0's GC-off). Costs ~32 MB retained (4509 held ASTs)  
+  Заметки: Relies on collectStmts copying each Stmt before mutating. -j0 runs with GC off.
+
+- **2026-06-26** `e1e7797` — memoize induced .pb.h per target on a single stateful proto parser @ parser_proto.go ProtoIncludeDirectiveParser.inducedHeader; parser_ext.go registry; parsers_manager.go  
+  protoImportInducedHeader rebuilt TrimSuffix(target)+".pb.h" and re-interned on every import; now an IntMap[STR] memo keyed by interned target (0 = no header). The parser ext table is built by the registry owned by IncludeParserManager (no package-global), and cfgproto delegates to the same proto instance so they share one memo.  
+  Эффект: induced-header concat 29891 -> 3255 allocs; total alloc_objects 1822726 -> 1796771  
+  Заметки: Context-free: mapping is a fixed target->header.
+
+- **2026-07-01** `bdf0ce7` — per-context scanner/codegen cache @ newEmitContext / EmitContext.scanner,.codegen  
+  scannerFor(instance)/codegenFor are computed once when the EmitContext is built; ~112 call sites read e.scanner/e.codegen fields instead of re-resolving per call.  
+  Заметки: Mostly a structural refactor; no measurement in the message.
+
+- **2026-07-02** `288d957` — dispatch on memoized extension class @ emitOneSource / srcExtClassOf (ext_class.go)  
+  The master extClassMatcher gains leaf families; emitOneSource switches over srcExtClassOf (one memoized array read) instead of two darts walks per call (isHeaderSource + srcExtMatcher).  
+  Эффект: Measured on yabs: darts calls 464736 -> 366392 (-21%)  
+  Заметки: srcExtClassOf later keyed by rel STR (8883f96) so source/build forms share one memo slot.
+
+- **2026-07-02** `3c1d2c7` — context-free memo of resolveSourceUnder for all callers @ resolveSourceUnder (quoted include + resolveContextSearchTier)  
+  The deterministic (prefix, target) probe is memoized inside resolveSourceUnder keyed by splitMix64(prefix, targetSTR) (both interned uint32, no string re-hash), so both callers hit it.  
+  Эффект: CPU (10x yabs): isFile 3.12s->2.41s, resolveContextSearchTier 2.18->1.68 (+its closures ~-0.6s each), resolveSearchPath 4.15->3.69, intern 3.36->3.06  
+  Заметки: Moved onto FS and shared across host/target scanners in 090bfc9; key rekeyed to rel STR (83b7f69); front cache added 194c2f2.
+
+- **2026-07-05** `fb2bcef` — reuse module ScanCfg for PR input closure @ prInputClosure  
+  prInputClosure reuses d.cc.ScanCfg instead of rebuilding an identical scan context (which hash-consed to the same ScanConfig anyway). Dead 6-prefix switch removed from runProgramInputVFS.  
+
+- **2026-07-06** `6572d96` **[superseded]** — single shared TwoBitSet file-existence memo @ sourceFileExists -> IncludeParserManager TwoBitSet (unprobed/absent/present); scan cache -> DenseMap2  
+  The existence verdict was cached in a full scan-cache row per scanner and duplicated across target/host; one 2-bit-per-id set on the shared parser manager replaces it and the scan cache shrinks to 8-byte rows.  
+  Эффект: bs_static: max-rss -2.7 MB, dense_map allocations -2.8 MB  
+  Заметки: Merged into the resolveSourceUnder cache (6906dc7) which then moved onto FS (090bfc9).
+
+- **2026-07-07** `35f68f9` — per-chunk uid accumulator memo keyed by (ptr,len) @ CanonBuf writeVFSChunks  
+  Per-VFS input-value memo (intern lo ^ content hash) and per-chunk (sum,xor,sq) memo keyed by the chunk's (ptr,len); valid because input chunks are immutable arena/bucket slices shared across nodes.  
+  Заметки: (part of 35f68f9 effect) Relies on chunk immutability/identity (arena + hash-consed buckets).
+
+- **2026-07-07** `a7655de`, `cdc79d9` **[reverted]** — persistent (size,mtime)-validated source hash cache @ hashSourceFile fallback / bld/srchash.json  
+  ~4.2k inputs the generator never reads were re-opened and re-hashed every warm run (+4.2k openat / +8.4k read); a persistent cache validated by size+mtime avoided that.  
+  Заметки: (combined effect in a7655de above) cdc79d9: 'Caches are a separate research topic'; only the in-run memo remains. Diagnosis kept: ~4.2k inputs re-hashed from disk on every warm run.
+
+- **2026-07-08** `2e69640`, `e74a9ca`, `4e30eb4` — resolveModuleToolchain memo with cheap key @ resolveModuleToolchain (GenCtx memo)  
+  Toolchain resolution memoized per (clangVer, resource set); key became a comparable struct (no per-call string concat, even on hit) and the clang resource is matched by prefix compare without concat/intern.  
+
+- **2026-07-08** `46eb6a3` — per-module emission contexts built once per module @ PbModuleEmission (per modulePlugins variant), PyPBModuleEmission, ObjcopyEmitCtx, ProtoSrcsResult  
+  Proto emission context (incl. arg blocks and the proto ScanContext) was rebuilt per source; it is folded into EmitContext values with memo flags and built once per module.  
+
+- **2026-07-08** `50f3fa9` — remove the global full-form VFS string cache @ VFS.fullSTR / vfsFull DenseMap  
+  Stdout becomes a VFS; the two values that need full-form strings (bison M4, CURDIR/BINDIR) intern them directly — 'a global cache doesn't pay for once-per-module strings'.  
+  Заметки: Removal of a cache judged not worth its memory.
+
+- **2026-07-09** `6906dc7`, `090bfc9` — one source-existence cache on FS shared by both scanners @ resolveSourceUnder (+ empty-prefix fast path) on FS; parsers.sourceExists TwoBitSet removed  
+  sourceFileExists duplicated resolveSourceUnder's cache; it becomes the empty-prefix case, and the cache moves onto the FS so host and target scanners share it ('both correct and warmer').  
+
+- **2026-07-10** `4c199ac`, `11343be`, `e3ec3b7` — one module ScanContext with scan domains, passed by pointer @ d.cc.ScanCfg / d.scanCtx; walkClosure(..., scanDomain); snapshotScanCfg and protoWalkInputs removed  
+  Emitters stop building or snapshot-copying their own ScanContexts (cython/proto/aux); a single module-scope context is passed by pointer and selects a scan domain.  
+  Заметки: No numbers in the messages (Codex refactor series).
+
+- **2026-07-11** `194c2f2`, `2406084`, `6b6dac2`, `76b828d` — direct-mapped front cache for resolveSourceUnder @ OsFS.sourceUnderHot  
+  A fixed array of {pair key, STR} entries indexed by a multiplicative hash of (prefix,target) sits in front of the IntMap; the backing key changed from splitMix64 to mix64 of the exact 64-bit pair.  
+  Заметки: Size 1<<14 (194c2f2) -> 1<<15 (2406084) -> 1<<16 (6b6dac2) -> 1<<18 (76b828d); 1<<18 at HEAD.
+
+- **2026-07-11** `1a32a96` — compact ScanContext and shared per-module proto pending state @ ScanContext{ccOwn, ccPeer, fullPeer,...}; protoPBCommon; protoPBPending.imports  
+  ScanContext stores three path lists and derives domain paths on demand; per-module protoc fields live once in a shared protoPBCommon; each per-source pending keeps the already walked imports Closure (no re-walk at fire time) and a single extra dep ref instead of a slice.  
+
+- **2026-07-11** `6c5b5ac` **[superseded]** — lazy per-domain ScanConfig resolution @ ScanContext.config(domain)/modulePaths  
+  Domain include paths and ScanConfigs are built on first use of a domain (ready bits / nil config) instead of eagerly for all scan domains of every module.  
+  Заметки: 1a32a96 further compacts ScanContext (no stored per-domain path array).
+
+- **2026-07-12** `6e8f74c`, `1459f18` **[superseded]** — skip source-only input chunks @ resolveNodeCodegenDeps (GenCtx.srcOnly IntSet keyed by chunk pointer)  
+  Chunks found to contain no build paths are remembered by data pointer and skipped on later nodes.  
+  Заметки: Superseded by root-homogeneous chunks (1459f18): a chunk is skipped when chunk[0].isSource().
+
+- **2026-07-12** `9343d92`, `be65c3d` **[reverted]** — codegen deps cached per input chunk @ resolveNodeCodegenDeps / chunkDepRefsCache  
+  Direct-mapped 64K cache keyed by mix64 of the chunk's data pointer storing the chunk's producer refs (length-prefixed arena block), reusing results for shared chunks.  
+  Заметки: Reverted the next commit with no reason stated.
+
+- **2026-07-13** `2a55011`, `a3c5fde`, `5f6e868` — per-module protoSourceRelPath cache @ EmitContext.protoSourceRelPath/protoSourceRel  
+  A small round-robin cache (16, then 64 entries) of src -> resolved proto rel per module avoids repeated resolution across srcPosition/emitters; 5f6e868 returns STR so callers mint source/build VFS by bit flips.  
+
+- **2026-07-13** `69b1e48` — module memo chained by path id @ GenCtx.memo -> moduleMemo{heads PageVec, entries arena}; memoGet/memoPut  
+  Module results are found by indexing a PageVec with the module rel id and walking a tiny variant chain, instead of hashing a packed instanceKey into an IntValueMap.  
+  Заметки: moduleMemoEntry exists at HEAD.
+
+- **2026-07-13** `8883f96` — ext-class memo keyed by rel; small hot-path trims @ srcExtClassOf (relOrSelf), internV/internedV single-part, BitSet.add, splitPrefixSeen  
+  Extension-class memo keyed by the rel STR so source/build forms share a slot; single-part internV goes straight to internStr; BitSet.add only calls ensureLen when out of range.  
+
+- **2026-07-13** `bccb3a2`, `8203314`, `76366a2` — lazy split-key lookup cache with negative entries @ CodegenRegistry.lookupSplit / bySplit  
+  Registration no longer eagerly inserts a split entry for every '/' of every generated path; lookupSplit probes prefix+'/'+suffix with a lookup-only internedV and byRel, caching results lazily (hits in 8203314; misses tagged with a registry generation counter bumped on every register in 76366a2).  
+  Заметки: splitGeneration later touched in 53f0351 (outside slice).
+
+- **2026-07-14** `76b828d` — direct-mapped front cache for search-tier resolution @ IncludeScanner.searchTierHot (resolveContextSearchTier)  
+  A 32K-entry array keyed by splitMix64(cfg.num, target) answers repeated search-tier lookups before the BitSet+IntMap path.  
+  Заметки: searchTierHotMask = 1<<15-1 at HEAD.
+
+- **2026-07-14** `a3c5fde` — python source resolution via cached resolveSourceUnder @ resolvePySrcRel (clean case)  
+  Clean python sources resolve through resolveSourceUnderClean (front-cached, memoized) for each srcdir/module/root instead of isFile probes plus internV joins.  
+
+
+### Замыкания include (41)
+
+- **2026-05-08** `0fc7d64` — shared DFS visited set across JOIN_SRCS sources @ gen.go joinSrcsIncludeClosure  
+  One visited/order pair is shared across all joined sources (mirroring the single joined .cpp compile), so headers reached once stay deduped and total work is O(union closure) instead of O(sum of per-source closures).  
+
+- **2026-05-08** `75a63bc` — per-header transitive-closure (subgraph) cache @ scanner.go dfs/subgraph, subgraphCache keyed (headerAbs, ctxHash, srcClassHash)  
+  The canonical-from-clean transitive closure rooted at each header is memoized on first encounter and merged with skip-on-already-visited into later walks, so shared header closures are walked once per context/class.  
+  Эффект: time ./yatool gen --target tools/archiver: 1.167s -> 0.851s (27.1% speedup); hit rate target scanner 87% (hits=10713 misses=1553 tainted=80), host scanner 92% (hits=6201 misses=518 tainted=37)  
+  Заметки: Key restructured in 5457e60 (2-level) and fe4e728 (per-scanCtx subgraphInnerKey).
+
+- **2026-05-08** `75a63bc` — taint tracking for cycle-on-stack subgraphs + no caching attempt for top-level sources @ scanner.go subgraphTaintedKnown, isSourceLike  
+  Subgraphs that hit a cycle with an ancestor still mid-computation are not cached and fall back to plain DFS over the caller's visited/order; subgraphTaintedKnown short-circuits future speculative attempts on them. Top-level sources skip the cache attempt because each source is unique and a speculative walk would re-traverse its full closure for nothing.  
+  Заметки: Correctness invariant: a cached subgraph must be independent of the ancestor stack.
+
+- **2026-05-23** `8b1fe4b` — Tarjan SCC closure cache replacing tainted-subgraph re-walks @ scanner.go closureOf/strongconnect/dfsID (replaces subgraph/walkSubgraphID/walkSubgraphTaintedID)  
+  closureOf(absID) returns the full transitive include closure cached per (absID, sourceClass); strongconnect finalizes each SCC in reverse-topological order so successors are cached before the SCC closure is built, and all SCC members share one closure slice. Every (node, sourceClass) is explored once per run; dfsID merges the cached closure.  
+  Эффект: sg5: dfsID calls 55.5M -> 347K, only 3585 genuinely-cyclic SCCs. Wall flat (~40s); peak RSS ~5.4->7.5GB (full closures materialized), GC ~30% of runtime.  
+  Заметки: Removes the O(n^2) blowup; memory cost addressed by d9552a2 (share across scanCtxes) and 38ffa0c (chunked arena). Source-like roots still plain-DFS (not cached).
+
+- **2026-05-31** `907ec69` **[rejected-by-measurement]** — roaring bitset union for closures @ WalkClosure prototype with github.com/RoaringBitmap/roaring (not committed)  
+  Store each closure as a roaring bitset and compute WalkClosure as OR of the direct includes' bitsets. Closures are sparse (~700 files over ~800k ids), so roaring degrades to sorted []uint16 array containers with binary-search + memmove inserts.  
+  Эффект: Regression: wall 2.4 -> 3.1 s, RSS 800 -> 900 MB (iaddReturnMinimized 15%, binarySearch 7.6%, memmove 5.6%); byte-exact kept  
+  Заметки: Slower than the cache-friendly dense idSet element walk.
+
+- **2026-05-31** `907ec69` **[rejected-by-measurement]** — dense per-closure []uint64 bitset (word-OR merge) @ closure storage (INTERN.md analysis)  
+  A dense bitset per closure would make merge a true word-OR, but memory is ~100 KB per closure.  
+  Эффект: 100 KB x 26k closures ~ 2.6 GB  
+  Заметки: Rejected by calculation, not by a prototype.
+
+- **2026-05-31** `907ec69` **[rejected-by-measurement]** — closure-by-reference / DAG sharing instead of flattened windows @ closure storage (INTERN.md analysis)  
+  Store a closure as {own SCC} + references to child closures and materialize by DFS with O(1) skip; cost becomes U + E (unique files + edges).  
+  Эффект: wins only if mean include fan-out < 59M/24M ~ 2.46; real C++ fan-out 5-30, so markedly slower  
+  Заметки: Rejected by calculation from measured counts; flattening windows trades expensive edge traversal for cheap flat scans, the 3.45x overlap is its price.
+
+- **2026-06-02** `0bd4ecd` — remove dfsID/plainDfsID; joinSrcsIncludeClosure unions cached closures @ scanner joinSrcsIncludeClosure  
+  The last user of the old DFS path now unions each source's cached closureOf window, deduping across sources with the reused idSet; dfsID, plainDfsID, isSourceLike and the dfsCalls/plainDfsCalls counters are deleted.  
+
+- **2026-06-02** `45bd341` — straighten non-root SCC member leading via a cached copy, not an in-place swap @ scanner closureOf HIT path; subgraphCache re-key  
+  On a hit where the queried node is not w[0] of its SCC-shared window, copy the window, lead it with the node, append it as a new closureRef and re-key the cache, so later queries hit directly and the shared root-led window is never mutated.  
+  Эффект: ~1.2% of queried files on sg5 (280 cyclic SCCs / 43685 windows), off the hot path; gen 2.49s (budget 8.80s)  
+  Заметки: Also exposes closureWindows=len(subgraphClosures) in the YATOOL_PERF_STATS scanner dump (distinct windows vs cached members).
+
+- **2026-06-02** `7422d2f` — strongconnect behind a narrow closureSink; count cached-edge hits once @ tarjan_ctx.go runSCC/strongconnect; scanCtx.emitClosure  
+  SCC algorithm moved into tarjanCtx talking to the scanner via forEachChild/cachedWindow/emitClosure; strongconnect returns the cached-child-edge count so dfs bumps subgraphHits once instead of a per-edge method call.  
+  Заметки: Commit calls it a pure refactor of a cold path (fires only on include cycles); the hot dfs build untouched.
+
+- **2026-06-02** `85fda2d` **[superseded]** — plain two-pass dfs for C/C++ source roots instead of strongconnect @ scanner closureOf miss path / dfs  
+  A translation unit is never #included, so it roots a singleton SCC and Tarjan's low-link/stack is dead weight; a plain dfs leads with the root and splices children's cached windows. Two passes because of the single-pending arena: pass 1 resolves children's closures, pass 2 reserves the block and splices.  
+  Эффект: sg5 stays byte-exact (gen 2.54s, budget 8.80s)  
+  Заметки: Generalized to every root in e4a98b4 (isSourceLike gate and .S special case deleted).
+
+- **2026-06-02** `885feaa` — single closure path: route per-source closures through Tarjan-cached closureOf (delete WalkClosure/WalkSource) @ scanner closureOf / walkClosureRoot  
+  WalkClosure duplicated closureOf (plainDfsID over sources + splicing cached header windows); collapsing onto closureOf caches source closures too and drops the per-query copy (walkOutArena removed).  
+  Эффект: Trade-off: ~+8% gen CPU on sg5 (source roots pay Tarjan + closure caching + GC on cached one-shot source closures)  
+  Заметки: Cost accepted for one code path; recovered later by routing roots through a plain dfs (85fda2d, e4a98b4).
+
+- **2026-06-02** `e4a98b4` — dfs for every root, dfsActive cycle guard hands cycles to strongconnect @ scanner closureOf / dfs / dfsActive  
+  Every uncached file goes through a plain dfs (node + children's cached windows, no low-link/SCC stack); a cycle re-enters dfs before the node is cached, and the guard hands it to strongconnect which collapses the SCC reusing every acyclic subtree already cached. Post-order arena allocation; pass 2 splices directly from subgraphCache and dedups via the shared tjClosure (no temp [][]VFS, no pool).  
+  Эффект: Perf-neutral vs prior all-strongconnect: CPU a wash (splice work moves strongconnect.func2 -> dfs.func2, no new GC), alloc +~14MB (dfsActive set), inuse and maxRSS at parity; gen 2.52s  
+  Заметки: Win is a single uniform code path; the +14MB is reclaimed in ace47b3.
+
+- **2026-06-03** `128f8dd` — non-expanded closure leaves spliced into cached windows @ CodegenRegistry.closureLeaves; scanner dfs pass-2 / emitClosure; withContextSourceExtras -> copyProductToolingExtras  
+  A COPY_FILE(TEXT) dst's $(S) source + fs_tools.py are registered as leaves on the dst and spliced into its window once at build time; they ride transitively to every consumer through the cached window instead of re-walking every CC source's full closure.  
+  Эффект: withContextSourceExtras was the top map-access hotspot (~20.8M probes on sg5), an O(closure x sources) re-walk  
+  Заметки: Leaves are never traversed as children (avoids the cross-module include leak). Leaves later moved onto GeneratedFileInfo (5c16d57).
+
+- **2026-06-03** `5c16d57`, `1298097` — generated-from .proto as a closure leaf, not a fake include; drop dropTransitiveGeneratedProto at 5 CC sites @ pb.cc/grpc.pb.cc/pb.h parsedIncludes; GeneratedFileInfo leaves; emit_sources x2, emit_proto, emit_codegen_cc, emit_llvm_bc  
+  With no pseudo-include of X.proto, a $(B) .proto never enters a CC closure, so the post-walk scrubber filtering pass became a no-op at five call sites and was removed (only the two RUN_PROGRAM/RUN_PYTHON3 sites remain).  
+  Заметки: 1298097 verified the dead sites with a panic-on-drop probe over the gate; dead twin dropTransitiveGeneratedCPP removed. One test skipped: generator sources double-listed in raw graph, normalize dedups.
+
+- **2026-06-04** `8ae02fe` — AUTO COPY source as a closure leaf; delete autoCopyDstExtras @ emit_copy emitCopyFiles; autoCopyDstExtras deleted  
+  autoCopyDstExtras rebuilt per-module srcToDst/dstToSrc maps and rescanned every CC source's closure; the src->dst direction proved unnecessary (gate byte-exact without it) and dst->src is exactly 'register src as a non-expanded ClosureLeaf of dst', spliced once at window construction.  
+  Эффект: ~725k map probes/run on sg5 (~8% of the map-op profile); sg5 gen 3.1s (budget 8.8s)  
+  Заметки: sg5 promoted to hard byte-compare gating in the same commit.
+
+- **2026-06-06** `d5712f6`, `1c1715c`, `727245b`, `8a2f0f1` — ride per-source extra inputs as ClosureLeaves through the cached window instead of per-source re-walk passes @ ensureFlatcEmission (flatc), emitCopyFiles (fs_tools.py), bison .y header leaf, emitRunProgram/emitArchive SourceInputs; removed flatcCCExtraInputs, copyProductToolingExtras, bisonCCSourceInputs, runtimePy3CCExtraInputs  
+  Extra inputs (flatc wrapper, .fbs + transitive imports, runtime header; copy tooling; bison .y; RUN_PROGRAM .py sources behind archived .pyc.inc) are registered once as non-expanded closure leaves of the generated file, so they reach every consumer transitively via the cached closure window; the per-source pull passes (flatc had three separate per-source rewalk sites) are deleted.  
+  Заметки: Closure leaves bypass the closure dedup, so raw consumer input lists are order/duplicate-agnostic (gate compares normalized output). Leaves later required the leafEver guard for window subsumption (252441e).
+
+- **2026-06-09** `252441e` — skip subsumed windows in the closure splice loops @ scanCtx.windowSubsumed (dfs pass 2 in scanner.go, strongconnect in tarjan_ctx.go); CodegenRegistry.leafEver BitSet  
+  Cached windows are transitively closed, so if a child is already in the block under construction its whole window is a subset; one membership probe skips the window wholesale instead of re-checking every element. A VFS ever registered as a ClosureLeaf (leafEver bit, set strictly before any window build can hand it out) never short-circuits, since a bare leaf's presence does not imply its window is present.  
+  Эффект: on sg5 this absorbs 52.5% of window splices (212,926 of ~405k, closureSubsumed in YATOOL_PERF_STATS), cutting dfs.func2 2280->1360 ms and IdSet.has 1250->520 ms over 10 runs (warm wall 1.14->1.09 s, user 1.02->0.90 s).  
+  Заметки: PERF.md item 1 (attack on 12.77x read amplification). Rejected alternatives: marking 'arrived by splice' (splices copy nested foreign leaves), XFS=VFS<<1|leaf in windows (breaks zero-copy walkClosureRoot -> Node.Inputs boundary; tens of MB churn on ~22.9k CC nodes), two lists per window. Block contents and order unchanged.
+
+- **2026-06-10** `00dba59` — drop spliceNew's grow fallback; callers presize to vfsBound @ IdSet.spliceNew (scanner.go dfs pass-2, tarjan_ctx.go strongconnect)  
+  Both call sites reset(vfsBound()) right before splicing and windows hold only already-interned ids, so the in-loop bounds branch plus add/re-hoist arm were dead; loop body becomes stamp-check/stamp/store, the runtime bounds check remains as fail-fast.  
+  Эффект: 10x sg5: spliceNew flat 1070ms -> 1010ms, total samples 7.92s -> 7.83s (both within batch noise; the win is the simpler loop).  
+  Заметки: Test pins the panic on a violated invariant.
+
+- **2026-06-10** `45f8b43` **[rejected-by-measurement]** — bulk-splice the first window without has() checks @ closure splice loop (dfs.func2)  
+  Copy the first window wholesale instead of membership-checking each element. Cost moved from IdSet.has into memmove: copying large windows is memory-bound while the has-loop runs over a cache-resident set.  
+  Эффект: стоимость переехала из IdSet.has (−250 ms) в runtime.memmove (+290 ms)  
+  Заметки: PERF.md item 12-B; rolled back (changed window contents without a win). Third confirmation of the item-9 lesson.
+
+- **2026-06-10** `5c3fe24`, `199f9dd` — IdSet.spliceNew: hoist gen/epoch into locals in the splice inner loop @ IdSet.spliceNew; dfs pass-2 (scanner.go) and strongconnect fill (tarjan_ctx.go)  
+  Disasm of dfs.func2 showed four dependent loads per window element (s.tjc, gen pointer, its length, epoch) because the gen[id] store could alias IdSet fields; with gen/epoch in registers the present-check, stamp and append are two cache-resident loads per element. reset() presizes gen to the id bound.  
+  Эффект: 10x sg5: splice cluster 1410 -> 870 ms, total samples 8880 -> 8320 (-6.3%), warm user 0.62 -> 0.58 s, wall 0.89 -> 0.85 s.  
+  Заметки: PERF.md item 13 (disasm heat map).
+
+- **2026-06-10** `6eafe2b`, `c3dcdfa`, `7e0332a`, `3706a11`, `9c705b7` — close .proto/.ev/.fbs/.swg/rl6 imports over the scanner engine instead of five ad-hoc walkers @ removed protoTransitiveImports, evTransitiveImports, flatcTransitiveImports, swigIncludeClosure, appendRagelNativeDeps; walkClosure windows; walkableBucketFor  
+  The hand-rolled walkers (recursive BFS + seen/scanned maps re-walked per consumer per file; swig with per-call fs re-reads) are replaced by the standard walkClosure window, which is cached, arena-backed and SCC-safe; one window serves several consumers (e.g. R6 node and CC compile).  
+  Заметки: walkableBucketFor is a pure function of file type, so the context-free scanCache needs no bucket key.
+
+- **2026-06-10** `d5ce4a7` — drop closure straightening; the cached window IS the input list @ closureOf, walkClosure, walkClosureTail; EmitCC/EmitAS/EmitR6/EmitCF/EmitEN/llvm-BC  
+  closureOf returns the cached window as is: the straighten-on-hit branch (copy + re-key for non-head SCC members) is gone and emitters stop re-adding the root. Collectors needing transitives only use walkClosureTail.  
+  Эффект: ~1.2% of queried files  
+  Заметки: walkClosureTail is sound only for build-output roots, which cannot be SCC members. Raw input order shifts at a few sites; normalize canonicalizes order.
+
+- **2026-06-30** `84802f7` — remove dead TarjanScratch.discover grow path @ tarjan_ctx.go TarjanScratch.discover  
+  stamp/index/low are always pre-sized to vfsBound() >= every VFS id, so the id >= len(stamp) grow-and-copy branch is unreachable and removed from the hot discover path.  
+  Заметки: Invariant: Tarjan scratch pre-sized to vfsBound().
+
+- **2026-07-02** `a13b58c` **[rejected-by-measurement]** — branchless compaction in spliceNew @ IdSet.spliceNew  
+  Branchless compaction (and prefetch/SIMD) of the closure-window dedup loop.  
+  Заметки: 'Branchless compaction and prefetch/SIMD were tried and measured slower on the real workload (latency already hidden, branch already predicted) — not included.'
+
+- **2026-07-02** `c29950f`, `dcab2fb` **[rejected-by-measurement]** — SIMD/prefetch spliceNew @ IdSet.spliceNew closure-window dedup  
+  AVX512 gather/compress/scatter and software-prefetch variants were benchmarked against the scalar loop.  
+  Заметки: 'both AVX512 and prefetch were measured slower on the real build (interleaved, drift-controlled) — the loop is memory-latency-bound with MLP already saturated by the OoO engine, and real closures have gen-access locality the synthetic's uniform-random elements don't model'. Tool removed in dcab2fb.
+
+- **2026-07-03** `1392ad6`, `7af521a`, `3791682` **[rejected-by-measurement]** — positional 16-bucket direct closure build @ ScanCtx.dfs / foldInto  
+  Build each closure straight into 16 positional buckets (slot = strID&15) merging child buckets index-to-index with no flat pass; then inlined the fold (hoisted gen/epoch, no per-element grow check).  
+  Эффект: Bench (yabs bs_static, min of 10, no -G, YATOOL_CPUPROFILE): CPU 47.7s→49.0s (+2.7%, within the 5% noise band; was +18% before this inlining). Revert table: 81f5ecb (compacted, flat block) 47.98s <- floor; positional + copy-on-miss +2.7%; positional + 16-pool zero-copy +4.3%; positional + buckets-outer (2-pass) +21%  
+  Заметки: 3791682: 'buckets-outer is forced into two passes by windowSubsumed'; zero-copy intern did not help because the hash-cons hit rate is high. Hashes 81f5ecb/3421f5f/b3028c4 in the message are pre-rewrite ids. The idea came back in Codex f17d939 (direct splice into 1+8 root-homogeneous buckets) and was kept.
+
+- **2026-07-03** `1b7bae2`, `6bf433c` — no closure flattening in consumers @ ClosureView consumers (codegen emitters, dedupClosure, RawClosure callback)  
+  flat()/appendTo removed from production; filters use one-pass collect, dedup runs over buckets (dedupClosure(extra, groups...)), metadata loops iterate buckets, so no private flat []VFS copy per consumer.  
+
+- **2026-07-03** `3777f54` — expand only abs's build-leaf chain @ ScanCtx.dfs build-leaf frontier  
+  Child build nodes already carry their ClosureLeaves inside their own closure, so only abs's own leaves (and build nodes among them, transitively) are expanded, skipping the spliced child block.  
+  Эффект: Bench (yabs bs_static, min of 10, no -G, YATOOL_CPUPROFILE): CPU 49.6s→48.5s (-2.2%), wall 5.00→4.80  
+  Заметки: Recorded as 'the one kept win' in the closure-representation notes (1bf985a).
+
+- **2026-07-03** `65aefd5` **[superseded]** — bucketed hash-consed closure storage @ IncludeScanner closures / BucketCache (bucket_closure.go)  
+  Each include closure is stored as 16 buckets partitioned by strID&15 plus self; each bucket is hash-consed (order-independent sum hash) into one shared pool, so nested sibling closures share most buckets. Build path still assembles flat in reused scratch, bucketizes once at save.  
+  Эффект: on yabs 92.7M stored closure elements collapse to 17M unique (~81% saved, ~370MB -> ~80MB)  
+  Заметки: Bucket hash assumed collision-free (later made injective with an overflow table, 023b362). Bucket layout changed to 1 build + 8 source buckets in 4f42935. Also landed `ay dev perf merge` + AY_CLOSURE_DUMP (removed in 8495f62).
+
+- **2026-07-03** `bf31616` **[superseded]** — thin Closure{self, [][]VFS} @ BucketClosure/ClosureView -> Closure; DenseMap[STR,Closure] per scanner  
+  Stored [16]uint32 bucket handles (pure compaction, no identity) and the separate view type are replaced by one thin struct referencing only the non-empty residue buckets; view()/reconstruct()/closureWindow collapse into spliceInto.  
+  Заметки: Bucket lists later hash-consed behind a *BucketList (e5fa013).
+
+- **2026-07-09** `07d540f` **[superseded]** — TarjanCtx per ScanCtx frame (pooled) @ TarjanCtx pool, forEachResolvedChildID scratch, runSCC reentry assert  
+  Nested walks triggered by use() get isolated SCC state; child resolution goes into a pooled scratch and the childArena window covers only the copy.  
+  Заметки: Correctness change; each pooled TarjanScratch held dense vfsBound arrays — replaced by a sparse map in 6c5b5ac ('recover pre-refactor memory profile').
+
+- **2026-07-11** `6c5b5ac` — sparse Tarjan scratch @ TarjanScratch (map[VFS]int slots + []tarjanNode)  
+  Dense stamp/index/low arrays sized to vfsBound per pooled TarjanScratch (one per ScanCtx frame since 07d540f) are replaced by a map of visited nodes plus a compact node slice; SCC paths are rare.  
+  Заметки: Memory lever; CPU of the rare SCC path not measured in the message.
+
+- **2026-07-11** `6c653e4` — inline codegen closure walks @ resolveCodegenDepRefsInclView; DeDuper.add  
+  Closure.each callbacks replaced with direct loops over self and buckets; DeDuper.add checks growth before touching the Vec and indexes a hoisted slice.  
+
+- **2026-07-12** `4f42935` — 1 build bucket + 8 source buckets @ closureBucketIndex (bucket_cache.go)  
+  All $(B) members go to bucket 0 and sources split 8 ways by rel id, instead of 16 buckets by strID; buckets become root-homogeneous.  
+  Заметки: closureSourceBuckets = 8 at HEAD. Enables first-element bucket classification (8883f96) and direct splicing (f17d939).
+
+- **2026-07-12** `e5fa013`, `6b6dac2` — hash-consed closure bucket lists @ BucketCache.internBucketList; Closure{self, *BucketList}  
+  The list of bucket slice headers of a closure is itself interned (pair hash + overflow table), so identical lists are shared and Closure stores one pointer instead of a 24-byte slice header; 6b6dac2 hashes the list by the interned buckets' (pointer,len) instead of xxh3-128 over the header bytes.  
+  Заметки: Relies on buckets being hash-consed (pointer identity = content identity).
+
+- **2026-07-13** `10d1b12` — skip repeated closure buckets via per-bucket visit epoch @ BucketCache.storeBucket/firstBucketVisit  
+  Each interned bucket gets a hidden header slot before its first element holding a visit epoch; during one dfs a bucket already spliced (shared by several children) is skipped without probing its elements.  
+  Заметки: Header lives outside the slice so it does not affect hashing/equality/capacity; epochs cleared on wraparound.
+
+- **2026-07-13** `8883f96` — bucket-granular closure consumers @ emit_cfgproto/flatc/gztproto/pr/proto/proto_desc/rodata/sc/swig/yasm, dedupSourceVFS  
+  Consumers exploit homogeneous buckets: whole build/source buckets are taken or skipped by bucket[0], eachBucketVFS callbacks are replaced by inline loops, and bucketList() is hoisted out of repeated calls.  
+
+- **2026-07-13** `f17d939`, `52f8824` — splice child closures directly into scratch buckets @ ScanCtx.dfs / BucketCache.spliceOne/spliceBucket/storeScratch  
+  Child self and each homogeneous child bucket are deduped straight into the destination bucket (index computed once per bucket from its first element), replacing the flat block + rebucketing at store; build-leaf expansion iterates only the build bucket; 52f8824 inlines the splice and windowSubsumed into dfs.  
+  Заметки: Re-attempt of the direct-to-buckets idea that was rejected for 16 positional buckets (3791682, +2.7%..+21%); no numbers published for this version.
+
+- **2026-07-15** `5f6e868` — resolve children once per dfs @ ScanCtx.dfs / resolvedChildren  
+  dfs fetches the resolved child slice once and iterates it for both the ensureClosure and splice passes, instead of two callback-driven passes each hitting the children cache.  
+
+- **2026-07-15** `cbd7f49` — bulk splice of the first bucket in a partition @ BucketCache.spliceBucket (+ spliceBucketSlow noinline)  
+  If the destination bucket is still empty and is not the closure self's bucket, the incoming bucket is known disjoint: epochs are stamped without probing and the bucket is appended as one block copy.  
+  Заметки: Relies on 'All seen values except the closure's self are also present in scratch'.
+
+
+### Аллокации и churn (103)
+
+- **2026-05-08** `07817cb` — sync.Pool for WalkClosure visited map and order slice @ scanner.go IncludeScanner.WalkClosure (visitedPool/orderPool)  
+  Per-walk scratch (visited map, order slice) taken from sync.Pool and reset in place with clear(visited) and order[:0]; the returned out slice is fresh per call so pool reuse cannot corrupt caller state.  
+  Эффект: time ./yatool gen --target tools/archiver: 12.763s -> 11.593s avg (9.17% lift); TotalAlloc -26.6% (-1.66 GB); profiler: WalkClosure was 1.94 GB total flat alloc  
+  Заметки: Measured on a pre-PR-34b base. Same pools reused by a93e0d3 for subgraph().
+
+- **2026-05-08** `698d68d` — pre-absified sysincl mappings, lazy result allocation, linear-scan dedup of 1-3 entry lists @ scanner.go absifyRels, resolve() sysincl layering, sysinclLookup  
+  SOURCE_ROOT-relative YAML paths are converted to absolute once and stored in the per-half cache; the result slice is allocated only when a new mapping actually sticks (otherwise searchOut, the mappings slice, or the non-empty half is returned as-is); dedup uses a linear scan because mapping lists are 1-3 entries and a map allocation per call would dominate.  
+  Заметки: Part of the PR whose total is 1.74s -> 1.87s (modelling cost).
+
+- **2026-05-08** `766aa55` — callback eachLine iterator instead of per-file [][]byte line accumulator @ scanner.go parseIncludes (was splitLinesNoAlloc)  
+  Lines are visited through a callback iterator rather than collected into a per-file [][]byte slice, removing the accumulator allocation for every parsed file.  
+  Эффект: ~74 MB / run. PR-34k total: time ./yatool gen --target tools/archiver 1.870s -> 1.593s (14.8% speedup; 3-run warm avg); TotalAlloc 515MB -> 360MB (30.1% reduction); mallocs 2.29M -> 1.81M (-21%); peak RSS 490MB -> ~370MB  
+  Заметки: Output sha256 796bdc36... preserved.
+
+- **2026-05-08** `766aa55` — cache sourceRoot + "/" once (sourceRootSlash) @ scanner.go addPath / resolve / absifyRels  
+  The source-root prefix with trailing slash is built once at scanner construction instead of being re-concatenated on every call.  
+  Эффект: part of PR-34k total (1.870s -> 1.593s)  
+  Заметки: 2331a1e moved path handling to VFS strings, translating to FS only in parseIncludes/fileExists.
+
+- **2026-05-08** `766aa55` — sync.Pool for the per-resolveSearchPath dedup map @ scanner.go resolveSearchPath  
+  The dedup set built in every resolveSearchPath call is taken from a sync.Pool and cleared instead of freshly allocated.  
+  Эффект: ~10 MB / run (part of PR-34k total)  
+
+- **2026-05-08** `766aa55`, `af43a2f` — pre-size scanner caches to the observed working set @ scanner.go sysinclSourceCache, sysinclIncluderCache, parsed, exists, resolveCache, viewCache, emittedRelCache  
+  Maps are created with capacities near the measured working set so the rehash-and-grow chain (which dominated sysinclSourceLookup's flat-alloc) does not happen.  
+  Эффект: af43a2f bumps: resolveCache 16384 -> 131072, viewCache 1024 -> 4096, sysinclSourceCache 131072 -> 524288, sysinclIncluderCache 16384 -> 32768, emittedRelCache 16384 -> 4096  
+  Заметки: af43a2f found the brief premise wrong: sysinclSourceCache had ~328k misses on the target scanner, not 579, so the 766aa55 pre-sizes were under, not over. Sizes are tuned to tools/archiver.
+
+- **2026-05-11** `5457e60` — gate same-dir abs-path construction behind hasMultiTarget @ scanner.go resolve() quoted-include sysincl gate  
+  sameDirAbs = sourceRoot + normalisePath(...) only matters when sysincl has multi-target mappings; testing !hasMultiTarget before building the string skips the concat and normalisePath for most quoted includes.  
+  Эффект: ~390 MB of per-run allocation and ~120 ms of normalisePath CPU eliminated (M3); part of PR total 5.07 s -> 4.37 s  
+
+- **2026-05-11** `a93e0d3` — reuse visitedPool/orderPool in subgraph() cache misses @ scanner.go subgraph()  
+  subgraph() allocated a fresh make(map[string]struct{}, 32) + make([]string, 0, 32) on every cache miss; it now borrows the scanner's existing visitedPool/orderPool (added in PR-34d), reducing allocation and GC pressure.  
+  Эффект: M3 devtools/ymake/bin wall (3-run avg): 4.84 s -> 4.18 s (-13.6%; target <= 4.5 s); ~102 MB + 31 MB total per run were the per-miss allocations; M2 wall 0.74 s  
+  Заметки: M1/M2 sha256 unchanged.
+
+- **2026-05-13** `04fd8b2`, `8850027`, `8633127` — hoist repeated concat prefixes (outPrefix / binPrefix / single header VFS) @ EmitEN (triple path construction), EmitJV/EmitJVSplit output lists, emitMiscNodes Register() calls, EmitLD output paths  
+  Go does not CSE `instance.Path + "/" + base + ...` inside slice literals — each `+` chain is a fresh runtime.concatstring call; computing the shared prefix once removes the 6×/12× repeated concats per node.  
+
+- **2026-05-13** `5edf65f` — share immutable Platform.Tags slice instead of per-emit copy @ all emitters node.Tags = instance.Platform.Tags  
+  NewPlatform guarantees a non-nil Tags slice and Platform is immutable, so nodes alias it directly rather than `append([]string(nil), targetP.Tags...)` per emitted node.  
+  Заметки: Relies on Platform never being mutated (the commit also fixed two sites that mutated the shared Platform pointer).
+
+- **2026-05-13** `7969961` — cache duplicate VFS.String() materialisations @ EmitR5 (tmp/cpp/src paths), EmitLD (vcsC/vcsO/output across 3 composers), emitArchive (pathStrPerFile parallel slice for maxArchived)  
+  Each VFS needed in several cmd_args slots is stringified once and reused instead of re-running the allocating concat per use.  
+  Заметки: PR-VFS-14; also EmitJS returns VFS.
+
+- **2026-05-13** `90d5c2a` — defer sameDirRel concat to the multi-target branch @ scanner.go scanCtx.resolve quoted-include gate  
+  normalisePath(incDir + "/" + target) was built for every quoted-include resolve but consulted only when hasMultiTarget; moving it inside `hasMultiTarget && searchOut[0].IsSource()` skips it on the dominant single-target path.  
+  Эффект: concat fired 2.42M times (23% of total alloc_objects); M3 alloc_objects 10.4M → 7.26M (-30%); M3 gen wall 4.41s → 4.24s (-4%); tools/archiver 0.64s → 0.62s  
+
+- **2026-05-13** `93f5b55` — concrete *canonBuf receiver instead of io.Writer interface @ uid.go canonBuf.writeXxx, nodeUID  
+  Interface Write forces escape analysis to assume retention, so every [4]byte length prefix and [1]byte tag escaped to heap; concrete methods compile to append(c.buf, ...) with stack scratch, then one sha1.Sum(c.buf).  
+  Эффект: M3 gen total alloc_objects 8.53M → 5.77M (-32%); writeBytes 1.28M → 123K (-90%); writeByte 819K → 0; M3 gen wall 4.24s → 4.30s (flat)  
+  Заметки: Only heap alloc per nodeUID is the growable canonBuf.buf (removed by d49d23a scratch reuse). Later f270f98 (outside slice) spells canonBuf integer appends as inline byte stores.
+
+- **2026-05-13** `c794edd` **[superseded]** — alias string bytes via unsafe.StringData instead of []byte(s) copy @ uid.go writeBytes  
+  Both sinks (sha1 digest, bytes.Buffer) copy synchronously and never retain the slice, so the string body is aliased with unsafe.Slice(unsafe.StringData(s), len(s)) rather than copied.  
+  Эффект: Total alloc_objects 14.9M → 10.4M (-30%); writeBytes alloc 5.5M → 1.2M (-78%); M3 gen wall 4.50s → 4.41s (-2%)  
+  Заметки: writeByte's [1]byte still escaped (819K) through the io.Writer interface; 93f5b55 replaced the io.Writer path with concrete canonBuf appends and dropped the unsafe import.
+
+- **2026-05-13** `d190aa5` **[superseded]** — drop sync.Pool for sha1.Hash @ uid.go nodeUID  
+  sha1.New() is one ~88-byte alloc per node (~0.5 MB per M3 run, GC-invisible); the pool's per-P fast path, interface assertion and Put churn cost more than it saved, so allocate inline.  
+  Эффект: M3 gen=4.48–4.56s (flat — pool wasn't on the critical path)  
+  Заметки: Pools for tiny objects are noise. 93f5b55 then removed hash streaming entirely (sha1.Sum over canonBuf).
+
+- **2026-05-15** `d49d23a` — reuse one canonBuf scratch across all node UIDs @ emitter.go finalizeNodes/resolveAndUID, StreamingEmitter.uidScratch; uid.go nodeUIDWithBuf  
+  Caller-owned canonBuf is reset (buf[:0]) per node instead of allocating a fresh growable buffer for every node's canonical form — avoids repeated large transient slices for wide input lists.  
+  Заметки: Commit body: 'Reuse UID canonicalization buffers'. No numbers.
+
+- **2026-05-15** `d49d23a`, `050317f` — shrink scanner cache pre-sizes @ scanner.go NewScanCtx (resolveCache, subgraphCache, subgraphTaintedKnown, subgraphInProgress) and newIncludeScannerWith (viewCache, sysinclSourceCache, sysinclIncluderCache)  
+  Pre-sizes tuned for M2 over-allocate on M3, which creates many more distinct ctxHash scanCtx objects; modest initial buckets let only the few large contexts grow. scanCtx: 8192/4096/256/64 → 4096/2048/128/32 (d49d23a) → 1024/512/64/16 (050317f); scanner: viewCache 4096→1024, sysinclSourceCache 524288→131072, sysinclIncluderCache 32768→8192.  
+  Эффект: d49d23a comment: 'over-sizing every context wastes hundreds of MB and feeds GC'; no measured numbers  
+
+- **2026-05-23** `f571434` — Geometric growth of the pooled idSet on reset @ scanner.go idSet.reset  
+  reset(size) reallocated both backing slices to exactly relIDBound whenever smaller; relIDBound creeps up as files get interned, so nearly every walk re-grew the slices. Growing to max(size, 2*len) makes reallocation O(log N) total, then only epoch bumps.  
+  Эффект: idSet.reset was 3.09GB (34% of all allocations). sg5 build (ay make -j0, no -G): cumulative allocations 9.1GB -> 6.0GB, user CPU 18.9s -> 14.4s (-24%), GC share ~50% -> ~43%, peak RSS 2.15GB -> 1.99GB, wall 9.3s -> 8.5s.  
+
+- **2026-05-24** `14000cd` **[superseded]** — Reuse EmitCC's node.Inputs slice as CcIns @ EmitCC return value; regular .cpp/swig/cython call sites (sourceEmit.CcIns)  
+  Both slices are write-once with identical content ([primary]+IncludeInputs); EmitCC returns its node.Inputs and callers alias it instead of append([]VFS{src}, IncludeInputs...).  
+  Эффект: ~0.5GB on sg5; sg5 build allocations 6.09GB -> 5.55GB (-0.55GB).  
+  Заметки: CcIns removed entirely with the member-input tier (36d8409).
+
+- **2026-05-24** `895dbb3` — WalkClosure returns primary-first [root, ...headers]; adopted verbatim as node.Inputs @ WalkClosure; ModuleCCInputs.NodeInputs; emitOneSource -> EmitCC  
+  The closure was materialized twice (headers-only slice, then [primary]+headers copy). WalkClosure now returns [root, ...headers]; headers-only view is result[1:] (same backing, no copy) and the regular-source path hands the full slice to EmitCC as node.Inputs.  
+  Эффект: emitOneSource was 90.86% of EmitCC's allocations; sg5 build allocations 5.55GB -> 5.05GB (-0.50GB).  
+  Заметки: Scoped to the regular path: proto walks rooted at a $(B) pbCC would fabricate a self-dependency; NodeInputs nil when flatc/runtime extras perturb the closure.
+
+- **2026-05-25** `31797ba` — One reusable read buffer for scanner parse reads (FS.ReadInto) @ fs.go FS.ReadInto; includeParserManager.readBuf; sourceParsedBuckets  
+  Each source was read with os.ReadFile (fresh []byte per file). The scanner parses immediately and retains nothing (targets are interned copies), and gen is single-goroutine, so one caller-owned buffer grown to the largest source suffices.  
+  Эффект: os.readFileContents 553MB->7MB (28% of alloc, the single biggest allocator); alloc 1872MB->1396MB (-476), with -G 1976->1415MB; CPU samples 5.6s->5.31s (less GC).  
+  Заметки: General FS.Read unchanged for callers whose bytes outlive the call. Outside the slice git log shows 05704fe folding ReadInto into a buffer-reusing Read.
+
+- **2026-05-26** `1fd5a89` — Pool the JOIN_SRCS visited idSet @ sources.go joinSrcsIncludeClosure (visitedIDPool)  
+  Borrow from the scanner's visitedIDPool (Get + reset + defer Put) instead of a fresh &idSet{} per call; JOIN_SRCS walks are non-reentrant so one pooled set suffices.  
+  Эффект: Measured alloc delta small (78 calls on ydbd, freed arrays ~60-100KB each), wall-neutral.  
+  Заметки: Removes the lone unpooled idSet.
+
+- **2026-05-26** `9f51a7b` — Exact pre-size of composeTargetCC cmdArgs @ emit_cc composeTargetCC make([]string, 0, cap)  
+  The cap omitted platform/source bundle pieces (ArchArgs, CFlags, Defines, NoLibcBlock x2, CPUFeatures) and the warning bundle, so ~22k builds grew mid-compose; adding them makes cap == max final length (no grow, no over-alloc).  
+  Эффект: composeTargetCC from make(undersized)+realloc (60+56MB) to one exact alloc (93MB); sg5 alloc 1184MB -> 1173MB, appendCxxStdAndOwn churn gone. Wall flat.  
+
+- **2026-05-28** `b0a0d80`, `1308c57` — NodeInputs fast path: alias the include-closure slice instead of rebuilding @ emit_sources.go emitOneSource -> EmitCC (srcIn.NodeInputs = full, IncludeInputs = full[1:])  
+  When no extras are appended, IncludeInputs shares full's backing array, so NodeInputs = full lets EmitCC emit the whole input array with no extra allocation; when extras exist NodeInputs is left nil and EmitCC rebuilds from inVFS + IncludeInputs.  
+  Заметки: Pre-existing lever preserved by b0a0d80 when AUTO COPY extras were added. 1308c57 (Codex) fixed a stale-tail bug: dropTransitiveGeneratedProto compacts in place, so the fast path must also be disabled when anything was dropped (len(IncludeInputs) < len(full)-1).
+
+- **2026-05-31** `6983b1b` — drop redundant defensive slice copies (aliasing) @ node Tags <- Platform.Tags/host.Tags; prOutputInputs; foreignDepRefs['tool']; emit_ld composeProgramLinkTrailer  
+  Copies whose source is a fresh, never-mutated slice and whose consumers are read-only are elided; the backing array is shared.  
+  Заметки: Pure aliasing, no graph-bytes change; relies on sources never being reused/mutated after the store.
+
+- **2026-05-31** `78ce822` — share fresh ExtraDepRefs / peer flag slices in EmitCC @ emit_cc.go EmitCC DepRefs; composePeerExtras  
+  The CC node's DepRefs aliases in.ExtraDepRefs (every caller passes a fresh slice; DepRefs is never appended after construction); composePeerExtras returns the shared PeerCXXFlagsGlobal/PeerCOnlyFlagsGlobal slice directly since it is only appended FROM.  
+  Заметки: composeOwnAndPeerCFlagsAtOwnSlot kept (a genuine 4-way concat).
+
+- **2026-05-31** `920163b` — stop cloning genModule result slice fields @ gen.go moduleEmitResult (OwnAddInclGlobal, AddIncl*, WholeArchive*, Peer*ClosureRefs/Paths, InducedDeps, Peerdirs)  
+  Result fields were cloned from fresh, sole-owned locals (d dies when genModule returns; consumers read-only), so the source is assigned directly.  
+  Заметки: Kept the load-bearing copies: protoResultWholeArchiveCmdPaths (clones a peer's mutated field) and two locals appended after the copy.
+
+- **2026-06-01** `05704fe` — single buffer-reusing FS Read (fold ReadInto) @ fs.go osFS.Read / readBuf; ReadAbs  
+  Read now fills and returns one reused osFS.readBuf (valid until the next Read) instead of os.ReadFile's fresh slice; the ad-hoc reuse buffers (includeParserManager.readBuf, osFS.chReadBuf) and ReadInto are removed. ReadAbs returns an owned copy because the yamake lexer retains its src across a nested INCLUDE read.  
+  Заметки: Every Read caller audited for retention; targeted copy only where retention is real.
+
+- **2026-06-01** `0aba5c2` — right-size composeTargetCC argCap @ emit_cc composeTargetCC cmdArgs capacity  
+  The magic '101 + 4' base capacity is replaced by the actual sum of the fixed package slices' len(); since cmdArgs is retained as node.Cmds.CmdArgs, slack capacity was live RSS.  
+  Эффект: measured: sumCap 5.52M vs sumLen 3.87M over 21968 nodes (~30% over-estimate); composeTargetCC alloc 85.9MB -> 64.7MB (cap~len)  
+  Заметки: cxx-only slices counted unconditionally - slight over beats an under-estimate realloc.
+
+- **2026-06-01** `1360201` **[superseded]** — reused scratch for includer-class active records @ scanner includerClass / computeActiveIncluderRecordsInto  
+  Active-record slice computed into a reused scanner scratch and copied out only when a new class is created (the common case maps to an existing class).  
+  Эффект: ~16MB churn  
+  Заметки: Removed with the whole sysincl class/cache mechanism in 4d21dab.
+
+- **2026-06-01** `d6a603d` **[superseded]** — reuse one codegen-dep dedup map across calls @ gen resolveCodegenDepRefsExt seen map on genCtx  
+  The dedup map was make()'d per call (~22k/run); one map on genCtx is cleared on entry and keeps its grown buckets.  
+  Эффект: seen[ref] alloc 25.6MB -> 0.5MB  
+  Заметки: Safe because gen is single-threaded and the function does not re-enter. Replaced by the run-wide idSet deduper in ff97f6d once NodeRef became uint32.
+
+- **2026-06-01** `d99928d` **[superseded]** — sync.Pool for genModule's peer-archive dedup map @ gen.go genModule peer-archive seen map  
+  The per-module seen map (~12.5MB churn) is borrowed from a sync.Pool on genCtx; a shared field was not possible because genModule recurses and the map's live window overlaps a nested call (a field version diverged the graph).  
+  Эффект: ~12.5MB churn  
+  Заметки: Replaced in fd22f10: dedup moved after the recursive loop and onto the run-wide deduper; peerArchiveSeenPool deleted.
+
+- **2026-06-01** `e00a466` — hand off parsed directive slice without copy @ parser rawParsedIncludeSet (inlined at five call sites)  
+  append([]includeDirective(nil), directives...) copied an already-fresh local slice on every parse; the slice is handed into parsedIncludeSet directly.  
+
+- **2026-06-01** `e6b7bb9` **[superseded]** — sync.Pool for the per-node dep-uid dedup map @ uid resolveAndUID seen map via canonBuf pool  
+  The per-node dep-uid dedup map (~19MB churn) is borrowed/cleared/returned from a sync.Pool (a pool rather than a field to stay safe if the uid pass is parallelized).  
+  Эффект: resolveAndUID 32MB->10MB (with the strBuf change); RSS 711->681MB  
+  Заметки: Removed in 4dca629: the per-node dedup itself proved not load-bearing (seenPool deleted).
+
+- **2026-06-01** `e6e1e51` **[superseded]** — variadic mergeDedupVFS; one 3-way merge instead of two chained merges @ emit_en emitEnumSrcs  
+  Two chained mergeDedupVFS allocated two dedup maps and two result slices per EN source; a single variadic 3-way merge uses one map and one slice with the same dedup order.  
+  Заметки: Superseded by the epoch deduper (d9acbc4) and the removal of EN aggregation (6404da4).
+
+- **2026-06-02** `8ffb5eb`, `0851a4f` — shared tarjanCtx bundle (tj scratch, tjStack, tjNext, tjClosure) @ tarjan_ctx.go tarjanCtx owned by genCtx, shared via tjc pointer  
+  All four per-scanner Tarjan/closure-splice fields are grouped and shared run-wide, so tjClosure (an idSet) and the stack grow once instead of per scanner.  
+  Эффект: idSet.reset alloc 12.49MB -> 8.52MB; tarjanScratch.reset steady at ~9.3MB  
+  Заметки: No nesting (dfs pass 1 finishes before pass 2; strongconnect only reads cached child windows). 0851a4f is pure code motion into tarjan_ctx.go.
+
+- **2026-06-02** `b1a102f` — one run-wide Tarjan scratch shared by target and host scanners @ genCtx.tarjan; newIncludeScannerWith  
+  tarjanScratch (stamp/index/low/onStack dense arrays sized to vfsBound) was a per-scanner value, so both scanners grew their own; ownership moves to genCtx and both scanners take &ctx.tarjan.  
+  Эффект: ~17.5MB alloc churn; tarjanScratch.reset alloc 17.48MB -> 9.76MB  
+  Заметки: Safe: gen single-threaded and reset() (epoch bump) runs before every strongconnect.
+
+- **2026-06-05** `071ec30` **[superseded]** — drop per-resolve prepareSourceView allocation (inline source-keyed scan) @ sysincl sysinclSourceLookup (prepareSourceView, LookupSourceKeyed removed)  
+  prepareSourceView allocated a fresh []*SysIncl per resolve to pre-filter source-keyed records; iterating s.sysincl inline allocates nothing on the common no-match path.  
+  Эффект: before/after pprof pinned it as GC pressure (gcBgMarkWorker +1.27s); sg5 3.12 -> 3.01s  
+  Заметки: The inline per-resolve scan itself was replaced by the header-first index in 58eb9db.
+
+- **2026-06-08** `3e20b85` — share one buffer between Header/Cpp parse buckets @ parsers.go parse-derived induced directives (proto/ev .pb.h, ragel self-include, swig induced)  
+  Directives that apply to both consumer kinds are assigned as the same slice to both buckets instead of appended twice into separate backing arrays.  
+  Заметки: Aliasing is safe because buckets are read-only after parse. Parser directive storage later moved into a bump arena (d5aa27e).
+
+- **2026-06-08** `9c986d3` — node tags read from Platform; no per-node Tags copies @ Node.Tags, nodeTags(n), Platform.Tags/TestTags  
+  Almost every Node.Tags assignment copied instance.Platform.Tags; the writer and UID now read the platform's tags via nodeTags(n), and only the tagless clang_format test node keeps its own (empty, non-nil) slice.  
+
+- **2026-06-10** `043076b` — intern $(S)/$(B)-prefixed paths via a reused scratch buffer instead of a string concat @ Source()/Build()/recordContentHash -> internPrefixed + internBytes (vfs)  
+  prefix+rel is assembled in a reused []byte and probed via internBytes, so a hit allocates nothing and a miss makes the one stable copy; the root bit is static per call site so Intern's full[2]=='B' probe drops out.  
+  Эффект: 10x sg5: Source cum 370 -> 220 ms (the rest is the xxh3+probe that must stay), concatstrings 370 -> 150 ms, total samples -2%.  
+  Заметки: PERF.md item 6. Single-writer contract like internTable/deduper.
+
+- **2026-06-10** `1a93b74` — drop dead cpInputs assembly @ EmitJVGeneral (emit_jv)  
+  The CP node's input list (copy of jvInputs + the include closure per node) was built and discarded; EmitJVCPG4 assembles its own chunked inputs.  
+
+- **2026-06-12** `19f7b2b` — one oversized STR token block per CC node sliced into sub-chunks @ emitCC  
+  Per-node tokens (input chunk and the -c/-o/out triple) ride one block instead of a fresh tiny slice per field.  
+  Эффект: Exact-rate profile: emitCC's per-node allocations 8 -> 5 (node/Cmds/cmdArgs/inputs/outputs remain — distinct types).  
+  Заметки: Remaining per-node slices later moved into node arenas (bfb1921).
+
+- **2026-06-12** `19f7b2b` — toolEnv() returns per-platform precomputed ToolEnvVars @ toolEnv(); CC/AR/AS/LD/dynlib emitters  
+  A brand-new (always identical) tool EnvVars slice per node is replaced by a shared per-platform vector.  
+
+- **2026-06-12** `20c78d4` **[superseded]** — one shared map for every empty directory @ readDirMapRel (both platform arms)  
+  Callers only read listdir results and the listable probe just needs non-nil, so a single canonical emptyDirEntries replaces a fresh empty map per empty-directory miss (nil stays the negative cache).  
+  Заметки: Superseded by 6d42678 (shared emptyDirNames in the DirView model).
+
+- **2026-06-12** `32e9692` — lexer interns token bytes in place from a reused per-lexer buffer @ ya.make lexer token interning (internBytes)  
+  string(buf) was materialized for every token before interning threw it away on a hit; tokens now intern straight from the reused buffer and internBytes makes the one stable copy only on a miss.  
+  Эффект: killing both the string copies (~128k) and the per-token []byte churn (~188k objects); whole commit: alloc_space: 632.9 -> ~570MB; alloc_objects (top sites): −0.5M+.  
+
+- **2026-06-12** `32e9692` — scratch-intern canonical joined paths; lookup-only generatedModuleSourceVFS @ sourceJoined/buildJoined/buildComposed (resolveSourceVFS, resolveSourceUnder, tier addincl join, AR archive paths, CC output paths), generatedModuleSourceVFS, composeCCPaths  
+  Clean(dir + '/' + rel) chains built concat garbage; when rel is already clean the joined form is assembled in scratch and interned. generatedModuleSourceVFS probes lookup-only instead of inserting a never-registered $(B) path per plain src; composeCCPaths compares the canon without building it.  
+  Эффект: intern table: 229,317 -> 212,416 strs  
+
+- **2026-06-12** `6f84c81` — per-scanner scratch slices for resolveSearchPath out and resolve's merge/rooted results @ resolveSearchPath, resolve (scanner)  
+  Results are fully consumed (copied into the children block) before the next resolve, so a reused per-scanner scratch replaces a fresh 1-3 element slice per include directive.  
+  Эффект: (~230k allocations); whole commit: sg5: alloc_objects 2,070,816 -> 1,649,001 (-20%); max RSS 587 -> 558MB; wall 0.93 -> 0.76s.  
+
+- **2026-06-12** `6f84c81` — sysincl lookup returns the single matching contribution's slice directly @ sysincl merged-index lookup  
+  The common single-record case returns the contribution's paths slice as is; a reused scratch is used only when several records contribute.  
+  Эффект: (~98k)  
+
+- **2026-06-12** `6f84c81` **[superseded]** — interned() probe family returns (STR, bool) instead of *STR (escape fix) @ interned()/internedBytes/internedPrefixed*, buildSuffix  
+  The returned pointer escaped to the heap on every hit; returning a value pair avoids the allocation.  
+  Эффект: (~65k)  
+  Заметки: Superseded by a98872f: 0-sentinel STR return instead of (STR, bool).
+
+- **2026-06-12** `71c9ac5` **[superseded]** — right-size the listdir map: read all dirents, parse twice (count, then fill) @ readDirMap linux arm  
+  Streaming parse grew the map from a presize of 16 (grow-chain) plus a per-block visit; reading the whole getdents64 stream first allows one right-sized map allocation.  
+  Эффект: sg5 alloc_objects: 1,421,590 (pre-getdents) -> 1,294,205 (−9%); the listdir layer drops from ~158k allocations to the map-key strings plus one path concat per miss.  
+  Заметки: Map grow-chain was ~81k allocations. Superseded by 6d42678 (DirView, no per-directory map).
+
+- **2026-06-12** `c68fbf1` — shared per-platform/package resource vectors instead of fresh per-node []string @ Platform CCUsesResources/UsesPython3Clang/UsesLinkResources/UsesClangOnly; usesPython3/JDK17/Clang16 consts (~23 emitter sites)  
+  Fixed resource sets attached per node are built once and shared, removing per-node slice churn.  
+
+- **2026-06-13** `10321b4` — resolve resource fetch deps on the fly in Node.buildDeps; drop ResourceAwareEmitter @ Node.buildDeps via fetchRefs; BufferedEmitter/StreamingEmitter, Graph, CanonBuf.writeDepRefUIDs, NodeFuture  
+  Per node the wrapper looked up each usesResources pattern and appended the FETCH NodeRef to DepRefs; the pattern list stays authoritative and deps are resolved through the run's fetchRefs registry wherever deps are read.  
+  Эффект: (the 12k-allocs/run append at the top of the alloc profile)  
+  Заметки: uid deps preimage byte-identical (DepRefs already trailed the resources).
+
+- **2026-06-13** `1d7e625` — tool deps stored once (ForeignDepRefs); Node.buildDeps yields the union @ codegen emitters as/r5/r6/rodata/flatc/ev/en/pb/pr/dynamic_library/py_codegen/py_proto; gjson, executor, finalizeOrder  
+  Tool LD refs were stored twice, often via a fresh append([]NodeRef(nil), toolRefs...) copy into DepRefs; now only in ForeignDepRefs and consumers iterate the union via buildDeps.  
+  Заметки: uid.go unchanged (already hashed both lists separately).
+
+- **2026-06-15** `7e3a3f0` — chunked one-pass dedupVFS instead of concat-then-dedup @ emit_cython_cpp.go cythonGeneratedOutputInputs (CY node toolInputs / emitsIncludes)  
+  Bare tool/source/header files collect into one small `singles` slice and each include closure (embedded files, OUTPUT_INCLUDES, source closure) is passed as its own chunk to variadic dedupVFS, which reads all chunks in a single pass - no ~7.5k-element intermediate list built by repeated append. ctx.scannerFor(instance) hoisted out of the loop.  
+  Эффект: measured 7481 raw -> 1263 unique on library/python/codecs  
+  Заметки: Behaviour-preserving (sg2-5 byte-exact, sg6 parity unchanged at 8140); dedup keeps first occurrence so singles go first.
+
+- **2026-06-24** `df5747e` — share one immutable KV per emitter kind via *KV @ node.go Node.KV -> *KV; per-emitter file-level KV vars  
+  Instead of constructing an identical KV struct for every node, each emitter declares its KV as a file-level var and passes &var, so all nodes of a kind share one instance; genuinely per-node KVs (test nodes with Path, py_proto ExtOut) take the address of a local literal.  
+  Заметки: Node.Cache/Node.Sandboxing fields dropped the same day by 0d3833c (state-ownership refactor, not perf). Later d6c30ab 'Keep node KV metadata constant' and ee2fd66 pbNode KV into arenas (outside slice).
+
+- **2026-06-25** `4ac047d` — atomVal union instead of any-boxing @ macros.go evalAtomNode / evalEq / evalLt / evalAtomString  
+  IF-comparison operands returned `any`, boxing every string/int; evalAtomNode returns a small atomVal{str,num,isNum} union read field-wise.  
+  Эффект: ~60k allocs/run on bs_static; gen alloc_objects on bs_static: 2,499,124 -> 2,430,179 (-69k)  
+  Заметки: Bool branches were dead (bool vars stored as yes/no strings).
+
+- **2026-06-25** `605effe` **[superseded]** — resolveProtoImportPath without re-clean and eager candidates @ emit_proto.go resolveProtoImportPath  
+  Dropped a redundant filepath.Clean on an already-cleaned name and built root candidates (yt/ and pbRuntimeBase concats) lazily, returning on the first fs hit.  
+  Эффект: re-clean ~34k allocs, eager candidates ~35k; gen alloc_objects on bs_static: 2,430,179 -> 2,363,705 (-66k)  
+  Заметки: 19ced7e (same day) deleted resolveProtoImportPath: induced .pb.h are emitted unresolved and resolved by walkClosure (single resolution path); 8dcc228 did the same for flatc.
+
+- **2026-06-25** `6d2befd` — flat []CondNode IF-conditions instead of Expr pointer AST @ yamake.go CondParser / readCondTokens; macros.go evalCond  
+  IF-condition parsing built a tree of 13 heterogeneous &ExprX structs behind an Expr interface (one heap alloc per node, rebuilt per parse); now a flat []CondNode with int32 child indices built in a reused per-Parser scratch and copied once per IF; readCondTokens reuses a per-Parser []Token buffer; CondParser is a stack value.  
+  Эффект: gen alloc count on bs_static: 3,127,579 -> 2,909,953 (-218k); the parseAtom/parseCmp/readCondTokens cluster (~263k allocs) collapses to one copy per IF  
+  Заметки: Short-circuit AND/OR and coercion/throw semantics unchanged. Cond nodes later moved into arenas by ec9c6cf (outside slice).
+
+- **2026-06-25** `87bd7c8` — sync.Pool for ScanCtx @ scanner.go getScanCtx/putScanCtx (next to visitedIDPool)  
+  newScanCtx returned a fresh heap *ScanCtx per scan; it escapes unavoidably (closureOf/dfs leak the receiver, runSCC's recursive strongconnect leaks the ClosureSink interface param), so stack placement is impossible and the struct is recycled via a pool. ctxNum/resolveIndex fields dropped (derived from cfg).  
+  Эффект: ~61k/run on bs_static; gen alloc_objects on bs_static: 2,846,026 -> 2,784,686 (-61k)  
+  Заметки: Gen is single-threaded and walkClosure not re-entrant, pool safe regardless.
+
+- **2026-06-25** `9023b82` — Incl for no-exclude calls; assign instead of append-copy @ emit_cc, emit_en, emit_antlr_general, emit_py_objcopy  
+  Three no-arg Excl calls switched to Incl with no head; two `node.DepRefs = append(node.DepRefs, Incl(...)...)` sites had nil DepRefs so the append was a pure copy of a fresh slice — assigned directly.  
+
+- **2026-06-25** `92b5aeb` — split resolveCodegenDepRefs into Incl (seeded head) / Excl @ resolveCodegenDepRefsIncl / resolveCodegenDepRefsExcl (26 call sites)  
+  At 19 sites the excluded ref was re-added as `[]NodeRef{X} + resolve(...,X)`; Incl seeds the output with the head refs and runs them through the same dedup in one growing slice, collapsing the caller-side literal/varargs/returned-slice/concat.  
+  Эффект: ~4 allocations per call (the literal, the varargs, the returned slice, the concat) at 19 sites  
+  Заметки: Excl removed later by 3df86d0; Incl result moved into an arena by 3545dfd.
+
+- **2026-06-26** `1553875` — presize dedupARG output to summed input length @ arg_intern.go dedupARG  
+  Result slice is made once with capacity = total input length (upper bound on unique count) instead of growing from nil; empty input still returns nil to keep byte-exact nil-vs-empty serialization.  
+  Эффект: dedupARG drops 25376 -> 16250 alloc_objects (one make per non-empty call); total 2303373 -> 2293597  
+  Заметки: dedupARG/dedupVFS later unified into generic dedup[T ~uint32] (d89cf0a).
+
+- **2026-06-26** `4a63976` — normalizeDotDotSegments returns (body, underscore) instead of "_/"+rel @ emit_cc.go normalizeDotDotSegments / composeCCPaths  
+  The common no-'..' path allocated "_/"+rel per source with a subdir; it now returns the body plus a bool and the caller folds the prefix into the variadic build(...).  
+  Эффект: total alloc_objects 2056292 -> 2043129  
+  Заметки: Rare '..' path still splits/joins.
+
+- **2026-06-26** `6e354f6` — preallocate parseStmts accumulator (cap 8) @ yamake.go parseStmts / parseMacroInto  
+  Statement slice grew from nil through size-class doublings; measured len(stmts) distribution (0.5% empty, bulk 4-8) justified make([]Stmt, 0, 8).  
+  Эффект: cap 8 covers 91% without a regrow; growth allocs 19752 -> 7378 (one make per parseStmts call); total alloc_objects 1836154 -> 1822726; inuse +0.5MB (cap-8 tails)  
+
+- **2026-06-26** `6e354f6` **[rejected-by-measurement]** — fixed reserve for parseMacroArgs @ yamake.go parseMacroArgs  
+  Tried presizing the macro-arg slice; with 36% zero-arg and 37% one-arg calls a fixed reserve regressed, so it stays append-from-nil.  
+  Эффект: 36% of calls have zero args and 37% have one — fixed reserve regressed  
+  Заметки: Presize only when measured length distribution supports it.
+
+- **2026-06-26** `71fcf9b` — expandStmtTokensSTR returns input when nothing to expand @ modules.go expandStmtTokensSTR  
+  Scan first via memoized strHasDollar bit lookup and alias the input slice when no token has '$'; allocate only when a substitution happens.  
+  Эффект: expandStmtTokensSTR make-site 20089 -> 384 allocs; total alloc_objects 1922250 -> 1903394  
+  Заметки: Results consumed read-only, so aliasing is safe.
+
+- **2026-06-26** `8cc149d` — concat aliases sole non-empty input @ concat[T]; flags.go concatARG folded in  
+  When all other lists are empty, concat returns the single non-empty input sliced to cap==len (zero-copy; a later append reallocates instead of writing into shared backing). Duplicate hand-rolled concatARG removed.  
+  Эффект: total alloc_objects 2293597 -> 2287715  
+  Заметки: Results treated as immutable. e6ae2a7 later dropped the [:n:n] clamp on this fast path as defensive.
+
+- **2026-06-26** `b484a64` — SearchTierResult -> single VFS (0 = not found) @ scanner.go search-tier resolution  
+  Every producer set exactly a one-element []VFS and the consumer appended <=1 paths; a plain VFS carries the same information without the per-miss []VFS{v} allocation.  
+  Эффект: 26110 objects at scanner.go:719 alone; total alloc_objects 2016060 -> 1980464; churn 1205.8MB -> 1178.1MB  
+
+- **2026-06-26** `bc139f8` — pass UnknownStmt by value (escape-analysis fix) @ modules.go collectStmts / applyUnknownStmt and read-only helpers  
+  collectStmts cloned every UnknownStmt and passed &expanded, forcing the 32-byte struct to the heap; helpers now take it by value and d.allPySrcs is []UnknownStmt (value copy for the one retaining branch), so the clone stays on the stack.  
+  Эффект: 27450 allocations, one per macro statement; total alloc_objects 2043129 -> 2015631  
+
+- **2026-07-02** `34d063f` — concat() aliases a single non-empty input @ eleven sum-capacity make+append sites -> concat()  
+  concat returns a lone non-empty input as-is (no copy) and otherwise allocates once at the summed length.  
+  Заметки: Only applied to read-only results (resourcePackHash sorts in place, swig ClosureLeaves is appended, so they keep explicit copies). The aliasing later forced persistResult cloning at the genModule boundary (acc0997).
+
+- **2026-07-02** `6b55cdb` — skip Split+Join in canonical case @ composeSrcDirOutputRel  
+  When the rel contains no '..' the Split+Join path is skipped, avoiding two allocations.  
+  Заметки: Later fully manual (no filepath.Rel/Split/Join) in 4e30eb4.
+
+- **2026-07-02** `72125ff` — preallocate closure-fed accumulators to summed size @ resourceGlobalsClosure, peerLinkCmdPaths, assembleProtoCmdOutputs  
+  Transitive-dedup accumulators are preallocated to the summed peer-closure length (one alloc instead of log-n growth).  
+  Эффект: yabs alloc_objects 1,562,623 -> 1,536,102 (-27k; -273k cumulative)  
+
+- **2026-07-02** `9bcbac1` — preallocate collect/partition slices; alloc-free prefix trim @ collectObj refs/outs/metas, partitionCollected, depRefs, trimModulePrefix (emit_cc/as/yasm/py_proto)  
+  Collection slices are preallocated to len(srcs)/len(metas) instead of growing from nil; trimModulePrefix strips the module dir without the throwaway dir+"/" concat TrimPrefix needed.  
+  Эффект: yabs alloc_objects 1,808,721 -> 1,757,414 (-51k)  
+
+- **2026-07-02** `ba0a13e` — in-place prefix compare instead of concat @ requireProducedInput / relUnderDir  
+  The module+"/" concatenation allocated per file input on the hot path; relUnderDir compares in place.  
+
+- **2026-07-02** `dafaf21` — dead storage removal + interned toolchain paths + nil-start sparse accumulators @ unhandledMacros, resolveModuleToolchain, defaultPeerdirs, peer dynamic/linkcmd/ldplugin accumulators  
+  Write-only unhandledMacros map+append removed; clang/lld paths built via internV (interned, deduped) instead of a fresh $(B)/resources/... concat per module; defaultPeerdirs preallocated; sparse peer accumulators start nil.  
+  Заметки: (included in dafaf21 total -125k) peerLinkCmdPaths was moved back to preallocation in 72125ff because it is closure-fed.
+
+- **2026-07-02** `ebb7f8d` — single-pass resource chunk packing @ splitResourceChunks -> resourceChunkEnds + per-consumer walk (emit_resource.go)  
+  Instead of materializing a nine-slice union per chunk (two consumers read disjoint halves), boundaries are computed with EncodedLen (no encoding) and each consumer walks items[lo:hi] once writing straight into payload/nodeCmd; keys encode into a reused buffer and intern via internBytes; hash via reused scratch (sort + incremental append + md5), no Join/ToLower.  
+  Эффект: yabs alloc_objects: total 1,975,129 -> 1,806,721 (-8.5%); resource packing cum 220,659 -> 53,925 (-76%); the 33,714 intermediate base64.EncodeToString strings are gone  
+  Заметки: objcopyHash kept only as test oracle (moved to test file in cbb936d).
+
+- **2026-07-03** `4524fa8` — skip filepath.Clean throwaway when parts are clean @ buildJoinClean/sourceClean (runInputBuildCandidate, proto-import loop, protoNamespace)  
+  When both parts are already clean the join is clean; the interned path is built from parts directly and Clean runs only for dirty input.  
+  Эффект: yabs alloc_objects 1,461,656 -> 1,449,487 (-12k; -78k cumulative)  
+
+- **2026-07-03** `62023c3` — kill transient concats before interning @ composePBArgBlocks cpp_out arg, collectModule CURDIR/BINDIR, includeScannerBasePaths  
+  cpp_out arg built straight through internV; CURDIR/BINDIR set via setStringID(internV(...)) instead of string concat re-interned; includeScannerBasePaths returns a package-level read-only slice instead of a fresh 4-elem slice per scan context.  
+  Эффект: yabs alloc_objects 1,498,628 -> 1,461,656 (-37k; -66k cumulative)  
+  Заметки: CURDIR/BINDIR later stored as lazily rendered envVFS values (bfc17cc).
+
+- **2026-07-03** `9323f6b` — intern composite kv in place; inline dedupClosure @ resfs kvCmd (ResourceItem.Cmd), py-srcs kvCmd, dedupClosure  
+  The 'resfs/src/'+key+'='+path concat was built, stored, then re-interned downstream; it is built straight through internV (reused scratch) so the downstream internStr hits. dedupClosure drops its escaping add-closure for inline loops and preallocates to the pre-dedup total.  
+  Эффект: yabs alloc_objects 1,527,990 -> 1,498,628 (-29k)  
+  Заметки: 'The win is the eliminated transient concat, not a flat-line prealloc — those just move the alloc to the caller via escape analysis'.
+
+- **2026-07-03** `9323f6b` **[rejected-by-measurement]** — depRefs fast-path prealloc @ depRefs  
+  Flat-line preallocation of the depRefs result.  
+  Эффект: measured: depRefs fast-path was net-zero, reverted  
+  Заметки: Escape analysis moved the allocation to the caller.
+
+- **2026-07-03** `dee636f` — preallocate peer closures to exact sum @ peerArchiveRefs/Paths, peerSbomRefs/Paths (genModuleImpl)  
+  Capacity was len(allPeers) but each peer contributes a whole closure; the exact sum is computed in the existing resGlobalsSum pass and used to preallocate.  
+  Эффект: yabs alloc_objects 1,449,487 -> 1,404,625 (-45k; -123k cumulative from the campaign start)  
+  Заметки: Superseded by SliceCache block allocation (5e65d59) and exact-cap/skip-empty blocks (69b1e48).
+
+- **2026-07-06** `cbb936d` — transient allocation cuts at inuse-0 garbage sites @ PR input closure scratch on GenCtx, peerLinkCmdPaths exact cap, packResources item partitions, resource hash/b64 scratch on GenCtx  
+  Garbage-only allocation sites switched to reused GenCtx scratch with deferred store-back, exact capacities from closure-sum pre-passes, and presized partitions; test-only objcopyHash moved to tests.  
+  Эффект: bs_static: max-rss 798.0 -> 767.5 MB (-30.5 MB), alloc -17.9 MB, inuse at parity  
+
+- **2026-07-08** `46eb6a3` — garbage sweep batch 4 — emit-layer scratch reuse @ frame-backed EmitContext scratch (srcs/pass2/refs/outs/metas, partition, producer positions, packResources lists, AR-reorder members); reorderARMembers; peerLinkCmdPaths; composeCCModuleArgBlocks  
+  [:0] capacity reuse across modules for EmitContext scratch; reorderARMembers sorts in place through a pooled member scratch; flag part lists composed in stack arrays.  
+  Заметки: goIncl* excluded (nil-lazy).
+
+- **2026-07-08** `48bd76b`, `288c0f9` — frame-pooled EmitContext/PeerContext and peer lists @ ModuleFrame: allPeers/peerKinds/resolved/peerAddInclGlobal/ownProtoInclude/peerProtoInclude, EmitContext, PeerContext, peer*Global accumulators  
+  Module-lifetime lists re-slice from retained capacity; the genModule-level EmitContext (largest single per-module allocation) and PeerContext live on the frame.  
+  Заметки: refs/outs/metas and peer closure lists stay heap because Node.Inputs chunks reference them (the CUDA lesson); EmitContext.at() keeps heap since derived contexts coexist.
+
+- **2026-07-08** `4e30eb4` — garbage sweep round 2 — sub-1000 tail @ partitionCollected/enqueueSrc presize, defaultPeerdirsForWithState, parseMacroArgs, OsFS.walk, compileFlagBundleFor, pySrcYapycSuffix, protoImportInducedHeader, composePBArgBlocks, expandEmbeddedDollarVars, emitPB inputs, archives, PyGenResEntry, ragel/lex parsers, composeSrcDirOutputRel  
+  Pooled scratches presize on first use; derived heap EmitContext avoided; one exact-size copy per statement for macro args; internJoined for walk children; platform-owned NoLibcBlock reused; interned 4-char suffixes; strings.Cut instead of Split; stack buffers instead of strings.Builder; input chunk list in the inputs arena; prefix+rel interning; ragel dedup against emitted block; lex fields into stack array; manual __-relative form (no filepath.Rel/Split/Join).  
+
+- **2026-07-08** `54b2a35` — producer ins/outs as span views; value memos @ srcPositionOuts/Ins, producerPositions (prodVFS), CcModuleArgBlocks/PbArgBlocks by value, defaultPeerdirs peers scratch, partitionCollected writeback  
+  Producer position ins/outs are views (prodVFSTake) into one per-module span buffer instead of small per-position slices; arg-block memos stored by value instead of heap pointers; peers list in a reused scratch.  
+
+- **2026-07-08** `5661373` — name factories via frame buffer; parser stmt scratch stack; split-flags arena windows @ arName/globalArName, emitPyProtoSource ext names, Parser.stmtScratch/takeStmts, splitFlagsByGlobal  
+  Archive names are views into the per-module byte buffer; py-proto ext_out keys/values built in the buffer and interned via internBytes; statements accumulate on one parser scratch stack and are copied once into the AST arena per block; flags counted first then written into exact arena windows.  
+
+- **2026-07-08** `722a93b` — garbage sweep batch 4c — tarjan/entries tail @ TarjanCtx visit callbacks, pyResEntriesFor/pyProtoResEntries, collectModuleInto addIncl dedup, protoDirectImportNames  
+  Per-call closures replaced by prebuilt method funcs with visit state on the context; append-style entry builders into the caller accumulator; in-place dedup (dedupInPlace); callback-style import iteration instead of a per-source []string.  
+  Заметки: Not taken: OsFS.walk zero-copy path buffer ('the transient-view contract breaks against zero-copy internStr in recordContentHash and walker callbacks'); ragel per-parse closure kept.
+
+- **2026-07-08** `7c04433` — stack-buffer join/normalise; byte-view ragel scan; interned service tokens @ OsFS.exists, resolveSourceUnder, normaliseAppend/joinRelInto, parser_ragel, macro_audit_known  
+  Dirty paths are joined and normalised in [256]byte stack buffers (slow path only on overflow); ragel lines parsed via bytesString views; service tokens interned via internBytes.  
+
+- **2026-07-08** `91db487` — garbage sweep batch 3 — parser and environment reuse @ Environment.cloneInto/EnvStore, IncludeState (sync.Pool), ya.make parse buffers, Parser+Lexer pool, parseProtoImportLine  
+  Pooled EnvStore and per-module if-env on the frame; IncludeState pooled with ONCE-set as IntSet keyed by interned rel STR instead of map[string]; ya.make parsed from pooled buffers over the shared FS read buffer instead of an owned copy; parser/lexer pooled with scratch reuse; proto import target interned via internBytes from a zero-copy view.  
+  Заметки: internStr would have captured the transient view zero-copy (same defect class as 4479d63).
+
+- **2026-07-08** `af0bec3` — garbage sweep batch 2 — string/key composition @ pySrcYapycSuffix, pythonInitSuffix, protoPythonResourceKeyBase/enumSerializedBase, moduleProtoGenHeaders, expandResourceFiles, normalisePath, resource glob walk/hash  
+  base32 of md5 encoded directly (no EncodeToString/ToLower/TrimRight); stack-buffer mangling instead of fmt.Fprintf; (dir,sep,base) parts consumed by internV/build; STR keys instead of built strings; append into caller's slice; stack-buffer path normalisation; hex into stack buffer.  
+
+- **2026-07-08** `e74a9ca` — garbage sweep batch 1 — cheap per-call allocations @ moduleRootedVFS/sourceInputVFS, pbHEmitsIncludesExtras, hot sort sites, archiveNameWithPrefix, collectModuleInto, applySbomComponentOrder, moduleStmts  
+  (VFS,bool) returns instead of heap *VFS; package-level chunk; sort.Slice -> slices.Sort/SortFunc (no reflect Swapper closures) in darts/emit_en/emit_proto/KVExt/resource sites; exact-size name buffer; musl/sse prefixes into pooled backing; single clone for sbom reorder; per-dir cache of ya.make+linters-inc concatenation.  
+
+- **2026-07-08** `ff38724` — ModuleData pooled per recursion depth (module frame stack) @ GenCtx ModuleFrame stack / collectModuleInto / generated reset()  
+  genModule recursion (depth 43 on bs_static) reuses a lazily grown stack of frames; ModuleData is refilled after a capacity-preserving reset() generated by 'ay dev refac reset' (slices [:0], maps cleared, rest zeroed).  
+  Заметки: Registry CompileSpec references map values, never [:0]-reused backings.
+
+- **2026-07-10** `d6c30ab` — constant shared KV with per-node KVExts @ Node.KV / Node.KVExts; py-proto PB node  
+  The PB node pointed at a per-node arena KV copy only to carry ExtOut; ExtOut moves to Node.KVExts so KV stays a shared constant (&pbKV) and the kvs arena is removed.  
+
+- **2026-07-11** `1a32a96` — source FIFO with head index @ EmitContext.srcs drain loop  
+  Draining by advancing a head index (zeroing consumed slots) instead of re-slicing srcs[1:] keeps the backing capacity intact for frame-pooled reuse.  
+
+- **2026-07-12** `2b331db` — shared node requirements profile @ Node.Requirements (*Requirements, nil = default)  
+  Requirements becomes a pointer to a shared profile (nil means the default {cpu 1, restricted, ram 32}, written as a constant by the JSON writer), shrinking every Node struct and removing ~60 per-site literals.  
+
+- **2026-07-12** `ec66637` — Python source metadata in a module vector @ SrcMeta.PyMeta uint32 index into EmitContext.pyMetas  
+  Queued python sources carry a 1-based index into a per-module (frame-reused) vector instead of a heap *PySourceMeta per source; slots are cleared when consumed.  
+
+- **2026-07-13** `a51026b` — pass Node by pointer through emit layers @ EmitContext.emitNode/emitReservedNode -> StreamingEmitter.emitNodePtr/emitReservedNodePtr  
+  The large Node struct is no longer copied by value through each forwarding layer; it is copied once into its arena slot.  
+
+- **2026-07-13** `af431b9` — pointer to module compile env instead of struct copy @ ModuleCCInputs{*ModuleCompileEnv, AddIncl, CFlags, CCBlocks*, Py3Suffix}  
+  Per-source compile inputs embed a pointer to the module env with only the overridable fields copied, instead of copying the large ModuleCompileEnv struct per source.  
+
+- **2026-07-13** `df36b65` — producer positions without the counting pre-pass @ producerPositions; resourceHashInto; genModuleImpl deduper.reset  
+  The total-size pre-pass is dropped (positions use the prodVFS span buffer), gzt children are appended in place, single-item hash lists skip sort, a redundant deduper.reset is removed.  
+
+- **2026-07-15** `3a3d4b6`, `f555519` — append-style child resolution @ appendResolvedChildren / appendResolvedInducedDeps / resolve(out, ...)  
+  Callback-based child resolution becomes append into the caller's slice; resolve appends directly into it, removing the spOut/resolveOut intermediate scratch slices.  
+
+- **2026-07-15** `5f6e868` — fast paths for trivial collect/dedup cases @ partitionCollected (no globals), dedupSharedWith (total==1), applyImplicitPeerdirs (single pass)  
+  Without global objects the collected slices are returned aliased (no copy); a single-element dedup returns the input; implicit peerdir detection scans srcs once.  
+
+
+### Арены (28)
+
+- **2026-05-26** `38ffa0c` — Chunked arena for per-node include closures @ scanner closureOf / subgraphCache (map[uint32]closureRef{off,n})  
+  35k separate make([]uint32) closures held by a map made the GC walk 35k slice headers; closures now live in fixed 256K-uint32 (1MB) write-once chunks referenced by pointer-free {off,n} windows; a closure that would straddle a chunk tail pads to the next chunk.  
+  Эффект: sg5 (ydb/apps/ydbd): CPU samples 4.73s -> 4.24s, alloc 1245MB -> 1220MB (no churn), inuse 216MB -> 199MB, scanobject 7.8% -> 6.4%.  
+  Заметки: A single doubling backing was rejected: reallocs would discard old arrays (1+2+...+32M ~= 252MB churn per scanner).
+
+- **2026-06-02** `885feaa` — cap-clamped shared cache windows + clone-on-write mutators @ scanner strongconnect stores block[:k:k]; rewriteClosureCPSource, keepOnlySourceVFS  
+  closureOf returns the shared cache slice itself (no copy); storing it capped forces any append to reallocate, and the two in-place mutators clone on write, so returning the shared slice cannot corrupt the cache.  
+
+- **2026-06-02** `9a708ec` — generic bumpAllocator[T] for the closure arena (alloc(hint) -> fill -> commit(k)) @ bump_allocator.go; scanner closureArena / subgraphClosures  
+  Replaces the fixed-262144 packed chunk arena (build into scratch + copy): alloc(n) hands back an address-stable region, the closure is built in place, commit(k) advances by the count written, and the committed prefix is stored directly into subgraphClosures [][]VFS with no copy; closureRef becomes a uint32 index. Chunks grow 1.5x.  
+  Эффект: sg5 perf: ~neutral wall/RSS, ~+18MB alloc churn (1.5x growth overshoot vs the old uniform chunk); smaller footprint on tiny graphs; alloc hint 8192 from measured sg5 max closure size 3935 (~2x margin)  
+  Заметки: Supersedes the earlier fixed-chunk scratch+copy arena (pre-slice lever).
+
+- **2026-06-02** `f93c816` **[superseded]** — dedicated walkOutArena for WalkClosure outputs @ scanner WalkClosure output (orderIDPool + order->out copy removed)  
+  WalkClosure's retained output is built directly into its own bump arena (separate from closureArena so cache and output allocations do not interleave on one cursor), removing the per-call make and the pool+copy.  
+  Эффект: Perf ~neutral: wall/alloc flat, RSS ~+20MB from 1.5x arena overshoot; per-call hint 8192 (measured sg5 max output 4014)  
+  Заметки: Removed one commit later in 885feaa when WalkClosure was deleted.
+
+- **2026-06-12** `6f84c81` **[superseded]** — resolved children copied once into an exact-sized per-scanner BumpAllocator block @ scanner children cache (childArena)  
+  Cached children are retained for the whole run; growing them in place churned a grow-chain per file, so they were collected into a reused scratch and copied once into a bump-arena block.  
+  Эффект: (~194k)  
+  Заметки: Superseded by a98872f: reserve closureAllocHint from childArena, collect straight into the block and commit the used prefix (no scratch+copy).
+
+- **2026-06-12** `8055bc7` — intern table string bytes in a shared BumpAllocator[byte] @ internBytes (str_intern.go)  
+  The mandatory stable copy of each unique interned string goes into a bump-arena chunk and the table stores an unsafe.String view over the committed, never-rewritten region, replacing one malloc per string.  
+  Эффект: string(b) per unique interned string was the top allocation site (171,925 mallocs, 17.2% of alloc_objects on sg5) ... 7 chunk mallocs replace 171,925 per-string ones; alloc_objects 998,677 -> 826,732 per run.  
+  Заметки: Invariant: committed arena regions are never rewritten.
+
+- **2026-06-12** `a98872f` — children collected in place: reserve closureAllocHint -> fill -> commit used prefix @ scanner childArena (children collection)  
+  The dfs arena idiom: reserve a hint-sized block, collect resolved children straight into it and commit only the used prefix, dropping the scratch + copy.  
+  Заметки: Supersedes the scratch+copy variant of 6f84c81.
+
+- **2026-06-12** `d5aa27e` — parser directive results in one shared BumpAllocator[IncludeDirective] (reserve -> fill -> commit) @ parse cache arena; parseCIncludes/parseYasmIncludes fill helpers; proto/ragel/swig parsers  
+  Per-file grow-chains for retained directive slices become fill-in-place blocks in a single arena owned by the parse cache; multi-language parsers go sequential (proto derives its .pb.h block from committed imports; ragel commits three blocks; swig parses embedded C chunks without per-line []byte(line+'\n') copies).  
+  Эффект: (parsers.go:448/:483 — ~56k allocations per run ...); Exact-rate profile: 1,129,282 -> 1,071,579 objects/run  
+  Заметки: Bison emitter drops its dedupDirectives calls (closure dedup covers registered sets).
+
+- **2026-06-13** `bfb1921`, `9100984` — per-node small slices in shared node arenas (NodeArenas) @ node_arena.go: cmdList/vfsList/strList/chunkList/inputList/argStrList/srcChunk; emitCC alloc(11)->fill->commit(k)  
+  Cmd list, outputs, arg-chunk and input-chunk headers and token blocks were one heap object each; variadic helpers copy the caller-stack literal into committed, address-stable bump-arena blocks. The CC emitter assembles its cmd-arg chunk list directly in the arena.  
+  Эффект: alloc_objects on sg5 (exact, no -G): 826,732 -> 707,576 per run; the emitCC cluster collapses to the &Node{} literal itself. (9100984: alloc_objects 707,548 (was 707,576))  
+  Заметки: 9100984 moves the five package-level arenas into a per-run NodeArenas on the emitter (no behaviour change).
+
+- **2026-06-25** `3545dfd` — resolveCodegenDepRefsIncl result in NodeArenas bump allocator @ node_arena.go noderefs allocator; resolveCodegenDepRefsIncl (26 call sites pass ctx.na)  
+  Reserve the upper bound len(incl)+len(includeInputs) from a noderefs bump allocator, fill, commit the actual count, and return out[:k:k] so a downstream append reallocates instead of corrupting the arena.  
+  Эффект: gen alloc_objects on bs_static: 2,903,501 -> 2,846,017 (-57k); the resolveCodegenDepRefs slice drops out of the allocation profile entirely  
+  Заметки: Cap clamp is load-bearing (callers append to node.DepRefs); e6ae2a7 explicitly kept such clamps.
+
+- **2026-06-26** `12e6b28` **[superseded]** — BumpAllocator fixed 1 MiB chunks instead of 1.5x geometric growth @ bump_allocator.go  
+  Geometric growth sized the last chunk far beyond use; fixed 1 MiB chunks (element count from unsafe.Sizeof(T)) with a one-off chunk for oversized allocs.  
+  Эффект: yabs/server/daemons/bs_static (-j0, no -G): scanner closure arena inuse 444.6MB -> 383.0MB, total churn 1255.6MB -> 1191.8MB, inuse 782.5MB -> 718.6MB. Max RSS unchanged (the eliminated slack was never touched), so this is a simplification + truthful accounting, not an RSS win  
+  Заметки: Replaced next commit by e141142.
+
+- **2026-06-26** `e141142` **[superseded]** — BumpAllocator as a single chunk slice with fixed 200k elements @ bump_allocator.go  
+  Allocator reduced to one field chunk []T: alloc returns the current chunk (fresh 200k-element or request-sized when larger), commit does chunk = chunk[k:]; old backings stay reachable via caller subslices (block[:k:k]), so chunk lists/offset/pending/growth bookkeeping disappear.  
+  Эффект: max RSS ~1.10 GiB unchanged; scanner closure arena inuse 444.6MB geometric -> 386.6MB; total churn 1255.6MB -> 1205.8MB. The win is simplicity  
+  Заметки: Later changed outside slice: d15848a byte-budget bump chunks, ec9c6cf growable bump chunks, e073baf unify bump allocator growth.
+
+- **2026-06-27** `24c81f5` — fixed CC arg blocks via na.chunkList (exact length) @ emit_cc.go flags/cTail/cxxTail blocks  
+  alloc(N)+fill+commit(N)+[:N] returned the whole remaining arena region and was trimmed; chunkList allocates exactly the given chunks and returns an exact-length slice.  
+  Заметки: concat's [:total] slice on the sole-input fast path was a no-op and removed.
+
+- **2026-06-27** `e6ae2a7` — drop defensive 3-index caps on read-only slices; keep load-bearing ones @ include parser arena returns, scanner closures, CC/CUDA chunk slices, concat fast path  
+  s[:n:n] -> s[:n] where results are immutable (over-insurance against appends that never happen).  
+  Заметки: Kept where load-bearing: BumpAllocator.list / NodeArenas.argStrList / inclArgList results are append-grown by callers (node.DepRefs) — dropping those clamps fails the gate; append(b[:off:off], ...) insert idiom in probe/refac tools.
+
+- **2026-07-02** `42fa3fd` — build-in-place interning with commit-on-miss @ internVInto / internBuild (str_intern.go)  
+  build()/source()/internV write prefix+parts straight into the intern arena's free region, hash in place, and commit only on a miss; a hit leaves the region to be overwritten. Removes the miss-path double copy and the separate scratch.  
+  Эффект: Byte-exact (gate 7/7, yabs matched=71689), alloc count unchanged. CPU is within run-to-run noise  
+  Заметки: Message: 'interning is hit-dominated + hash-bound'. Extended by 37b5c98 (lookup-only probes in the uncommitted pool tail).
+
+- **2026-07-02** `797b43e` — cap-clamped view for copy-on-append @ EmitContext.resources = d.resources[:k:k]  
+  ModuleData is immutable during emit(); the context gets a capacity-clamped view so the rare emit-time append copies into a fresh backing instead of mutating the long-lived ModuleData. The dead ensureResourcePeer d.peerdirs append is dropped.  
+  Заметки: Mutation sites found by a reflection watcher (per-field fingerprint before/after emit over all gate slices).
+
+- **2026-07-02** `c3272f0` — never append into arena-backed slices (use concat) @ packResources raw-packer deps (producers-then-rescompiler)  
+  Raw resource deps are built via concat into a fresh slice; an append into an arena slice wrote past its length into the shared arena and clobbered neighbouring allocations.  
+  Заметки: Lesson: 'an append into the arena slice aliased later allocations and corrupted neighbour deps — caught by the gate'. Invariant later enforced by cap-clamped slices (92d5330 inputList, 797b43e, 5e65d59) and the ownership/bump-window checkers (2e69640, e273a2f).
+
+- **2026-07-02** `dafaf21` — bump-allocated Node structs @ StreamingEmitter emitNode/emitReservedNode/newNode (~56 emitter sites)  
+  Graph node structs come from a BumpAllocator[Node] instead of a heap &Node{} per node.  
+  Эффект: ~72k fewer allocations; commit total: yabs alloc_objects 1,757,414 -> 1,632,144 (-125k; -177k cumulative)  
+  Заметки: Chunk sizing later moved to a 2 MB byte budget (d15848a) and growable chunks (ec9c6cf, e073baf).
+
+- **2026-07-06** `d15848a` — byte-budget bump chunks; right-sized reserves @ BumpAllocator chunk size; intern flat reserve; bucket cache map hint  
+  Chunks target 2 MB of bytes instead of 200k elements regardless of element size (one 47 MB Node chunk for 17 MB of need); intern reserve 1<<21 -> 1<<20 (largest gate case interns 591k strings); bucket cache hint 1<<16 -> 1<<18.  
+  Эффект: On bs_static: inuse-at-exit -51.5 MB (-8.0%), total alloc -65.4 MB, max-rss -8.1 MB under -j0 where the GC is off and untouched reserve pages never faulted; the live-heap cut lands in -j mode where GOGC=400 collects. Wall neutral.  
+  Заметки: Chunks made growable from a hint (ec9c6cf) and later from a uniform 128-element start (e073baf).
+
+- **2026-07-08** `2e69640`, `faa4807` — complete Node slice ownership in bump arenas @ all Node-referenced slices (Cmds, Env, Outputs, DepRefs, ForeignDepRefs, Resources, Inputs, chunks); shared helpers dedupClosure/dedupSourceVFS/filterSeen/...  
+  Every node-referenced slice is built in a bump arena or is a registered global; GeneratedFileInfo.SourceInputs producers allocate in the vfs arena because they are reused as consumers' input chunks.  
+  Эффект: AY_DEBUG_OWNERSHIP reports 0 violating (field, site) pairs across all 11 acceptance targets  
+  Заметки: NodeRef 0 is a sentinel in depRefs/refList semantics (synthetic tests padded).
+
+- **2026-07-08** `acc0997` — persist module results at the genModule boundary @ persistResult (ModuleEmitResult slice fields)  
+  Results live for the whole generation while referencing module-lifetime heap, and concat/concatShared may alias d-owned backing; every slice field is cloned once per module (reflect drift test guards new fields). Prerequisite for pooling module frames.  
+  Заметки: Adds clone cost per module in exchange for safe ModuleData reuse (ff38724).
+
+- **2026-07-08** `af33c0a` — zero-copy codegen registry @ CodegenRegistry.register (GeneratedFileInfo by value)  
+  Call sites build GFI slices directly in NodeArenas and register() only stores the value into a GFI arena slot, removing the copy-in of refs/leaves/directives/CompileSpec added in c6fa415/ee2fd66.  
+  Заметки: addClosureLeafNoSubsume appends via arenaAppend.
+
+- **2026-07-08** `c6fa415`, `ee2fd66` — typed arenas for permanent objects @ intern copy-in (internOwnedCopy), codegen registry GFI/directives/refs/leaves/CompileSpec, ya.make AST (astStmts/astArgs/astModules/...), addincl index (arenaAppend), sysincl contributions, ModuleEmitResult  
+  Objects that live for the whole run are bump-allocated in typed arenas (fewer GC-scanned heap objects); interned strings are copied into the intern byte arena; arenaAppend grows arena slices by doubling into fresh arena blocks.  
+  Заметки: Registry copy-in replaced by zero-copy registration in af33c0a.
+
+- **2026-07-08** `d5cef5b` — copy pooled slices into the node arena @ CUDA_NVCC_FLAGS chunk (anyChunkAny)  
+  A d-owned slice referenced directly by a Node chunk was overwritten after ModuleData pooling; it is copied per cuda node into the arena.  
+  Заметки: Caught by catboost_app byte-compare (-lineinfo swapped for another module's flag). Remaining chunk sources audited.
+
+- **2026-07-08** `ec9c6cf`, `e073baf` — growable bump chunks @ BumpAllocator (bump_allocator.go)  
+  Chunks start small and double per refill up to the 2 MB byte budget, instead of a fixed 2 MB chunk for every arena; e073baf removed per-site hints so every arena starts at 128 elements.  
+  Заметки: ec9c6cf also moved KV.ExtOut, flag splits, cond nodes, sysincl paths into arenas.
+
+- **2026-07-10** `f2fea95` **[superseded]** — arena-backed pending callbacks capturing only needed fields @ emitProtoPB pending functor (NodeArenas.pending)  
+  The pending functor slot is bump-allocated and the closure captures individual fields instead of copying the whole PbModuleEmission struct (pbm := *pe).  
+  Заметки: Replaced by typed pending emitters (6c5b5ac) and a shared per-module common struct (1a32a96).
+
+- **2026-07-11** `6c5b5ac` — typed pending emitters instead of heap closures @ PendingEmit{fn | emitter}; protoPBPending/pyPBPending structs in NodeArenas  
+  Pending node emission for proto/py-proto is a typed struct allocated in an arena and invoked through an interface method, instead of a heap closure capturing many variables.  
+  Заметки: Part of 'perf: recover pre-refactor memory profile' (restoring memory lost by the PendingEmit/scan-domain refactors).
+
+- **2026-07-12** `14b829a` — proto scan paths in the addincl arena @ IncludeParserManager.protoScanOwnPaths  
+  The proto domain own-path list (runtime base + out root + includes) is written into an exact arena window instead of make+append.  
+
+
+### Дедупликация (52)
+
+- **2026-05-24** `8ddfe1c` **[superseded]** — Global member-input aggregation: skip headers + uint32-id dedup @ gen.go addGlobalMemberInputs (replacing four inline dedup loops keyed map[VFS])  
+  One closure mirroring addMemberInputs: skip headers and dedup by interned uint32 id, so .global.a and regular AR get header-free member inputs.  
+  Эффект: emitARNode 116 -> 77MB, total 3.49 -> 3.47GB, peakRSS 1.73 -> 1.68GB.  
+  Заметки: Deleted in 015667a.
+
+- **2026-05-24** `a3e4531` — Dedup ADDINCL once at construction instead of at each consumer @ collectModule (d.addIncl / d.addInclGlobal); emit_en, emit_proto, gen x2  
+  d.addIncl was re-deduped by mergeDedupVFS at four consumers; it has no in-place mutators after construction, so dedup once at the end of collectModule and share the slice.  
+  Заметки: The dedup itself is load-bearing: duplicate ADDINCL would emit duplicate -I flags in raw-compared cmd_args.
+
+- **2026-05-24** `d27bd34` **[superseded]** — Plain concat instead of mergeDedupVFS for disjoint member sets @ gen.go combinedMemberInputs (concatVFS)  
+  memberInputs and globalMemberInputs are disjoint, so the dedup found nothing but built a seen-map of |m|+|g| and rehashed both lists; concatVFS returns the other slice directly when one side is empty (common) and otherwise allocates only the result.  
+  Эффект: ~240MB site; sg5 build allocations 4.36 -> 4.16GB; mergeDedupVFS 349 -> 97MB.  
+  Заметки: Disjointness confirmed by byte-exact gate. combinedMemberInputs later deleted (36d8409).
+
+- **2026-05-28** `3b8d5bc` — drop dead per-statement dedup @ modules.go GenerateEnumSerializationStmt peerdir push  
+  The per-stmt dedup loop added one commit earlier (c2e39ae) was dead: genModule's peer collector already runs every d.peerdirs entry through a seen set.  
+  Эффект: sg5 matched 21277 unchanged; gen 3.92s  
+
+- **2026-05-31** `53ce26a`, `2ba611b` — dedup belongs in normalization, not in the generator @ dump normalize canonInputs / normSortedStrings  
+  The canonical input list is a set: adjacent duplicates are dropped after sort in the normalizer, so generator emit sites can append shared helper closures (link_exe + fs_tools both import process_command_files) without hand-deduping.  
+  Эффект: No-op on the current graphs (no dups today)  
+  Заметки: Raw graph may now carry duplicate inputs; 5c16d57 later relies on this for double-listed generator sources.
+
+- **2026-06-01** `4dca629` — drop per-node dep dedup + sort in resolveAndUID @ emitter resolveAndUID (Deps / ForeignDeps)  
+  Deps are the DepRefs resolved to uids in insertion order: the dump-sort normalization owns ordering and the graph is content-addressed, so the per-node dedup map + sort (and per-key set + sort for ForeignDeps) were not load-bearing.  
+  Эффект: ~15.6MB flat / 62MB cum churn; resolveAndUID flat 15.6MB -> 9.5MB  
+  Заметки: Removing the dedup exposed EmitLD double-appending wholeArchiveRefs (4 dup proto archives on devtools/ya/bin in sg3) - fixed at the source; contract now: generators must not emit dup refs. canonBuf.seenPool (e6b7bb9) deleted.
+
+- **2026-06-01** `d9acbc4`, `f47559a` — epoch-stamped idSet deduper (genCtx, then program-global) @ de_duper.go deDuper; mergeDedupVFS / dedupVFS free function  
+  Fresh map[VFS]struct{} per dedup call is replaced by one deDuper holding an epoch-stamped dense idSet that grows to vfsBound() once and only bumps the epoch per call; has/add are dense-array ops instead of map probes. f47559a unifies the free-function dedupVFS and ctx.deduper into one program-global instance.  
+  Эффект: d9acbc4: ~6MB churn measured (~15 call sites); f47559a: dedupVFS per-call maps were ~826k probes/run on sg5  
+  Заметки: Safe because gen is single-threaded and each dedup is a leaf (reset -> scan -> return) - the same single-gen assumption as the intern table.
+
+- **2026-06-02** `207c4c1` — appendVFSUnique -> run-wide deduper @ emit_llvm_bc, emit_bison_y, emit_flatc, emit_sources (12 call sites)  
+  The per-call map[VFS] in appendVFSUnique gives way to the reused epoch-stamped idSet deduper; function deleted.  
+
+- **2026-06-03** `c354cc2` — drop redundant dedupVFS of fresh walkClosure windows @ emit_pb_primitive pyProtoAuxInputClosure; emit_py_aux  
+  walkClosure returns the scanner's already-deduplicated window, so dedupVFS over a single fresh window removed nothing.  
+  Заметки: Confirmed structurally and by a dedup idle-call probe (every other dedupVFS site is a genuine union of two lists).
+
+- **2026-06-03** `fd22f10` — route genModule peer-collection dedups through the run-wide deduper @ gen.go genModule peer archive/global/whole-archive/whole-archive-cmd/dynamic/link-cmd/ld-plugin sets  
+  ~7 fresh map[VFS]struct{} per module were live across the recursive peer genModule calls; moving every dedup pass after the recursive loop makes the phase recursion-free so each set resets and streams through the one shared idSet deduper.  
+  Эффект: ~12.5MB churn (thousands of small maps per run)  
+  Заметки: Drops peerArchiveSeenPool (d99928d) and the sync import; peerLinkCmd re-walks sources in original interleaved order. addInclSeen stayed a map until f2bb265.
+
+- **2026-06-03** `ff97f6d` — codegen producer-ref dedup via the idSet deduper @ gen resolveCodegenDepRefsExt (ctx.codegenSeen removed)  
+  The reused map[NodeRef]struct{} is replaced by the run-wide epoch idSet, casting NodeRef->VFS at the boundary (same dense uint32 space).  
+  Эффект: ~568k reads + 553k writes/run on sg5; drops ~1.1M map probes  
+  Заметки: Reset-then-stream safe: the probe's only side effect (EmitCF for a DeferredCF) touches no other deduper user.
+
+- **2026-06-04** `f2bb265` — peer addincl-global aggregation through the global deduper @ gen.go peerAddInclGlobal aggregation (addInclSeen map deleted)  
+  The libc++ addincl injection was moved above the effectiveAddInclGlobal dedupVFS so the whole add sequence sits in one reset-free window, letting it use the global deduper instead of a fresh per-module map; helper closures flattened into explicit kind-ordered sweeps.  
+  Эффект: ~569k hash ops -> dense idSet index ops; sg5 gen 2.95s (was 3.12s)  
+  Заметки: Kind order is load-bearing (-I order on the CC command).
+
+- **2026-06-06** `0b5f3f1` — drop never-deduplicating seen[] map in resolveSearchPath quoted-sourceUnder branch @ resolveSearchPath (scanner)  
+  Per-branch tracing showed the per-resolve map check/write never removed a duplicate, so candidates are appended directly.  
+  Эффект: resolveSearchPath quoted-sourceUnder seen[] dedup: 79,698 adds / 0 dups  
+  Заметки: Remaining pooled seen map in resolveSearchPath was replaced by a linear scan over out in a7d20a5.
+
+- **2026-06-06** `36ce2d7` — seed the union visited set with sources instead of a srcAbsSet post-filter @ joinSrcsIncludeClosure (sources)  
+  Each source's transitive closure was unioned and then a second pass filtered sources out via a srcAbsSet map. Seeding the union's visited idSet with every source VFS up front makes the visited-skip exclude them for free: no side map, no post-filter pass, no allocation.  
+  Эффект: Drops ~75k map probes on sg5.  
+  Заметки: All sources must be seeded before any closure walk (a source that is a transitive dep of an earlier one is still excluded); an incremental seed would be wrong.
+
+- **2026-06-06** `fe6ca89` — drop redundant per-lookup path dedup map in sysinclIndex.lookup @ sysinclIndex.lookup (sysincl)  
+  The per-lookup seen map (make(map,4)) deduped paths across matching contributions; downstream the resolved VFS already collapse in the closure idSet / program-global deduper, so duplicates never reach the graph. Just append.  
+  Эффект: Removes the two hottest sysincl map sites (~170k map-ops on sg5).  
+  Заметки: Relies on closure-level dedup downstream.
+
+- **2026-06-07** `41bbd82` — drop O(n^2) per-insert linear-scan dedup of objAddLibs; single dedupARG at result assembly @ OBJADDE writer / flagsContain; moduleData.objAddLibsGlobal, peerGlobalContribs.objAddLibs  
+  objAddLibs carried as []ARG; the per-insert flagsContain scan is removed and the downstream dedupARG (first-occurrence order) is the single dedup point. Peer-agg objAddLib seen-maps become BitSets.  
+  Заметки: Also removed dead FlagSet.Extra and mergeDedup.
+
+- **2026-06-07** `a854772` — peer-flag dedup via BitSets over the ARG space; mergeDedup -> dedupARG idSet @ peer-flag aggregation cFlagsSeen/cxxFlagsSeen/... (addEachARG); dedupARG  
+  Per-flag dedup maps map[string]struct{} become BitSets over dense ARG ids; flag merge helpers become an order-preserving idSet dedup over ARG.  
+  Заметки: dedupARG's own argDedupeSeen IdSet later folded into the global deduper (3aa8a85).
+
+- **2026-06-09** `3aa8a85` — dedupARG through the program-global VFS deduper; drop dedicated argDedupeSeen IdSet @ dedupARG (arg.go)  
+  ARG ids are cast to VFS as set keys in the single run-wide epoch deduper; the deduper is reset at the start of the pass, so ARG and VFS id spaces never interleave within one use.  
+  Заметки: Single-set contract: no other deduper user may be live across the pass.
+
+- **2026-06-10** `10338b3` — emitDynamicLibrary: collect peers first, then sequential per-kind leaf dedup passes through the deduper @ emitDynamicLibrary peer aggregation  
+  Phase 1 resolves all peers (memoized genModule) into a slice; per-kind aggregations (resource globals, AR outputs, addincl union, flag unions, LD plugins) then stream through the run-wide deduper one after another instead of keeping per-call maps live.  
+
+- **2026-06-10** `1a5054d` — gen/module membership sets through the global deduper; union set for addincl filter @ filterBuildRootSelfPaths ownSet, archive/LD path mover moveSets (gen.go), filterInvalidAddIncl (modules.go); deDuper.has  
+  Leaf-local VFS-keyed membership maps become epoch-IdSet probes; filterInvalidAddIncl's validGlobal/validOneLevel pair collapses to one union set because the consumer only tests membership in the union.  
+  Заметки: Output order preserved; single-set contract.
+
+- **2026-06-10** `34c01df` — NodeRef and directive seen-sets through the global deduper @ emit_bison_y dedupIncludeDirectives (deleted), swig induced set, emitArchive producerSet, EmitPR seenToolRefs, py-objcopy depSeen, py-proto/py-aux inputSeen  
+  NodeRef sets use deduper.reset()/add(VFS(ref)) sequentially after the sibling input set's last add; swig induced includes dedup via directiveID + deduper; duplicate dedupIncludeDirectives deleted.  
+  Заметки: depSeen in py-proto/py-aux kept as a local map because it is live simultaneously with inputSeen.
+
+- **2026-06-10** `7866b94` — walkPeersForGlobalAddIncl: walk + sequential leaf passes instead of 14 simultaneous dedup sets @ walkPeersForGlobalAddIncl; mergeLDPlugins  
+  The walk kept 14 simultaneous dedup sets (VFS maps, add-lambdas, an STR map, six BitSets) live across recursive genModule calls; now phase 1 only collects resolved *moduleEmitResult in visit order and each output kind is deduped in its own leaf pass via the run-wide deduper (resource globals via STR->VFS cast, flag unions via local BitSets in one pass).  
+  Заметки: The visited guard stays a local string-keyed map (must live across genModule). First-occurrence order preserved.
+
+- **2026-06-10** `8a89c1e` — deDuper.filterSeen copy-on-write filter @ deDuper.filterSeen; PR/PYRUN closures  
+  Returns the closure slice itself when nothing collides with the head chunk and builds a filtered copy only on the first duplicate, so the common case is zero-copy.  
+  Заметки: Unit tested.
+
+- **2026-06-10** `a3efaf4` — route emitter leaf-local seen-maps through the global epoch deduper @ composeLDInputs, AR archive input dedup, EmitPR, EmitPYRun, pyProtoSourceInputs, py-objcopy flush, antlr CF-extra, chunkPySrcEntries  
+  map[VFS]struct{} seen-sets (allocated and hashed per call) are replaced by deduper.reset()/add() on the run-wide epoch IdSet.  
+  Заметки: Skipped where the deduper is in use mid-set (splitCodegenSrcs, appendRagelNativeDeps, emitDynamicLibrary pluginSeen).
+
+- **2026-06-10** `a7d20a5` — dedup resolveSearchPath candidates by linear scan over out (<=3) instead of a pooled map @ resolveSearchPath (scanner)  
+  The pooled map[string]struct{} got at most three entries per call, each also in out, and 'B:'+rel keys allocated a string per probe; membership is now a linear scan over out, removing the pool, per-call clear and key concats.  
+  Эффект: Measured effect on 10x sg5 is below batch noise  
+  Заметки: PERF.md item 12-C, kept as cleanup. out later moves to a per-scanner scratch (6f84c81). Undoes the pooled seen-map lever from an earlier slice.
+
+- **2026-06-11** `ea1230a` — buildCfgResolveIndex rank dup-check on the epoch deduper; rank as IntValueMap keyed by VFS id @ buildCfgResolveIndex (scanner)  
+  The rank duplicate check rides the global epoch deduper (bitset-like probes instead of map reads) and the rank table is an identity-hashed IntValueMap[int32].  
+  Эффект: 50.5k map reads -> bitset probes  
+
+- **2026-06-11** `ea1230a` — genModule peer dedup on the epoch deduper keyed by the peer's intern id @ genModule peer list builder  
+  The seen string-map is replaced by the run-wide epoch deduper keyed by the peer's interned id.  
+  Эффект: the seen string-map (58k ops)  
+  Заметки: The second peer-list builder keeps its local map because it re-enters the deduper.
+
+- **2026-06-12** `2e89f8b`, `6ce0bb0` — delete parse-result directive dedup (dedupDirectives, swig induced-set dedup, directiveID) @ C and cython parsers; collectSwigInducedIncludes  
+  Duplicate directives only drive resolves that hit per-target caches, and the closure layer dedups children anyway, so parser-level dedup was pure cost.  
+  Заметки: Removes an earlier-slice dedup lever; gate byte-exact.
+
+- **2026-06-14** `1ff009b` — drop the unneeded PR tool-ref dedup @ emitPR appendToolRef closure (global deduper)  
+  resolveRunProgramAuxTools already dedups aux tools by path and the remaining collision does not change output, so the deduper pass is removed and zero-filtering folds into depRefs.  
+  Заметки: Verified by removal against the gate (byte-exact).
+
+- **2026-06-14** `38c7faa` — drop GenCtx.checkConfigOutputs cross-platform dedup map; duplicates collapse by uid @ CHECK_CONFIG_H emission; graphFromFinalizedEmitter  
+  Pinning the CH node's Tags empty makes host and target instances emit byte-identical nodes that collapse by uid, so the output-path keyed map is unnecessary.  
+  Заметки: Modelling-motivated; relies on uid-based node collapse.
+
+- **2026-06-14** `3d54e7d`, `35be3db` — platform-agnostic codegen emitted under ctx.target; uid collapse replaces cross-platform dedup maps @ GenCtx.pyRegisterOutputs (gen_py3_reg.py .reg3.cpp), GenCtx.ldPluginCPCache (.py->.pyplugin copy); CHECK_CONFIG_H (35be3db)  
+  The producer of platform-independent codegen is emitted with Platform=ctx.target from both target and host instances, so the two instances produce byte-identical nodes that collapse by uid in graphFromFinalizedEmitter; the GenCtx-level dedup maps are deleted.  
+  Заметки: Motive parity/structure (upstream attributes such codegen to the target). The same idea applied to python objcopy/.yapyc3 (cc48f72) was reverted (d7d22e6), re-gated on !OPENSOURCE (7d6f9d7) and reverted again (6f57432) - those are modelling, not perf. Gate byte-exact sg2/sg2_x86_64/sg3/sg4/sg5.
+
+- **2026-06-14** `ebccc8d` — drop flatcEmissions global re-entry cache via two-phase flatc emission @ emit_flatc.go emitFlatcProducer (was ensureFlatcEmission), gen.go .fbs pre-pass, emitLibraryFlatcSource  
+  ensureFlatcEmission recursed into imports and needed a GenCtx-level flatcEmissions cache to dedup the re-entry. All of a module's .fbs producers are now emitted+registered in a pre-pass before any CC closure is walked, the producer ref is read back from the codegen registry (reg.lookup(cppVFS).ProducerRef), and the recursion and cache disappear.  
+  Заметки: Motive structural (mirror proto's two-phase emitCPPProtoSrcs); removed GenCtx.flatcEmissions, FlatcEmission, CodegenOutputKey. Gate byte-exact sg2/sg2_x86_64/sg3/sg4/sg5.
+
+- **2026-06-15** `7e3a3f0` — cython CY input dedup proven load-bearing @ emit_cython_cpp.go dedupVFS over CY input chunks  
+  The closures overlap massively (sourceClosure, 35 embedded-file closures and 11 OUTPUT_INCLUDES closures all share libcxx/python headers), so the union really collapses; dedup kept, not defensive.  
+  Эффект: measured 7481 raw -> 1263 unique on library/python/codecs  
+  Заметки: Example of the dedup-must-prove-itself rule: raw vs unique counts measured before keeping it.
+
+- **2026-06-17** `e0741e0` — emit the vcs.json producer once at gen start (GenCtx.vcsRef) @ gen.go, emit_ld.go emitLD, emit_dynamic_library.go  
+  Program and DLL link nodes previously each called emitVCSNode (identical nodes); now one node is emitted at gen start and its NodeRef is shared. The base64 payload is computed once at package init (var vcsJSONBase64).  
+  Заметки: Motive: populate real vcs.json content; the producer is still folded/stripped in dump normalize. ctx.vcsRef later reused by emit_go/emit_java.
+
+- **2026-06-23** `e70933e` — drop no-op dropOwnOutputs filter @ emit_pr.go emitRunProgram / dropOwnOutputs  
+  dropOwnOutputs built a map[VFS]bool of the RUN_PROGRAM producer's own outputs and rebuilt the input closure slice on every PR; removing it eliminates the map build and per-element probes. Gate byte-exact across repeated runs proves the filter never removed anything.  
+  Эффект: the #1 map-probe site: 169k probes on sg7  
+  Заметки: Identified via map-probe counting; generation is deterministic so byte-exactness proves no-op.
+
+- **2026-06-25** `3df86d0` — drop dead exclude filter (resolveCodegenDepRefsExcl) @ resolveCodegenDepRefsIncl (all codegen dep-ref resolution)  
+  Runtime instrumentation across all 8 gate cases showed the exclude never removed a producer (refsDropped=0 everywhere): self-refs and tool LD refs are never among codegen producers in includeInputs. The 4 remaining Excl sites became Incl with empty head.  
+  Эффект: refsDropped=0 on all 8 gate cases  
+  Заметки: Guard proven never to fire by instrumentation.
+
+- **2026-06-26** `5bbffa9` — drop single-list dedup calls that never remove duplicates @ composeOwnAndPeerGlobalBucket; genResourcesLibrary; emitPySrcs; emitSwigC  
+  Cross-target instrumentation on all 8 corpus cases showed these dedups never removed an element (inputs duplicate-free by construction), so each was a pure make+copy; return/alias the input instead.  
+  Заметки: genResourcesLibrary aliases d's already-unique slices.
+
+- **2026-06-26** `745c2bc` — epoch deduper for peer-global flag lists instead of per-call BitSets @ gen.go genModule / walkPeersForGlobalAddIncl / dynamic-library emit (addEachARG removed)  
+  CFlags/CXXFlags/COnly/ObjAddLibs/LDFlags/RPath lists were deduped via a fresh BitSet per module and per peer walk that regrew its backing; replaced by the zero-alloc epoch deduper (reset + inline first-seen append per namespace).  
+  Эффект: accounting for 32349 of 2.36M alloc_objects; bit_set.go:23 make([]uint64) drops 32349 -> 108; total alloc_objects 2357819 -> 2303373  
+  Заметки: The lone post-dedup membership probe for baseUnitCxxNostdinc became a linear scan of the tiny peer cxx-flag slice.
+
+- **2026-06-26** `e4512b9` — generic concat[T] replaces proven no-op union dedups and two-alloc concats @ genModule peer/own global-flag merges, emitDynamicLibrary, flex/cython/llvm-bc addincl merges  
+  Union dedup sites proven (all 8 corpus cases) never to remove an element now use a single-make concatenation without membership checks; append(append([]T(nil), a...), b...) (two allocations) collapsed to concat (one).  
+  Заметки: dedup* kept only where it measurably removes duplicates (gen.go:1537 CFlags, emit_py_run, emit_archive_asm, emit_en, ...).
+
+- **2026-06-29** `3b1cd3d` — drop duplicate SourceClosure iteration in resource objcopy builder @ emit_resource.go resolvedResource; emit_py_objcopy.go  
+  After folding ProducerSourceClosure into SourceInputs, SourceClosure equalled SourceInputs and the builder iterated both, double-appending each kept source leaf into srcAttrInputs that downstream dedup absorbed; one field and one loop remain.  
+  Заметки: Dedup at the source; gate-neutral.
+
+- **2026-06-30** `84802f7` — drop needless dedups found by coverage marking @ modules.go protoCmdPeers (seen map); emit_py_run.go RUN_PROGRAM head builder (deduper.add/filterSeen)  
+  Inputs are already unique, so the seen-map and epoch-deduper passes were removed; head is a plain append and the closure is passed without filterSeen.  
+  Заметки: Found via dev/cov_annotate.py gate-corpus coverage (9ac217c). Gate byte-exact.
+
+- **2026-07-02** `410cd8d` **[superseded]** — STR-keyed branchless epoch DeDuper @ DeDuper (replaces IdSet-backed deduper)  
+  Custom epoch set keyed by STR id: gen[] sized to strBound() (half of vfsBound), has()/add() are gen[id]==epoch with no bounds check and no growth (growth only in reset()); every deduped type exposes strID().  
+  Заметки: Relies on type-homogeneous dedup scopes and VFS<->STR bijection; late-intern sites pre-intern before reset() so the no-grow array never overruns. Superseded by VFS relayout (f06ad5e: strID identity, sized by vfsBound), on-demand growth (522123b), u16 epochs (6b6dac2) and addStable (ae6a0b4).
+
+- **2026-07-02** `ebb7f8d` — epoch deduper instead of per-chunk map @ resource chunk adjacent/aux-tail dedupe  
+  Adjacent-item and aux-tail dedupe run in one epoch of the global DeDuper rather than a fresh map[VFS]struct{} per chunk.  
+  Заметки: (part of ebb7f8d totals above) The deduper epoch is re-seeded after RawClosure, which may clobber it (reentrancy hazard later solved by the deduper pool 81f0010 / single scoped deduper 0d4dfea).
+
+- **2026-07-03** `1847ec0`, `808f0c9` — bucket pool shared across target/host scanners @ BucketCache on GenCtx  
+  VFS ids are global, so the {list,pool,intern} bucket cache moves to GenCtx and both scanners share it; closures appearing in both scans store their buckets once.  
+  Эффект: uniqueBuckets 213307 -> 140693 (-34%), unique closure elems 17.08M -> 12.28M. Live heap 534.4MB -> 509.9MB (-24.5MB) on bs_static  
+  Заметки: Safe because the two scans run sequentially (already share &ctx.tarjan). The per-file closure index stays per scanner (bf31616: a shared path-keyed map cross-contaminated x86_64/aarch64 musl headers).
+
+- **2026-07-06** `5e65d59` — hash-consed module result closures (SliceCache) @ ModuleEmitResult peer closures, sbom components, ld plugins, resource-global decls, effective flag/addincl lists; dedupShared/concatShared  
+  Dedup runs straight into a bump-chunk block sized by the exact peer sum, then xxh3-128 over raw bytes (order-preserving) either returns the shared slice (block left uncommitted) or commits the block in place; interned slices are cap-clamped so a late append copies.  
+  Эффект: bs_static: max-rss -54.3 MB (-5.4%), inuse-at-exit -41.5 MB (-7.0%), wall min-of-8 -4.0%  
+  Заметки: Before: '48 MB of live heap holding ~7 MB of distinct content (7766 ResourceGlobalClosure copies over 6 unique values at the extreme)'. Order significant (link order), so the commutative bucketHash does not apply.
+
+- **2026-07-09** `81f0010` **[superseded]** — reentrant deduper stack pool @ DeDuperPool (dedupers.get/put) replacing the global deduper  
+  One DeDuper instance per live acquisition site so nested dedup scopes (needed once pending emitters fire mid-scan) do not clobber each other's epoch.  
+  Заметки: Each pool instance carries a vfsBound-sized gen array; leaks across recursion inflated the pool (fixed below); replaced by a single scoped deduper in 0d4dfea.
+
+- **2026-07-09** `9e263dc`, `59ecb39`, `6464ff4`, `45ef977`, `3119c1d`, `80877d1` — never hold a deduper across genModule recursion or loop iterations @ genModuleImpl peer collection/folding IIFEs, buildSysinclIndex, packObjcopy/RawResourceChunks, genResourcesLibrary/genPrebuiltProgram, emitDynamicLibrary  
+  Deduper acquisitions are scoped to the phase that uses them (IIFE with defer-put) and loops acquire once and reset() per iteration, so live dedupers (each a large epoch array) stop scaling with PEERDIR depth or loop count.  
+  Эффект: Peak depth 34 -> 3 (9e263dc); Peak live dedupers across a bs_static -G run: 160 -> 3 (59ecb39); peak concurrently live dedupers across every gate case is <=2 (3119c1d)  
+  Заметки: 80877d1 panics if more than 2 are live. Leaks were 'up to 58 (one per sysincl record) and 159 (one per resource chunk)' from defer inside for-loops.
+
+- **2026-07-10** `0d4dfea` — single scoped deduper @ DeDuperPool{deduper, live} / dedupers.with(func)  
+  One DeDuper instance borrowed via with(); a nested borrow panics, so all dedup scopes are flat and only one epoch array exists.  
+  Заметки: Replaces the stack pool (81f0010). Helpers gained *With variants taking an explicit deduper.
+
+- **2026-07-11** `6c5b5ac` — rank-map dedup in buildCfgResolveIndex @ buildCfgResolveIndex  
+  Dedup uses the rank IntValueMap being built (get != nil) instead of borrowing the shared deduper.  
+
+- **2026-07-13** `6b6dac2` — u16 DeDuper epochs @ DeDuper.gen Vec[uint16]  
+  Halves the deduper's vfsBound-sized epoch array.  
+  Заметки: Same move as IdSet in a13b58c.
+
+- **2026-07-13** `9cb5b30` — linear-scan dedup for small DepRefs sets @ resolveNodeCodegenDeps  
+  When explicit + discovered refs total <= 16, duplicates are filtered by scanning the output so far instead of borrowing the epoch deduper.  
+
+- **2026-07-13** `ae6a0b4`, `2a55011`, `5f6e868` — addStable: no-growth dedup probe @ DeDuper.addStable (genModuleImpl folds, dedupInPlace, dedup, dedupClosure, filterSeen, dedupShared)  
+  Where ids are guaranteed below the reset-time bound, dedup skips the growth check entirely (unsafe indexed epoch probe).  
+  Заметки: Relies on reset(vfsBound) sizing; ids interned later must use add(). Heavily used at HEAD.
+
+
+### Строки против id (35)
+
+- **2026-05-11** `2331a1e` — VFS-rooted paths inside the scanner; FS translation only at stat/read @ scanner.go WalkSource, emittedRel, parseIncludes, fileExists, fsLocator, resolve/resolveSearchPath/absifyRels  
+  Everything above the locator boundary uses $(SOURCE_ROOT)/... or $(BUILD_ROOT)/... strings (also as cache keys); emittedRel becomes the identity, so the per-result concat and its emittedRelCache disappear; only fileExists/fsLocator.Exists/parseIncludes translate to an FS path at the os.Stat/os.ReadFile call.  
+  Эффект: the 30 MB/run alloc the emittedRelCache amortised is now zero; net allocation neutral-to-better; gen wall on devtools/ymake/bin 4.62-4.74 s  
+  Заметки: Architectural user directive; perf-neutral. Supersedes 766aa55's emittedRelCache. The FS-translation concat now lives in fileExists/parseIncludes.
+
+- **2026-05-13** `04fd8b2`, `b2624b7`, `d215f85`, `8850027`, `9530a57`, `a590f70`, `2fd8e75`, `8633127`, `0b4a70a`, `e141f95`, `f6a68c4`, `df9a1ac`, `c5d94d9`, `8b5ec1b` — PR-VFS series: emitters build Source()/Build() directly, drop ParseVFSOrSource and $(S)/$(B) literal concats @ EmitEN, pb/ev runtime-header sets, EmitCP/EmitJVCPG4, EmitR5/R6/JV/JVSplit/CF, EmitBI/EmitPR, EmitPB/EmitEV, genPy3RegScript, protoCodegenOutput, EmitLD, resource.go objcopy, emitArchive, resolveEvImports, EmitJS/EmitAS  
+  Each emitter constructs typed paths once and feeds Inputs/Outputs directly; string forms are produced only where cmd_args need them, eliminating parse-back and repeated prefix concatenation.  
+  Эффект: ParseVFSOrSource in production: 94 → 44 (9530a57) → 33 (-65 %, a590f70) → 21 (-78 %, 2fd8e75); every step L4 byte-exact  
+  Заметки: No wall-time numbers reported for the series.
+
+- **2026-05-13** `76a4a40` — CodegenRegistry keyed by VFS (VFSMap) — no per-lookup String()/ParseVFS @ codegen registry Register/Lookup/SetProducerRef; scanner forEachResolvedChild  
+  GeneratedFileInfo.OutputPath/EmitsIncludes become VFS and byOutput a VFSMap, so the scanner hot path no longer materialises .String() per registry lookup nor re-parses each EmitsIncludes entry.  
+  Заметки: PR-VFS-1; L4 byte-exact unchanged; no timing reported.
+
+- **2026-05-13** `76a4a40`, `df9a1ac` — SortVFS / lessVFS: order VFS without materialising strings @ vfs.go SortVFS; EN EmitsIncludes sort; CodegenRegistry.All(); emitArchive buildRootSet  
+  Compares (root, rel) in the same lexicographic order the .String() forms would give ($(B) < $(S), then Rel), replacing per-comparison String() pairs and sort.Strings over materialised paths.  
+  Заметки: df9a1ac flipped emitArchive buildRootSet map[string]→map[VFS] and sort.Strings→SortVFS.
+
+- **2026-05-13** `8334e2d`, `df53972` — typed VFS{Root, Rel} paths instead of "$(S)/..." strings @ vfs.go; Node.Inputs/Outputs []VFS; codegen emitters, composeLDInputs, AR/LD dedup loops  
+  Paths carry root as an enum plus a rel string; the prefixed string is materialised only at cmd_args composition and JSON serialisation, removing prefix concat/trim/parse in the pipeline. df53972 pushed VFS end-to-end through codegen emitters and dropped the ToVFSSlice shims.  
+  Эффект: 8334e2d: no perf delta yet (M2 gen=618ms serialise=72ms; M3 gen=4.58s serialise=367ms); df53972: gen tools/archiver 1.01s, M3 gen=8.05s  
+  Заметки: df53972's VFS-struct-keyed scanner maps regressed M3 by +40% (see 947f4da row); fixed by VFSMap. Comparable struct, usable as map key.
+
+- **2026-05-13** `8ef142d` — rel-keyed exists probe; materialise $(SOURCE_ROOT)/rel only on hit @ scanner.go resolveSearchPath inner loop, IncludeScanner.pc.exists, fileExistsByRel, fsLocator.Exists  
+  The exists cache is keyed by the SOURCE_ROOT-relative tail instead of the full VFS string; resolveSearchPath probes fileExistsByRel(rel) before building the VFS string, so the concat happens only for the one search-path candidate that hits instead of every miss.  
+  Эффект: M3: vfsSource was #1 alloc hotspot 4.7M alloc_objects (37% of 12.8M), 385MB cumulative; after: vfsSource alloc_objects 4.7M → 3.5M (-25%), total alloc_objects 12.8M → 11.96M (-6.6%); wall ~5.0s → ~4.95 s (~50 ms median)  
+  Заметки: Residual 1.2M vfsSource allocs (sameDir quoted-include comparison, absifyRels seeding) deferred to the VFS-as-struct refactor (8334e2d onward).
+
+- **2026-05-13** `e28fa32` — kill string↔VFS round-trips at emit-helper boundaries @ EmitCC/EmitAS/emitOneSource/emitARNode/EmitAR*/EmitLD/composeLDInputs/reorderARMembers/emitResourceObjcopy/emitProtoSrcs etc.  
+  Emit helpers take and return VFS directly instead of the caller calling v.String() and the callee re-parsing via ParseVFSOrSource; strings are materialised only for cmd_args and in the JSON writer.  
+  Эффект: gen tools/archiver 0.83s, devtools/ymake/bin 5.63s — 'no perf regression from the round-trip cleanup' (matches vfs-2bucket baseline)  
+  Заметки: ParseVFSOrSource sites remaining: 87; peerLibPaths/peerGlobalPaths string asymmetry deferred.
+
+- **2026-05-17** `56b5458`, `d0b250f`, `5c41ad1`, `9eb4c8b`, `30ead98` — VFS at scanner boundaries, typed search paths, semantic/include paths as VFS (Codex phase 2) @ scanner.go pathLocator.Exists(VFS), fsLocator/codegenLocator, ScanContext.OwnAddIncl/PeerAddInclSet/BaseSearchPaths []VFS, hashScanContext, gen.go/pb.go/ld.go/sources.go semantic paths, ldPluginCPCache map[VFS]  
+  Locators take VFS (no abs.String() then ParseVFS in codegenLocator); search-path prefixes carry their root so resolveSearchPath no longer does strings.HasPrefix/TrimPrefix per prefix per lookup; hashScanContext mixes root byte + rel; production string shims removed.  
+  Заметки: No numbers in commits (bodies empty).
+
+- **2026-05-24** `bd20056` **[superseded]** — Allocation-free VFS comparator (SortVFS) instead of String()-based sort.Slice @ emit_en.go:240 enum closure sort + three other sort sites  
+  VFS.String() allocated "$(S)/<rel>" per comparison (~2*n*log n allocations per sort); lessVFS compares Root then Rel byte-for-byte equivalently without materializing strings.  
+  Эффект: emit_en.go:240 alone allocated 482MB; sg5 build allocations 5.05GB -> 4.60GB (-0.45GB); VFS.String allocations 549MB -> 36MB.  
+  Заметки: fa51dde removed the sorts themselves (normalizer sorts inputs).
+
+- **2026-05-25** `146a81e` — Intern the full "$(X)/<rel>" string so VFS.String() is a zero-alloc read @ vfs.go intern table; VFS.String/Rel/Root; Source/Build  
+  String() returns the interned full string instead of concatenating "$(X)/"+rel per call; Rel() is an O(1) slice of the interned string; Root() reads byte 2. Unset VFS removed (optional = *VFS).  
+  Эффект: String() was the hottest serializer allocator (1.53 GB, ~40% of all gen allocations) and becomes zero-alloc; but the concat moves into Source/Build (~1.74 GB), so total gen allocation ~flat.  
+  Заметки: Follow-ups removed the Source/Build concat churn (10dd621 literals, 6745623 scanner round-trip). Root() later moved into the id's low bit (e30db8f).
+
+- **2026-05-25** `2a308c7` — Same-dir quoted-include resolution through the concat-free first-component filter @ scanner resolveSearchPath same-dir probe + codegen sibling fallback (resolveSourceUnder, codegenUnder/LookupSplit, canRelFilter)  
+  The largest remaining resolver concat (incDir+"/"+target per quoted include) is replaced by listing-membership / split-index probes; the path is materialized (joinRel) only on a hit.  
+  Эффект: alloc 2057MB->1976MB.  
+  Заметки: Fast path valid only for plain forward relative RAW targets: canRelFilter skips it for leading ''/'.'/'..' or interior '..' (cython '/object.pxd', '../common/x.h').
+
+- **2026-05-27** `11c6304` — Parsed-include cache keyed by the caller's VFS instead of a re-interned rel @ sourceParsedBuckets; parsedIncludes, bison, ragel callers  
+  The hot caller already held the VFS but passed .Rel(), forcing Source(rel) ("$(S)/"+rel intern) on every call; now the VFS is the key and the rel is derived lazily on a miss.  
+  Эффект: That redundant intern was 44% of all Intern calls / top mapaccess2_faststr source; mapaccess2_faststr 0.22s -> 0.20s.  
+
+- **2026-05-31** `825d2ce` — key content hashes by the VFS strID (drop per-input re-intern) @ uid.go writeVFSSlice -> ContentHash(v VFS); fs.go contentHashes  
+  The uid serializer did ContentHash(internString(v.Rel())) - a string hash + map probe per $(S) input per node. Keying contentHashes by the VFS's own strID makes the hot path a plain array index; recordContentHash interns '$(S)/'+cleanRel once per file read.  
+  Эффект: that one line was 440ms / 11.3% of CPU; sg5 gen: writeVFSSlice 500ms->100ms (12.8%->3.3%), internString 460ms->110ms  
+  Заметки: Mixed hash value unchanged; byte-exact.
+
+- **2026-06-01** `5734cd3` — drop IncludeDirectiveTargets []string materialization @ emit_en serialized-header scan (IncludeDirectiveTargets deleted)  
+  Instead of materializing a []string of every parsed include target (target.String()) just to HasSuffix-filter it, the caller iterates parsedIncludes and checks the suffix on entry.target.String() (an intern-table index, no allocation).  
+  Эффект: ~51 MB of transient churn removed  
+
+- **2026-06-10** `0a71fc1` — Cmd.Stdout string -> STR reusing the producer VFS's interned path @ Cmd.Stdout  
+  Producers already hold the stdout VFS; .str() reuses its interned full-path STR instead of materializing a string. STR(0) backs the empty string.  
+  Заметки: Uid encoding of Stdout later switched to writeSTR (f1b0f0c).
+
+- **2026-06-10** `2fe510c` — drop dead ScanContext.SourceRel and its per-call .Rel() @ ScanContext.SourceRel, walkClosureWithSourceRel/walkClosureRoot (scanner)  
+  Field had production writes only; removing it removes a per-call .Rel() stringification on the walkClosure paths.  
+
+- **2026-06-10** `6e56a77` — pySrcEntry path inputs kept as VFS instead of stringify + re-intern @ pySrcChunk.pathInps (resource / py objcopy)  
+  Inputs were stringified into []string only for the consumer to re-intern each via appendInternStrs; the VFS is kept and converted with the free .str() at cmd-arg assembly.  
+
+- **2026-06-10** `6fcd2c0`, `cf1048a` — drop intermediate Build() VFS round trips built only to be stringified @ resolveModuleToolchain python3 path; Platform MultiarchLibPath  
+  A VFS was interned only to be stringified into a longer concat; the $(B)/ literal prefix is composed directly.  
+  Эффект: sg5 intern counters unchanged: strs=202123  
+
+- **2026-06-10** `fe19886` — internEnvSTR: probe the ENV table by STR directly @ bindResourceGlobalVars; internEnv split into internStr + internEnvSTR  
+  decl.GlobalVar was already a STR but went through internEnv(decl.GlobalVar.String()), re-interning a string already interned; the STR->string->ENV round trip is gone.  
+
+- **2026-06-11** `49e6191` — cut string views where the id was already in hand @ collectModule .ev/.proto/.fbs scan (d.hasFbs), genModule pass 1/2, flatSrc/perSrcCFlagsFor(STR), SimdSrc.Src, d.peerdirs dedup, SRCS/PEERDIR collect arms, Environment.bool, resolveModuleToolchain, emit_pr token maps  
+  One view per src instead of several, map probes keyed by the STR callers hold (no internStr(view) re-intern), deduper probed by id, truthiness checked by ids (setBool writes strYes/strNo), decl names compared by id, inVFSByToken/outVFSByToken keyed by STR.  
+  Заметки: Also deletes genModule's third src scan via d.hasFbs.
+
+- **2026-06-11** `5a3c289` — close the hottest id->string->id round trips in the scanner @ resolveContextSearchTier (target id, string derived after cache-hit gate), codegenUnder (takes target STR), gen.go per-source dispatch  
+  Cache hits never leave id space; codegenUnder stops re-deriving interned(target) the caller already held; three views of the same token become one.  
+  Эффект: was 307k views at the call site, now 64k on the miss path only; 137k id->string->id round-trips gone; sg5: 1,276,939 -> 1,007,929 .string() calls (-21.1%).  
+  Заметки: A first cut hoisting the view past isBuild() in resolveSearchPath regressed 26k -> 352k views and was caught by re-probing.
+
+- **2026-06-11** `d5cde3d` — id-space PEERDIR/PY_SRCS/allocator/macro-audit arms @ SRCS/PEERDIR ${-checks, recordHandledMacro (TOK, []STR) + per-arg validated bitset, acknowledgedMacros TOK-indexed bitset, PY_SRCS kw ids, allocator FAKE/J, JOIN_SRCS, flatcResolvedModuleSourceRel  
+  $-free tokens append without a view (strHasDollar gate); audit work views only when enabled and memoizes validated args per id; keyword/allocator compares by id; JOIN_SRCS strStrings computed once instead of four times per statement; flatc filters by ext class before materializing.  
+
+- **2026-06-16** `049c3a0` — compare interned VFS by == instead of .rel() strings @ PeerSbomClosure builders (peerContribs + inline per-module collection), lldToolchainSbomVFS exclusion  
+  The linker SBOM component is excluded by comparing the interned VFS uint32 directly (p == lldToolchainSbomVFS) rather than materializing and comparing .rel() strings.  
+  Заметки: Side note in a modelling commit (LD cmd divergence 12 -> 3).
+
+- **2026-06-25** `2332fd6` — thread source identity as STR through emitOneSource @ emit_sources.go emitOneSource + 17 source emitters; resolveModuleSourceVFS; copyFileAutoSourceVFS  
+  Callers already hold STR (d.srcs, fe.Src, ...) and pass it directly instead of round-tripping via .string(); copy-auto output lookup uses the interned id instead of re-hashing via internStr(srcRel). Emitters derive the string once where needed.  
+
+- **2026-06-25** `44adb95` — pass bound vfs.str() to emitCC instead of internStr(TrimPrefix(...)) @ gperf/cf/flex/flatc/r5/r6/proto/join emitters -> emitCC  
+  VFS.str() is just STR(strID) (no hash); emitCC reconstructs the module-relative srcRel from the bound VFS, so callers stop doing TrimPrefix + re-intern.  
+
+- **2026-06-26** `1edbcb0` — sourceJoined in search-tier addincl resolution @ scanner.go resolveContextSearchTier  
+  source(joinRel(bestAddincl.rel(), target)) built a joined string before interning; sourceJoined joins and interns in the shared scratch buffer in one pass.  
+  Эффект: joinRel concat (46% of all joinRel allocs, 32979); joinRel 70654 -> 37675 allocs; total alloc_objects 1869160 -> 1836154  
+  Заметки: target always non-empty so empty-dir handling matches joinRel.
+
+- **2026-06-26** `66176a6` — variadic build/source/internV over internVInto (no concat-then-intern) @ vfs.go internVInto/internV/internedV; 299 sites in 53 files; composeCCPaths  
+  build(a+"/"+b...)/source(...)/internStr(a+b) concatenated a joined string before interning; the variadic form concatenates into the reused vfsPrefixScratch buffer and interns the bytes. The variadic parts slice does not escape, so its backing array stays on the caller's stack (verified via -gcflags=-m).  
+  Эффект: total alloc_objects 2287715 -> 2056292 (-231423, -10.1%)  
+  Заметки: Relies on HashString128 and Hash128 agreeing on the same bytes so internV and internStr share intern-table identity. Later 42fa3fd builds directly into the intern arena and 37b5c98 drops vfsPrefixScratch (outside slice).
+
+- **2026-07-02** `1c1d6f2` — thread module/peer VFS instead of re-interning paths @ resolvePySrcRel, peerYaMakeExists/derivePeerInstanceVFS, exists()  
+  Guided by a runtime call-map of dirKey (404k calls): resolvePySrcRel takes the module VFS; the peer loop interns each peer path once instead of twice; exists() builds subdir keys via sourceJoined instead of dirKey(joinRel(...)).  
+  Эффект: CPU within run-to-run noise (these interns are hit-dominated)  
+  Заметки: Measurement: runtime call-map of dirKey callers.
+
+- **2026-07-02** `50eab65` — use module VFS instead of dirKey(vfs.rel()) round-trip @ 8 identity sites (emit_py_srcs, emit_cython_cpp, emit_js_node, sources, modules); d.srcDirs[0]  
+  dirKey(instance.Path.rel()) strips $(S)/ and re-interns back to instance.Path; the VFS in hand is used directly, dropping cleanRel+internVInto+IntMap.get(miss).  
+  Эффект: CPU within noise but fewer interns on the py/cython/collect path  
+
+- **2026-07-02** `580b9e8` — return interned STR instead of concat string @ resolvePySrcRel (callers source/protoSourceRelPath)  
+  The joined module-relative path was concatenated per call and re-interned by the caller; it now returns an STR built via internV (scratch buffer, deduped across target/host), callers take .string() only at use.  
+  Эффект: yabs alloc_objects 1,612,577 -> 1,562,623 (-50k; -246k cumulative from the campaign start)  
+  Заметки: resolvePySrcRel later takes the module VFS (1c1d6f2) and resolves via the cached resolveSourceUnderClean (a3c5fde).
+
+- **2026-07-07** `8f121cb` — VFS relayout stage 3 — drop conversion inefficiencies @ 67 internStr(x.relString()) sites, CC/CUDA chunks, uid writeVFSSliceBody  
+  internStr(x.relString()) -> x.rel(); CC/CUDA chunks reference shared []ANY blocks directly instead of arena copies; uid writes tag+rel instead of interning the full form; dead STR arena helpers removed.  
+
+- **2026-07-07** `e10cb3b` — kill VFS->string->intern round trips and join concats @ LD/dynlib compose family, bison/m4 tools, composeCCNode, internV composites  
+  VFS carried end-to-end (no fullSTR + reparse per node); composite internV args take prefix+rel parts; dir+'/'+rel joins via sourceJoinClean/buildClean; identity re-mints become bit flips; allocation-free path comparisons in scanner resolve and emit_cc.  
+
+- **2026-07-08** `3f748a6` — typed ResourceItem pipeline with buffer views @ ResourceItem.Cmd (STR), pyGenResourceItems, packRaw/ObjcopyResourceChunks  
+  Cmd is an STR rendered once (no internStr per pack); key/hash strings are bytesString views into a pooled per-module byte buffer instead of fresh concatenations; '-'+key built in a reused dash buffer.  
+
+- **2026-07-08** `fad6bdc` — typed ResourceEntry: kv assembled once, keys as module-buffer views @ ResourceEntry.SrcPath, emitResourceFile, expandResourceFiles  
+  The kv macro is assembled once at pack time from typed fields; keys are views into a per-module byte buffer; Aux slices live in arenas; renderResourceKvCmd runs only when the command contains ${ARCADIA.  
+
+- **2026-07-13** `9cb5b30`, `86cf8e3`, `a88aaab` — byte-slice include targets; skip re-interning clean targets @ parseDelimitedIncludeTarget ([]byte), resolveContextSearchTier, srcPosition  
+  Include targets are parsed and interned from byte slices (internBytes, no string conversion); when a target is already clean its STR is reused as the build suffix instead of interned(normTarget), prefixes stay VFS, the rel-filter index check is skipped for clean targets, and clean proto import names map via nameID.build().  
+
+
+### Хеширование (14)
+
+- **2026-05-08** `75a63bc` — srcClassHash: FNV over PerSourceView record addresses @ scanner.go srcClassHash (part of subgraph cache key)  
+  Sources are collapsed into equivalence classes by the pointer identity of their activeSourceKeyed sysincl record set (FNV over record addresses), so sources whose source-keyed filters accept the same records share every cached subgraph while differing classes stay separate.  
+  Заметки: Keeps cross-source reuse that a per-source key would lose while staying correct where source-keyed sysincl routing differs.
+
+- **2026-05-27** `65b167a` — xxh3-128 instead of SHA-1 for node UID @ uid.go computeUID (zeebo/xxh3)  
+  UID is an internal content-stable identity (normalizer recomputes uids), so a non-cryptographic SIMD hash suffices; a 16-byte digest base64url-encodes to the same 22 chars.  
+  Эффект: SHA-1 (SHA-NI ~2 GB/s) was 19.6% of gen flat / 0.70s with ~1.4 GB hashed across the run; ~15x faster hashing; gen wall 2.69s -> 2.11s (-22%).  
+  Заметки: stats_uid keeps md5 (mirrors upstream preimage, small string). xxh3 still in go.mod at HEAD.
+
+- **2026-05-31** `503a7fa`, `90b4ad7` — xxh3 content hash recorded at read time in a dense STR-indexed []uint64 @ fs.go osFS recordContentHash / ContentHash; uid.go writeVFSSlice  
+  xxh3(content) is recorded on every Read/ReadInto (files already read for scanning cost no extra read) into a plain growing []uint64 indexed by STR (slot 0 = unrecorded, xxh3 never 0); inputs never scanned are read lazily with one reused buffer. Single gen goroutine, no locks.  
+  Заметки: Purpose is cache invalidation (content in uids). 90b4ad7 extends it to the -G/BufferedEmitter path and returns 0 for directories. Its re-intern hot spot was fixed in 825d2ce; the separate reuse buffer folded into Read in 05704fe.
+
+- **2026-06-04** `32a56e0` — Morton (Z-order) key interleave via BMI2 PDEP @ morton.go; morton_amd64.s; morton_noasm.go mortonGeneric  
+  Bit-interleaves two 32-bit dense ids into a uint64 so identity-hashed tables see well-mixed low bits; PDEP asm on amd64 with a portable magic-bit-spread fallback.  
+  Эффект: asm 0.81ns/op vs generic 2.0ns/op; morton itself ~0.5ms per sg5 run  
+  Заметки: Fuzz test checks asm == generic and that the encoding is bijective.
+
+- **2026-06-04** `64a05da` — intern table keyed by xxh3-128 hi with lo verify; drop hashes[] @ vfs.go internTable: map[uint64]STR + los[] + exact string overflow map  
+  The string-keyed map is replaced by a uint64 map on the hi half of xxh3-128; a parallel los[] verifies hits by a uint64 compare and hi collisions route to an exact string-keyed overflow map. los[] doubles as the per-path UID hash, removing the separate xxh3-64 hashes[] and the miss-path double hash; map key shrinks 16B->8B.  
+  Эффект: CPU-neutral (aeshash+strcompare traded for xxh3.Hash128 + uint64 map key hashing); does not reduce the ~12% map CPU - the lever there is the 2.4M lookup count; sg5 gen 3.1s  
+  Заметки: Replaces the pre-slice hashes[] (xxh3-64 per string). Identity stays exact (no 128-bit false merge).
+
+- **2026-06-08** `27faa1b` — splitMix64 finalizer of a<<32|b instead of Morton interleave for id-pair keys of identity-hashed IntMap/IntValueMap @ searchTierFlat, sourceUnderCache, codegen bySplit caches (intmap)  
+  Morton is a bijection but not a hash: over dense sequential id spaces the interleaved low bits collide, so identity indexing (key & mask) built huge linear-probe clusters. splitmix64 is also a 64-bit bijection (exact, no verify) but scatters uniformly.  
+  Эффект: Measured on sg5: sourceUnderCache/searchTierFlat ran 364 probes per Get (231M probes total); bySplit 20. ... brings both to ~1.66 probes. Effect (10x sg5 CPU profile): IntMap[uint32].Get 1380ms -> 550ms (9.0% -> 3.9%), total samples 15300ms -> 14180ms (-7.3% wall).  
+  Заметки: Drops the BMI2 PDEP asm (morton_amd64.s) and generic/noasm split. internTable (xxh3-keyed, ~1.76 probes) unaffected. Undoes the Morton keying lever from an earlier slice.
+
+- **2026-06-10** `624b8c8` — hash the scan context via interned los chained through mix64, not FNV over path bytes @ hashScanContext (scanner); mix64 factored out of splitMix64  
+  Each addincl/search-path element contributes its interned string's xxh3 lo (already stored per STR) chained through the splitmix64 finalizer, with length prefixes keeping slice boundaries unambiguous; no byte-per-byte re-walk of every path on every NewScanCtx.  
+  Эффект: 10x sg5: hashScanContext 580 ms -> below the profile drop threshold (<60 ms); warm gen user 0.77 -> 0.70-0.75 s.  
+  Заметки: PERF.md item 4. Hash keys only in-memory config maps, so in-run id stability suffices. Later 4311fb3 seals the hash once per ScanContext construction, removing the per-walk mix.
+
+- **2026-07-03** `edfc810`, `38e7c2f` **[reverted]** — sum+square+xor multiset bucketHash, 2-wide unsafe @ bucketHash (closure bucket intern)  
+  Replace per-element Σ mix64(v) with three cheap order-independent invariants Σv, Σv², ⊕v folded once at the end, unrolled 2-wide with independent accumulators and unsafe pointer walk.  
+  Эффект: Clean-field microbench (dev perf buckethash): 2.03x faster per element than mix64. Real build (yabs bs_static): storeBuckets 6.21s -> 5.14s (-1.07s)  
+  Заметки: 38e7c2f reverted to keep production on Σ mix64(v) ('to pick up later'); re-landed as the injective pair hash 023b362. The message's 1118dcd is the pre-rewrite id of edfc810.
+
+- **2026-07-05** `023b362` **[superseded]** — injective 64+64 pair hash with overflow table @ bucketHash / BucketCache intern  
+  Bucket folded into three 32-bit invariants (sum, xor, sum of squares) encoded into two 64-bit keys (bijective mix64): primary table keyed on h1 verifies h2, mismatches go to an overflow table keyed by h2, a full pair collision throws. No per-element mix64.  
+  Эффект: 1.93x hash throughput clean-field, bucketHash cum 0.96s -> 0.59s, storeBuckets cum 4.05s -> 3.75s on bs_static  
+  Заметки: Telemetry: 'bs_static: 49 buckets in overflow — real h1 collisions the old single-key scheme could not even observe'. Superseded by per-element mix64 sum/xor with SIMD (9ca51ac).
+
+- **2026-07-06** `30db1b5`, `b3997f2`, `1fdd224`, `134cf24`, `d3235d9`, `00015f6`, `a8a6f96` **[superseded]** — bucketHash finalizer/moment hardening @ bucketHash finalizer; uidAccum  
+  Bucket length mixed into both finalizer words (mix64(len+1)); a third moment Σx³ added to bucketHash and to the uid multiset fold (extra VPMULLD / VPMULUDQ); finalizer lane packing kept at rank 4 with no same-degree xor pairs so the (h1,h2) pair is injective in all four moments at fixed length.  
+  Заметки: Correctness-driven (collision structure). Superseded by 9ca51ac for buckets; uid fold keeps its own accumulators.
+
+- **2026-07-06** `7ff2676` **[superseded]** — nonlinear invariant as primary key @ bucketHash h1/h2  
+  Primary key folds (sq, sum^xor) — all three invariants including the nonlinear one; linear (sum, xor) key backs the overflow table.  
+  Эффект: bs_static drops from 49 overflow buckets to zero; the 1.3M-set collision stress shows zero h1 collisions  
+  Заметки: Superseded by 9ca51ac.
+
+- **2026-07-07** `096dabb`, `5703ac8` **[superseded]** — AVX2 bucketHash accumulation @ bucketHash (bucket_hash_amd64.s), per-platform files  
+  sum/xor/x*x accumulators map onto vpaddd/vpxor/vpmulld 8 lanes per iteration behind a CPUID+XGETBV gate with scalar tail; bit-identical results.  
+  Эффект: bs_static, merged 6-run pprof: bucketHash cum 0.53s -> 0.21s, storeBuckets cum 3.67s -> 3.13s; wall min of 10: 4.44s -> 4.39s. Microbench: AVX2 ahead already at one vector (6.2ns vs 8.4ns; 4.9x at len 64)  
+  Заметки: Threshold len>=8. Superseded by AVX2/AVX512 per-element mix64 kernels (9ca51ac).
+
+- **2026-07-07** `35f68f9`, `d3235d9` — AVX2 64-bit uid accumulator @ uidAccum  
+  VPADDQ/VPXOR plus low64(e*e) synthesized as lo*lo + (lo*hi)<<33 via VPMULUDQ; scalar tail and !amd64 fallback, matched-against-scalar tests; d3235d9 adds low64(e^3).  
+
+- **2026-07-11** `9ca51ac`, `6373cb6`, `5182b73`, `d7b52de` — per-element mix64 sum/xor bucket hash with AVX2/AVX512 @ bucketHash / bucketHashPlatform (bucket_hash_amd64.s)  
+  Bucket hash becomes (Σ mix64(v) + mix64(len+1), ⊕ mix64(v) ^ mix64(len+1)), computed by AVX2 (4-wide) or AVX512 (8-wide) mix64 block kernels for len >= 16 with 2-wide unrolled scalar tails; dispatch inlined.  
+  Заметки: Motive: collision resistance — test with equal count/sum/xor/square/cube sets ({512,672,832,992} vs {544,608,896,960}). Replaces the moment-based scheme (023b362/096dabb).
+
+
+### IO и сисколлы (27)
+
+- **2026-05-11** `9656e6a` — EN cross-EN dep detection via scanner parse cache instead of re-reading files @ gen.go emitEnumSrcs cross-EN loop -> IncludeScanner.IncludeDirectiveTargets  
+  The loop did an os.Open + bufio.NewScanner per closure entry to find _serialized.h includes; it now asks the scanner, which already parsed every closure file during the WalkClosure that produced the closure, so each lookup is a cache hit.  
+  Эффект: M3 wall time -> 4.47s (under 5s gate)  
+  Заметки: Also removes ~30 LOC of ad-hoc bracket extraction.
+
+- **2026-05-18** `3087ed5` — FS.Walk on cached Listdir + shared proto/ev import scanning @ fs.go FS.Walk; swigLibInputs, applyAllPySrcs; cfIncludeDirectives/buildCFGVars; proto/.ev import scanning (parseProtoImports)  
+  Recursive directory walks (swig Lib enumeration, ALL_PY_SRCS) use a DFS over the cached Listdir, so they share the run-wide directory cache instead of filepath.WalkDir; proto/.ev import scanning goes through one shared helper over FS instead of open/close per file.  
+  Заметки: After this only fetch.go and make.go (build cache/output tree) use os.Stat/ReadFile directly.
+
+- **2026-05-18** `5b884f3`, `bfdc63a`, `df3f01b` — FS abstraction with run-wide cached directory listings (smart Exists) @ fs.go FS.Exists/Listdir/IsFile/IsDir/ReadAbs; parser_manager exists map, sysincl YAML loader, sources.go/emit_cc/emit_as_helpers/emit_sources/defaults/modules stat checks, ya.make parser INCLUDE expansion  
+  Exists(rel) routes through a cached Listdir(dirname): N per-file os.Stat calls over the same directory collapse into 1 ReadDir + N map lookups. Caches never invalidate (sources immutable during a Gen run); one FS per run held on genCtx.fs and shared by parser manager, sysincl loader, source resolution and every ya.make/INCLUDE read.  
+  Заметки: Replaced parser_manager's private exists map. 93edfa6 later tried STR-keyed dirs (reverted 54c601d); 3a917bc builds the first-component filter on these cached listings.
+
+- **2026-05-26** `139e99c` — Read exactly Stat's size; drop the EOF-probe read @ fs.go ReadInto  
+  Open+Stat+Read+Read(EOF)+Close = 5 syscalls/file; sources are immutable during a run, so read exactly sz bytes and return (grow-to-EOF loop kept as fallback when Stat fails).  
+  Эффект: ~44k files on sg5: Syscall6 0.24s -> 0.19s; with the cleanRel fast path scan wall ~3.62s -> ~3.42s.  
+
+- **2026-05-29** `7666913` **[superseded]** — registry lookup instead of a filesystem existence probe per COPY entry @ emit_copy.go withContextSourceExtras  
+  The copy's source VFS is looked up by dst from CodegenRegistry.SourcePath instead of being re-derived from entry.Src via copyFileInputVFS, which did a filesystem existence probe per entry.  
+  Эффект: No graph change: sg5 matched self_uid stays 26110  
+  Заметки: withContextSourceExtras was later collapsed by 128f8dd (TEXT-copy source rides as a closure leaf).
+
+- **2026-06-01** `cba6b03` — Fstat into a stack Stat_t instead of f.Stat() @ fs.go readIntoRaw  
+  f.Stat() allocated an *os.fileStat per file read just to pre-size the buffer; syscall.Fstat into a stack-resident Stat_t (&st does not escape) is zero-alloc and keeps the exact pre-size.  
+  Эффект: ~10MB churn over an sg5 run removed  
+  Заметки: Linux target.
+
+- **2026-06-01** `cba6b03` **[rejected-by-measurement]** — cache file sizes in Listdir @ fs.go Listdir / readIntoRaw  
+  Considered caching sizes from directory listing to avoid the per-read stat.  
+  Заметки: Rejected by analysis (not benchmarked): getdents64 carries no size, so it would need an lstat per directory entry - mostly existence-check candidates never read - i.e. more stats, not fewer.
+
+- **2026-06-02** `8872933` — resolveSourceUnder calls IsFile(prefix, target) directly @ scanner resolveSourceUnder  
+  The hand-rolled first-level gating (Listdir(prefix)) followed by fileExistsByRel(joinRel(prefix, target)) re-listed from the source root and re-gated the prefix's components; IsFile keyed off the already-interned prefix VFS does it once.  
+  Эффект: drops the redundant Listdir(srcRoot) and duplicated first-level walk per multi-component resolve (~33k/run)  
+
+- **2026-06-10** `8e97940` **[rejected-by-measurement]** — Listdir via File.ReadDir(-1) (unsorted) + pointerless set @ fs.go listdir  
+  Proposed to avoid os.ReadDir's sort of ~370k names and the GC scan of map[string]bool string keys. Measured: the sort is negligible and the GC part vanished with GC off for -j 0.  
+  Эффект: Сортировка в os.ReadDir = 20 ms на 10 прогонов (0.2%) — ниже порога интереса.  
+  Заметки: PERF.md item 8. For -j N (GOGC=400) the GC part stays theoretical. Later 6d34fdf/71c9ac5/6d42678 did replace os.ReadDir, but for allocation counts.
+
+- **2026-06-10** `f855d1d` — per-platform raw-syscall file read path @ readFileInto (fs_read_linux.go / fs_read_other.go), osFS.Read  
+  Linux reads via raw open/fstat/read/close with manual EINTR retry: no per-read *os.File heap object, finalizer or poll.FD indirection. Non-linux keeps the os.File path.  
+  Эффект: 10x sg5: osFS.Read cum 2030 -> 1730 ms; warm wall 1.02 -> 0.99-1.00 s.  
+  Заметки: PERF.md item 3. Extended by 8985cd9 (openat via pinned root fd).
+
+- **2026-06-12** `6d34fdf`, `fdd32af` — listdir misses via raw getdents64 into a reused 64K block @ readDirEntries / readDirMap (fs_linux.go; !linux keeps os.ReadDir)  
+  os.ReadDir built a *unixDirent per entry, a sorted []DirEntry and an os.File wrapper; raw getdents64 carves NUL-terminated names out of a reused block as byte slices, isDir from d_type (lstat fallback for DT_UNKNOWN). Per entry only the map-key string remains.  
+  Эффект: ~158k allocations per run  
+  Заметки: fdd32af made the seam portable (readDirMap). Map later right-sized (71c9ac5) and then replaced by DirView (6d42678).
+
+- **2026-06-12** `8985cd9` — pin the source root fd; reads and listdir via openat(rootFD, rel) @ OsFS readFileRel / readDirMapRel (linux arm)  
+  Each read/listdir built rootSlash+rel and syscall.Open converted it to NUL-terminated bytes; openat from a root fd opened once at newFS with the NUL-terminated rel assembled in a reused scratch removes both per-open allocations. DT_UNKNOWN fallback uses SYS_NEWFSTATAT from the same fd.  
+  Эффект: a fresh full-path string, ~48k/run ... ByteSliceFromString, ~65k/run — both per-open allocations are gone  
+  Заметки: Portable arm keeps os.Open/os.ReadDir behind the same methods.
+
+- **2026-06-15** `37c8301`, `f3982e9` **[superseded]** — --copy-sources slice derived from the existing content-hash table, copied by GOMAXPROCS workers @ OsFS.readSourceRels; cmdMake --copy-sources  
+  Every read file is already recorded in the content-hash table for UID hashing, so the slice is recovered from it with no new bookkeeping; paths are coarsened to ancestor-deduped directories and copied recursively across GOMAXPROCS workers (symlinks/modes preserved).  
+  Заметки: Opt-in tool; gen/build paths unchanged. --copy-sources dropped entirely in f191dc6 (2026-07-07, outside slice).
+
+- **2026-06-15** `4bd31ec`, `4a34ee8` **[superseded]** — streaming producer/workers/printer copy pipeline (no up-front enumeration) @ cmdMake --copy-sources copy loop  
+  Replaces an up-front enumeration pass (a stat storm only to compute a total) with one producer that walks dirs and streams each file/symlink into jobCh as found, GOMAXPROCS workers copying into statCh, and a single printer owning the counter; no total is computed, so there is no extra walk.  
+  Заметки: Tool removed in f191dc6 (2026-07-07, outside slice).
+
+- **2026-06-16** `47acbf8` — FS.walk visit returns a descend flag (prune at descent) @ fs.go FS.walk / fs_os.go OsFS.walk; ALL_PY_SRCS glob (modules.go); parser_manager  
+  visit now returns whether to descend into a directory, so ALL_PY_SRCS prunes subdirectories owning their own ya.make at descent instead of walking the whole tree and filtering afterwards; pruned subtrees are never read.  
+  Заметки: Motive correctness (14 spurious test .yapyc3 nodes in sg6); 'prune cleanly at the source instead of a post-walk filter'.
+
+- **2026-06-22** `729592f` **[superseded]** — classify walk entries by readdir d_type, no per-entry lstat @ copy-sources walk producer / copyOne / copyFileMode / copyJob  
+  The walk called de.Info() (an lstat against src) on every entry before the skip check; it now classifies from de.Type() (readdir d_type) and defers the only src access (open + fstat of the fd for mode) into copyFileMode on the copy path. A skip performs zero per-file src operations.  
+  Заметки: Only remaining src I/O on a re-run is one readdir per directory. Feature removed by f191dc6 (outside slice).
+
+- **2026-06-22** `75488c6` **[superseded]** — copy read dirs shallow, recurse only always-dirs @ copy-sources copySourceSlice / dropUnderRecursive  
+  A dir with a single read was copied recursively, dragging whole subtrees through FUSE readdir; now alwaysCopyDirs stay recursive while read dirs copy only direct file entries, so read-less subtrees are never walked. dropDescendantDirs replaced by dropUnderRecursive.  
+  Эффект: strace of a skip-only re-run showed 8565 opendir+getdents on the arc/FUSE source, 6765 of them (79%) under yabs/qa alone  
+  Заметки: Measured with strace. Feature removed by f191dc6 (outside slice).
+
+- **2026-06-22** `d9cd2ab` **[superseded]** — copy-sources: check dst before any src operation @ copy-sources copyOne / copyFileMode / copyLooseFiles  
+  copyOne Lstats dst first; an existing dst short-circuits with zero operations on src (no redundant FUSE read on re-runs); copyLooseFiles reorders the dst-presence check ahead of the src Lstat; EPERM/EACCES on src is skipped instead of failing.  
+  Заметки: --copy-sources was dropped entirely by f191dc6 (2026-07-07, outside this slice). Enumeration still stat'd src until 729592f.
+
+- **2026-07-06** `a6c7cb9`, `5020085`, `ee9a9c1` — graveyard GC that actually drains read-only junk @ background garbage collector / removeAllForce  
+  os.RemoveAll with chmod-writable-and-retry instead of an rm -rf that failed with EACCES forever on read-only toolchain dirs, so the graveyard drains and steady state is one stat per second.  
+  Эффект: 65k failing unlinkat + 260k writev of error text per no-op make -> steady state is a single stat per second  
+  Заметки: 5020085 (detached setsid 'ay gc' child with flock) was reverted in ee9a9c1 to a plain rm -rf loop with each rm in its own session; removeAllForce repair still runs on non-zero rm exit.
+
+- **2026-07-06** `ff1355f` **[superseded]** — mmap large source files, fixed-size read buffer @ OsFS.readFileRel / readBuf  
+  Files >= 2 MB go through mmap(PROT_READ, MAP_PRIVATE|MAP_POPULATE), unmapped on the next read; readBuf is preallocated at the 2 MB threshold and never grows (it used to escalate to each new record file size, e.g. 34.9 MB tree-sitter parser.c).  
+  Эффект: bs_static: readFileRel vanishes from the alloc profile (was 100.5 MB), total alloc -91 MB, max-rss 940.8 -> 845.5 MB (-10.1%), wall neutral  
+  Заметки: With GC off under -j0 the discarded buffer generations had stayed in RSS. Superseded by stable-chunk reads (6f55d73: one read into a fixed 1 MiB buffer + mmap of the tail).
+
+- **2026-07-07** `35f68f9` — async one-pass uid cache snapshot @ uid cache (bld/uid)  
+  Warm path reads an async one-pass snapshot of bld/uid instead of a per-node stat; stat kept as fallback for concurrent writers.  
+  Заметки: (part of 35f68f9 effect)
+
+- **2026-07-09** `3107803` — stop discard() spinning on ENOENT rename @ clearCache -> discard  
+  The retry loop never inspected the rename error, so a missing source produced an infinite os.Rename syscall storm; on failure it Lstats the source and returns if gone. Success path keeps a single rename syscall.  
+
+- **2026-07-13** `6791820`, `6e6191f` **[reverted]** — 256 KiB source read cutoff @ readChunkSize  
+  Lowered the first-chunk buffer from 1 MiB to 256 KiB.  
+  Заметки: Restored to 1 MiB in 6e6191f (2026-07-16) with no reason stated.
+
+- **2026-07-13** `6f55d73` — read sources in stable chunks (fixed buffer + mmap tail) @ OsFS.readFileRel / FS.read -> [][]byte; contentHashChunks; chunk-aware parsers (eachLine)  
+  One read() into a fixed readChunkSize buffer; fstat only if the buffer filled, then only the tail is mmapped; content hash = XOR of per-chunk xxh3; parsers handle a line spanning the chunk boundary. Small files cost open+read+close with no fstat.  
+  Заметки: readChunkSize is part of the content-hash format (changing it invalidates hashes). Supersedes ff1355f.
+
+- **2026-07-13** `9d290fc`, `2a55011`, `6b6dac2`, `c785a62` — openat relative to cached directory fds @ OsFS.readFileRel/readDirAll (dirFD, dirFDs map + dirFDRing)  
+  Directory fds from readdir are kept open (last dir, then a ring cache of 256 -> 512 -> 768) and source files are opened with openat(dirfd, basename) instead of resolving the full path from the root fd each time.  
+  Заметки: dirFDCacheSize = 768 at HEAD.
+
+- **2026-07-13** `bccb3a2` — single-pass getdents decode @ OsFS.readDirViewRel (fs_linux.go)  
+  Dirent records are decoded and interned in one pass into an arena window sized by the upper bound len(buf)/24, instead of a counting pass plus a callback-based second pass.  
+
+- **2026-07-15** `5f6e868`, `8356577` — existence via parent directory listing @ resolveSourceUnder0 single-component fast path; isFilePathClean  
+  For a clean single-component target (or any clean rel), presence is answered from the parent directory's cached listing (dirHasID) instead of the generic existsClean path walk.  
+
+
+### Парсинг (22)
+
+- **2026-05-08** `766aa55` — FindSubmatchIndex + length compare instead of FindSubmatch @ scanner.go parseIncludes  
+  Using index-returning regexp matching avoids the per-match [][]byte result and the string(m[1]) conversion allocation for every #include line.  
+  Эффект: part of PR-34k total (1.870s -> 1.593s)  
+
+- **2026-05-08** `b8f9d1c` — single-pass in-place comment stripper with no-trigger fast path @ scanner.go stripComments / parseIncludes  
+  A byte-level state machine rewrites /* */ and // comment spans to spaces in place (newlines kept; string, char and raw-string literals transparent). A pre-scan returns the buffer unchanged when none of '/', '"', '\'' appear, so the hot path has zero allocations.  
+  Эффект: baseline 0.86s -> PR-35u 0.80s on 5-run mean (-7%; the prefilter saves more than the strip costs)  
+  Заметки: Primarily a parity fix (L2 93.40% -> 97.43%); the '#' prefilter in the same commit pays for the strip.
+
+- **2026-05-08** `b8f9d1c` — bytes.IndexByte(line, '#') prefilter before the include regex @ scanner.go parseIncludes  
+  Lines without '#' skip the regex entirely; otherwise ^\s* greedy-walks hundreds of stripped-comment spaces before failing the '#' anchor, multiplying regex cost ~3x.  
+  Эффект: net with stripper: 0.86s -> 0.80s 5-run mean (-7%)  
+
+- **2026-05-24** `1091373` **[superseded]** — Single-pass C include scanner (port of ymake ScanCppIncludes) @ parsers.go parseCIncludes  
+  Replaces stripComments + eachLine + per-line regex with one forward pass: at each line start skip ws and block comments, match `# include|import <..>/".."`, otherwise jump to next newline via bytes.IndexByte (memchr). No strip buffer, no regex; drops `$` targets and `// Y_IGNORE` like upstream.  
+  Эффект: Parsing 0.58+0.42+regex (~1.3s) -> ~0.2s; sg5 build wall 8.5s -> 7.9s, user 14.4s -> 13.7s.  
+  Заметки: Superseded by the '#'-anchored single scan f1768c2.
+
+- **2026-05-25** `22b9c2e` **[reverted]** — Boost macro-include expansion via regex re-scan (anti-lever) @ macro_expansion.go (per parsed source), parser_manager.go  
+  For every parsed source ran 6 full-file (?m) regex scans to detect boost dispatcher macro includes and expanded them via hardcoded path lists + recursive directory walks: a second full pass over every file in the closure.  
+  Эффект: Per eb5c91a: regressed sg5 `ay make` from ~5.8s to ~61s (~10x, CPU 154%->69%, regexp.match = 75% of runtime).  
+  Заметки: Pre-rebase hash 5f6001c. Deleted by eb5c91a; motivated the gen-time budget gate c6dd528.
+
+- **2026-05-25** `eb5c91a` — Capture macro #include tokens in the single parse pass; resolve via sysincl/macro.yml @ parsers.go parseCIncludes (bare-token include alternative) -> resolve() -> sysinclLookup() -> macro.yml; macro_expansion.go deleted  
+  Matches upstream's cpp grammar third `incl` alternative: the bare macro token is captured in the existing pass and resolved through the data-driven macro.yml, removing the second regex pass over every file.  
+  Эффект: sg5 `ay make` 60.9s -> 5.45s, CPU back to 154%, peakRSS ~1.66GB (parity 14157 -> 14904).  
+  Заметки: Pre-rebase hash c31218d.
+
+- **2026-05-26** `f1768c2` — '#'-anchored single-scan C include parser @ parsers.go parseCIncludes (skipWSAndBlockComments, leadingBlockCoversHi)  
+  IndexByte jumps to the next '#' in SIMD strides instead of walking every line; a '#' is a directive only if it is the first non-ws/non-block-comment byte of its line and not inside a line-leading multiline /* */. Target read literally between brackets.  
+  Эффект: skipWSAndBlockComments was ~39% of parse time. Parser throughput ~2.5-3.5x (351 -> 137 ms/pass over 897MB, ~6.5 GB/s); sg5 gen 6.1s -> 5.4s.  
+  Заметки: Byte-identical to the old parser on all 74,111 C/C++ sources of the ydb tree. Two superseded prototypes (strip+functor V2) removed.
+
+- **2026-06-05** `1d60a1b`, `721f7ef` — dedup identical (kind, target) include directives inside the parsers @ parsers.go C parser and cython parser; dedupDirectives; directiveID  
+  Boost PP iteration files repeat one #include up to 1024x, each driving a sysincl lookup for the same (header, file); directives are deduped once per file before the parse result is cached, packing (kind, target) as a VFS (target<<1|kind) so the global VFS deduper works by cast, compacting in place with no per-file map or copy.  
+  Эффект: ~25k sysincl lookups (25% of all) from duplicate directives; sysincl header probes 100,568 -> 74,344; total map ops 2,313,445 -> 2,282,919  
+  Заметки: 1d60a1b first deduped in parser_manager before Put; 721f7ef moved it into the parsers before the parsedIncludeSet map wrap (no extra bucket probe). Cython's own map[includeDirective] dedup replaced by the shared deduper.
+
+- **2026-06-07** `14344e6` — handle computed macro includes in the lexer behind a one-byte gate; delete per-file fixup tables @ parseDirectiveInline bareword branch; removed macroIndirectIncludes/macroIncludeDrops/filterDroppedDirectives  
+  BACKTRACE_HEADER is dropped and OPENSSL_UNISTD expanded to <unistd.h> behind 'B'/'O' first-byte gates, so the hot path pays a single byte compare instead of per-file map probes; poco types.h drops through the real upstream sysincl negative-lookahead rule.  
+  Заметки: Supersedes the 'co' prefix gate of 2e2d18c.
+
+- **2026-06-10** `8e97940` **[rejected-by-measurement]** — memoize the next '/*' position in parseCIncludes @ parseCIncludes / leadingBlockCoversHi (parsers.go)  
+  Proposed because bytes.Index(data[clean:hi], '/*') appeared to re-scan inter-directive text per directive. Analysis showed the covers call only happens for line-leading '#', both outcomes advance clean, and the [clean,hi) windows are disjoint, so the scan is already amortized linear; only merging passes could save, at disproportionate complexity.  
+  Заметки: PERF.md item 5, rejected by analysis. Original evidence cited: 340 ms (2.3%), expected ~1.5–2%.
+
+- **2026-06-12** `32e9692` — parseProtoImportLine rejects non-import lines in byte space @ parseProtoImportLine (proto parser)  
+  Every .proto line was converted to a string before rejection; non-import lines (the vast majority) now bounce off byte-space trims/prefix checks.  
+
+- **2026-06-12** `ffacb8f` — custom line-oriented streaming parser for the sysincl YAML subset @ parseSysInclYAML (sysincl); gopkg.in/yaml.v3 dependency removed  
+  The generic yaml.v3 decode rebuilt a node tree per file per scanner; a streaming parser over exactly the used subset (throws on anything else) interns headers straight from line bytes and targets via scratch; only filters and CI keys materialize strings.  
+  Эффект: ~137k allocations per run (10% of object churn); sg5 alloc_objects: 1,343,640 -> 1,252,693/ран (−6.8%); остаток sysincl-слоя ~10k/ран  
+  Заметки: yaml.v3 had been introduced in 840a6dc (to parse valid YAML the earlier hand-rolled parser threw on) - this reverts to a hand-written parser for allocation reasons.
+
+- **2026-06-17** `1ec908f`, `9634dba` **[reverted]** — Starlark ya.star front-end as an alternative to the native ya.make parser @ starlark_front.go evalStar (parse+execute, no cache, re-executed per module build-variant env)  
+  ya.star evaluated per variant to the same []Stmt as the ya.make parser; measured at ~6-7x the native parser cost per module build (006ad54).  
+  Эффект: parse ~86µs vs eval ~611µs; make-build ~114µs vs star-build ~679µs  
+  Заметки: 9634dba removes front-end, transpiler, perf_starlark and go.starlark.net ('experiment over'); the revert body does not cite perf as the reason.
+
+- **2026-06-25** `682d799` — cython line scanner on []byte @ parser_cython.go  
+  Replaced per-line strings.TrimSpace(string(line)) with bytes.TrimSpace + regexp FindSubmatch on []byte and internBytes for the target; only small captured groups on real import lines are stringified.  
+  Эффект: ~41k/run on bs_static; gen alloc_objects on bs_static: 2,784,686 -> 2,743,742 (-41k)  
+
+- **2026-06-25** `7a973e4` — eachLine via bytes.IndexByte @ parser.go eachLine (all line-based parsers)  
+  Scans for '\n' with bytes.IndexByte (SIMD) per line instead of byte-by-byte.  
+  Заметки: Preserves the quirk of not stripping a trailing CR on the final newline-less segment. No numbers stated.
+
+- **2026-06-25** `7a973e4` — byte-scan ragel/swig lines; swig chunk aliasing @ parser_ragel.go, parser_swig.go  
+  bytes.TrimSpace + bytes prefix/suffix checks replace per-line string conversion; only rare matching lines are stringified; swig stores the trimmed []byte subslice into cChunks directly instead of copying (data stable for the parse).  
+  Заметки: proto/cfgproto/flatc/yasm parsers were already byte-clean.
+
+- **2026-07-06** `4479d63` — byte-level Go import scan with internBytes @ parseGoImports  
+  Walks data []byte directly (no string(data) copy of each .go file) and returns []STR, interning import paths with internBytes (owned copy).  
+  Эффект: yamaker graph wall min of 10: 0.68s -> 0.65s; parseGoImports and slicebytetostring dropped out of the top-200 lines  
+  Заметки: slicebytetostring was 0.11s / 2.8% of the yamaker profile. internStr (zero-copy) on views of the reused OsFS readBuf corrupted peerdir paths (caught by the yamaker gate) — views must be interned with internBytes.
+
+- **2026-07-13** `08d019a` — manual byte scan for service tokens @ mineServiceTokensFromSources (macro_audit_known.go)  
+  Quoted upper-case literals are found with IndexByte and a byte loop instead of regexp FindAllSubmatch over every embedded Go source.  
+
+- **2026-07-13** `1724ca0`, `8203314`, `5f6e868` — reject non-import proto lines early @ parseProtoImportLine  
+  First-byte check and 'import' prefix test run before any comment search; trailing trims removed; the line-comment check is applied only to the extracted target.  
+
+- **2026-07-13** `8883f96`, `9cb5b30` — lexer fast paths intern directly from source bytes @ Lexer.readIdentOrWord/readWord/readNumberOrWord/readString  
+  Simple tokens (no quotes/escapes/newlines) are scanned with a local position and interned straight from l.src without copying into tokBuf; complex tokens fall back to the old path.  
+
+- **2026-07-13** `df36b65` — regex-free include directive parsers @ parser_yasm/swig/cython/flatc/cfgproto (regexp vars removed from parser.go)  
+  Include/cimport/extern/flatbuffers lines are parsed with byte-level keyword cutting (cutParserKeyword, trimParserSpace) instead of regexp FindSubmatch.  
+
+- **2026-07-14** `76b828d` — single-pass C include scan with trailing-comment tracking @ parseCIncludesBlock / leadingBlockCoversHi  
+  The chunk-boundary block-comment state is computed in the same pass as include parsing, removing the separate leadingBlockCommentOpen rescan of every chunk.  
+
+
+### Сборка команд (22)
+
+- **2026-06-07** `c7e8f10` — debug-info flag group built once at NewPlatform and spliced by construction (Pre + DebugInfoFlags + Post) @ Platform.DebugInfoFlags / composeCompileCFlags (flags.go, platform.go); removed withSandboxingDebugCompression  
+  The old helper scanned the finished CFlags vector in compileFlagBundleFor and copied it to splice -gz=zstd after -g; the platform's compile C flag vector is now composed once at construction.  
+  Заметки: Motive was parity (sandboxing was a fake proxy for the repo ymake_conf.py rule); removal of the per-call scan+copy is a side effect.
+
+- **2026-06-10** `0f91745` — chunked Node.Inputs (inputChunks [][]VFS): emitters reference shared closures, never copy @ Node.Inputs; EmitCC/EmitJS; uid writeVFSChunks, gjson appendVFSChunks/appendBuildOnlyVFSChunks, executor linkSourceInputs  
+  Emitters hand over natural pieces ([1]{src}, the shared cached closure, a static tool tail) and no flattening happens on the gen path; consumers iterate chunks with byte-identical output (JSON marshals flat).  
+  Заметки: Motivated by wrapcc reintroducing a per-CC-node copy of the whole include closure (copy-then-append) - 'the recurring trap on this hot edge'. AR/LD kept flat initially.
+
+- **2026-06-10** `49577a7` — Platform.SysrootArgs precomputed [--sysroot, -B] vector @ NewPlatform; composeTargetCC / composeASCmdArgs  
+  The sysroot/-B prefix is a pure function of os/MUSL/OS_SDK, built once per platform and spliced after --target.  
+  Эффект: gen wall-time unchanged  
+  Заметки: Modelling commit (sg6 parity); precompute-once pattern. Later folded into Platform.CCHead (126e0e2).
+
+- **2026-06-10** `55208a0` — wrapcc compile-wrapper prefix and CC resource vector precomputed once per Platform @ Platform.WrapccHead/WrapccTail, composeTargetCC, EmitCC  
+  The wrapper prefix is a pure function of the platform, so it is built once in NewPlatform (head ++ [src] ++ tail) and spliced, not rebuilt per CC node; Platform also carries the CC node's usesResources vector.  
+  Заметки: The first version copied the whole include closure per CC node to append wrapcc.py; fixed by inputChunks (0f91745).
+
+- **2026-06-10** `835fa85` — drop the NodeInputs fast-path and emitter-level root-first contract @ ModuleCCInputs.NodeInputs, EmitCC, walkClosureRoot folded into walkClosure  
+  After inputChunks, EmitCC's {src}+IncludeInputs chunks already emit without copying, so the NodeInputs fast path bought nothing and was removed; root strip happens in one place.  
+  Заметки: Removes an earlier-slice lever (NodeInputs zero-copy fast path) made redundant by chunks. Root-first invariant stays inside the scanner (subsumption needs self-containing windows). Counters identical.
+
+- **2026-06-10** `8a89c1e` — sweep all 30 emitters onto inputChunks @ AS/AS_YASM/CF/EN/R6/SW/BC closures, PB/EV/FL imports, AR objPaths, LD peerLibPaths, dynlib, CP fs_tools, objcopy tool prefixes (rescompilersChunk), py3cc pairs, JV inputs; composeLDInputs/composeDynLibInputs  
+  Shared cached closures and caller-owned slices are referenced as chunks instead of copied; prEmitResult.Inputs share the node's chunk list (defensive copies removed); LD's peerLibPaths chunk seeds the dedup set and a duplicate there throws.  
+  Заметки: Left flat with reasons: bison preprocess, cython tool inputs, py codegen generated-src arm, llvm_bc OP node, archives member block, check_config_h, small literal-only sites. Counters unchanged.
+
+- **2026-06-11** `126e0e2` — CC arg spans built once at their owners and referenced as chunks @ Platform.CCHead; ccModuleArgBlocks/composeCCModuleArgBlocks (genModule, header-only, emitCPPProtoSrcs, py-proto-aux); EmitCC  
+  The CC command line decomposes by data ownership: [--target, -march, sysroot] once per platform; compiler heads, the common span (-I block + compile flag pipeline), c/cxx tails and C-only extras once per module; per node only the chunk list, [-c -o out], [in] and per-source flags are fresh.  
+  Эффект: sg5: alloc_space 620.5MB -> 592.9MB (-4.4%); EmitCC cum alloc 50.9MB -> 24.8MB; 10x wall mean 0.824s -> 0.802s.  
+  Заметки: No caches. Cython paths that mutate AddIncl/CFlags rebuild blocks for their copy.
+
+- **2026-06-11** `1dc57a0` — chunked command args: Cmd.CmdArgs []STR -> argChunks [][]STR @ Cmd.argChunks; uid writeStrChunks, gjson appendStrChunks, executor flatten  
+  The inputChunks model applied to commands: argChunks marshal flat and hash/serialize the flattened sequence byte-identically, so emitters can reference shared pre-built arg blocks instead of copying.  
+  Заметки: Stage 1 (every emitter wraps its slice as one chunk); owner-built blocks follow in 126e0e2..e71766e.
+
+- **2026-06-11** `3334bba` — objcopy command head built once per module @ objcopyEmitCtx / newObjcopyEmitCtx (emitResourceObjcopy); objcopyCmdArgs  
+  Four objcopy emitters rebuilt the same 14-token head per node (re-interning script, rescompiler/rescompressor paths, platform triple); pre/post spans are built once per module and only the payload (--inputs/--keys/--kvs) per node.  
+
+- **2026-06-11** `3a14af9` — protoc arg blocks built once per module proto context @ pbModuleEmission / pbArgBlocks (emitCPPProtoSrcs, emitLibraryProtoSource); EmitPB  
+  EmitPB rebuilt the full protoc command (the -I set, interning a fresh concat per peer chain entry, plugin blocks) per .proto; head/mid/tail blocks are now built once per module and EmitPB assembles argChunks{head, outputs, mid, [src], tail}.  
+
+- **2026-06-11** `76101d2`, `e71766e` — hoist constant arg vectors into package-level []STR spans @ flatcConstFlags/flatcIOLeadArgs, evProtocConstArgs, yasmConstHead, cythonConstHead, antlrJavaConstHead, ragel6ConstArgs, swigConstArgs, rodataConstArgs, rodataYasmConstArgs  
+  Constant command spans are built once at init and referenced as chunks instead of being rebuilt per node.  
+  Заметки: Deliberately not applied to LD/dynlib (26 nodes, constants interleaved with per-node tokens every 2-5 positions) and to CP/JS/FT/BI/EN/CF heads of <=3 constant tokens (chunk-list overhead exceeds the copy saved).
+
+- **2026-06-11** `8e439bc` — owner-built arg heads for AR, yapyc and py-proto commands @ moduleToolchain.ARCmdHead (resolveModuleToolchain), emitARNode; emitPySrcs yapyc head; pyPBModuleEmission (emitPyProtoSrcs)  
+  The 8-token AR head is a pure function of the toolchain; the yapyc head is loop-invariant per module; py protoc head/mid/tail spans (suffixes, namespace, -I set, grpc/mypy plugins) are built once per module; per-node work is only the tail.  
+  Заметки: Populations cited: 1911 AR nodes in sg5; PY nodes 4015 in sg3.
+
+- **2026-06-24** `65bfc11` — CUDA command from interned STR chunks and arena lists @ emit_cuda.go  
+  Static nvcc flags are interned []STR built once at init (nvccFlagsHead/nvccFlagsTail split around per-module --keep-dir) plus interned STR/ARG/ENV constants; cmd_args and inputs are assembled from arena chunks (na.chunkList/na.inputList/na.vfsList) instead of concatenating []string/[]VFS arrays.  
+  Заметки: catboost_app stays byte-identical. Dead nvccGencodeFlags and internStrList removed.
+
+- **2026-06-27** `3cd7819` — CC command blocks as ArgChunks instead of flat appendArgStr @ emit_cc.go CcModuleArgBlocks / composeCCModuleArgBlocks; emit_cuda.go; node_arena.go argStrList/inclArgList  
+  Blocks were flat []STR built element-by-element with []ARG->[]STR reconversion; ArgChunks ([][]STR) flatten only at graph-write, so constant groups (ccIncludesPrefix, debugPrefixMap, xclang dir, builtinMacroDateTime, macroPrefixMap, warning bundles, catboost define, -std) are converted once at init and referenced, and per-module/platform groups go through the arena.  
+  Эффект: appendArgStr 38660 -> 122 allocs; total alloc_objects 1796771 -> 1733164  
+  Заметки: Flat helpers remain for the llvm-bc path.
+
+- **2026-06-27** `bae64c5` — precompute platform CFlags/Defines/NoLibcBlock as []STR @ platform.go newPlatform (CompileCFlagsStr/DefinesStr/NoLibcBlockStr); emit_cc.go composeCCModuleArgBlocks  
+  Platform-stable bundle parts were converted to []STR on every module; computed once per platform and referenced.  
+  Эффект: total alloc_objects 1733164 -> 1723441  
+  Заметки: Only the rare NoOptimize path still converts a suppressOptimize'd CFlags.
+
+- **2026-07-03** `92d5330` — closure buckets as node input chunks @ walkClosure -> ClosureView; emit_cc/as/yasm na.inputList(self, buckets...)  
+  walkClosure returns self + 16 resolved bucket slices and compile nodes put the buckets directly into Node.Inputs [][]VFS chunks with no flat reconstruction.  
+  Эффект: Live heap 800.9MB -> 533.3MB (-33%) on bs_static  
+  Заметки: inputList(first, rest...) returns a capped slice to keep append from corrupting the shared arena.
+
+- **2026-07-06** `ba4a7fa` — flatten CC module arg blocks into megachunks @ composeCCModuleArgBlocks / composeCCNode  
+  Module-invariant include/flag/tail chunks are flattened once per module into single []STR megachunks; the constant date-time/prefix-map pair moves into two shared headers, so each CC node's outer ArgChunks array drops from ~15-20 to ~10 headers.  
+  Эффект: bs_static: []STR headers 34.8 -> 14.3 MB, inuse-at-exit -16.2 MB, max-rss -16.7 MB (-1.7%), wall neutral (overlapping distributions)  
+  Заметки: Chunk boundaries changed, so CAS UIDs reshuffled once; the flat JSON graph is unchanged.
+
+- **2026-07-06** `cb4e792` — Go emitters on file-level constant chunks and node arenas @ emit_go.go / emit_go_cgo.go  
+  Interns hoisted out of function bodies; constant cmd blocks become ready [][]STR chunks; dynamic node memory goes through NodeArenas alloc/commit; goCgoIncludeArgs/goInclSplitArgs cached per EmitContext, goCmdEnv memoized on GenCtx; chunk-aware dep resolver; goClassifyClosure into one arena block.  
+  Заметки: byte-neutral per message.
+
+- **2026-07-07** `f9ee38b`, `ab15a51`, `989f3f3` — ANY-tagged command args (STR | VFS) @ Cmd.CmdArgs [][]ANY, Cwd VFS, IncludeDirective.target, SrcMeta.Source  
+  ANY = STR<<1 | VFS<<1|1: JSON renders VFS args through the escaped-prefix cache, uid canon tags str/source/build per arg, the executor materializes VFS args straight into mounted roots with no ReplaceAll on path args; scanner resolve() and generated-source dispatch become bit tests instead of string parses.  
+
+- **2026-07-08** `00f989c` — precompute shared command chunks found by profiling @ py3cc head triple (lazy per-gen chunk); CC arg blocks memoized on CompileSpec  
+  The yapyc head triple was heap-assembled per node; it is now a lazy per-gen chunk. CC arg blocks rebuilt per env-delta source sharing one CompileSpec are memoized on the spec.  
+  Эффект: py3cc head triple was assembled per yapyc node (6172+2772 calls)  
+
+- **2026-07-08** `2e69640` — package-global EnvVars instead of per-node literals @ envVarsVCS/envVarsVCSYasm/envVarsVCSPyHash (+envVarsVCSCuda in faa4807)  
+  50+ per-node EnvVars literals replaced by shared package globals; dynamic EnvVars go through a new envs arena.  
+
+- **2026-07-12** `1459f18` — root-homogeneous input chunks @ node input chunk construction (emit_*), dedupClosureChunks  
+  Input chunks are made all-$(S) or all-$(B), so codegen-dep resolution and other consumers classify a whole chunk by its first element instead of scanning or memoizing it.  
+  Заметки: Closure buckets made root-homogeneous in 4f42935.
+
+
+### UID и сериализация (24)
+
+- **2026-05-08** `d768ff3` — hand-rolled streaming JSON graph writer @ gjson_write.go writeGraph  
+  Replaces json.Encoder.Encode with SetIndent, which runs two passes (compact encode into a temp buffer, then json.Indent), with a non-reflective single walk specialised to Graph/Node/Cmd that writes indentation inline and flushes into a 1 MiB bufio.Writer.  
+  Эффект: time ./yatool gen --target tools/archiver: 1.533s -> 1.270s (17.2% speedup); writeGraph itself: ~300 ms -> ~50 ms (6x) on 63 MiB output  
+  Заметки: Byte-exactness pinned by gjson_write_test.go against json.Encoder(SetEscapeHTML=false, SetIndent). Replaced the PR-10 (2b1f970) json.Encoder writer. 54896fd changed indent 2 -> 4 for L4 parity (output 63 MB -> 73.2 MB).
+
+- **2026-05-13** `0dce722` — short VFS root prefixes $(B)/ and $(S)/ @ vfs.go vfsSourcePrefix/vfsBuildPrefix; all emitted cmd_args/inputs/outputs/env; normalize.py  
+  Prefixes shrink from 14/15 chars to 5 chars, so every materialised path string and the on-disk graph JSON are smaller; normalize.py textually rewrites REF to the short form before json.loads.  
+  Эффект: M1 (tools/archiver) output 67.3 MB (ref 73.5 MB, -8.4%); M3 321.8 MB (ref 356.3 MB, -9.7%), ~30 MB less disk per M3 emit; gen wall flat (tools/archiver 0.62s, M3 4.3-4.4s)  
+  Заметки: Canonical SHA256 pins changed (b4d44009..., c735f577...).
+
+- **2026-05-13** `8334e2d` **[reverted]** — appendVFS writes prefix + rel inline into the JSON buffer @ gjson_write.go appendVFS/appendVFSSlice  
+  The serializer emits the $(S)/ or $(B)/ prefix and the escaped rel as two buffer appends, never materialising the concatenated VFS string per path.  
+  Заметки: d0b250f (2026-05-17) rewrote appendVFS as appendStringEscapedBody(buf, v.String()), reintroducing a string alloc per VFS; c7c0bbd PERF.md lists VFS.String allocations as 'the separate low-risk appendVFS fix' (not done in this slice).
+
+- **2026-05-13** `92b26b8` **[superseded]** — hand-rolled canonical writer instead of encoding/json reflection for node UID bytes @ uid.go canonicalNodeBytes / appendNodeCanonical (called per node from BufferedEmitter.Finalize)  
+  Replaces json.NewEncoder + reflection (VFS.MarshalJSON, json.Marshal, VFS.String) with direct appends reusing gjson_write primitives; sync.Pool of byte buffers amortises scratch.  
+  Эффект: pre-refactor mem profile: ~9.6M allocations (53% of one M3 gen) and ~10% CPU in encoding/json (3.15M VFS.MarshalJSON + 2.97M json.Marshal + 3.80M VFS.String); M3 gen 5.75s → 4.54s (-21%), tools/archiver gen 0.83s → 0.65s (-22%)  
+  Заметки: Superseded by binary positional format (96fd549). Internal UIDs changed; L4 preserved because normalize.py re-derives UIDs by topology.
+
+- **2026-05-13** `96fd549` — binary positional canonical form streamed into sha1 @ uid.go writeNode/nodeUID  
+  Drops JSON shape (keys, quotes, escaping) since the bytes only feed sha1: 1-byte presence tags, 4-byte LE length prefixes, fixed field order, VFS as root tag + rel, sorted count-prefixed maps; written straight into a pooled sha1.Hash with no []byte per node.  
+  Эффект: tools/archiver gen=0.64s, devtools/ymake/bin gen=4.51s — roughly flat vs canon-bytes-no-reflect; uid.go 333 → 195 lines  
+  Заметки: Binary format kept; the io.Writer/hash.Hash streaming and pool were replaced by d190aa5 (no pool) and 93f5b55 (concrete canonBuf + one sha1.Sum).
+
+- **2026-05-27** `b135a48` — Per-string xxh3-64 computed once at intern time; canon buffer writes the hash, not the path @ internTable.hashes (internString/internBytes first-sight miss); writeVFSSlice / node canonicalizer  
+  A VFS is written into the UID preimage as its precomputed 8-byte full-string hash instead of copying the variable-length path; content-stable across runs (hash of string body, not run-local id).  
+  Эффект: memmove was 7.7% of gen flat; per-input canon shrinks ~5x (8 bytes vs ~45); gen wall 2.11s -> 1.98s (-6%); RSS flat (+8B/string offset by smaller canon buffers).  
+
+- **2026-05-28** `1a24d5c` — per-STR cache of the JSON-escaped (quoted) VFS string @ gjson writer appendVFS / vfsEscapedJSON [][]byte indexed by VFS.strID()  
+  Each interned VFS string's pre-quoted, pre-escaped JSON form is computed once and stored in a strID-indexed slice; appendVFS copies the cached bytes instead of running the per-byte escape loop. The same ~30k interned strings were emitted ~1.3M times.  
+  Эффект: writeGraph profile: appendStringEscapedBody sat at 27% of CPU; sg5 gen 3.25s -> 2.18s (-33%; well below the 2.87s pre-OUTPUT_INCLUDES baseline)  
+  Заметки: Relies on the intern table being append-only (strID stable for the run); the slice grows to internBound() on the first miss past its length.
+
+- **2026-06-01** `2ab88bb` — compact graph JSON (no indentation/whitespace) @ gjson writer writeGraphCompact (was writeGraphIndented)  
+  The graph is only parsed, never read by humans, so newline + 4-space-per-level indent and post-colon spaces were dropped from every append* helper; for sg5 (~1.3M path emits) that was a large amount of bytes appended and written.  
+  Заметки: Output is re-serialized by dump-normalize, so the gate is unaffected.
+
+- **2026-06-01** `5dbfb98` — carry node uid as 128-bit {Hi,Lo} value, not a base64 string @ uid_type.go UID; Node.UID/SelfUID/Deps, Graph.Result, emitter id->uid arrays, executor  
+  xxh3.Hash128 already returns two uint64s; carrying them directly removes the per-node 22-char base64 string allocation and string compares. Base64 exists only at the JSON boundary (UID.appendB64 encodes into a stack array).  
+  Эффект: alloc 932MB -> 892MB (per-uid base64 string churn gone)  
+  Заметки: StreamingEmitter's empty-string 'unresolved' sentinel replaced by an explicit resolved[]bool (zero UID would be a bad sentinel). uid-keyed maps stay native map[UID]V (off the hot path). StatsUID stays an md5 hex string.
+
+- **2026-06-01** `e6b7bb9`, `23d8a61` — build python-repr / stats-uid preimage into reused byte buffers @ uid canonBuf.strBuf/strBuf2; appendPythonStringRepr, generic appendPyRepr[string|[]byte]; nodeStatsUID  
+  pythonStringListRepr built a fresh strings.Builder per call and statsUIDPreimage nested it 3 deep with string->[]byte conversion; now the preimage is appended into reused canonBuf buffers and md5 runs over the bytes directly.  
+  Эффект: e6b7bb9: ~44MB strings.Builder churn gone; 23d8a61: ~10.5MB churn, pythonStringListRepr/appendPyRepr churn gone  
+  Заметки: Each call copies results out via string(), so buffers may be overwritten by nested calls.
+
+- **2026-06-08** `454771c` — drop the ExtOut sort from the node-hash preimage @ writeKV (uid.go)  
+  A node's ExtOut is a fixed slice, so hashing it in slice order is already deterministic; the sort is kept only in the JSON writer (appendKV) for byte parity.  
+
+- **2026-06-08** `555a656` — omit $(S) inputs from the -G graph when not sandboxing, filtered while streaming @ writeGraphCompact/appendNode dropSrcInputs; appendBuildOnlyVFSSlice (gjson)  
+  Without --sandboxing the local executor reads sources from the checkout, so $(S)-rooted inputs are skipped straight into the output buffer; streaming, no graph copy, no extra allocation, smaller JSON.  
+  Заметки: Gate cases sg2/sg2_x86_64/sg3 switched to --sandboxing (223bd36) to keep listing $(S) inputs.
+
+- **2026-06-08** `c7e2f48`, `158328a` — remove the per-node stats_uid computation and the StatsTags subsystem @ uid.go nodeStatsUID/appendStatsPreimage/sortedStatsTags/sortedLongOutputs/appendPythonListRepr; Node.StatsTags; Platform.StatsTags  
+  stats_uid (an md5 over a python-repr preimage with sorted tags and long outputs, plus per-node copies of platform stats tags) was computed for every node; it is not gated, so the whole computation, the copied tag lists and the canonBuf scratch buffers are deleted.  
+  Заметки: stats_uid is discounted by dump normalize; md5/hex/sort imports dropped from uid.go.
+
+- **2026-06-08** `e992a1c` — hash interned tokens in the canonical uid preimage by their 8-byte xxh3 lo, not their bytes @ canonBuf.writeSTR; CmdArgs, Cwd, VFS inputs/outputs (uid.go)  
+  Each STR/ARG/ENV/TOK/VFS token writes internTable.los[id] (8 bytes, already computed at intern time) instead of materializing and copying its string; equal strings share a STR and thus a lo.  
+  Заметки: Changes uid values (gate recomputes content hashes from JSON). Extended to env (8e712bf), tags (6fba2af), ModuleTag (f6155e9), Stdout (f1b0f0c).
+
+- **2026-06-10** `162be10`, `2b67d8b` — hand-devirtualize FS.ContentHash in the uid input loop (writeVFSSliceOS) @ writeVFSSlice -> writeVFSSliceOS; contentHashSlow (uid.go, fs)  
+  An interface call per $(S) element forced a reload of the c.buf header around every append. One *osFS type assert per slice, a loop over hoisted locals (buf, los, contentHashes) with ContentHash's array probe inlined, and a cold contentHashSlow (lazy read, may grow the array) after which locals are re-hoisted.  
+  Эффект: 10x sg5: the writeVFSSlice cluster 840 -> 440 ms cum, total samples 8320 -> 8130, warm user ~0.58 -> ~0.57 s.  
+  Заметки: PERF.md item 14. Byte output identical; uids and user caches unaffected.
+
+- **2026-06-10** `162be10`, `2b67d8b` **[rejected-by-measurement]** — generic canonWriter[F FS] to devirtualize ContentHash @ uid canon writer  
+  Tried first: Go gcshape stenciling compiles all pointer type args into one instantiation with dictionary-routed calls (verified CALL R9 in the shape body), so generics do not devirtualize.  
+  Заметки: Rejected by disasm inspection; replaced by the hand-devirtualized writeVFSSliceOS.
+
+- **2026-06-10** `f270f98` — canonBuf integer appends spelled out as inline byte stores @ canonBuf.writeUint32/writeUint64 (uid.go)  
+  PutUint64 into a stack array plus append(b[:]...) paid a runtime memmove call per 8 bytes on the innermost uid op; spelled-out byte appends compile to inline stores. Byte sequence identical so uids and user caches are unaffected.  
+  Эффект: 10x sg5: writeUint64 310 -> 190 ms, writeVFSSlice cum 880 -> 670 ms, warm user 0.71 -> 0.69 s.  
+  Заметки: PERF.md item 7.
+
+- **2026-06-10** `f270f98` **[rejected-by-measurement]** — AoS merge of {los, contentHash} arrays @ internTable.los + contentHashes used by writeVFSSlice  
+  Proposed to put both lookups in one cache line. Rejected on analysis: the two loads are independent off one index (OoO overlaps the misses already) and an AoS would double the stride of los for its majority readers (intern verify, every writeSTR) to benefit only $(S)-input elements.  
+  Заметки: Rejected by analysis (PERF.md item 7), not by an A/B run.
+
+- **2026-06-11** `f1b0f0c` — canon-encode Cmd.Stdout as its intern lo hash @ writeCmdSlice (uid.go)  
+  Stdout was materialized as a string view only to feed bytes into the canonical buffer; writeSTR encodes the STR as its 8-byte xxh3 lo.  
+  Эффект: 26,585 views on sg5, #6 in the --probe=str table  
+  Заметки: Parity with old encoding not required: canon hash only feeds self_uid, which the gate recomputes.
+
+- **2026-06-23** `8436081` — CanonBuf transient parameter-object over reusable uid buffer @ emitter.go / uid.go CanonBuf.calcUID  
+  The emitter owns fs/uids/fetchRefs plus one reusable uidBuf; CanonBuf{...} is built per UID call with bufStore *[]byte pointing at that buffer, seeding from and writing back to it, replacing a long-lived uidScratch that duplicated fields.  
+  Эффект: buffer reuse preserved (sg5 gen 6.1s, budget 8.8s)  
+  Заметки: Refactor that keeps the canonical-buffer reuse lever intact.
+
+- **2026-06-24** `9ad5069`, `0e1dfdf` — drop requirements and kv from the node content hash @ uid.go writeNode (writeRequirements, writeKV deleted)  
+  Fewer fields serialized into the canonical uid buffer per node: requirements (scheduling hint) and kv (metadata never in upstream self_uid) no longer hashed.  
+  Заметки: Motive is semantic parity with upstream ComputeSelfUID, not speed; normalization recomputes self_uid independently. TestCanonicalNodeBytes_VsDefaultJSONMarshal dropped since CanonBuf is a binary interned-id buffer that never touches encoding/json.
+
+- **2026-07-06** `80cb14d` — multiset fold of uid inputs instead of sorting @ executor writeVFSChunks / uid canonicalization  
+  Inputs fold into symmetric 64-bit accumulators over e = lo (^ contentHash for sources): sum, xor, sum of squares plus element count — order-invariant like sorting, no per-node keyed scratch allocation.  
+  Эффект: no-op ay make for search/daemons/basesearch: wall 7.9s -> 4.5s (vs 4.35s graph-only), user 5.5 -> 2.7, sys 4.5 -> 2.0 with the graveyard fix combined  
+  Заметки: Sorting was '1.3-2s CPU per no-op basesearch make (40% of executor CPU)'. One-time full cache invalidation. Third moment added in d3235d9; AVX2 accumulator in 35f68f9.
+
+- **2026-07-06** `de78080` **[superseded]** — sort uid inputs by intern lo hash @ uidizer / CanonBuf  
+  Inputs are collected and sorted by their intern lo hash (the value the canon buffer writes anyway) before hashing so UIDs are input-order independent despite closure caching.  
+  Заметки: Sorting cost 1.3-2s CPU per no-op basesearch make; replaced by the multiset fold in 80cb14d.
+
+- **2026-07-08** `b713122`, `2e1df39` — stream cwd/args as VFS through the JSON writer @ JSON cwd rendering, RUN_PROGRAM/RUN_PYTHON3 args, intern('$(S)/...') literals  
+  Cwd rendered via appendVFS with the escaped cache instead of string concatenation per node; RUN arg loops carry the VFS tag instead of re-interning vfs.string() full forms; 195 literal intern('$(S)/...') sites become source()/build().  
+
+
+### GC и runtime (6)
+
+- **2026-06-09** `7f41738`, `1b14da9` — disable GC for generate-only (-j 0) runs @ make.go GC setup for -j 0  
+  A -j 0 run emits the graph and exits, so collection only costs CPU; GC is switched off for the short-lived process. An explicit GOGC env var wins.  
+  Эффект: on sg5, GC off cuts gen user time ~19% (0.95->0.77 s) for a peak-RSS rise of 496->681 MB  
+  Заметки: PERF.md item 2. Not applied to builds with executor threads (long-lived, shares RAM with compilers).
+
+- **2026-06-10** `c1a1784`, `1b14da9` — GOGC=400 for builds (-j > 0) @ executorGCPercent (make.go)  
+  A GOGC scan 100..800/off on sg5 plateaued near the GC-off gen user time from 400 up; 400 keeps near-full gen speed while still bounding the heap of the long-lived build process.  
+  Эффект: The sg5 GOGC scan (100..800, off) plateaus at ~the GC-off gen user time from 400 up — the 400..800 spread (0.83-0.90 s user, 547-680 MB peak) is the phase of the last mark cycle, not a trend. 400 keeps near-full gen speed (1.07 -> 0.83 s user vs the default)  
+  Заметки: Explicit GOGC env var still wins.
+
+- **2026-06-22** `dda7168` **[superseded]** — GOGC=800 per heavy ay command in the gate @ dev/validate.py (gen/normalize/sort/diff commands)  
+  Raises GOGC for the heavy gate subprocesses only (not process-wide), trading RSS for fewer GC cycles and less core contention when several big nodes run concurrently; build/cmp never inherit it.  
+  Эффект: gen / normalize / sort / diff spend ~half their CPU on GC at the default GOGC=100; 800 roughly halves it for ~1.5GB RSS  
+  Заметки: Dropped by 4b4da45: with normalize holding one parsed graph, the override was unnecessary and RSS fell 43 -> 15.7 GB at the default GC with no wall-time penalty.
+
+- **2026-07-08** `9f626bb` **[superseded]** — pool hygiene: scrub pointer-bearing scratch tails @ pooled scratches (pass2 closures, ResourceItem, ProducerPos, sbomOrder, frame peers, parser cond scratches); partitionCollected writeback; 'ay dev refac reset' codegen  
+  [:0] reslicing keeps cap-tail pointees reachable for the GC; pointer-bearing pooled scratches reset via scrub() = clear(s[:cap]) + [:0]. Also fixes partitionCollected never writing its presized backing back, so the pool never warmed up.  
+  Заметки: Refined to clear only live/dirty prefixes in 396d955/4b04e1d/dbc9706.
+
+- **2026-07-11** `396d955`, `4b04e1d`, `dbc9706` — clear only live/dirty prefixes of pooled scratch @ scrub/scrubCap/retainMaxLen; ModuleData reset (modules_reset_gen.go); EmitContext scratch  
+  scrub() clears only s[:len] for ModuleData reuse; pooled emit scratches record their high-water length (retainMaxLen) so the next reset clears just the dirty prefix instead of clear(s[:cap]) on every module.  
+  Заметки: Refines 9f626bb full-capacity scrubbing (needed so stale pointers are not retained by the GC).
+
+- **2026-07-11** `d1fecff` — leave GC policy to the runtime @ cmdMake (debug.SetGCPercent), executorGCPercent  
+  Removed SetGCPercent(-1) for graph-only (-j0) runs and GOGC=400 for executor runs when GOGC was unset; Go's default policy applies.  
+  Заметки: Earlier memory measurements in this slice were taken with GC off under -j0 (d15848a, ff1355f, c6817c7, 5e86684). dev/perf.py sets GOGC=off in its child env by default. No SetGCPercent at HEAD.
+
+
+### Executor (14)
+
+- **2026-05-13** `0df8378` **[superseded]** — auto-fire node futures at onNode registration @ make.go executor.onNode  
+  Each node's runner goroutine is spawned as soon as it is registered (deps already registered under dep-first order), so leaf compiles start during Gen instead of after the whole graph is emitted.  
+  Заметки: Superseded by StreamingEmitter (f997650), which dropped the autoFire flag.
+
+- **2026-05-13** `a8998a7` **[superseded]** — in-process streaming Gen→Exec (no JSON round-trip, no []Node materialisation) @ make.go cmdMake/executor, emitter.go FinalizeStream, gen.go runGenInto  
+  `yatool make` runs the executor directly over typed *Node values yielded in dep-first topological order from finalisation, instead of writing and re-reading a JSON graph; per-UID nodeFuture (sync.Once) with a chan semaphore bounds parallelism.  
+  Эффект: yatool make --jobs 0 tools/archiver streams 674 node(s)  
+  Заметки: Execution start moved to onNode in 0df8378, then to inline finalisation in f997650.
+
+- **2026-05-13** `f997650` — StreamingEmitter: finalise UID inline at Emit time @ make.go/emitter.go StreamingEmitter, resolveAndUID  
+  Under post-order DFS all deps already have UIDs at Emit, so each node is resolved, hashed and handed to the executor immediately; nodes that might be mutated by post-emit ADDINCL patches (or depend on pending ones) are held in a pending pool drained at Finish.  
+  Эффект: Leaf compiles start within ~40 ms of Gen start instead of after Gen completes (~4.3 s on M3); M2 first node +41 ms / last +325 ms; M3 first node +45 ms / last +4.04 s; M3 gen wall 4.33 s  
+  Заметки: 000927e/9d71ba1 (2026-05-14) deleted the umbrella/back-peer post-emit patches, so mightNeedAddInclPatch → false and the hold predicate was removed; the pending pool remains only as an out-of-order-DepRef safety net.
+
+- **2026-05-31** `c54ed39` — dedup streamed nodes by uid in the executor @ make.go executor onNode  
+  The generator can stream the same node (identical uid) more than once; the first emit of a uid owns the future and later duplicates are ignored instead of each spawning a goroutine executing tmp/<uid>.  
+  Заметки: Motive was correctness (two goroutines on the same tmp/<uid>, one's forceRemoveAll wiped the other's output); also avoids duplicate execution.
+
+- **2026-06-09** `b0622d8` — discard node workspaces by O(1) rename into a garbage dir with a background collector @ executor grbDir: discard / removeContents / startGarbageCollector  
+  Per-node workspace cleanup renames the doomed path into grb/ (O(1), survives write-less trees) and a 1s background collector does the real delete, keeping deletion off the node's critical path.  
+  Заметки: Rename targets use rand.Uint64() to avoid collisions with neighbour processes. Builds on 5f8e6c6 (flock the workspace dir instead of removing it).
+
+- **2026-06-09** `c35e777` — shard cas/ and uid/ directories; manifest stores bare content hash @ executor CAS layout cas/<hh>/<hash>, uid/<u>/<uid>; casPathForHash  
+  Sharding by hash prefix keeps the per-directory entry count down on large builds; restore rebuilds the CAS path from the bare hash.  
+  Заметки: On-disk layout change, no migration.
+
+- **2026-06-17** `3559a45`, `8531650` — Sandbox OAuth token resolved once, lazily (sync.Once), only for sbr: FETCH nodes @ executor (FETCH nodes, KV.P == pkFETCH with sbr: URI); cmdMake  
+  3559a45 resolved the token once in cmdMake and exported YA_TOKEN so the many `ay fetch` children inherit it - a single SSH-agent exchange instead of one per fetch. 8531650 moved it into the executor behind sync.Once: concurrent fetch nodes share one resolution, graphs without an sbr: fetch never touch the agent, -j0 never runs it.  
+  Заметки: Cost avoided is SSH-agent/OAuth round trips (Secure-Enclave touch), not graph CPU. executor.go tokenOnce sync.Once in HEAD.
+
+- **2026-06-22** `352ff82` — hard-link CAS inputs instead of symlinking @ executor.go input materialization  
+  Node inputs are hard-linked from the flat CAS (copy fallback on cross-device) instead of symlinked; unifies the former resources-only hard-link path with the default for every non-symlink output.  
+  Эффект: hard link ~10.1us/op, symlink ~10.7us/op, copy ~28us/op  
+  Заметки: Primary motive is correctness (tarfile recorded absolute CAS symlink linkname, breaking merge_protosrc.py); the switch is also faster.
+
+- **2026-06-22** `8bac9f1` — --clear via O(1) renames into grb @ make.go / executor.go --clear  
+  --clear moves cas/tmp/uid into the grb directory with renames at startup and lets the background collector delete them, giving a fresh cache without a slow synchronous rm -rf.  
+
+- **2026-06-24** `bba87f4` — grb collector rm -rf's whole dir; discard retries rename @ executor.go garbage collector / discard()  
+  The collector goroutine blindly runs `rm -rf grb` (subprocess) once per second instead of ReadDir + per-entry removal; discard() recreates grbDir and retries the rename until it lands, so no shared lock is needed.  
+
+- **2026-07-03** `4858ed9` — UID materialization moved from graph construction to executor @ Node.UID/SelfUID removed; NodeFuture.uid; CanonBuf; StreamingEmitter  
+  Graph construction only assigns NodeRefs; the Merkle UID (xxh3 over content + dep UIDs + source content hashes) is computed lazily per NodeFuture at execution time; -G dumps refer to nodes by NodeRef; no construction-time dedup (dedup moved to dump normalize).  
+  Заметки: UidVec replaced by a generic paged lock-free PageVec[*NodeFuture]. Enabled concurrent uidization (9d4efbc) and later single-thread pipelining (35f68f9).
+
+- **2026-07-06** `be086dd` — symlink from CAS when hardlink fails (EXDEV) @ restoreManifest  
+  Cross-filesystem installs used to copy the artifact on os.Link EXDEV failure; a symlink to the absolute CAS path is used instead.  
+  Эффект: a no-op ay make re-copied the 1.3 GB basesearch binary from CAS on every run (7.6s of copy_file_range in the no-op CPU profile)  
+  Заметки: Install-root semantics revisited in dfdcf85 (dep restore hard-links, --install symlinks).
+
+- **2026-07-07** `35f68f9` — uidization pipelined on the event loop; goroutine only on cache miss @ Executor onNode / event loop / run(roots)  
+  A single event-loop thread walks nodes in deps-first emission order, materializes uids on a persistent CanonBuf and checks the cache; execution goroutines spawn only on a miss, so a warm no-op build runs none; pending counter grows at uidization pace.  
+  Эффект: devtools/ya/bin warm no-op: uid tail after generation ~50ms, run(roots) ~4us; futex 0.79s->0.43s, memclr 0.76s->0.24s per 10 runs  
+  Заметки: contentHash devirtualized (direct *OsFS table); mutex around localHash removed since uidization is single-threaded.
+
+- **2026-07-07** `a7655de`, `519ceaa` — batched prepare posts (ramped batch size) @ Executor onNode -> event loop  
+  Every onNode post woke the parked consumer (futex per node); futures are batched per post (64, then a threshold that starts at 1 and doubles per flush up to 128 so UID work starts with the first node).  
+  Эффект: devtools/ya/bin warm no-op, min of 10: full 0.81s vs -j0 0.76s (delta 0.25s -> 0.05s since the uidization move), sys 0.26s vs 0.25s  
+  Заметки: Effect stated together with the (later dropped) persistent source-hash cache.
+
+
+### Нормализатор и гейт (22)
+
+- **2026-05-11** `49b79e0`, `695c998` — Python stdlib bidirectional normalize.py replaces the Go normalize subcommand @ normalize.py (Go normalize.go deleted)  
+  Both our output and the reference go through one canonical pipeline (subgraph extraction, field strips, sorting, sha256 re-UID, DFS preorder).  
+  Эффект: Go normalize --target tools/archiver ran in 0.49s; normalize.py wall ~1.2s on 73 MB sg.json; gen wall 0.87s  
+  Заметки: Not perf-motivated (chosen for bidirectional canonicalization); recorded as the tooling-speed baseline.
+
+- **2026-05-22** `646a033` — Streaming exact-match parity counter in validate.py @ dev/validate.py  
+  Counts exact normalized-node matches (multiset, duplicate-line aware) by streaming over the two sorted JSONL files instead of ad hoc shell pipelines / whole-file loads.  
+
+- **2026-05-22** `6d8635f` **[superseded]** — JSONL normalized output (one node per line) for streaming consumers @ dev/normalize.py, dev/validate.py, gen_<graph>.sh  
+  normalize.py emits canonical JSONL sorted by uid (node bodies only) instead of one JSON object, so consumers stream node by node; packed xz refs and in-process compare mode removed.  
+  Заметки: Python normalizer replaced by the streaming Go `ay dump normalize` (89d4d6c) and deleted in 966c6bd.
+
+- **2026-05-22** `89af080` — Streaming dump diff holding only compact indexes @ dump diff (cmdDumpDiff)  
+  Single-pass streaming compare of two canonical JSONL graphs; only compact indexes (self_uids, outputs -> producer sets) are held, not node bodies.  
+  Заметки: Also defines self_uid as the intrinsic content hash vs uid as the Merkle hash.
+
+- **2026-05-22** `89d4d6c` — Streaming two-pass Go normalizer (`ay dump normalize`) @ dump_normalize.go cmdDumpNormalize; validate.py  
+  Pass 1 streams every node (Decoder) and keeps only metadata (uid->content hash, uid->deps, FETCH set, roots); between passes BFS the target closure and bottom-up Merkle re-uid; pass 2 re-streams and emits one canonical line per node. Parsing and node processing run in two goroutines over a channel. Output unsorted.  
+  Эффект: ~1.4x slower wall than normalize.py (two passes + Go encoding/json) but ~10-100x less memory: sg5 105 MB vs ~11 GB, sg2 39 MB vs 1.46 GB.  
+  Заметки: Motive was memory: the 11 GB load got OOM-killed under concurrent load; normalizations can now run in parallel.
+
+- **2026-05-22** `89d4d6c` — External merge sort (`ay dump sort`) @ dump_sort.go  
+  Sort fixed-size chunks in memory, spill, k-way heap merge; bytewise LC_ALL=C order; bounded memory regardless of graph size.  
+  Заметки: validate.py pipes `ay dump normalize | ay dump sort`.
+
+- **2026-05-22** `f13fa7b` — Fan-out node processing to 4 workers @ dump.go streamGraphFanout  
+  One decoder feeds N workers that canonicalize/hash (pass 1) or marshal lines (pass 2) in parallel; a single collector merges maps / writes output (order-independent, sorted downstream).  
+  Эффект: sg5 normalize ~17.6s->16.4s; 24 workers and 4 workers both land at ~16s (24 burns more CPU on GC contention); fixed at 4.  
+  Заметки: Gain saturates: decode is serial (one streaming decoder) and the heap is shared. Profile before: canonContent ~28%, GC ~31%.
+
+- **2026-05-22** `f349bba` — Substring gate before the versioned-resource regex @ dump normalize normPath / versionedResourceRe  
+  Run the regex only when the string actually contains "$(CLANG-" / "$(LLD_ROOT-" / "$(YMAKE_PYTHON3-"; nearly all strings are plain $(B)/$(S) paths, so the regex engine is skipped.  
+  Эффект: Profile before: ~11% in the versioned-resource regex. Combined with goccy: sg5 normalize 35s->17.6s, sg2 6.2s->2.9s.  
+
+- **2026-05-22** `f349bba` — goccy/go-json drop-in for encoding/json in the dump streaming path @ dump.go streaming decode/encode  
+  goccy/go-json aliased as json (Delim/Token/RawMessage are encoding/json aliases, sorts map keys on marshal so output stays deterministic); ~2-3x faster decode/encode.  
+  Эффект: Profile before: ~38% in encoding/json decode. Combined with regex gate: sg5 normalize 35s->17.6s, sg2 6.2s->2.9s; faster than normalize.py (26s / 3.5s) and ~27x lighter (411 MB vs ~11 GB).  
+  Заметки: Remaining hotspots named: GC ~33% (map[string]any + goccy buffers) and canonContent sorting. Briefly replaced by encoding/json in b854dd5/bee8428 (misdiagnosed crash) and restored by 6e612b2. Still in go.mod at HEAD.
+
+- **2026-05-24** `5549492`, `c755769`, `b02cbdf`, `22162ef` — Normalizer canonicalizes AR/LD inputs to objects/archives/own scripts (enabler) @ dump normalize canonContent: dropHeaderInputs -> filterARLDInputs (node-type-aware keep set)  
+  Applied to both graphs: AR keeps .o/.a/.pyplugin + link_lib.py, LD keeps .o/.a/.pyplugin/.exports + its own link scripts; member source/header closures and transitive codegen wrapper scripts are dropped. This made emitting the member closures on our side dead work.  
+  Эффект: sg5 matched 14155 -> 14157; one LD node was 1171 headers out of 1300 inputs (90%); 58-72% of AR/LD inputs were the members' transitive source+header closure.  
+  Заметки: Modelling decision that unlocked 0e3bbb1/a0d9a5c/ff97288/015667a/36d8409.
+
+- **2026-05-25** `370344d` — Host-wide flock serializing validate.py runs @ dev/validate.py main() (~/.cache/ay/validate.lock)  
+  Exclusive fcntl.flock before any work so memory-heavy `ay make` + normalize runs (sg5 raw ~2.2 GB) from concurrent worktrees queue instead of exhausting RAM; flock auto-releases on exit/crash/SIGKILL.  
+  Заметки: Root cause of the 'goccy crash' misdiagnosis (5f6001c/c3aa627). Also keeps timing measurements unperturbed by parallel runs.
+
+- **2026-05-25** `6e612b2` — Restore goccy/go-json in the dump path (OOM was the real cause) @ dump.go decode+encode, go.mod  
+  Restores the faster goccy decode/encode; diagnosis via klog showed oom_kill_process with 4 concurrent ay pids and an 11 GB python3.  
+  Эффект: goccy ~2-3x faster decode; validate.py normalizes the full 2.2 GB sg5 raw graph via goccy in a single run.  
+  Заметки: Lesson: on unexpected death check klog for OOM before blaming the library (codified in fd946b2).
+
+- **2026-05-25** `966c6bd` — Delete the Python normalizer fallback @ dev/normalize.py, dev/validate.py normalize_pair  
+  Removes the fallback that spawned the heaviest process on the box (~11 GB python3); a failed `ay dump normalize` is now a hard failure.  
+  Заметки: Fallback had been added by 5f6001c (=22b9c2e) to 'survive normalize crashes' that were really OOM.
+
+- **2026-05-25** `b854dd5`, `bee8428` **[reverted]** — Switch dump JSON decode/encode from goccy to encoding/json @ dump.go, dump_grep.go, go.mod  
+  Moved raw-graph decode (b854dd5) and then encode too (bee8428) to encoding/json and dropped the goccy dependency, on the premise that goccy's stream decoder corrupted the heap on large sg5 inputs.  
+  Заметки: Reverted by 6e612b2 (pre-rebase hashes ddb18f1/c3aa627): klog showed the crashes were OOM kills from parallel ay/python3 processes, not goccy; encoding/json allocates more for map[string]any, so the switch only made the dump path slower and heavier.
+
+- **2026-06-18** `a59350e`, `68007c0` **[superseded]** — drop validate.py cross-worktree flock (parallel gate runs) @ dev/validate.py acquire_global_lock / LOCK_PATH_CANDIDATES  
+  Concurrent validate.py runs across worktrees proceed in parallel instead of serializing; they may contend for RAM on the multi-GB graphs.  
+  Заметки: The flock was added in 370344d (2026-05-25) 'to stop parallel OOM'; 68007c0 had just added a /var/tmp lock path. Later gate runs are serialized again under ay-gate.lock (outside slice).
+
+- **2026-06-18** `ee3046a`, `7a3cb0c`, `3d7de50`, `5863d21` — acceptance gate runs OLD and NEW validate.py concurrently @ acceptance script (merge gate comparing validate.py metrics across two repos)  
+  OLD and NEW validate.py runs execute in two threads with line-atomic logging, each with its own watchdog; each frees its multi-GB out-dir as soon as its text is captured. Peak disk is both repos at once.  
+  Эффект: sg7 generation dominates a validate.py run (~200s); ~2x wall-time win; two 2s stub runs finish in ~2.4s wall (not ~4s)  
+  Заметки: Per-run timeout 600s (7a3cb0c) -> 1200s (3d7de50) -> 2400s (5863d21).
+
+- **2026-06-22** `1924fd7` — gate as a parallel DAG of program nodes @ dev/validate.py  
+  Every program invocation is a DAG node with explicit input/output files; a bounded micro-executor (VALIDATE_JOBS, default min(cpu,6)) joins nodes on files and runs independent ones concurrently. normalize|sort pipe split into file-joined nodes (unsorted intermediate deleted after sort); ref normalize depends only on binary + ref json so it overlaps the generator; cross-case and our/ref work overlap, wall time = critical path.  
+  Эффект: full gate ~406s -> ~172s (2.4x), output contract and exit code unchanged (sg2..sg7 OK, byte-exact)  
+  Заметки: No caching (no hashes, no timestamps, every node always runs). The min(cpu,6) job cap was removed by e70933e.
+
+- **2026-06-22** `3d9cae5` — typed struct decode of raw graph nodes @ dump.go streamGraphFanout / rawNode; dump_normalize.go normSortedStrings/normStringsKeepOrder  
+  Raw nodes decode into a rawNode struct instead of map[string]any: deps/inputs/outputs/platform/uid decode straight to Go types, skipping per-element interface boxing and the toStrings copy; cmds/env/kv/requirements/target_properties stay `any` so canonContent sees the identical value tree.  
+  Эффект: normalize CPU 15.36s -> 8.80s and wall 3.86s -> 2.39s (-38%) on sg2  
+  Заметки: Keeping those fields `any` preserves orVal's `v == nil` substitution (a typed-nil map wrapped in any is != nil and would emit null instead of {}). sg2 sorted output cmp-identical in our and --ref-graph modes.
+
+- **2026-06-23** `692d6b7` — dedupe gate fetch nodes by resource id @ dev/validate.py fetch nodes  
+  A slice/graph shared by several cases is fetched and unpacked once instead of concurrently racing into one dir; dest dir cleaned before extract.  
+  Заметки: Motive is also a race fix.
+
+- **2026-06-23** `e70933e` — uncap validate.py job parallelism @ dev/validate.py VALIDATE_JOBS  
+  Removed the jobs=6 cap; default concurrency is the cpu count.  
+  Заметки: RAM-contention/OOM prose dropped: box has ample RAM and gate stays green at full parallelism.
+
+- **2026-06-24** `9a9a7c9` — --warm cache prefetch and shared cache dir @ dev/validate.py --warm, --cache, AY_VALIDATE_CACHE_DIR  
+  Builds ay then downloads+unpacks every slice/graph resource into a shared cache (deduped by resource id, idempotent via .ready markers) so a swarm of agents shares one fetch; per-case filter.  
+  Заметки: Cache introduced by 68b1e51 (config-driven gate caching fetched resources under .out/acceptance/cache).
+
+- **2026-06-25** `4b4da45` — parse graph once into memory for normalize @ dump.go loadGraph / sliceFanout; dump_normalize.go  
+  dump normalize re-decoded the full input graph three times (hash/roots, dep-strip, emit); it now parses once into []*rawNode and fans the three passes over the in-memory slice, so the 24-worker passes skip JSON parsing. --streaming keeps the old re-parse-per-pass mode for low memory.  
+  Эффект: norm-ref on bs_static (5.4GB/73k nodes): 75.6s -> 33.8s (2.2x), sorted output byte-identical; validate.py drops GOGC=800, RSS falls 43 -> 15.7 GB at the default GC with no wall-time penalty  
+  Заметки: Supersedes dda7168 GOGC override (one held graph instead of three transient re-parses).
+
+
+### Измерения и методология (53)
+
+- **2026-05-08** `07817cb`, `766aa55`, `75a63bc`, `725efbd`, `af43a2f`, `a93e0d3`, `5457e60` — alloc profiling, MemStats and cache hit/miss instrumentation @ scanner.go / sysincl.go perf work  
+  Levers were chosen from pprof flat-alloc attribution and validated with TotalAlloc/mallocs/peak RSS and per-cache hit/miss/tainted counters.  
+  Эффект: WalkClosure 1.94 GB flat alloc (07817cb); TotalAlloc 515MB -> 360MB, mallocs 2.29M -> 1.81M (766aa55); subgraph hits/misses/tainted 10713/1553/80 (75a63bc); 80.88% includer-filter hit rate (725efbd); subgraph() ~102 MB + 31 MB (a93e0d3); sameDirAbs ~390 MB (5457e60); 1.67M subgraph probes/run (5457e60)  
+  Заметки: Lesson from af43a2f: the brief claimed sysinclSourceCache saw 579 misses, instrumentation showed ~328k; instrument before sizing.
+
+- **2026-05-08** `9f3d666`, `84de005`, `5eea2bf`, `bf3a926`, `5094710`, `abd402c`, `a93e0d3` — hard wall-time gates: gen <= 5s, plus ~1s soft / perf-agent threshold on tools/archiver @ GOALS.md / tasks.md acceptance; gen tools/archiver and devtools/ymake/bin  
+  A user-imposed hard perf gate (PR-34 emergency) took priority over parity work; GOALS.md fixes gen <= 5s warm-cache as a hard gate; M3 keeps <= 5s despite x2.35 node growth; a ~1s soft threshold on tools/archiver is the perf-agent trigger.  
+  Эффект: PR-34 emergency: gen tools/archiver MUST be <=5s (currently 28s); M2 closed at gen wall 0.97s; M3 perf-A target <= 4.5 s; PR-M3-F-2 measured 5.34-5.42s within 5.5s hard gate (baseline 5.0-5.2s system variation)  
+
+- **2026-05-08** `af43a2f`, `5457e60`, `fe4e728`, `b8f9d1c` — timing methodology: CPU pinning, real/user split, median-of-N, interleaved bake-offs @ perf PR verification  
+  Progression from 3-run warm averages to taskset -c 0 pinned runs reporting real and user separately (af43a2f), 5-run means (b8f9d1c), median of 15 runs with /usr/bin/time (5457e60), and interleaved 10-run A/B bake-offs with median/min/max behind a CLI mode flag (fe4e728).  
+  Эффект: same code measured 4.37 s median (5457e60, 15 runs) and 5.02 s median (fe4e728 baseline, 10 interleaved runs)  
+  Заметки: Cross-session numbers drift; only interleaved runs within one session compare.
+
+- **2026-05-08** `b64c10a`, `d880db3`, `07817cb`, `7909c61`, `725efbd`, `766aa55`, `d768ff3`, `af43a2f`, `75a63bc`, `698d68d` — per-PR >=5% lift gate, 3-run warm average, sha256 byte-exact invariant @ PR-34 perf series on tools/archiver  
+  Each perf PR had to show >=5% wall lift (3-run warm avg of time ./yatool gen) with identical output sha256 and unchanged L0-L3; modelling PRs carried a +5% regression budget (698d68d exceeded it at +7.5% with justification).  
+  Эффект: e.g. 7909c61 5.42% lift (>=5% gate met); 725efbd 9.97%; 75a63bc 27.1%  
+  Заметки: PR-34 levers were measured on different bases (parallel worktrees): 34a/34d/34e on ~12-28s bases, 34j onward on ~1-2s bases.
+
+- **2026-05-12** `9196ef1`, `c7cb2ee`, `26469b9`, `d06268c`, `bb1b64d`, `4e1863d`, `c7787bb`, `84adf96`, `88b89e5`, `091fbb7`, `3f92602` — per-PR wall-time gate on graph generation @ commit verification recipe / GOALS.md acceptance bar  
+  Every parity PR re-times `yatool gen --target tools/archiver` (later also devtools/ymake/bin) against a hard 5 s gate and a <1 s perf-agent threshold, so perf regressions are caught per commit. 3f92602 redefined the gate as `time ./yatool make -j 0 -G <target>` warm-cache 3-run avg when `gen` was removed.  
+  Эффект: tools/archiver gen wall 0.63s (9196ef1), 0.7s (c7cb2ee), 0.70s (26469b9), 0.68s (d06268c, 84adf96), 0.6s (bb1b64d), 0.69 s (4e1863d), 0.67s (c7787bb), ≈0.7s (88b89e5); M3 wall time 5.3s (84adf96); Perf: M2 0.70s, M3 4.65s (091fbb7)  
+  Заметки: Gate thresholds: ≤5 s hard gate, <1 s perf-agent threshold for tools/archiver. GOALS.md text (3f92602 diff) also records earlier history outside this slice: PR-34a/b/d-r 28s→0.85s via heap topo + memo-key minimisation + scanner optimisations; sysinclLookup-before-gate cost 0.85→0.87s.
+
+- **2026-05-13** `30edeb9` **[superseded]** — -cpuprofile / -memprofile / -profile-rate flags on `yatool gen` @ main.go cmdGen  
+  Exposes Go pprof CPU profile over the Gen call (sampling rate default 1000 Hz) and a heap profile written after a forced runtime.GC() so it reflects retained, not in-flight, allocations. Off by default, zero overhead.  
+  Заметки: Flags disappeared with the standalone gen command in 3f92602 (2026-05-16); replaced by env-driven YATOOL_CPUPROFILE / YATOOL_MEMPROFILE in cmdMake (2a2e4d4).
+
+- **2026-05-13** `f55dd00` **[superseded]** — --out optional + --time split of build vs serialise wall @ main.go cmdGen  
+  Omitting --out skips JSON serialisation so graph-build time can be measured in isolation; --time prints gen= / serialise= / total= to stderr, isolating the serializer as its own optimisation surface.  
+  Эффект: M3 (devtools/ymake/bin, 8750 nodes): graph build ~4.5 s, JSON serialise ~400 ms (~8% of the run-with-output total)  
+  Заметки: --time removed together with the gen command in 3f92602.
+
+- **2026-05-17** `2a2e4d4` — env-driven pprof in `make` + PLAN_1..6 profiling plans @ main.go startProfilesFromEnv, make.go cmdMake; PLAN_1.md..PLAN_6.md  
+  YATOOL_CPUPROFILE starts a CPU profile for the whole cmdMake; YATOOL_MEMPROFILE writes a heap profile after runtime.GC(). Six plan docs record the sg3 (devtools/ya/bin) profile and propose levers.  
+  Эффект: Baseline profile (PLAN_1): maps.ctrlGroup.matchH2 21.21%, aeshashbody 12.82%, runtime.mapaccess2_faststr 25.99% cum, eq.resolveInnerKey 4.16%, eq.sysinclIncluderKey 3.75%; PLAN_3: scanCtx.subgraph 435.93 MB flat / 1237.99 MB cum, WalkClosure 1730.44 MB cum; PLAN_4: resolveSearchPath 6.60s cum CPU, 587 MB cum alloc, fileExistsByRel 1.87s cum; PLAN_5: walkPeersForGlobalAddIncl 4.50s cum CPU, 387 MB; PLAN_6: sg3 JSON 460 MB, max RSS 1.46 GB, writeGraph 0.85s  
+  Заметки: Env profiling hooks kept. PLAN_1 implemented in d253495, PLAN_2 in 22d9216; PLAN_3 (subgraph-cache admission policy: cache small, skip large first-seen), PLAN_4 (typed include prefixes in resolveSearchPath), PLAN_5 (memoise peer-global ADDINCL on moduleEmitResult), PLAN_6 (stream graph JSON for -j 0 -G) were proposals; PLAN files deleted in 0882e5f (2026-05-17).
+
+- **2026-05-18** `85ba737` — YATOOL_PERF_STATS final counter summary @ gen.go reportPerfStats / perfScanCtxStats, parser_manager.go, scanner.go  
+  Env-gated stderr summary per run: scanCtx allocs/peak/interned count, parser parsed/exists hits+misses and buildParsed, per-scanner (target/host) walkClosure/dfs/plainDfs, subgraph hits/misses/tainted, resolve calls/hits/misses, sysincl source/includer hits/misses, and live cache entry counts — makes runs comparable without pprof.  
+  Заметки: Plain integer counters (generation is single-goroutine); stdout graph unaffected. 0905817 added searchTierHits/Misses/Entries.
+
+- **2026-05-18** `a4c04a1` — 2x graph-gen speedup plan with baseline profile + counters @ docs/drafts/20260518-1500-graph-gen-2x.md  
+  Planning doc: CPU/alloc profile and cache counters of `make -G -j0`, then initiatives: resolve-cache re-keying (B2-1), interner IDs instead of per-call VFS.String (B3-1), dense epoch array instead of closure idSet map (B4-2), directory-listing snapshots instead of Stat misses (B3-3), persistent parser/subgraph caches (B1-1/B1-2), precompiled sysincl index (B3-2), skip/demand-driven emission (B6). Acceptance: median of 5 runs after one warm run.  
+  Эффект: Baseline: tools/archiver 0.81s wall (3777 nodes, 260,388 resolveCalls); devtools/ymake/bin 3.98s wall, 124% CPU (8826 nodes, 6,213,811 resolveCalls, 12,427,622 sysincl calls). Profile ymake/bin: forEachResolvedChild 62.3% cum, dfsID+plainDfsID 47.1%, gcBgMarkWorker/scanobject 20.3%; flat matchH2 8.0%, aeshashbody 5.0%, mapaccess2_fast32 cum 13.8%, appendStringEscapedBody 4.4%, sha1.blockSHANI 2.3%; alloc 1.13 GB: VFS.String 21.5%, os.readFileContents 10.4%, resolveSearchPath 9.7%. resolve hit 90.4% (4,631,217 calls, 443,828 unique keys); subgraph cache 95.6% hit; parsedHits 957,517 / parsedMisses 10,351; existsMisses 97,379 / existsHits 865,904.  
+  Заметки: Plan, not code. Stated lesson: at these hit rates the bottleneck is probing the cache, not filling it -> ask fewer questions or make each cheaper than a Go map probe. Several items later landed in this slice (FS listdir cache 5b884f3, epoch idSet 8fb7b20, VFS interning 0459511/6745623).
+
+- **2026-05-18** `c7c0bbd` **[superseded]** — PERF.md sg3 baseline + staged scanner plan @ PERF.md (devtools/ya/bin, make -j 0 -k -G)  
+  Records a /usr/bin/time + pprof baseline and an ordered plan: final perf counters, per-target search-tier cache, subgraph cache as interned IDs, DFS visited/order on interned IDs, rework file-existence checks; mandates wall/RSS/CPU top/alloc_space/alloc_objects/counters before-after per change.  
+  Эффект: sg3: 8.4s wall, 10.6s CPU, 126% CPU, ~1.34 GiB peak RSS, JSON ~462 MiB, 14649 nodes; without -G: 7.8s wall, ~1.07 GiB RSS; -G adds ~0.4-0.6s and ~270 MiB; forEachResolvedChild ~67% cum CPU, dfs/WalkClosure ~62%, subgraph ~52-58%, resolveSearchPath ~19%, mapaccess2_faststr ~31% cum, GC marking ~2.1s CPU, alloc_space ~2.25 GiB, os.ReadFile ~174 MiB  
+  Заметки: Steps 1,3,4,5 implemented by 85ba737, 0905817, fb710de, fef2d29; step 6 (ReadDir-based existence) not in this slice. Explicitly excluded the 'low-risk appendVFS fix' (VFS.String allocations in the JSON writer). PERF.md deleted in 76241bf (2026-05-18).
+
+- **2026-05-22** `f349bba` — CPU profile hook on dump normalize @ cmdDumpNormalize startProfilesFromEnv (YATOOL_CPUPROFILE)  
+  Same env-driven pprof hook as cmdMake, zero overhead when unset; used to find the json/regex hotspots.  
+
+- **2026-05-25** `6f224c7` — Best-of-3 re-run on a perf-budget miss @ dev/validate.py measured_generate  
+  When the first run exceeds slack*budget, re-run the generator twice and judge by the min of three: transient spikes recover, real regressions stay slow; cost only paid on a miss.  
+  Эффект: Observed sg5 gen 9s vs 33s back-to-back under contention.  
+
+- **2026-05-25** `c6dd528` — Per-case generation wall-time budget gate @ dev/validate.py measured_generate  
+  Each gen_<case>.sh run is timed; slower than 1.2x of a hardcoded budget fails the suite with 'optimize the code, do NOT raise the budget'. Budgets measured under the run lock, including writing the raw graph.  
+  Эффект: Budgets: sg2 1.20, sg2_x86_64 1.20, sg3 2.00, sg4 0.50, sg5 8.80 (seconds).  
+  Заметки: Motivated by the boost macro-include blowup (sg5 5.8s -> 61s). Narrowed by dc3cae0 and made retry-tolerant by 6f224c7.
+
+- **2026-05-25** `dc3cae0` — Gate gen time only on sg5 @ dev/validate.py budgets  
+  Sub-2s cases jitter too much under shared-box contention; they get a 10000s budget (effectively ungated) while sg5 stays gated; times still printed.  
+
+- **2026-05-25** `fd946b2` — Rules: klog-first OOM diagnosis; never load a whole multi-GB graph into memory @ PROMPTS.md COMMON  
+  Methodology: an unexpected death is checked against klog OOM kills before blaming code; graph analysis/normalization must be streaming and bounded-memory.  
+
+- **2026-05-26** `f1768c2` — `ay perf parser` bench/diff harness @ ay perf parser subcommand  
+  Benchmarks a parser over a whole source tree (ms/pass, GB/s) and diffs its output against the old parser per file, so parser rewrites are validated byte-for-byte and measured in isolation.  
+  Эффект: Used to show 351 -> 137 ms/pass over 897MB, byte-identical on 74,111 sources.  
+
+- **2026-05-30** `e047b96`, `1f0318c`, `dd86f3c`, `109f001` — agent perf policy: 5% noise band, no regression, reuse computed results @ PROMPTS.md DIGGER/REVIEWER sections  
+  Agents must treat >5% as a regression (re-measure if noise suspected, else optimize the hot path before READY; reviewer REWORKs any regression), must pass the validate.py generation-time budget, and must not re-parse already-parsed files, recompute computed values or build shadow data structures.  
+  Заметки: Framing: 'we are building a racing car, not a Zhiguli'. 109f001 adds preference for net-negative diffs.
+
+- **2026-05-31** `4b2ad2e` — emit-intern breakdown and cross-module sharing @ internString call sites classified by prefix (INTERN.md section 7)  
+  Measured which emit strings are interned and how many modules touch each, to cost a per-worker local intern + remap.  
+  Эффект: raw 67813 (49%), build $(B) 48369 (35%), source $(S) 23433 (17%); touched distinct 162207: single-owner 156054 (96.2%), cross-module-shared 6153 (3.8%)  
+  Заметки: Conclusion: remap ~140k hash-inserts is cheap; bottlenecks are NodeRef determinism, cross-module dep-DAG for uid, streaming phase split.
+
+- **2026-05-31** `907ec69` — closure-merge redundancy measurement @ scanner dfsID / strongconnect sibling merge into one epoch idSet (INTERN.md)  
+  Instrumented the merge loop that linearly scans each sibling's full cached window into one shared idSet: most probes are re-scans of overlapping header closures, but per-probe cost is ~1.4 ns so the whole dedup is small.  
+  Эффект: windowDumps = 113120, iter = 83.4M, hit 59.1M (70.9%), add 24.3M (29.1%), avg window 737; redundancy factor 3.45x; whole dedup ~5-8% CPU, redundant part ~3-5% wall (baseline sg5 wall ~2.4 s, RSS ~800 MB, serial CPU ~2.2 s; scanner ~25% serial CPU)  
+  Заметки: Conclusion recorded: flat-window merge is a local optimum for this data shape. INTERN.md deleted in a98d3a7 (2026-06-02).
+
+- **2026-05-31** `907ec69` — scan-vs-emit interning split @ internString tagged by phase (inside resolve() = scan, else emit)  
+  Phase-tagged intern misses showed interning is dominated by emission (output paths, cmd tokens, codegen outputs), not the scanner; this killed the 'freeze intern table after scan + parallel lookup-only emit' idea.  
+  Эффект: intern miss = 166855: scanMiss 27240 (16.3%), emitMiss 139615 (83.7%); 167k inserts / 679k reads, table -> 180k; uid path has zero intern calls (~10% of work)  
+  Заметки: internTable (lock-free single-writer, append-only) recorded as 'the most important optimization'; a global lock would serialize 846k accesses.
+
+- **2026-06-01** `1ab082e` — full map-probing breakdown by source location @ pprof map entry points (faststr/fast32/fast64) on ay make -j 0 ydb/apps/ydbd  
+  Attributed 100% of map-runtime work (~20% CPU on a ~2.0s run) to 8 sites to pick next levers.  
+  Эффект: intern table ~35%, FS dir cache ~20%, searchTierCache ~15%, Environment ~8%, parser include set ~6%, sourceClassCache ~5%, Tarjan/peer closures ~7%, sysincl unionIncluderMappings ~3% + sourceClassBuckets ~1%; ~70% string-keyed  
+  Заметки: Named next levers: FS dir cache -> STR-keyed (done in 4dc6536/8bef600), or a purpose-built string interner (done in 64a05da/f25d9a6).
+
+- **2026-06-03** `1298097`, `c354cc2` — prove passes dead by gate-wide probes before removal @ panic-on-drop probe (dropTransitiveGeneratedProto); dedup idle-call probe (dedupVFS)  
+  Instrument a filter/dedup to panic or count when it actually removes something, run the whole gate, and delete the call sites where it never fires.  
+  Эффект: panic-on-drop fired only at the two RUN_PROGRAM/RUN_PYTHON3 sites (5 CC sites removed); idle-call probe showed only two dedupVFS sites dedup a single fresh window  
+
+- **2026-06-03** `b51dff6`, `22ee3e0`, `a23ca75`, `0e3f36e` — map-access instrumentation injector (per-site map-op profile) @ `ay refac mapinstr` -> `ay probe mapinstr`; probe_mapinstr.go mapKR/mapKW counters, reportMapProbe; global --probe=map  
+  A go/types AST injector wraps every map index/delete with probe calls recording key + source site, producing a full per-site map-operation count profile; applied in a throwaway tree and reverted, only tooling kept. a23ca75 dumps it via ay --probe=map on exit.  
+  Эффект: Used for the 'total map ops' and per-site probe counts in e4a7a27, b41783f, 32a56e0, 58eebc3, 58eb9db, 721f7ef  
+  Заметки: a23ca75 replaces the ad-hoc YATOOL_PERF_STATS gate on mapKR/mapKW. Per memory: commit feature work before applying mapinstr (cleanup git checkout clobbers edits).
+
+- **2026-06-06** `bfa7cd0`, `5bfd679`, `8280aa0` — callsite reachability probe (CALLSITE_OUT) over the whole gate @ recordCall / dumpCalls probe (make gen path and dump streamGraphFanout)  
+  Records which functions are reached on make + dump normalize runs so never-executed code (and its per-call work) can be deleted. Zero-cost when off: recordCall is a nil check unless CALLSITE_OUT is set; final form stores into a load-ready sync.Map (idempotent reachability, not counts) so init-time and concurrent callers are captured.  
+  Заметки: Channel+drain-goroutine version (bfa7cd0) replaced by sync.Map (8280aa0) because package-var initializers run before init(). Drove dead-code deletions d2ec948, 0cdf029, e85d2ba.
+
+- **2026-06-09** `252441e`, `8e97940`, `99b9bd3`, `45f8b43`, `199f9dd`, `2b67d8b`, `1b14da9` — PERF.md single-thread speedup plan: 10x sg5 merged-pprof protocol and measured floor @ PERF.md (repo root, deleted as stale in f2c3889)  
+  Baseline and every item verified by 10 sg5 runs without -G merged into one CPU profile (go tool pprof -proto) before/after plus byte-exact ./dev/validate.py; batch noise ±100-200 ms per 10 runs decides 'below resolution'. Lessons recorded: for cache-resident loops the enemy is dependent reloads of invariants, read the disasm rather than guess about cache misses.  
+  Эффект: База измерения (2026-06-09): 10 прогонов sg5 без -G, слитый CPU-профиль = 14 590 ms сэмплов (~1459 ms CPU/прогон). Тёплый прогон: 1.17s wall / 1.05s user / 0.25s sys. Текущий floor (10x sg5 ≈ 8.8 s сэмплов, user ≈ 0.62 s): syscalls чтения исходников 20%, интерн-пробы xxh3+IntMap ~7%, сплайс окон ~12%, парсер ~9%, UID ~9%.  
+  Заметки: Item 10 (persistent parse + content-hash cache keyed by (mtime, size, inode); evidence: 44.6k reads = 16.5% CPU readIntoRaw, parse 6.6%, xxh3 ~2%; expected ~25% CPU of a warm run) was left as an architectural owner decision, not implemented in this slice. PERF.md deleted in f2c3889.
+
+- **2026-06-09** `efc7930`, `33a6f7b` — ay make cas analyze: content-defined-chunking dedup estimate for the CAS @ ay make cas analyze (--chunk, --min-len)  
+  Read-only walk of the CAS that splits files into FastCDC-style gear-hash chunks, dedups chunks across files and reports how much smaller a chunked store would be; --min-len skips small files via dir-entry size without reading.  
+  Заметки: Analysis tool only; never modifies the store.
+
+- **2026-06-09** `fb5c950` — parallelize cas analyze (lister -> NumCPU chunkers -> single-owner dedup fold) @ ay make cas analyze pipeline  
+  A lister goroutine feeds files to NumCPU chunker goroutines that read, split and sha256 each chunk; main alone owns the dedup set and folds the hash stream; results are order-independent.  
+  Эффект: ~Ncpu faster (34s CPU in 2.9s wall on the local CAS)  
+
+- **2026-06-10** `8e867cb` — report intern table sizes under YATOOL_PERF_STATS @ perf stats (intern tables STR/ARG/ENV, overflow)  
+  Counters of interned strings/args/envs act as a growth detector so each id-space refactor reports its intern-table delta.  
+  Эффект: Baseline on sg5 gen: strs=202123 args=2042 envs=278 overflow=0  
+  Заметки: Later commits quote deltas (e.g. f6155e9, e19c991, 83cea8f, 32e9692, 6d42678).
+
+- **2026-06-11** `5a3c289` — --probe=str runtime probe ranking STR.string() view call sites @ STR.string() call-stack hook enabled by the global probe flag  
+  A call-stack hook inside STR.string() counts views per use site (no AST rewrite needed, unlike the map probe); direct intern-table readers were routed through .string() so the probe sees them. Drives the following string-view cuts.  
+  Заметки: Its table is cited by f1b0f0c, 999ba98, fcd2014, 2260e28, d5cde3d.
+
+- **2026-06-14** `100457e`, `142396b`, `fa5847b`, `c685fe7`, `cc48f72`, `190c9b0`, `c3db0af`, `ee5ccc4`, `916bf80`, `4a364c0` — gen wall-time budget checked on every modelling change @ dev/validate.py gating cases (sg5 budget), sg6 gen time  
+  Modelling commits report the gen wall time against the gate's per-case budget to catch perf regressions from parity work.  
+  Эффект: sg5 gen ~2.1s within 8.80s budget (100457e); sg6 no perf regression (gen ~1.5s) (c685fe7); no perf regression (gen ~1.4s) (cc48f72); gen wall-time unchanged (142396b, fa5847b)  
+  Заметки: Budget predates this slice; these commits only cite it.
+
+- **2026-06-14** `61364a1` — YATOOL_CPUHZ env sets the CPU profile sampling rate @ main.go profiling hooks (next to YATOOL_CPUPROFILE / YATOOL_MEMPROFILE)  
+  pprof.StartCPUProfile hardcodes 100Hz; calling runtime.SetCPUProfileRate before it (honored on Go 1.25) lets profiling runs resolve the sub-10ms tail, e.g. 1000Hz -> 1ms granularity.  
+  Заметки: Env-gated, no effect unless set. Still present in HEAD main.go.
+
+- **2026-06-16** `6c08c29` — `ay perf darts` longest-prefix-match micro-benchmark @ perf_darts.go + perf_darts_data.txt (//go:embed)  
+  Benchmarks a fixed random sample of 2000 source-tree directories against the 327 AUTOINCLUDE_PATHS roots with both matchers (Darts vs ancestor-walk IntValueMap + internedPrefixed), cross-checking results (0 mismatches).  
+  Эффект: darts ~10 ns/op vs ancestor-walk ~86 ns/op (~8.5x)  
+  Заметки: Microbenchmark only (user rule elsewhere: validate perf end-to-end on sg5 pprof). perf_darts.go still in HEAD.
+
+- **2026-06-17** `006ad54` **[superseded]** — `ay dev perf starlark` front-end benchmark over an in-memory FS @ perf_starlark.go (embedded util ya.make / ya.star), fs_mem.go MemFS  
+  Over a MemFS, loops module construction to a fixed budget and reports native ya.make parse vs Starlark eval, and full front-end + collectModule build for each. MemFS moved from fs_test.go into production fs_mem.go so in-binary perf commands can run over an in-memory tree.  
+  Эффект: parse ~86µs vs eval ~611µs; make-build ~114µs vs star-build ~679µs (Starlark front-end ~6-7x the native parser)  
+  Заметки: Removed with the whole Starlark experiment in 9634dba.
+
+- **2026-06-22** `352ff82` — ay dev perf link microbenchmark @ perf.go (`ay dev perf link [count] [size]`)  
+  Benchmarks hard link vs symlink vs copy per-op cost to choose the CAS materialization primitive.  
+  Эффект: hard link ~10.1us/op, symlink ~10.7us/op, copy ~28us/op  
+
+- **2026-06-24** `52c4ada` — print every gate subprocess with its wall time @ dev/validate.py sh()  
+  All command execution centralized in sh(), which prints a copy-pasteable command line followed by elapsed time and return code, labeled per case/step (incl. go build).  
+  Заметки: Replaced per-action timing prints.
+
+- **2026-06-24** `b578cdf` — run ay/ya in a clean toolchain env for A/B and parity @ dev/validate.py sh() + build; dev/provision.py ya_env()  
+  Strips CC/CXX/CPP/LD/AR, C/CXX/CPP/LD FLAGS, CGO_* and NIX_* before invoking ay so leaked shell flags (USER_CFLAGS) do not perturb generated commands.  
+  Эффект: bs_static parity goes 48654 -> 71689 of 71709 paired  
+  Заметки: Methodology: later perf commits verify 'graph byte-identical (clean toolchain env)'. Parity effect, not speed.
+
+- **2026-06-25** `6d2befd` — YATOOL_MEMPROFRATE env knob @ main.go  
+  Sets runtime.MemProfileRate (symmetric with YATOOL_CPUHZ) to get exact allocation-count profiles; the subsequent alloc_objects numbers in this slice come from such profiles.  
+
+- **2026-06-29** `9ac217c` — runtime-coverage annotator for dead-branch review @ dev/cov_annotate.py  
+  Parses a go-cover textfmt profile from the gate corpus and marks never-executed lines (bucketed CORE vs dev/exec/platform) to find dead guards/dedups; unused IntHeap removed.  
+  Заметки: Gate does not run tests: coverage-driven cut deleted test-only argStrs (restored in c0cf3a9) and tests 7009bd9 removed; 3839c4f excludes throw/make modes.
+
+- **2026-07-02** `c29950f`, `dcab2fb` **[superseded]** — ay dev perf splice synthetic bench @ perf_splice*.go/.s (dev tool)  
+  Synthetic bench over 10000 random arrays with shared merge-pair sequence and byte-identity check before timing; max-element arg selects L2 vs DRAM regime.  
+  Заметки: Dropped in dcab2fb after the investigation concluded; findings in history.
+
+- **2026-07-03** `8495f62` — strip debug perf counters from hot paths @ Scanner/FS/parser hit-miss counters, strProbe hook in STR.string(), closure_stats.go, perf-merge bench  
+  Profiling scaffolding feeding YATOOL_PERF_STATS polluted hot paths (per-scan counters, an inline probe hook in STR.string()); removed. Container len() accessors kept (computed), IntMap.count kept (drives resize).  
+
+- **2026-07-03** `edfc810`, `023b362` — ay dev perf buckethash throughput + collision stress @ dev tool (bucket hash bench)  
+  Throughput bench (mix64 vs candidate bucketHash vs a two-moment lower bound) plus a random-sequence collision stress test for the closure-bucket intern hash.  
+  Заметки: Removed with the edfc810 revert, revived in 023b362; the 1.3M-set collision stress backed 7ff2676.
+
+- **2026-07-06** `297fb3a` — remove YATOOL_TRACE check from genModule @ genModule  
+  Deleted the per-call os.Getenv('YATOOL_TRACE') branch and trace stack from the genModule hot path.  
+  Заметки: Commit subject is just 'fix'.
+
+- **2026-07-06** `cbb936d` — A/B on max-rss/alloc, not inuse-at-exit @ memory A/B methodology  
+  inuse-at-exit is too noisy for small memory A/Bs; max-rss and total alloc are the metrics to trust.  
+  Эффект: noted: inuse-at-exit floats +-12 MB run-to-run, trust max-rss/alloc for A/B  
+
+- **2026-07-08** `00f989c` — arena-call caller profiling @ anyList/anyConcat/chunkList instrumentation  
+  Arena list/concat helpers instrumented by caller location on bs_static (71k nodes) to find per-node heap assembly of constant data.  
+
+- **2026-07-08** `2e69640`, `f6a0d5d` — AY_DEBUG_OWNERSHIP runtime ownership checker @ node_ownership.go (+ lint-generated node_ownership_gen.go)  
+  Validates every Node slice/chunk backing against registered arena/global ranges, aggregated by (field, emit call site); global chunk registry generated by 'ay dev refac lint' (81 entries).  
+
+- **2026-07-08** `d3d6b17` — process-wide profiling hooks via at_exit @ at_exit.go, main.go init (YATOOL_CPUPROFILE, YATOOL_MEMPROFILE), CALLSITE_OUT probe, --probe=map  
+  CPU profile starts at process start and memprofile/callsite/map-probe dumps self-register LIFO exit hooks, replacing five per-command defer sites.  
+
+- **2026-07-09** `372987f`, `e214fed` — ay dev maxrss — peak summed RSS of a process subtree @ dev tool  
+  Samples /proc to build the PPID tree of the command and sums RSS (field 24 x page size) per tick, tracking the peak; --hz sets the sampling rate (ru_maxrss only reports the largest single process).  
+  Заметки: Reparented/daemonized descendants escape; granularity is one tick.
+
+- **2026-07-09** `4afff2b`, `16f1638` — --stat: longest tasks, per-kind totals, critical path @ Executor TaskStat collection  
+  Collects per-task durations and prints the 10 longest tasks, per-kind totals and the critical path (memoized finish[ref] = dur + max(finish[dep])).  
+
+- **2026-07-09** `94bbd45`, `f1afd79` — AY_DEBUG_DEDUP live-deduper site tracking @ DeDuperPool debug hook  
+  Tracks a stack of acquisition sites and prints each live deduper's get() site when depth >= 2, exposing nesting and defer-in-loop escalation.  
+
+- **2026-07-09** `e273a2f` — bump-window runtime checker @ BumpAllocator strict/open flags, NodeArenas.markStrict, dfs frame assert  
+  Under AY_DEBUG_OWNERSHIP strict arenas throw on a nested alloc while a window is open (alloc without commit); scan/lookup calls were hoisted out of open arena windows across emitters.  
+  Заметки: Guards the alloc->fill->commit idiom against reentrant fills (pending emitters firing mid-window).
+
+- **2026-07-13** `5d13dd1`, `ba8d6f9`, `d502be1`, `dbf9742`, `5e691f6`, `cf0159e` — dev/perf.py sequential paired A/B gate @ dev/perf.py  
+  Two ay binaries run `make -j0` in alternating, then randomized LRRL/RLLR blocks; each block yields log(right/left); decisions use a paired sign-flip permutation test at precomputed group-sequential checkpoints (FWER-controlled); reports min wall; raw chronological JSON; perf stat counters (task-clock/cycles/instructions:u) with CPU pinning, calibration and MDE; Holm over wall/task_clock/cycles/instructions accepting 'any faster, none slower'.  
+  Заметки: Initial version used Mann-Whitney U. Child env gets GOGC=off by default.
+
+- **2026-07-15** `0a6bd69` — resumable per-commit perf history runner @ dev/perf_history.py  
+  Builds each first-parent commit of a range detached (no worktree changes) and runs the perf gate against its parent, keeping every attempt, raw samples and logs; completed pairs skipped on restart.  
+
+
+### other:inlining (1)
+
+- **2026-07-13** `8203314` — outline slow paths to keep hot callers inlinable @ fireGenerated (//go:noinline), DeDuper.grow (//go:noinline), internFill (0-3 part specializations)  
+  Rare branches (firing a pending emitter, growing the deduper) moved into noinline helpers so the hot use()/add() stay small; internFill specialized for 0..3 parts.  
+
+
+### other:parallel-gen (2)
+
+- **2026-05-31** `907ec69` **[rejected-by-measurement]** — intra-merge parallelism of closure walks @ scanner WalkClosure merge (INTERN.md)  
+  Measured the work distribution across walks to see whether large walks could be split across goroutines.  
+  Эффект: n=22795 walks, total=82.5M, max=286932, mean=3621; top 0.1% = 2.7%, top 1% = 9.1%, top 5% = 25.7%, top 10% = 40.0%; mean walk ~5 us (below goroutine overhead); parallelizable tail <1% CPU  
+
+- **2026-05-31** `907ec69`, `4b2ad2e`, `9f4c041` **[superseded]** — parallel emit with local intern + deferred canonicalization; parallel uid by dep-DAG wave @ proposed 4-phase gen (serial scan -> parallel emit with per-worker intern -> serial canonicalize -> parallel uid), BufferedEmitter only  
+  Serial scan keeps shared caches; parallel emit workers read the frozen global id base and intern new strings locally; a serial pass remaps local->global ids; uids computed in topological waves (uid path is intern-free).  
+  Заметки: Design proposal only; not implemented in this slice (no later implementation seen). 9f4c041 constraint: streaming make overlaps exec with gen (fast-start), so parallel-gen/parallel-uid is scoped to BufferedEmitter (-G/validate/CI); StreamingEmitter stays inline. INTERN.md deleted in a98d3a7.
+
+
+### other:parallelism (1)
+
+- **2026-05-07** `178b7b1`, `41bf849`, `5eea2bf` **[rejected-by-measurement]** — streaming emitter (Emitter.OnReady early execution) + parallel parser @ emitter.go Emitter.OnReady / BufferedEmitter (D37); planned M3 StreamingEmitter  
+  Planned per-ref ready channels so execution could start before Finalize and a parallel ya.make parser; only the OnReady interface with a shared-channel no-op BufferedEmitter landed.  
+  Эффект: deferred: 'performance is currently 5x under budget so the streaming work is unmotivated' (5eea2bf)  
+  Заметки: Deferred to an M3-perf track, not implemented in this slice.
+
+
+### other:self-build (1)
+
+- **2026-08-11** `5f6b5b6`, `9e973d1`, `dccf427` **[reverted]** — Go build of ay: cache and parallel compile flags @ build.py (ay's own build graph)  
+  Generated dense maps in the build tree with a Go overlay instead of copying the whole source tree; custom GOCACHE preserved across actions; -gcflags=-c=16 for parallel package compilation.  
+  Заметки: dccf427 dropped -c=16 and the custom GOCACHE ('reuse standard Go cache'). Affects ay's build time, not graph generation.
+
+
+### other:struct-layout (1)
+
+- **2026-06-25** `44adb95` **[superseded]** — CompileSpec held by pointer on GeneratedFileInfo @ codegen_registry.go GeneratedFileInfo.Compile  
+  Per-file compile settings (CFlags, FlatOutput, Variant, ObjectSuffixStem, Py3Suffix, ForceCxx) are held by pointer so the common registry entry does not grow inline.  
+  Заметки: CompileSpec moved into registry arenas by ee2fd66 (outside slice).
+
