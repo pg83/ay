@@ -15,6 +15,25 @@ class ConfReactiveTest(MakeTest):
             self.assertEqual(args.count(f"-L{original}"), 1)
             self.assertEqual(args.count("-Wl,--gdb-index"), 1)
 
+    def test_module_initialization_after_restored_and_unrelated_writes(self):
+        cases = (
+            ("base", "", 0),
+            ("changed", "DISABLE(CUDA_NVPRUNE)\n", 1),
+            ("restored", "DISABLE(CUDA_NVPRUNE)\nENABLE(CUDA_NVPRUNE)\n", 0),
+            ("unrelated", "SET(UNRELATED_SETTING changed)\n", 0),
+            ("empty", "SET(CUDA_NVPRUNE)\n", 0),
+            ("again", "", 0),
+        )
+        self.write("ya.make", "RECURSE(" + " ".join(directory for directory, _, _ in cases) + ")\n")
+        for directory, settings, _ in cases:
+            self.write(f"{directory}/ya.make", f"{settings}PROGRAM({directory})\nSRCS(main.cpp)\nEND()\n")
+            self.write(f"{directory}/main.cpp", "int main() { return 0; }\n")
+        graph = self.graph()
+        for directory, _, expected in cases:
+            args = [arg for cmd in self.node(graph, f"{directory}/{directory}")["cmds"] for arg in cmd["cmd_args"]]
+            self.assertEqual(args.count("-L/CUDA:PRUNE=False"), expected)
+            self.assertEqual(args.count("-Wl,--gdb-index"), 1)
+
     def test_jni_dll_inherits_link_settings(self):
         self.write("ya.make", "DLL_JAVA(answer)\nJDK_VERSION(17)\nSRCS(answer.cpp)\nEND()\n")
         self.write("answer.cpp", "int answer() { return 42; }\n")

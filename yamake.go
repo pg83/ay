@@ -80,6 +80,29 @@ var includeStatePool = sync.Pool{New: func() any {
 	return &IncludeState{once: newIntSet(16)}
 }}
 
+var wordBytes = func() [256]uint8 {
+	var table [256]uint8
+
+	for i := range table {
+		b := byte(i)
+
+		switch {
+		case b >= 'a' && b <= 'z', b >= 'A' && b <= 'Z', b >= '0' && b <= '9', b >= 0x80:
+			table[i] = 1
+		}
+	}
+
+	for _, b := range []byte("_-./+:=*?$%~,!{}#[]@\\") {
+		table[b] = 1
+	}
+
+	for _, b := range []byte(";&`^|<>\"'") {
+		table[b] = 2
+	}
+
+	return table
+}()
+
 const (
 	splitCodegenDefaultOutNum = 25
 	splitCodegenStreamCount   = 5
@@ -562,40 +585,13 @@ func isIdentCont(b byte) bool {
 }
 
 func (l *Lexer) isWordByte(b byte) bool {
-	if isWordByte(b) {
-		return true
-	}
+	kind := wordBytes[b]
 
-	if !l.inArgs {
-		return false
-	}
-
-	switch b {
-	case ';', '&', '`', '^', '|', '<', '>', '"', '\'':
-		return true
-	}
-
-	return false
+	return kind == 1 || kind == 2 && l.inArgs
 }
 
 func isWordByte(b byte) bool {
-	switch {
-	case b >= 'a' && b <= 'z':
-		return true
-	case b >= 'A' && b <= 'Z':
-		return true
-	case b >= '0' && b <= '9':
-		return true
-	}
-
-	switch b {
-	case '_', '-', '.', '/', '+', ':', '=', '*', '?', '$', '%', '~', ',', '!', '{', '}', '#', '[', ']', '@',
-
-		'\\':
-		return true
-	}
-
-	return b >= 0x80
+	return wordBytes[b] == 1
 }
 
 func (l *Lexer) skipTrivia() {

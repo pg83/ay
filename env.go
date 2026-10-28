@@ -13,6 +13,8 @@ type EnvStore struct {
 	textInputs       map[ENV][]SourceTextRange
 	resourceBindings []EnvResourceBinding
 	included         map[string]bool
+	confBase         *EnvStore
+	confWrites       []ENV
 }
 
 type Environment struct {
@@ -120,8 +122,22 @@ func (e Environment) cloneInto(dst *EnvStore) Environment {
 	dst.textInputs = maps.Clone(e.s.textInputs)
 	dst.resourceBindings = append(dst.resourceBindings[:0], e.s.resourceBindings...)
 	dst.included = maps.Clone(e.s.included)
+	dst.confBase = nil
+	dst.confWrites = dst.confWrites[:0]
+
+	if e.s.confBase == e.s {
+		dst.confBase = e.s
+	}
 
 	return Environment{s: dst}
+}
+
+func (s *EnvStore) confWrite(id ENV) {
+	if s.confBase == s {
+		s.confBase = nil
+	} else if s.confBase != nil {
+		s.confWrites = append(s.confWrites, id)
+	}
 }
 
 func (e Environment) setVFS(id ENV, v VFS) {
@@ -129,6 +145,7 @@ func (e Environment) setVFS(id ENV, v VFS) {
 
 	e.s.clearResourceBinding(id)
 
+	e.s.confWrite(id)
 	e.s.ensure(id)
 	e.s.kind[id] = envVFS
 	e.s.val[id] = STR(uint32(v))
@@ -139,6 +156,7 @@ func (e Environment) setStrID(id ENV, v STR) {
 
 	e.s.clearResourceBinding(id)
 
+	e.s.confWrite(id)
 	e.s.ensure(id)
 	e.s.kind[id] = envStr
 	e.s.val[id] = v
@@ -163,6 +181,7 @@ func (e Environment) setInt(id ENV, n int) {
 
 	e.s.clearResourceBinding(id)
 
+	e.s.confWrite(id)
 	e.s.ensure(id)
 	e.s.kind[id] = envInt
 	e.s.val[id] = intSTR[n]
@@ -195,6 +214,7 @@ func (e Environment) unbind(id ENV) EnvKind {
 	k, _ := e.s.lookup(id)
 
 	if k != envAbsent {
+		e.s.confWrite(id)
 		e.s.kind[id] = envAbsent
 	}
 
@@ -203,6 +223,7 @@ func (e Environment) unbind(id ENV) EnvKind {
 
 func (e Environment) rebind(id ENV, k EnvKind) {
 	if k != envAbsent {
+		e.s.confWrite(id)
 		e.s.kind[id] = k
 	}
 }

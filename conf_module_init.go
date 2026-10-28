@@ -3,6 +3,7 @@ package main
 type ConfModuleInit struct {
 	steps     []confInitStep
 	inputs    []ENV
+	read      []bool
 	originals []ENV
 	outputs   []ENV
 	memo      []confInitMemo
@@ -14,8 +15,10 @@ type confInitStep struct {
 }
 
 type confInitMemo struct {
-	inputs      []ConfValue
-	assignments []ConfAssignment
+	inputs       []ConfValue
+	assignments  []ConfAssignment
+	base         *EnvStore
+	hasOriginals bool
 }
 
 type ConfAssignment struct {
@@ -87,21 +90,32 @@ func (c *ConfConditions) moduleInit(module *ConfModule) *ConfModuleInit {
 		}
 	}
 
+	plan.read = read
 	module.init = plan
 
 	return plan
 }
 
 func (m confInitMemo) matches(plan *ConfModuleInit, env Environment, originals map[STR]STR) bool {
-	for i, key := range plan.inputs {
-		if m.inputs[i] != confEnvValue(env, key) {
-			return false
+	if m.base != nil && env.s.confBase == m.base && m.base.confBase == m.base {
+		for _, key := range env.s.confWrites {
+			if int(key) < len(plan.read) && plan.read[key] && confEnvValue(env, key) != confEnvValue(Environment{s: m.base}, key) {
+				return false
+			}
+		}
+	} else {
+		for i, key := range plan.inputs {
+			if m.inputs[i] != confEnvValue(env, key) {
+				return false
+			}
 		}
 	}
 
-	for i, key := range plan.originals {
-		if m.inputs[len(plan.inputs)+i].value != originals[key.str()] {
-			return false
+	if len(originals) != 0 || m.hasOriginals {
+		for i, key := range plan.originals {
+			if m.inputs[len(plan.inputs)+i].value != originals[key.str()] {
+				return false
+			}
 		}
 	}
 
@@ -109,6 +123,8 @@ func (m confInitMemo) matches(plan *ConfModuleInit, env Environment, originals m
 }
 
 func (p *Platform) initConfModule(env Environment, name STR, tag string, originals map[STR]STR) {
+	defer func() { env.s.confBase = nil }()
+
 	c := p.conditions
 
 	if c == nil {
@@ -124,6 +140,7 @@ func (p *Platform) initConfModule(env Environment, name STR, tag string, origina
 	plan := c.moduleInit(module)
 
 	if env.resourceUses != nil {
+		env.s.confBase = nil
 		p.runConfModuleInit(plan, env, originals, nil)
 
 		return
@@ -131,6 +148,8 @@ func (p *Platform) initConfModule(env Environment, name STR, tag string, origina
 
 	for _, memo := range plan.memo {
 		if memo.matches(plan, env, originals) {
+			env.s.confBase = nil
+
 			for _, assignment := range memo.assignments {
 				assignment.value.apply(env, assignment.key)
 
@@ -147,13 +166,27 @@ func (p *Platform) initConfModule(env Environment, name STR, tag string, origina
 
 	n := len(plan.inputs) + len(plan.originals)
 	inputs := c.values.alloc(n)
+	base := env.s.confBase
+
+	if base != nil && base.confBase != base {
+		base = nil
+	}
 
 	for i, key := range plan.inputs {
 		inputs[i] = confEnvValue(env, key)
+
+		if base != nil && inputs[i] != confEnvValue(Environment{s: base}, key) {
+			base = nil
+		}
 	}
 
+	hasOriginals := false
+
 	for i, key := range plan.originals {
-		inputs[len(plan.inputs)+i] = ConfValue{value: originals[key.str()]}
+		value := originals[key.str()]
+
+		inputs[len(plan.inputs)+i] = ConfValue{value: value}
+		hasOriginals = hasOriginals || value != 0
 	}
 
 	c.values.commit(n)
@@ -164,9 +197,10 @@ func (p *Platform) initConfModule(env Environment, name STR, tag string, origina
 		assignments[i] = ConfAssignment{key: key}
 	}
 
+	env.s.confBase = nil
 	p.runConfModuleInit(plan, env, originals, assignments[:len(plan.outputs)])
 	c.assignments.commit(len(plan.outputs))
-	plan.memo = append(plan.memo, confInitMemo{inputs: inputs[:n:n], assignments: assignments[:len(plan.outputs):len(plan.outputs)]})
+	plan.memo = append(plan.memo, confInitMemo{base: base, hasOriginals: hasOriginals, inputs: inputs[:n:n], assignments: assignments[:len(plan.outputs):len(plan.outputs)]})
 }
 
 func (p *Platform) runConfModuleInit(plan *ConfModuleInit, env Environment, originals map[STR]STR, recording []ConfAssignment) {

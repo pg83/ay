@@ -8,13 +8,12 @@ import (
 
 var (
 	confCondReplacer = strings.NewReplacer("&&", " AND ", "||", " OR ", "!=", "!=", "!", " NOT ")
+	confVarRefRe     = regexp.MustCompile(`\$\{(?:[^}:]*:)?([A-Za-z_][A-Za-z0-9_]*)\}|\$([A-Za-z_][A-Za-z0-9_]*)`)
 	confCondParser   Parser
 	confCondLexer    Lexer
 	confCondNodes    = newBumpAllocator[CondNode]()
-	confScalarRefRe  = regexp.MustCompile(`\$\{[A-Za-z_][A-Za-z0-9_]*\}|\$[A-Za-z_][A-Za-z0-9_]*`)
-	confVarRefRe     = regexp.MustCompile(`\$\{(?:[^}:]*:)?([A-Za-z_][A-Za-z0-9_]*)\}|\$([A-Za-z_][A-Za-z0-9_]*)`)
-	confInRe         = regexp.MustCompile(`^\(\s*(\$[A-Za-z_][A-Za-z0-9_]*|"[^"]*")\s+in\s+\[(.*)\]\s*\)$`)
-	confInItemRe     = regexp.MustCompile(`^\s*("[^"]*")\s*(?:,|$)`)
+	confInputArena   = newBumpAllocator[ENV]()
+	confInputLists   = newBumpAllocator[[]ENV]()
 )
 
 var confReadScratch struct {
@@ -37,14 +36,15 @@ const (
 type ConfOp uint8
 
 type ConfBranch struct {
-	parent   int
-	previous int
+	parent   int32
+	previous int32
 	expr     string
 	cond     []CondNode
+	inputs   *[]ENV
 }
 
 type ConfStmt struct {
-	branch int
+	branch int32
 	name   ENV
 	scalar ConfValue
 	value  string
@@ -63,7 +63,7 @@ type ConfFile struct {
 }
 
 type confParseFrame struct {
-	branch    int
+	branch    int32
 	selectVar string
 	skipped   bool
 	block     string
@@ -77,7 +77,7 @@ func readConfFile(rel, text string) *ConfFile {
 	conf := &ConfFile{rel: rel, branches: []ConfBranch{{}}}
 	stack := append(confReadScratch.frames[:0], confParseFrame{})
 	pending := confReadScratch.pending[:0]
-	previous := 0
+	previous := int32(0)
 
 	defer func() {
 		clear(stack)
@@ -224,7 +224,7 @@ func readConfFile(rel, text string) *ConfFile {
 
 		conf.branches = append(conf.branches, branch)
 
-		frame := confParseFrame{branch: len(conf.branches) - 1, selectVar: selectVar, skipped: skip, block: block, owner: owner, guard: guard}
+		frame := confParseFrame{branch: int32(len(conf.branches) - 1), selectVar: selectVar, skipped: skip, block: block, owner: owner, guard: guard}
 
 		if strings.HasPrefix(header, "macro ") {
 			frame.macro = true
@@ -355,30 +355,103 @@ func parseConfCondition(rel, expr string) []CondNode {
 }
 
 func confInCondition(rel, expr string) string {
-	match := confInRe.FindStringSubmatch(strings.TrimSpace(expr))
+	text := strings.TrimSpace(expr)
 
-	if match == nil {
+	if len(text) < 2 || text[0] != '(' || text[len(text)-1] != ')' {
 		return expr
 	}
 
-	var alternatives []string
+	text = strings.TrimLeft(text[1:len(text)-1], " \t\r\n\f")
 
-	for rest := match[2]; strings.TrimSpace(rest) != ""; {
-		item := confInItemRe.FindStringSubmatch(rest)
+	end := 0
 
-		if item == nil {
+	if strings.HasPrefix(text, "$") {
+		end = confNameEnd(text, 1)
+
+		if end == 1 {
+			return expr
+		}
+	} else if strings.HasPrefix(text, `"`) {
+		quote := strings.IndexByte(text[1:], '"')
+
+		if quote < 0 {
+			return expr
+		}
+
+		end = quote + 2
+	} else {
+		return expr
+	}
+
+	left := text[:end]
+	rest := strings.TrimLeft(text[end:], " \t\r\n\f")
+
+	if len(rest) == len(text)-end || !strings.HasPrefix(rest, "in") {
+		return expr
+	}
+
+	afterIn := strings.TrimLeft(rest[2:], " \t\r\n\f")
+
+	if len(afterIn) == len(rest)-2 {
+		return expr
+	}
+
+	rest = strings.TrimRight(afterIn, " \t\r\n\f")
+
+	if len(rest) < 2 || rest[0] != '[' || rest[len(rest)-1] != ']' || strings.ContainsRune(rest, '\n') {
+		return expr
+	}
+
+	rest = rest[1 : len(rest)-1]
+
+	var out strings.Builder
+
+	out.WriteByte('(')
+
+	count := 0
+
+	for strings.TrimSpace(rest) != "" {
+		rest = strings.TrimLeft(rest, " \t\r\n\f")
+
+		if !strings.HasPrefix(rest, `"`) {
 			throwFmt("conf: %s: unsupported condition %s", rel, expr)
 		}
 
-		alternatives = append(alternatives, match[1]+" == "+item[1])
-		rest = rest[len(item[0]):]
+		end := strings.IndexByte(rest[1:], '"') + 2
+
+		if end == 1 {
+			throwFmt("conf: %s: unsupported condition %s", rel, expr)
+		}
+
+		item := rest[:end]
+
+		rest = strings.TrimLeft(rest[end:], " \t\r\n\f")
+
+		if rest != "" {
+			if rest[0] != ',' {
+				throwFmt("conf: %s: unsupported condition %s", rel, expr)
+			}
+
+			rest = rest[1:]
+		}
+
+		if count > 0 {
+			out.WriteString(" || ")
+		}
+
+		out.WriteString(left)
+		out.WriteString(" == ")
+		out.WriteString(item)
+		count++
 	}
 
-	if len(alternatives) == 0 {
+	if count == 0 {
 		throwFmt("conf: %s: unsupported condition %s", rel, expr)
 	}
 
-	return "(" + strings.Join(alternatives, " || ") + ")"
+	out.WriteByte(')')
+
+	return out.String()
 }
 
 func evalConfAtomString(nodes []CondNode, i int32, env Environment) string {
@@ -439,7 +512,7 @@ func confNumber(nodes []CondNode, i int32, env Environment) int {
 	return 0
 }
 
-func (c *ConfFile) cond(b int) []CondNode {
+func (c *ConfFile) cond(b int32) []CondNode {
 	branch := &c.branches[b]
 
 	if branch.expr != "" && branch.cond == nil {
@@ -449,13 +522,13 @@ func (c *ConfFile) cond(b int) []CondNode {
 	return branch.cond
 }
 
-func (c *ConfFile) condHolds(b int, env Environment) bool {
+func (c *ConfFile) condHolds(b int32, env Environment) bool {
 	cond := c.cond(b)
 
 	return len(cond) == 0 || evalCond(cond, env)
 }
 
-func (c *ConfFile) holds(b int, env Environment) bool {
+func (c *ConfFile) holds(b int32, env Environment) bool {
 	for b != 0 {
 		if !c.condHolds(b, env) {
 			return false
@@ -473,31 +546,112 @@ func (c *ConfFile) holds(b int, env Environment) bool {
 	return true
 }
 
-func (c *ConfFile) condVars(b int, add func(ENV)) {
-	for b != 0 {
-		for p := b; p != 0; p = c.branches[p].previous {
-			for _, n := range c.cond(p) {
-				if n.Kind == ckConfIdent {
-					add(n.Env)
+func (c *ConfFile) condVars(b int32, add func(ENV)) {
+	branch := &c.branches[b]
+
+	if branch.inputs == nil {
+		n := 0
+
+		for parent := b; parent != 0; parent = c.branches[parent].parent {
+			for p := parent; p != 0; p = c.branches[p].previous {
+				n += len(c.cond(p))
+			}
+		}
+
+		inputs := confInputArena.alloc(n)
+		used := 0
+
+		for parent := b; parent != 0; parent = c.branches[parent].parent {
+			for p := parent; p != 0; p = c.branches[p].previous {
+				for _, node := range c.branches[p].cond {
+					if node.Kind == ckConfIdent {
+						inputs[used] = node.Env
+						used++
+					}
 				}
 			}
 		}
 
-		b = c.branches[b].parent
+		confInputArena.commit(used)
+		branch.inputs = confInputLists.one()
+		*branch.inputs = inputs[:used:used]
+	}
+
+	for _, key := range *branch.inputs {
+		add(key)
 	}
 }
 
-func confValueVars(value string, add func(string)) {
-	if !strings.Contains(value, "$") {
-		return
+func confNameEnd(text string, start int) int {
+	end := start
+
+	if end < len(text) && macroVariableLetter(text[end]) {
+		end++
+
+		for end < len(text) && (macroVariableLetter(text[end]) || text[end] >= '0' && text[end] <= '9') {
+			end++
+		}
 	}
 
-	for _, m := range confVarRefRe.FindAllStringSubmatch(value, -1) {
-		if m[1] != "" {
-			add(m[1])
-		} else {
-			add(m[2])
+	return end
+}
+
+func nextConfReference(text string, from int, modifiers bool) (start, end int, name string) {
+	for from < len(text) {
+		dollar := strings.IndexByte(text[from:], '$')
+
+		if dollar < 0 {
+			break
 		}
+
+		start = from + dollar
+		from = start + 1
+
+		first := from
+		braced := first < len(text) && text[first] == '{'
+
+		if braced {
+			first++
+
+			if modifiers {
+				for i := first; i < len(text) && text[i] != '}'; i++ {
+					if text[i] == ':' {
+						first = i + 1
+
+						break
+					}
+				}
+			}
+		}
+
+		end = confNameEnd(text, first)
+
+		if end == first {
+			continue
+		}
+
+		if !braced {
+			return start, end, text[first:end]
+		}
+
+		if end < len(text) && text[end] == '}' {
+			return start, end + 1, text[first:end]
+		}
+	}
+
+	return len(text), len(text), ""
+}
+
+func confValueVars(value string, add func(string)) {
+	for from := 0; ; {
+		start, end, name := nextConfReference(value, from, true)
+
+		if start == end {
+			return
+		}
+
+		add(name)
+		from = end
 	}
 }
 
@@ -547,9 +701,28 @@ func expandConfScalar(value string, env Environment) string {
 	}
 
 	for iteration := 1; value != ""; iteration++ {
-		expanded := confScalarRefRe.ReplaceAllStringFunc(value, func(reference string) string {
-			return env.string(internEnv(strings.Trim(reference, "${}")))
-		})
+		var out strings.Builder
+
+		from := 0
+
+		for {
+			start, end, name := nextConfReference(value, from, false)
+
+			if start == end {
+				break
+			}
+
+			out.WriteString(value[from:start])
+			out.WriteString(env.string(internedEnv(name)))
+			from = end
+		}
+
+		expanded := value
+
+		if from != 0 {
+			out.WriteString(value[from:])
+			expanded = out.String()
+		}
 
 		if iteration >= 128 {
 			throwFmt("conf: scalar substitution exceeded the limit 128")

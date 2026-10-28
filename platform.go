@@ -230,6 +230,7 @@ func newPlatform(os OS, isa ISA, buildType string, tc *Toolchain, flags map[stri
 	bundle := compileFlagBundleFor(p)
 
 	p.Defines = bundle.Defines
+	p.ifEnv.s.confBase = p.ifEnv.s
 
 	if ownershipOn {
 		registerPlatformOwned(p)
