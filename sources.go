@@ -30,14 +30,18 @@ func resolveSourceVFS(ctx *GenCtx, instance ModuleInstance, src string, dirs []V
 
 func resolveSource(ctx *GenCtx, srcInstance ModuleInstance, srcRel string, srcDirs []VFS) ResolvedSource {
 	if vfs, ok := moduleRootedVFS(srcInstance.Path.relString(), srcRel); ok {
-		return ResolvedSource{Path: vfs, Existing: vfs.isSource() && ctx.fs.isFilePathClean(vfs.relString()), Fixed: true}
+		return ResolvedSource{Path: vfs, Existing: vfs.isSource() && ctx.fs.isFileVFS(vfs), Fixed: true}
 	}
 
 	srcRelClean := srcRel != "" && pathIsClean(srcRel)
 
 	if srcRelClean {
 		if ctx.fs.isFileClean(srcInstance.Path.rel(), srcRel) {
-			return ResolvedSource{Path: sourceJoined(cleanRel(srcInstance.Path.relString()), srcRel), Existing: true}
+			path := sourceJoined(cleanRel(srcInstance.Path.relString()), srcRel)
+
+			ctx.fs.noteFile(path)
+
+			return ResolvedSource{Path: path, Existing: true}
 		}
 	} else if ctx.fs.isFile(srcInstance.Path.rel(), srcRel) {
 		return ResolvedSource{Path: source(filepath.ToSlash(filepath.Clean(srcInstance.Path.relString() + "/" + srcRel))), Existing: true}
@@ -142,7 +146,7 @@ func (r ResolvedSource) withGenerated(registry *CodegenRegistry, token string, d
 
 func (e *EmitContext) resolveDeclaredSource(token ANY) ResolvedSource {
 	if v := token.vfs(); v != 0 {
-		return ResolvedSource{Path: v, Existing: v.isSource() && e.ctx.fs.isFilePathClean(v.relString()), Fixed: true}
+		return ResolvedSource{Path: v, Existing: v.isSource() && e.ctx.fs.isFileVFS(v), Fixed: true}
 	}
 
 	return resolveSource(e.ctx, e.instance, token.string(), e.d.srcDirs)

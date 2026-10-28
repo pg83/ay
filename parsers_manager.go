@@ -164,7 +164,7 @@ func (pm *IncludeParserManager) sourceParsed(vfsPath VFS, ctxParser IncludeDirec
 		bucket = parsedIncludesRagelNative
 	}
 
-	if parser == nil || !pm.fs.isFilePathClean(rel) {
+	if parser == nil || !pm.fs.isFileVFS(vfsPath) {
 		empty := ParsedSource{parser: includeParserKind(parser), bucket: bucket}
 
 		pm.cache.parsed.put(key, empty)

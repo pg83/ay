@@ -82,7 +82,7 @@ func (e *EmitContext) pythonLinterFiles() []string {
 			v := resolveSourceOrGeneratedVFS(e.ctx, e.instance, extra, d.srcDirs)
 			_, rooted := moduleRootedVFS(e.instance.Path.relString(), extra)
 
-			if v.isSource() && (rooted || e.ctx.fs.isFilePathClean(v.relString())) {
+			if v.isSource() && (rooted || e.ctx.fs.isFileVFS(v)) {
 				files = append(files, v.relString())
 			}
 		}

@@ -112,47 +112,36 @@ func readYaConfToolchains(fs FS) *YaConfToolchains {
 		throwFmt("ymake conf: no tool chain description, neither %s nor %s", yaConfJSON, yaConfJSONOpenSrc)
 	}
 
-	dec := json.NewDecoder(bytes.NewReader(concatChunks(fs.read(rel))))
+	data := concatChunks(fs.read(rel))
 	out := &YaConfToolchains{raw: map[string]json.RawMessage{}, entries: map[string]map[string]any{}}
 
-	expectJSONDelim(dec, '{')
-
-	for dec.More() {
-		switch key := jsonKey(dec); key {
+	ok := jsonObjectMembers(data, func(key string, raw []byte) {
+		switch key {
 		case "toolchain":
-			expectJSONDelim(dec, '{')
-
-			for dec.More() {
-				name := jsonKey(dec)
-
-				var entry json.RawMessage
-
-				throw(dec.Decode(&entry))
+			if !jsonObjectMembers(raw, func(name string, entry []byte) {
 				out.order = append(out.order, name)
 				out.raw[name] = entry
+			}) {
+				throwFmt("%s: tool chain section is not an object", rel)
+			}
+		case "bottles":
+			if string(raw) == "null" {
+				return
 			}
 
-			expectJSONDelim(dec, '}')
-		case "bottles":
-			throw(dec.Decode(&out.bottles))
-		default:
-			var skip json.RawMessage
+			out.bottles = map[string]json.RawMessage{}
 
-			throw(dec.Decode(&skip))
+			if !jsonObjectMembers(raw, func(name string, bottle []byte) { out.bottles[name] = bottle }) {
+				throwFmt("%s: bottles section is not an object", rel)
+			}
 		}
+	})
+
+	if !ok {
+		throwFmt("%s: not a JSON object", rel)
 	}
 
 	return out
-}
-
-func expectJSONDelim(dec *json.Decoder, want json.Delim) {
-	if tok := throw2(dec.Token()); tok != want {
-		throwFmt("ya.conf.json: want %q, got %v", want, tok)
-	}
-}
-
-func jsonKey(dec *json.Decoder) string {
-	return throw2(dec.Token()).(string)
 }
 
 func toolchainPlatform(name string, spec any, fallback map[string]any) map[string]any {

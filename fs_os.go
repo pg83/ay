@@ -63,6 +63,7 @@ type OsFS struct {
 	dirNames       *BumpAllocator[uint32]
 	dirEntries     *IntSet
 	contentHashes  ContentHashes
+	knownFiles     BitSet
 	sourceUnder    *IntMap[STR]
 	sourceUnderHot [sourceUnderHotMask + 1]sourceUnderHotEntry
 	readResult     [2][]byte
@@ -215,6 +216,26 @@ func (fs *OsFS) isFilePathClean(rel string) bool {
 	return present && !isDir
 }
 
+func (fs *OsFS) isFileVFS(v VFS) bool {
+	id := v.rel()
+
+	if fs.knownFiles.has(uint32(id)) {
+		return true
+	}
+
+	if !fs.isFilePathClean(id.string()) {
+		return false
+	}
+
+	fs.knownFiles.add(uint32(id))
+
+	return true
+}
+
+func (fs *OsFS) noteFile(v VFS) {
+	fs.knownFiles.add(uint32(v.rel()))
+}
+
 func (fs *OsFS) isReadFile(rel STR) bool {
 	return fs.contentHashes.load(rel) != 0
 }
@@ -300,6 +321,10 @@ func (fs *OsFS) resolveSourceUnder0(prefix, target STR, targetClean, cleanKnown 
 				v = internStr(normalisePathSlow(string(joined)))
 			}
 		}
+	}
+
+	if v != 0 {
+		fs.knownFiles.add(uint32(v))
 	}
 
 	fs.sourceUnder.put(key, v)
