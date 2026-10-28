@@ -52,10 +52,10 @@ func pyResourceKeyPrefix(topLevel bool, namespace *ANY, modulePath string) strin
 	}
 
 	if namespace != nil {
-		return strings.ReplaceAll(strings.TrimSuffix(namespace.string(), "."), ".", "/") + "/"
+		return internV(strings.ReplaceAll(strings.TrimSuffix(namespace.string(), "."), ".", "/"), "/").string()
 	}
 
-	return modulePath + "/"
+	return internV(modulePath, "/").string()
 }
 
 type PySrc struct {

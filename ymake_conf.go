@@ -175,14 +175,22 @@ func toolchainPlatform(name string, spec any, fallback map[string]any) map[strin
 	return map[string]any{"os": m["os"], "arch": arch, "toolchain": name, "visible_name": name}
 }
 
-func toolchainSpecName(toolchain string, spec *yaConfPlatformSpec) string {
+func toolchainSpecNameIs(toolchain string, spec *yaConfPlatformSpec, want string) bool {
 	arch := spec.Arch
 
 	if arch == "" {
 		arch = toolchainArchDflt
 	}
 
-	return strings.ToUpper(toolchain + "-" + spec.OS + "-" + arch)
+	for _, part := range [...]string{toolchain, "-", spec.OS, "-", arch} {
+		if len(want) < len(part) || !strings.EqualFold(want[:len(part)], part) {
+			return false
+		}
+
+		want = want[len(part):]
+	}
+
+	return want == ""
 }
 
 func stringizeToolchainPlatform(p map[string]any, sep string) string {
@@ -218,7 +226,7 @@ func resolveCxxToolchain(fs FS, cfg *YaConfToolchains, host, target string) *Too
 			}
 
 			matches := func(toolchain string) bool {
-				return toolchainSpecName(toolchain, hostSpec) == host && toolchainSpecName(toolchain, targetSpec) == target
+				return toolchainSpecNameIs(toolchain, hostSpec, host) && toolchainSpecNameIs(toolchain, targetSpec, target)
 			}
 
 			toolchain := name

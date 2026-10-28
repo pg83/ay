@@ -32,6 +32,12 @@ func appendConfigurationRecurses(out []string, dir string, stmt UnknownStmt, pla
 		child := arg.string()
 
 		if stmt.Name != tokRecurseRootRelative {
+			if pathIsClean(child) && child != "" {
+				out = append(out, internJoined(dir, child).string())
+
+				continue
+			}
+
 			child = path.Join(dir, child)
 		}
 
