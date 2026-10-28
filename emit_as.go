@@ -31,16 +31,13 @@ func (e *EmitContext) emitAS(srcVFS VFS, in ModuleCCInputs, hostP *Platform) (No
 
 	env := hostP.toolEnv()
 
-	node := Node{
-		Platform: instance.Platform,
+	node := NodeSpec{Node: Node{Platform: instance.Platform,
 		Cmds: na.cmdList(Cmd{CmdArgs: cmdArgs,
 			Cwd: bldRootDirVFS, Resources: blocks.asResources,
 			Env: env}),
-		Env:       env,
-		Inputs:    NodeInputs{files: na.rootInputList(na.vfsList(in.IncludeView.self), in.IncludeView.bucketList()...)},
-		Outputs:   na.vfsList(outVFS),
+		Env: env, Inputs: na.rootInputList(na.vfsList(in.IncludeView.self), in.IncludeView.bucketList()...), Outputs: na.vfsList(outVFS),
 		KV:        &asKV,
-		Resources: instance.Platform.UsesClangOnly,
+		Resources: instance.Platform.UsesClangOnly},
 	}
 
 	return e.emitNode(node), outVFS, true

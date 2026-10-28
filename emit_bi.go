@@ -57,15 +57,12 @@ func (e *EmitContext) emitBIReserved(
 		buildInfoGenPyVFS,
 	)
 
-	node := Node{
-		Platform:  instance.Platform,
-		Cmds:      na.cmdList(Cmd{CmdArgs: na.chunkList(cmd0Args), Env: env}, Cmd{CmdArgs: na.chunkList(cmd1Args), Env: env}, Cmd{CmdArgs: na.chunkList(cmd2Args), Env: env}),
-		Env:       env,
-		Inputs:    NodeInputs{files: na.rootInputList(inputs)},
-		KV:        &instance.Platform.BuildInfoKV,
+	node := NodeSpec{Node: Node{Platform: instance.Platform,
+		Cmds: na.cmdList(Cmd{CmdArgs: na.chunkList(cmd0Args), Env: env}, Cmd{CmdArgs: na.chunkList(cmd1Args), Env: env}, Cmd{CmdArgs: na.chunkList(cmd2Args), Env: env}),
+		Env:  env, Inputs: na.rootInputList(inputs), KV: &instance.Platform.BuildInfoKV,
 		Outputs:   na.vfsList(outVFS),
 		DepRefs:   na.refList(),
-		Resources: instance.Platform.UsesPython3Clang,
+		Resources: instance.Platform.UsesPython3Clang},
 	}
 
 	e.emitReservedNode(node, id)

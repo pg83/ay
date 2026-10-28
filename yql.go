@@ -199,12 +199,10 @@ func (e *EmitContext) genYqlPrebuiltCopy(src, out VFS, globals []ResourceDecl) *
 	node := Node{
 		Platform: e.instance.Platform,
 		Cmds:     na.cmdList(e.pythonScriptCmd("fs_tools.py", "copy", src.string(), out.string())),
-		Env:      envVarsVCS, KV: &resourcesKV, Outputs: na.vfsList(out),
-		Inputs:  NodeInputs{files: na.inputList(na.vfsList(src), ctx.scripts[copyFsToolsVFS.rel()])},
-		DepRefs: refs, Resources: usesPython3,
+		Env:      envVarsVCS, KV: &resourcesKV, Outputs: na.vfsList(out), Inputs: na.inputList(na.vfsList(src), ctx.scripts[copyFsToolsVFS.rel()]), DepRefs: refs, Resources: usesPython3,
 	}
 
-	ref := e.emitModuleNode(node, true)
+	ref := e.emitModuleNode(NodeSpec{Node: node}, true)
 
 	result := &ModuleEmitResult{
 		ModuleStmtName: d.moduleStmt.Name, LDRef: ref, LDPath: ptr(out),

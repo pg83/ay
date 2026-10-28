@@ -23,13 +23,10 @@ func emitResourceFetch(ctx *GenCtx, decl ResourceDecl) NodeRef {
 		args = append(args, argB.any(), argS.any(), decl.URI.any(), output.any())
 	}
 
-	node := Node{
-		Platform:     ctx.host,
-		Cmds:         na.cmdList(Cmd{CmdArgs: na.chunkList(na.anyList(args...))}),
-		Inputs:       NodeInputs{files: na.inputList(fetchScriptInputs(na, ctx.scripts))},
-		KV:           &fetchKV,
+	node := NodeSpec{Node: Node{Platform: ctx.host,
+		Cmds: na.cmdList(Cmd{CmdArgs: na.chunkList(na.anyList(args...))}), Inputs: na.inputList(fetchScriptInputs(na, ctx.scripts)), KV: &fetchKV,
 		Outputs:      na.vfsList(output),
-		Requirements: &fetchRequirements,
+		Requirements: &fetchRequirements},
 	}
 
 	node.PresetUID = resourceFetchUID(identity, output.string())

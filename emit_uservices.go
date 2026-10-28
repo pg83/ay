@@ -88,9 +88,8 @@ func (e *EmitContext) emitUsrvFile(file UsrvFile) {
 		inputs = na.vfsList(src, producer.ProducerMainOut)
 	}
 
-	n := Node{Platform: e.instance.Platform, KV: &KV{P: pkUT, PC: pcLightCyan, ShowOut: true}, Env: envVarsVCS,
-		Cmds:   na.cmdList(Cmd{CmdArgs: na.chunkList(na.anyList(toolArgs[0], strSourceArg.any(), src.any(), strTarget2.any(), build(e.instance.Path.relString()).any(), out.any())), Env: envVarsVCS, Resources: toolValue.Resources}),
-		Inputs: NodeInputs{files: na.rootInputList(inputs)}, Outputs: na.vfsList(out)}
+	n := NodeSpec{Node: Node{Platform: e.instance.Platform, KV: &KV{P: pkUT, PC: pcLightCyan, ShowOut: true}, Env: envVarsVCS,
+		Cmds: na.cmdList(Cmd{CmdArgs: na.chunkList(na.anyList(toolArgs[0], strSourceArg.any(), src.any(), strTarget2.any(), build(e.instance.Path.relString()).any(), out.any())), Env: envVarsVCS, Resources: toolValue.Resources}), Inputs: na.rootInputList(inputs), Outputs: na.vfsList(out)}}
 
 	e.collectCPPStyleInputs(src)
 	e.emitLazyModuleNode(n, nil)

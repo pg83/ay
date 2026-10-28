@@ -49,9 +49,10 @@ func (e *EmitContext) emitPchFile(stmt PchFileStmt) {
 
 		inputs := na.inputList(na.vfsList(tool), na.dedupClosureChunks(closure)...)
 
-		e.emitReservedNode(Node{Platform: e.instance.Platform, Cmds: pch.cmds(e.ctx.visitScoped(&pch.scoped)),
-			Env: envVarsVCS, Inputs: NodeInputs{files: inputs, roots: inputs[1:], root: closure.self}, Outputs: na.vfsList(out),
-			DepRefs: na.refList(toolRef), Resources: resources, KV: &pchKV}, ref)
+		e.emitReservedNode(NodeSpec{Node: Node{Platform: e.instance.Platform, Cmds: pch.cmds(e.ctx.visitScoped(&pch.scoped)),
+			Env: envVarsVCS, Inputs: inputs, Outputs: na.vfsList(out),
+			DepRefs: na.refList(toolRef), Resources: resources, KV: &pchKV}, input: InputSpec{roots: inputs[1:], root: closure.self},
+		}, ref)
 
 		pch.scoped.rendered = pch
 	})

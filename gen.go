@@ -315,6 +315,7 @@ func runGenIntoWithResources(fs FS, parsers *IncludeParserManager, targets []str
 	ctx.bindCommandScopes()
 	ctx.bindForeignTools()
 	ctx.emitDiscoveredModuleTests(suites)
+	ctx.scannerTarget.fixer.finish(ctx.emit)
 
 	if ctx.buckets.h1Mismatches > 0 {
 		onWarn(Warn{
@@ -385,6 +386,7 @@ func newGenCtx(fs FS, parsers *IncludeParserManager, hostP, targetP *Platform, e
 	targetSysincl := newSysinclCtx(loadSysInclSet(parsers, targetP, onWarn))
 	targetScanner := newIncludeScannerWith(parsers, targetSysincl, ctx.onWarn, ctx.buckets)
 
+	targetScanner.fixer = newIncludeFixer()
 	targetScanner.codegen = targetReg
 	targetScanner.moduleByRef = &ctx.moduleByRef
 
@@ -396,6 +398,7 @@ func newGenCtx(fs FS, parsers *IncludeParserManager, hostP, targetP *Platform, e
 
 	hostScanner := newIncludeScannerWith(parsers, hostSysincl, ctx.onWarn, ctx.buckets)
 
+	hostScanner.fixer = targetScanner.fixer
 	hostScanner.codegen = hostReg
 	hostScanner.moduleByRef = &ctx.moduleByRef
 
@@ -3160,6 +3163,7 @@ func (ctx *GenCtx) targetPICScanner() *IncludeScanner {
 		s := newIncludeScannerWith(ctx.parsers, nil, ctx.onWarn, ctx.buckets)
 
 		s.sysincl = ctx.scannerTarget.sysincl
+		s.fixer = ctx.scannerTarget.fixer
 		s.codegen = newCodegenRegistry(ctx.na)
 		s.moduleByRef = &ctx.moduleByRef
 

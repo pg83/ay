@@ -27,18 +27,15 @@ func (e *EmitContext) emitCheckConfigHStmt(conf ANY) {
 	pe := func() {
 		cv := scanner.walkClosure(confVFS, scanCtx, scanDomainCC)
 
-		e.emitReservedNode(Node{
-			Platform: ctx.target,
+		e.emitReservedNode(NodeSpec{Node: Node{Platform: ctx.target,
 			Cmds: na.cmdList(Cmd{CmdArgs: na.chunkList(na.anyList(python3.any(),
 				argSBuildScriptsCheckConfigHPy.any(),
 				confVFS.rel().any(),
 				generatedVFS.any())),
 				Env: env}),
-			Env:       env,
-			Inputs:    NodeInputs{files: na.rootInputList(na.vfsList(buildScriptsCheckConfigHPy, cv.self), cv.bucketList()...)},
-			Outputs:   na.vfsList(generatedVFS),
+			Env: env, Inputs: na.rootInputList(na.vfsList(buildScriptsCheckConfigHPy, cv.self), cv.bucketList()...), Outputs: na.vfsList(generatedVFS),
 			KV:        &checkConfigHKV,
-			Resources: usesPython3,
+			Resources: usesPython3},
 		}, chRef)
 	}
 

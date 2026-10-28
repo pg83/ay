@@ -63,9 +63,9 @@ func (e *EmitContext) emitLibraryCudaSource(meta SrcMeta, in ModuleCCInputs) {
 
 	inputs = appendInputChunks(na, inputs, closure)
 
-	node := Node{Platform: instance.Platform, Cmds: na.cmdList(Cmd{CmdArgs: args, Env: env, Resources: resourceKeyUnion(e.cudaSettings().Resources, compilerCommandBlocks(in.CCBlocks, true).resources)}), Env: env,
-		Inputs: NodeInputs{files: inputs, roots: appendInputChunks(na, inputs[:1], inputs[2:])}, Outputs: na.vfsList(outVFS), KV: &cudaKV, Resources: instance.Platform.CCUsesResources,
-		DepRefs: na.refList(mtimeRef, pidRef)}
+	node := NodeSpec{Node: Node{Platform: instance.Platform, Cmds: na.cmdList(Cmd{CmdArgs: args, Env: env, Resources: resourceKeyUnion(e.cudaSettings().Resources, compilerCommandBlocks(in.CCBlocks, true).resources)}), Env: env, Inputs: inputs, Outputs: na.vfsList(outVFS), KV: &cudaKV, Resources: instance.Platform.CCUsesResources,
+		DepRefs: na.refList(mtimeRef, pidRef)}, input: InputSpec{roots: appendInputChunks(na, inputs[:1], inputs[2:])},
+	}
 
 	if env := (Environment{s: &e.frame.ifEnv}); env.bool(envCudaNodeRAMRequirement) {
 		ram := throw2(strconv.ParseFloat(strings.TrimPrefix(env.string(envCudaNodeRAMRequirement), "ram:"), 64))
@@ -177,8 +177,7 @@ func (e *EmitContext) emitSplitCudaSource(src ANY, arches []string, embedPTX boo
 
 			inputs = appendInputChunks(na, inputs, compileClosure)
 
-			e.emitReservedNode(Node{Platform: e.instance.Platform, Cmds: na.cmdList(cmds...), Env: env, Inputs: NodeInputs{files: inputs, roots: appendInputChunks(na, inputs[:2], inputs[3:])},
-				Outputs: outs, KV: &cudaKV, DepRefs: na.refList(mtimeRef, pidRef), Resources: e.instance.Platform.CCUsesResources}, ref)
+			e.emitReservedNode(NodeSpec{Node: Node{Platform: e.instance.Platform, Cmds: na.cmdList(cmds...), Env: env, Inputs: inputs, Outputs: outs, KV: &cudaKV, DepRefs: na.refList(mtimeRef, pidRef), Resources: e.instance.Platform.CCUsesResources}, input: InputSpec{roots: appendInputChunks(na, inputs[:2], inputs[3:])}}, ref)
 		})
 
 		for i, out := range outs {
@@ -215,8 +214,7 @@ func (e *EmitContext) emitSplitCudaSource(src ANY, arches []string, embedPTX boo
 
 		inputs := appendInputChunks(na, na.inputList(na.vfsList(images...), na.vfsList(script)), sourceClosure)
 
-		e.emitReservedNode(Node{Platform: e.instance.Platform, Cmds: na.cmdList(Cmd{CmdArgs: na.chunkList(na.anyList(args...)), Env: envVarsVCS, Resources: e.cudaSettings().RootResources}), Env: envVarsVCS,
-			Inputs: NodeInputs{files: inputs}, Outputs: na.vfsList(fatbin), KV: &cudaKV, Resources: usesPython3}, fatRef)
+		e.emitReservedNode(NodeSpec{Node: Node{Platform: e.instance.Platform, Cmds: na.cmdList(Cmd{CmdArgs: na.chunkList(na.anyList(args...)), Env: envVarsVCS, Resources: e.cudaSettings().RootResources}), Env: envVarsVCS, Inputs: inputs, Outputs: na.vfsList(fatbin), KV: &cudaKV, Resources: usesPython3}}, fatRef)
 	})
 
 	e.register(GeneratedFileSpec{OutputPath: fatbin, ProducerRef: fatRef, OnUse: fatPending})
@@ -248,8 +246,7 @@ func (e *EmitContext) emitSplitCudaSource(src ANY, arches []string, embedPTX boo
 
 		inputs = appendInputChunks(na, inputs, compileClosure)
 
-		e.emitReservedNode(Node{Platform: e.instance.Platform, Cmds: na.cmdList(Cmd{CmdArgs: args, Env: env, Resources: resourceKeyUnion(e.cudaSettings().Resources, compilerCommandBlocks(in.CCBlocks, true).resources)}, Cmd{CmdArgs: na.chunkList(na.anyList(frontend...)), Env: envVarsVCS}), Env: env,
-			Inputs: NodeInputs{files: inputs, roots: appendInputChunks(na, inputs[:1], inputs[2:])}, Outputs: hostOuts, KV: &cudaKV, DepRefs: na.refList(mtimeRef, pidRef), Resources: e.instance.Platform.CCUsesResources}, hostRef)
+		e.emitReservedNode(NodeSpec{Node: Node{Platform: e.instance.Platform, Cmds: na.cmdList(Cmd{CmdArgs: args, Env: env, Resources: resourceKeyUnion(e.cudaSettings().Resources, compilerCommandBlocks(in.CCBlocks, true).resources)}, Cmd{CmdArgs: na.chunkList(na.anyList(frontend...)), Env: envVarsVCS}), Env: env, Inputs: inputs, Outputs: hostOuts, KV: &cudaKV, DepRefs: na.refList(mtimeRef, pidRef), Resources: e.instance.Platform.CCUsesResources}, input: InputSpec{roots: appendInputChunks(na, inputs[:1], inputs[2:])}}, hostRef)
 	})
 
 	e.register(GeneratedFileSpec{OutputPath: hostOuts[0], ProducerRef: hostRef, OnUse: hostPending})
@@ -291,7 +288,7 @@ func (e *EmitContext) emitCudaDeviceLink(archiveName string, local CollectedObjs
 	node.Cmds = na.cmdList(Cmd{CmdArgs: na.chunkList(na.anyList(args...)), Env: env, Resources: resourceKeyUnion(c.Resources, c.TargetResources)}, arCmd)
 	node.Env = na.envList(append(append(EnvVars(nil), node.Env...), env[1])...)
 	node.Outputs = na.vfsList(archive, devlink)
-	node.Inputs.files = appendInputChunks(na, node.Inputs.files, na.rootInputList(na.vfsList(inputs...)))
+	node.Inputs = appendInputChunks(na, node.Inputs, na.rootInputList(na.vfsList(inputs...)))
 
 	return e.emitNode(node)
 }

@@ -102,8 +102,7 @@ func (e *EmitContext) emitSbomComponent(realPrjName string) (*NodeRef, *VFS) {
 	scriptVFS := source(sbomGenScriptRel)
 	env := envVarsVCS
 
-	node := Node{
-		Platform: instance.Platform,
+	node := NodeSpec{Node: Node{Platform: instance.Platform,
 		Cmds: na.cmdList(Cmd{CmdArgs: na.chunkList(na.anyList(
 			wrapccPython3STR.any(),
 			scriptVFS.any(),
@@ -112,11 +111,9 @@ func (e *EmitContext) emitSbomComponent(realPrjName string) (*NodeRef, *VFS) {
 			strPath.any(), internStr(moddir).any(),
 			strVer.any(), internStr(modver).any(),
 			strLang.any(), internStr(lang).any())), Env: env}),
-		Env:       env,
-		Inputs:    NodeInputs{files: na.inputList(na.vfsList(scriptVFS))},
-		KV:        &sbomKV,
+		Env: env, Inputs: na.inputList(na.vfsList(scriptVFS)), KV: &sbomKV,
 		Outputs:   na.vfsList(out),
-		Resources: usesPython3,
+		Resources: usesPython3},
 	}
 
 	ref := e.emitNode(node)
@@ -144,8 +141,7 @@ func (e *EmitContext) emitSbomToolchainComponent(toolchainName, ver string) (*No
 	scriptVFS := source(sbomGenScriptRel)
 	env := envVarsVCS
 
-	node := Node{
-		Platform: instance.Platform,
+	node := NodeSpec{Node: Node{Platform: instance.Platform,
 		Cmds: na.cmdList(Cmd{CmdArgs: na.chunkList(na.anyList(
 			wrapccPython3STR.any(),
 			scriptVFS.any(),
@@ -153,11 +149,9 @@ func (e *EmitContext) emitSbomToolchainComponent(toolchainName, ver string) (*No
 			strType.any(), strToolchain.any(),
 			strToolchainName.any(), internStr(toolchainName).any(),
 			strVer.any(), internStr(ver).any())), Env: env}),
-		Env:       env,
-		Inputs:    NodeInputs{files: na.inputList(na.vfsList(scriptVFS))},
-		KV:        &sbomKV,
+		Env: env, Inputs: na.inputList(na.vfsList(scriptVFS)), KV: &sbomKV,
 		Outputs:   na.vfsList(out),
-		Resources: usesPython3,
+		Resources: usesPython3},
 	}
 
 	ref := e.emitNode(node)

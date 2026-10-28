@@ -166,18 +166,14 @@ func (e *EmitContext) emitFLReserved(srcRel string, srcVFS VFS, flatcLDRef NodeR
 	copy(inputs[3:], transitiveBuckets)
 	na.inputs.commit(len(inputs))
 
-	node := Node{
-		Platform: instance.Platform,
+	node := NodeSpec{Node: Node{Platform: instance.Platform,
 		Cmds: na.cmdList(Cmd{CmdArgs: cmdArgs,
 			Cwd: bldRootDirVFS,
 			Env: env}),
 		Env:            env,
-		ForeignDepRefs: na.refList(flatcLDRef),
-		Inputs:         NodeInputs{files: InputChunks(inputs[:len(inputs):len(inputs)]), roots: InputChunks(inputs[1:len(inputs):len(inputs)])},
-
-		KV:        v.kv,
+		ForeignDepRefs: na.refList(flatcLDRef), Inputs: InputChunks(inputs[:len(inputs):len(inputs)]), KV: v.kv,
 		Outputs:   na.vfsList(headerVFS, cppVFS, bfbsVFS),
-		Resources: usesPython3,
+		Resources: usesPython3}, input: InputSpec{roots: InputChunks(inputs[1:len(inputs):len(inputs)])},
 	}
 
 	e.emitReservedNode(node, id)

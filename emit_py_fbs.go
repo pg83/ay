@@ -102,17 +102,15 @@ func (e *EmitContext) emitPyFbsGroup(files []PyFbsSource) {
 		imports = append(imports, view.bucketList()...)
 	}
 
-	node := Node{
-		Platform: instance.Platform, Env: envVarsVCS,
+	node := NodeSpec{Node: Node{Platform: instance.Platform, Env: envVarsVCS,
 		Cmds: na.cmdList(
 			Cmd{CmdArgs: na.chunkList(args, d.flatcFlags, flatcIOLeadArgs[:len(flatcIOLeadArgs)-1], e.peers.FlatcIncludeArgs, tail), Cwd: bldRootDirVFS, Env: envVarsVCS},
 			Cmd{CmdArgs: na.chunkList(na.anyList(d.tc.Python3.any(), tar.any(), strExts.any(), strPy.any(), strInput.any(), build(dir).any(), strOutput.any(), out.any())), Env: envVarsVCS},
-		),
-		Inputs: NodeInputs{files: na.rootInputList(inputs, ctx.scripts[tar.rel()])}, Outputs: na.vfsList(out), ForeignDepRefs: na.refList(toolRef), KV: &pyFbsKV, KVExts: []KVExt{{Key: "tared_kind", Val: "nodir"}}, Resources: usesPython3,
+		), Inputs: na.rootInputList(inputs, ctx.scripts[tar.rel()]), Outputs: na.vfsList(out), ForeignDepRefs: na.refList(toolRef), KV: &pyFbsKV, KVExts: []KVExt{{Key: "tared_kind", Val: "nodir"}}, Resources: usesPython3},
 	}
 
-	node.Inputs.files = append(node.Inputs.files, imports...)
-	node.Inputs.roots = na.inputList(node.Inputs.files[0][1:], node.Inputs.files[1:]...)
+	node.Inputs = append(node.Inputs, imports...)
+	node.input.roots = na.inputList(node.Inputs[0][1:], node.Inputs[1:]...)
 
 	fp := e.emitNode(node)
 
@@ -130,10 +128,8 @@ func (e *EmitContext) emitPyFbsGroup(files []PyFbsSource) {
 
 	toolRefs := na.refList(append([]NodeRef{resRef}, pycc.refs...)...)
 
-	p3 := e.emitNode(Node{
-		Platform: instance.Platform, Env: envVarsVCS,
-		Cmds:   na.cmdList(Cmd{CmdArgs: na.chunkList(na.anyList(compileArgs...)), Cwd: build(dir), Env: envVarsVCS}),
-		Inputs: NodeInputs{files: na.rootInputList(na.vfsList(script, out, res), pycc.binaries, ctx.scripts[script.rel()]), roots: na.inputList(na.vfsList(script, out), ctx.scripts[script.rel()])}, Outputs: na.vfsList(cc), DepRefs: na.refList(fp), ForeignDepRefs: toolRefs, KV: kv, Resources: usesPython3,
+	p3 := e.emitNode(NodeSpec{Node: Node{Platform: instance.Platform, Env: envVarsVCS,
+		Cmds: na.cmdList(Cmd{CmdArgs: na.chunkList(na.anyList(compileArgs...)), Cwd: build(dir), Env: envVarsVCS}), Inputs: na.rootInputList(na.vfsList(script, out, res), pycc.binaries, ctx.scripts[script.rel()]), Outputs: na.vfsList(cc), DepRefs: na.refList(fp), ForeignDepRefs: toolRefs, KV: kv, Resources: usesPython3}, input: InputSpec{roots: na.inputList(na.vfsList(script, out), ctx.scripts[script.rel()])},
 	})
 
 	e.register(GeneratedFileSpec{OutputPath: cc, ProducerRef: p3, GeneratorRefs: toolRefs})

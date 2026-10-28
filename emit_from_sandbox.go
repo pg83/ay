@@ -106,7 +106,7 @@ func appendSandboxOutput(outs []VFS, out VFS) []VFS {
 	return append(outs, out)
 }
 
-func fromSandboxNode(na *NodeArenas, instance ModuleInstance, python3 ANY, stmt *FromSandboxStmt) (Node, []VFS, int) {
+func fromSandboxNode(na *NodeArenas, instance ModuleInstance, python3 ANY, stmt *FromSandboxStmt) (NodeSpec, []VFS, int) {
 	id := stmt.ResourceId.string()
 	mode := "--untar-to"
 
@@ -159,15 +159,12 @@ func fromSandboxNode(na *NodeArenas, instance ModuleInstance, python3 ANY, stmt 
 
 	env := envVarsVCS
 
-	return Node{
-		Platform:     instance.Platform,
-		Cmds:         na.cmdList(Cmd{CmdArgs: na.chunkList(args), Cwd: instance.Path.rel().build(), Env: env}),
-		Env:          env,
-		Inputs:       NodeInputs{files: na.inputList(fromSandboxScriptInputs)},
-		KV:           &fromSandboxKV,
+	return NodeSpec{Node: Node{Platform: instance.Platform,
+		Cmds: na.cmdList(Cmd{CmdArgs: na.chunkList(args), Cwd: instance.Path.rel().build(), Env: env}),
+		Env:  env, Inputs: na.inputList(fromSandboxScriptInputs), KV: &fromSandboxKV,
 		Outputs:      na.vfsList(outVFSs...),
 		Requirements: &fromSandboxRequirements,
-		Resources:    usesPython3,
+		Resources:    usesPython3},
 	}, outVFSs, auto
 }
 

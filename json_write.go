@@ -78,7 +78,7 @@ func writeGraphCompact(w io.Writer, g *Graph, dropSrcInputs bool) {
 		}
 
 		first = false
-		buf = appendNode(buf, node, node.consumeInputs(), g.fetchRefs, dropSrcInputs)
+		buf = appendNode(buf, node, node.Inputs, g.fetchRefs, dropSrcInputs)
 
 		if len(buf) >= 1<<20 {
 			throw2(w.Write(buf))
@@ -121,10 +121,10 @@ func appendNode(buf []byte, n *Node, inputs InputChunks, fetchRefs *DenseMap[STR
 		buf = appendVFSChunks(buf, inputs)
 	}
 
-	if len(n.InputNames) > 0 {
+	if len(n.inputNames()) > 0 {
 		buf = buf[:len(buf)-1]
 
-		for _, name := range n.InputNames {
+		for _, name := range n.inputNames() {
 			if buf[len(buf)-1] != '[' {
 				buf = append(buf, ',')
 			}
@@ -148,10 +148,10 @@ func appendNode(buf []byte, n *Node, inputs InputChunks, fetchRefs *DenseMap[STR
 	buf = append(buf, `,"requirements":`...)
 	buf = appendRequirements(buf, n.Requirements)
 
-	if len(n.ResourceURIs) > 0 {
+	if len(n.resourceURIs()) > 0 {
 		buf = append(buf, `,"resources":[`...)
 
-		for i, uri := range n.ResourceURIs {
+		for i, uri := range n.resourceURIs() {
 			if i > 0 {
 				buf = append(buf, ',')
 			}

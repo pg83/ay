@@ -182,7 +182,7 @@ func (e *EmitContext) emitARNode(
 	return ref
 }
 
-func composeARNode(instance ModuleInstance, archivePath VFS, objRefs []NodeRef, objPaths []VFS, arPluginPath *VFS, tc ModuleToolchain, hostP *Platform, na *NodeArenas) Node {
+func composeARNode(instance ModuleInstance, archivePath VFS, objRefs []NodeRef, objPaths []VFS, arPluginPath *VFS, tc ModuleToolchain, hostP *Platform, na *NodeArenas) NodeSpec {
 	cmdEnv := hostP.toolEnv()
 	tail := na.anys.alloc(4 + len(objPaths))[:0]
 
@@ -215,16 +215,13 @@ func composeARNode(instance ModuleInstance, archivePath VFS, objRefs []NodeRef, 
 	topEnv := hostP.toolEnv()
 	deps := na.uniqueRefs(na.objectBuildRefs(objRefs, objPaths))
 
-	n := Node{
-		Platform: instance.Platform,
+	n := NodeSpec{Node: Node{Platform: instance.Platform,
 		Cmds: na.cmdList(Cmd{CmdArgs: cmdArgs,
 			Env: cmdEnv}),
-		Env:       topEnv,
-		Inputs:    NodeInputs{files: na.rootInputList(inputTail, objInputs)},
-		KV:        &arKV,
+		Env: topEnv, Inputs: na.rootInputList(inputTail, objInputs), KV: &arKV,
 		Outputs:   na.vfsList(archivePath),
 		DepRefs:   deps,
-		Resources: instance.Platform.UsesPython3Clang,
+		Resources: instance.Platform.UsesPython3Clang},
 	}
 
 	return n

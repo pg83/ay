@@ -66,20 +66,17 @@ func (e *EmitContext) emitGoFlatcSource(meta SrcMeta) {
 	post := na.anyList(d.tc.Python3.any(), postprocess.any(), strArcadiaPrefix.any(), internStr(goArcPrefix).any(), strInputDir.any(), bindir.any(), strMap.any())
 	tar := na.anyList(d.tc.Python3.any(), tarSources.any(), strFlat.any(), strInput.any(), generated.any(), strOutput.any(), out.any(), strExts.any(), strGo3.any())
 
-	node := Node{
-		Platform: instance.Platform, Env: envVarsVCS,
+	node := NodeSpec{Node: Node{Platform: instance.Platform, Env: envVarsVCS,
 		Cmds: na.cmdList(
 			Cmd{CmdArgs: na.chunkList(head, d.flatcFlags, flatcIOLeadArgs[:len(flatcIOLeadArgs)-1], e.peers.FlatcIncludeArgs, tail), Cwd: bldRootDirVFS, Env: envVarsVCS},
 			Cmd{CmdArgs: na.chunkList(post, e.peers.FbsNamespaces), Env: envVarsVCS},
 			Cmd{CmdArgs: na.chunkList(tar), Env: envVarsVCS},
-		),
-		Inputs: NodeInputs{files: na.rootInputList(na.vfsList(tool, src, postprocess, tarSources), ctx.scripts[postprocess.rel()], ctx.scripts[tarSources.rel()])},
-		KV:     &goFlatcKV, KVExts: []KVExt{{Key: "tared_kind", Val: "nodir"}},
-		ForeignDepRefs: na.refList(toolRef), Outputs: na.vfsList(out), Resources: usesPython3,
+		), Inputs: na.rootInputList(na.vfsList(tool, src, postprocess, tarSources), ctx.scripts[postprocess.rel()], ctx.scripts[tarSources.rel()]), KV: &goFlatcKV, KVExts: []KVExt{{Key: "tared_kind", Val: "nodir"}},
+		ForeignDepRefs: na.refList(toolRef), Outputs: na.vfsList(out), Resources: usesPython3},
 	}
 
-	node.Inputs.files = append(node.Inputs.files, imports.bucketList()...)
-	node.Inputs.roots = na.inputList(node.Inputs.files[0][1:], node.Inputs.files[1:]...)
+	node.Inputs = append(node.Inputs, imports.bucketList()...)
+	node.input.roots = na.inputList(node.Inputs[0][1:], node.Inputs[1:]...)
 
 	ref := e.emitNode(node)
 

@@ -153,15 +153,11 @@ func (e *EmitContext) emitAliceEnumSrcStmt(stmt *GenerateEnumSerializationStmt) 
 
 		info.GeneratorRefs = na.refList(toolRef)
 
-		e.emitReservedNode(Node{
-			Platform: e.instance.Platform,
-			Cmds:     na.cmdList(Cmd{CmdArgs: na.chunkList(args), Env: envVarsVCS}),
-			Env:      envVarsVCS,
-			Inputs:   NodeInputs{files: inputs, roots: na.inputList(inputs[0][1:], inputs[1:]...), root: closure.self},
-
-			Outputs:        na.vfsList(output),
+		e.emitReservedNode(NodeSpec{Node: Node{Platform: e.instance.Platform,
+			Cmds: na.cmdList(Cmd{CmdArgs: na.chunkList(args), Env: envVarsVCS}),
+			Env:  envVarsVCS, Inputs: inputs, Outputs: na.vfsList(output),
 			ForeignDepRefs: na.refList(toolRef),
-			KV:             &enKV,
+			KV:             &enKV}, input: InputSpec{roots: na.inputList(inputs[0][1:], inputs[1:]...), root: closure.self},
 		}, ref)
 	})
 
@@ -216,16 +212,12 @@ func (e *EmitContext) emitEN(
 	foreignDepRefs := na.refList(enumParserLD)
 	inputs := appendInputChunks(na, na.inputList(na.vfsList(enumParserBin)), na.dedupClosureChunks(closure))
 
-	node := Node{
-		Platform: e.instance.Platform,
+	node := NodeSpec{Node: Node{Platform: e.instance.Platform,
 		Cmds: na.cmdList(Cmd{CmdArgs: na.chunkList(cmdArgs),
 			Env: env}),
-		Env:    env,
-		Inputs: NodeInputs{files: inputs, roots: na.inputList(inputs[0][1:], inputs[1:]...), root: closure.self},
-
-		KV:             &enKV,
+		Env: env, Inputs: inputs, KV: &enKV,
 		Outputs:        outputs,
-		ForeignDepRefs: foreignDepRefs,
+		ForeignDepRefs: foreignDepRefs}, input: InputSpec{roots: na.inputList(inputs[0][1:], inputs[1:]...), root: closure.self},
 	}
 
 	e.emitReservedNode(node, id)

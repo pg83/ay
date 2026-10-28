@@ -54,7 +54,7 @@ func (e *EmitContext) emitGolaunchSource(kv *KV, script VFS, args []ANY, out VFS
 	na := e.ctx.na
 	ref := e.ctx.emit.reserve()
 	inputs := append([]VFS{script}, e.ctx.scripts[script.rel()]...)
-	node := Node{Platform: e.instance.Platform, KV: kv, Resources: usesPython3, Env: envVarsVCS, Cmds: na.cmdList(Cmd{CmdArgs: na.chunkList(args), Stdout: out, Env: envVarsVCS}), Inputs: NodeInputs{files: na.rootInputList(na.vfsList(inputs...))}, Outputs: na.vfsList(out)}
+	node := NodeSpec{Node: Node{Platform: e.instance.Platform, KV: kv, Resources: usesPython3, Env: envVarsVCS, Cmds: na.cmdList(Cmd{CmdArgs: na.chunkList(args), Stdout: out, Env: envVarsVCS}), Inputs: na.rootInputList(na.vfsList(inputs...)), Outputs: na.vfsList(out)}}
 	pending := e.pendingEmit(func() { e.emitReservedNode(node, ref) })
 
 	e.register(GeneratedFileSpec{OutputPath: out, ProducerRef: ref, OnUse: pending})
@@ -173,9 +173,9 @@ func (e *EmitContext) genPackageFinal() *ModuleEmitResult {
 
 	args = append(args, strYaEndCommandFile.any())
 
-	node := Node{Module: true, Platform: e.instance.Platform, KV: &packageFinalKV, KVExts: []KVExt{{Key: "package", Val: "PACKAGE"}}, Env: envVarsVCS, Resources: usesPython3,
-		Inputs: NodeInputs{files: na.rootInputList(na.vfsList(dedup(inputs)...)), roots: buildFrom}, Outputs: na.vfsList(append(outputs, e.outs...)...), DepRefs: na.refList(dedupRefs(e.refs)...),
-		Cmds: na.cmdList(e.pythonScriptCmd("touch.py", out.string()), Cmd{CmdArgs: na.chunkList(args), Env: envVarsVCS})}
+	node := NodeSpec{Node: Node{Module: true, Platform: e.instance.Platform, KV: &packageFinalKV, KVExts: []KVExt{{Key: "package", Val: "PACKAGE"}}, Env: envVarsVCS, Resources: usesPython3, Inputs: na.rootInputList(na.vfsList(dedup(inputs)...)), Outputs: na.vfsList(append(outputs, e.outs...)...), DepRefs: na.refList(dedupRefs(e.refs)...),
+		Cmds: na.cmdList(e.pythonScriptCmd("touch.py", out.string()), Cmd{CmdArgs: na.chunkList(args), Env: envVarsVCS})}, input: InputSpec{roots: buildFrom},
+	}
 
 	suffix := ""
 
@@ -190,7 +190,7 @@ func (e *EmitContext) genPackageFinal() *ModuleEmitResult {
 			globalInputs = append(globalInputs, global, e.codegen.lookup(global).ProducerMainOut)
 		}
 
-		node.Inputs.files = appendInputChunks(na, node.Inputs.files, na.inputList(na.vfsList(dedup(globalInputs)...)))
+		node.Inputs = appendInputChunks(na, node.Inputs, na.inputList(na.vfsList(dedup(globalInputs)...)))
 	}
 
 	for _, file := range copyFiles {
@@ -202,7 +202,7 @@ func (e *EmitContext) genPackageFinal() *ModuleEmitResult {
 	packagePeers := dedup(peers)
 
 	e.setModulePeerRoots(&node, packagePeers)
-	node.Inputs.files = e.appendModuleInputs(node.Inputs.files, packagePeers, false)
+	node.Inputs = e.appendModuleInputs(node.Inputs, packagePeers, false)
 
 	ref := e.emitLazyModuleNode(node, peers, outputs...)
 

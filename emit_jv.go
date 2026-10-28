@@ -69,14 +69,11 @@ func (e *EmitContext) emitJVNodeReserved(cmdArgs []ANY, inputs InputChunks, outp
 		cmd.Cwd = cwdVFS(cwd)
 	}
 
-	node := Node{
-		Platform:  e.instance.Platform,
-		Cmds:      na.cmdList(cmd),
-		Env:       env,
-		Inputs:    NodeInputs{files: inputs},
-		KV:        &jvKV,
+	node := NodeSpec{Node: Node{Platform: e.instance.Platform,
+		Cmds: na.cmdList(cmd),
+		Env:  env, Inputs: inputs, KV: &jvKV,
 		Outputs:   na.vfsList(outputs...),
-		Resources: usesPython3JDK17,
+		Resources: usesPython3JDK17},
 	}
 
 	e.emitReservedNode(node, id)

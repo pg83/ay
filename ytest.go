@@ -375,10 +375,8 @@ func (ctx *GenCtx) testContext() NodeRef {
 	}
 
 	o.contextRef = ctx.emit.emit(&Node{
-		Platform:     ctx.target,
-		Cmds:         na.cmdList(Cmd{CmdArgs: na.chunkList(args)}),
-		Inputs:       NodeInputs{files: na.inputList(na.vfsList(source(testAppendFileScriptRel)))},
-		KV:           &testNodesKV,
+		Platform: ctx.target,
+		Cmds:     na.cmdList(Cmd{CmdArgs: na.chunkList(args)}), Inputs: na.inputList(na.vfsList(source(testAppendFileScriptRel))), KV: &testNodesKV,
 		Outputs:      na.vfsList(bldCommonTestContext),
 		Requirements: o.contextReqs,
 		Resources:    usesPython3,
@@ -604,11 +602,9 @@ func (ctx *GenCtx) testAccumulator(s *TestSuite, chunks []*Node, refs []NodeRef,
 	return &Node{
 		Platform: testNoPlatform,
 		Cmds:     na.cmdList(Cmd{CmdArgs: na.chunkList(na.anyList(testArgs(strs)...)), Cwd: bld}),
-		Env:      sortedEnvVars(o.commonEnvMap()),
-		Inputs:   NodeInputs{files: na.inputList(na.vfsList(slices.Compact(inputs)...))},
-		KV:       &KV{P: pkTA, PC: pcLightCyan, ShowOutBool: true},
-		Outputs:  na.vfsList(append(outs, intern(log))...),
-		DepRefs:  na.refList(dedupRefs(refs)...),
+		Env:      sortedEnvVars(o.commonEnvMap()), Inputs: na.inputList(na.vfsList(slices.Compact(inputs)...)), KV: &KV{P: pkTA, PC: pcLightCyan, ShowOutBool: true},
+		Outputs: na.vfsList(append(outs, intern(log))...),
+		DepRefs: na.refList(dedupRefs(refs)...),
 	}
 }
 
@@ -819,12 +815,10 @@ func (ctx *GenCtx) testNode(s *TestSuite, chunk TestChunk) *Node {
 	}
 
 	return &Node{
-		UIDSalt:      internStr(s.uidSalt),
-		Platform:     s.p,
-		Cmds:         na.cmdList(cmds...),
-		Env:          ctx.testEnv(s),
-		Inputs:       NodeInputs{files: na.inputList(na.vfsList(slices.Compact(inputs)...))},
-		InputNames:   names,
+		UIDSalt:  internStr(s.uidSalt),
+		Platform: s.p,
+		Cmds:     na.cmdList(cmds...),
+		Env:      ctx.testEnv(s), Inputs: na.inputList(na.vfsList(slices.Compact(inputs)...)), Extra: &NodeExtra{InputNames: names},
 		KV:           kv,
 		Outputs:      na.vfsList(outputs...),
 		Requirements: req,
@@ -1139,5 +1133,5 @@ func (ctx *GenCtx) testMerger(s *TestSuite, nodes []*Node, refs []NodeRef) *Node
 
 	slices.SortFunc(inputs, func(a, b VFS) int { return strings.Compare(a.string(), b.string()) })
 
-	return &Node{Platform: testNoPlatform, Env: sortedEnvVars(o.commonEnvMap()), Cmds: na.cmdList(Cmd{CmdArgs: na.chunkList(testArgs(strs)), Cwd: bld}), Inputs: NodeInputs{files: na.inputList(na.vfsList(slices.Compact(inputs)...))}, Outputs: na.vfsList(outs...), DepRefs: na.refList(dedupRefs(refs)...), KV: &KV{P: pkTR, PC: pcLightCyan, ShowOutBool: true}}
+	return &Node{Platform: testNoPlatform, Env: sortedEnvVars(o.commonEnvMap()), Cmds: na.cmdList(Cmd{CmdArgs: na.chunkList(testArgs(strs)), Cwd: bld}), Inputs: na.inputList(na.vfsList(slices.Compact(inputs)...)), Outputs: na.vfsList(outs...), DepRefs: na.refList(dedupRefs(refs)...), KV: &KV{P: pkTR, PC: pcLightCyan, ShowOutBool: true}}
 }

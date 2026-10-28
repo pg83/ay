@@ -699,17 +699,15 @@ func (e *EmitContext) genPrebuiltProgram() *ModuleEmitResult {
 	na.anys.commit(len(args))
 
 	node := Node{
-		Platform:  instance.Platform,
-		Cmds:      na.cmdList(Cmd{CmdArgs: na.chunkList(args[:len(args):len(args)]), Env: env}),
-		Env:       env,
-		Inputs:    NodeInputs{files: inputsChunks},
-		KV:        &resourcesKV,
+		Platform: instance.Platform,
+		Cmds:     na.cmdList(Cmd{CmdArgs: na.chunkList(args[:len(args):len(args)]), Env: env}),
+		Env:      env, Inputs: inputsChunks, KV: &resourcesKV,
 		Outputs:   na.vfsList(dst),
 		DepRefs:   depRefs,
 		Resources: usesPython3,
 	}
 
-	ref := e.emitNode(node)
+	ref := e.emitNode(NodeSpec{Node: node})
 
 	result := &ModuleEmitResult{
 		ModuleStmtName: d.moduleStmt.Name,

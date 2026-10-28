@@ -21,11 +21,7 @@ func (e *EmitContext) genExecTest() *ModuleEmitResult {
 
 	out := build(e.instance.Path.relString(), "/", name, ".pkg.fake")
 	na := e.ctx.na
-
-	node := Node{Module: true, Platform: e.instance.Platform, KV: &unionKV, Env: envVarsVCS, Outputs: na.vfsList(out), Resources: usesPython3,
-		Inputs: NodeInputs{files: na.inputList(na.vfsList(buildScriptsTouchPy))},
-		Cmds:   na.cmdList(e.pythonScriptCmd("touch.py", out.string()))}
-
+	node := NodeSpec{Node: Node{Module: true, Platform: e.instance.Platform, KV: &unionKV, Env: envVarsVCS, Outputs: na.vfsList(out), Resources: usesPython3, Inputs: na.inputList(na.vfsList(buildScriptsTouchPy)), Cmds: na.cmdList(e.pythonScriptCmd("touch.py", out.string()))}}
 	ref := e.emitLazyModuleNode(node, nil, out)
 	result := e.scriptModuleResult(ref, out, nil, globals)
 

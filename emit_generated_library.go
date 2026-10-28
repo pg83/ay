@@ -47,9 +47,8 @@ func (e *EmitContext) genGeneratedLibrary() *ModuleEmitResult {
 	na := e.ctx.na
 	inputs := append(dedup(e.outs), buildScriptsTouchPy)
 
-	node := Node{Module: true, Platform: e.instance.Platform, KV: &unionKV, Env: envVarsVCS,
-		Inputs: NodeInputs{files: na.rootInputList(na.vfsList(inputs...))}, Outputs: na.vfsList(out), Resources: usesPython3,
-		Cmds: na.cmdList(e.pythonScriptCmd("touch.py", out.string()))}
+	node := NodeSpec{Node: Node{Module: true, Platform: e.instance.Platform, KV: &unionKV, Env: envVarsVCS, Inputs: na.rootInputList(na.vfsList(inputs...)), Outputs: na.vfsList(out), Resources: usesPython3,
+		Cmds: na.cmdList(e.pythonScriptCmd("touch.py", out.string()))}}
 
 	ref := e.emitLazyModuleNode(node, nil, out)
 

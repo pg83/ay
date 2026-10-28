@@ -102,19 +102,15 @@ func (e *EmitContext) emitArchive(
 
 	env := envVarsVCS
 
-	n := Node{
-		Platform: instance.Platform,
+	n := NodeSpec{Node: Node{Platform: instance.Platform,
 		Cmds: na.cmdList(Cmd{CmdArgs: na.chunkList(cmdArgs),
 			Env: env}),
-		Env:    env,
-		Inputs: NodeInputs{files: na.rootInputList(inputs, na.srcChunk(toolBinPath)), roots: na.inputList(inputs)},
-
-		KV:                  &archivesKV,
+		Env: env, Inputs: na.rootInputList(inputs, na.srcChunk(toolBinPath)), KV: &archivesKV,
 		Outputs:             na.vfsList(archiveVFS),
 		DepRefs:             deps,
 		ForeignDepRefs:      na.refList(toolLDRef),
 		foreignToolsPending: foreignToolsPending,
-		Resources:           instance.Platform.UsesPython3Clang,
+		Resources:           instance.Platform.UsesPython3Clang}, input: InputSpec{roots: na.inputList(inputs)},
 	}
 
 	arRef := emit.reserve()

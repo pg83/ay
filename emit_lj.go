@@ -42,19 +42,15 @@ func (e *EmitContext) emitLJReserved(luaSrc, rawOut, compilerBin VFS, compilerLD
 
 	args = append(args, rawOut.any())
 
-	node := Node{
-		Platform: e.instance.Platform,
+	node := NodeSpec{Node: Node{Platform: e.instance.Platform,
 		Cmds: na.cmdList(Cmd{
 			CmdArgs: na.chunkList(na.anyList(args...)),
 			Cwd:     cwd,
 			Env:     env,
 		}),
-		Env:    env,
-		Inputs: NodeInputs{files: na.inputList(na.vfsList(compilerBin), na.vfsList(luaSrc)), roots: na.inputList(na.vfsList(luaSrc))},
-
-		KV:             &ljKV,
+		Env: env, Inputs: na.inputList(na.vfsList(compilerBin), na.vfsList(luaSrc)), KV: &ljKV,
 		Outputs:        na.vfsList(rawOut),
-		ForeignDepRefs: na.refList(compilerLDRef),
+		ForeignDepRefs: na.refList(compilerLDRef)}, input: InputSpec{roots: na.inputList(na.vfsList(luaSrc))},
 	}
 
 	e.emitReservedNode(node, id)

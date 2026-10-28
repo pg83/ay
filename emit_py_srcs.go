@@ -512,16 +512,12 @@ func (e *EmitContext) emitPyYapyc(ps PySrc, tool PyccTool) {
 		existingSource = ps.Path
 	}
 
-	node := Node{
-		Platform: instance.Platform,
-		Cmds:     na.cmdList(Cmd{CmdArgs: cmdArgs, Env: env}),
-		Env:      env,
-		Inputs:   NodeInputs{files: nodeInputs, roots: nodeInputs[1:], root: closure.self, existingSource: existingSource},
-
-		Outputs:        na.vfsList(outputPath),
+	node := NodeSpec{Node: Node{Platform: instance.Platform,
+		Cmds: na.cmdList(Cmd{CmdArgs: cmdArgs, Env: env}),
+		Env:  env, Inputs: nodeInputs, Outputs: na.vfsList(outputPath),
 		KV:             &pyCodegenKV,
 		ForeignDepRefs: toolRefs,
-		Resources:      tool.resources,
+		Resources:      tool.resources}, input: InputSpec{roots: nodeInputs[1:], root: closure.self, existingSource: existingSource},
 	}
 
 	pyRef := e.emitNode(node)
@@ -848,14 +844,11 @@ func (e *EmitContext) emitPyRegistration(registration PyRegistration) {
 		regCppVFS.any(),
 	)
 
-	pyNode := Node{
-		Platform:  ctx.target,
-		Cmds:      na.cmdList(Cmd{CmdArgs: na.chunkList(pyCmdArgs), Env: env}),
-		Env:       env,
-		Inputs:    NodeInputs{files: na.inputList(scriptChunk)},
-		Outputs:   na.vfsList(regCppVFS),
+	pyNode := NodeSpec{Node: Node{Platform: ctx.target,
+		Cmds: na.cmdList(Cmd{CmdArgs: na.chunkList(pyCmdArgs), Env: env}),
+		Env:  env, Inputs: na.inputList(scriptChunk), Outputs: na.vfsList(regCppVFS),
 		KV:        &pyCodegenKV,
-		Resources: usesPython3,
+		Resources: usesPython3},
 	}
 
 	pyRef := e.emitNode(pyNode)

@@ -78,12 +78,9 @@ func (e *EmitContext) genUnion() *ModuleEmitResult {
 	out := build(module, "/", name, Environment{s: &e.frame.ifEnv}.string(envMODULE_SUFFIX))
 	na := e.ctx.na
 
-	node := Node{
-		Module: true, Platform: e.instance.Platform, KV: &unionKV,
-		KVExts: []KVExt{{Key: "package", Val: "UNION"}}, Env: envVarsVCS,
-		Inputs:  NodeInputs{files: na.rootInputList(na.vfsList(own...), na.vfsList(generated...))},
-		Outputs: na.vfsList(append([]VFS{out}, generated...)...), Resources: usesPython3,
-		Cmds: na.cmdList(Cmd{CmdArgs: na.chunkList(na.anyList(e.d.tc.Python3.any(), strC2.any(), internStr("open('"+out.string()+"','w').close()").any())), Env: envVarsVCS}),
+	node := NodeSpec{Node: Node{Module: true, Platform: e.instance.Platform, KV: &unionKV,
+		KVExts: []KVExt{{Key: "package", Val: "UNION"}}, Env: envVarsVCS, Inputs: na.rootInputList(na.vfsList(own...), na.vfsList(generated...)), Outputs: na.vfsList(append([]VFS{out}, generated...)...), Resources: usesPython3,
+		Cmds: na.cmdList(Cmd{CmdArgs: na.chunkList(na.anyList(e.d.tc.Python3.any(), strC2.any(), internStr("open('"+out.string()+"','w').close()").any())), Env: envVarsVCS})},
 	}
 
 	e.appendSdcMeta(&node, name)

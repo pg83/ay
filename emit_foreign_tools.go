@@ -85,47 +85,45 @@ func (ctx *GenCtx) moduleBuildDeps(ref NodeRef) ([]NodeRef, bool) {
 	return nil, false
 }
 
-func (ctx *GenCtx) activateNodeInputs(node *Node, activation map[*IncludeScanner]*BitSet, selectProducer func(NodeRef), modulePeers bool) {
-	plan := &node.Inputs
-
-	if !modulePeers && plan.pending != nil {
-		pending := plan.pending
-
-		plan.pending = nil
-		pending.fire()
-	}
-
-	if plan.scanner == nil {
+func (ctx *GenCtx) activateNodeInputs(node *Node, selectProducer func(NodeRef), modulePeers bool) {
+	if len(node.InputFixes) == 0 {
 		return
 	}
 
-	seen := activation[plan.scanner]
-
-	if seen == nil {
-		seen = &BitSet{}
-		activation[plan.scanner] = seen
-	}
-
-	registry := plan.scanner.codegen
-	buildDeps, module := registry.moduleBuildDeps.get(node.Ref)
-
-	module = module && !modulePeers
+	f := ctx.scannerTarget.fixer
 
 	var added []NodeRef
+	var registry *CodegenRegistry
+	var buildDeps []NodeRef
 
-	plan.activate(seen, func(ref NodeRef) {
-		selectProducer(ref)
+	module := false
 
-		if ref == node.Ref || slices.Contains(node.DepRefs, ref) && (!module || slices.Contains(buildDeps, ref)) {
-			return
+	for _, id := range node.InputFixes {
+		entry := f.entries.s[id-1]
+		peer := entry.kind == fixPeerIncludes || entry.kind == fixModuleRoots
+
+		if peer != modulePeers {
+			continue
 		}
 
-		if added == nil {
-			added = nodeRefScratches.get()
-		}
+		registry = entry.scanner.codegen
+		buildDeps, module = registry.moduleBuildDeps.get(node.Ref)
+		module = module && !modulePeers
 
-		added = append(added, ref)
-	}, modulePeers)
+		f.activate(id, func(ref NodeRef) {
+			selectProducer(ref)
+
+			if ref == node.Ref || slices.Contains(node.DepRefs, ref) && (!module || slices.Contains(buildDeps, ref)) {
+				return
+			}
+
+			if added == nil {
+				added = nodeRefScratches.get()
+			}
+
+			added = append(added, ref)
+		})
+	}
 
 	if len(added) == 0 {
 		return
@@ -148,9 +146,20 @@ func (ctx *GenCtx) activateNodeInputs(node *Node, activation map[*IncludeScanner
 	nodeRefScratches.put(added)
 }
 
+func (ctx *GenCtx) hasPeerInputFixes(node *Node) bool {
+	for _, id := range node.InputFixes {
+		kind := ctx.scannerTarget.fixer.entries.s[id-1].kind
+
+		if kind == fixPeerIncludes || kind == fixModuleRoots {
+			return true
+		}
+	}
+
+	return false
+}
+
 func (ctx *GenCtx) bindForeignTools() {
 	bindings := &ctx.foreignTools
-	activation := map[*IncludeScanner]*BitSet{}
 	weak := nodeRefScratches.get()
 
 	defer func() { nodeRefScratches.put(weak) }()
@@ -185,9 +194,9 @@ func (ctx *GenCtx) bindForeignTools() {
 			}
 
 			selected.add(uint32(ref))
-			ctx.activateNodeInputs(node, activation, selectProducer, false)
+			ctx.activateNodeInputs(node, selectProducer, false)
 
-			if len(node.Inputs.modulePeers) > 0 {
+			if ctx.hasPeerInputFixes(node) {
 				weak = append(weak, ref)
 			}
 
@@ -258,7 +267,7 @@ func (ctx *GenCtx) bindForeignTools() {
 	weak = append(weak, ctx.emit.publicationRoots...)
 	weak = append(weak, ctx.emit.results...)
 
-	ctx.emit.exportEligible = ctx.activateSelectedInputs(activation, selected, weak)
+	ctx.emit.exportEligible = ctx.activateSelectedInputs(selected, weak)
 
 	for _, node := range ctx.emit.nodes.s {
 		if node == nil {
@@ -335,16 +344,13 @@ func (ctx *GenCtx) foreignToolRef(tool *foreignToolCandidate) NodeRef {
 
 	from, to := *tool.host.LDPath, *tool.target.LDPath
 
-	tool.boundRef = ctx.emit.emitNode(Node{
-		Platform: ctx.host,
+	tool.boundRef = ctx.emit.emitNode(NodeSpec{Node: Node{Platform: ctx.host,
 		Cmds: ctx.na.cmdList(Cmd{
 			CmdArgs: ctx.na.chunkList(ctx.na.anyList(strBinMv.any(), from.any(), to.any())),
 			Cwd:     bldRootDirVFS,
-		}),
-		Inputs:  NodeInputs{files: ctx.na.inputList(ctx.na.vfsList(from))},
-		Outputs: ctx.na.vfsList(to),
+		}), Inputs: ctx.na.inputList(ctx.na.vfsList(from)), Outputs: ctx.na.vfsList(to),
 		DepRefs: ctx.na.refList(tool.host.LDRef),
-		KV:      &KV{P: pkCP, PC: pcLightBlue},
+		KV:      &KV{P: pkCP, PC: pcLightBlue}},
 	})
 
 	return tool.boundRef

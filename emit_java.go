@@ -134,30 +134,20 @@ func (b *javaNodeBuilder) emitTo(ref NodeRef) {
 
 	*kv = b.kv
 
-	node := Node{
-		Platform:     platform,
-		Cmds:         na.cmdList(b.cmds...),
-		Env:          env,
-		Inputs:       NodeInputs{files: na.rootInputList(dedupVFSKeepOrder(b.inputs))},
-		KV:           kv,
+	node := NodeSpec{Node: Node{Platform: platform,
+		Cmds: na.cmdList(b.cmds...),
+		Env:  env, Inputs: na.rootInputList(dedupVFSKeepOrder(b.inputs)), KV: kv,
 		KVExts:       b.exts,
 		Outputs:      na.vfsList(b.outputs...),
 		Requirements: b.req,
 		DepRefs:      na.refList(dedupRefs(b.deps)...),
-		Resources:    b.resources,
-	}
-
-	if len(b.modulePeers) > 0 {
-		node.Inputs.modulePeers = na.vfsList(dedupVFSKeepOrder(b.modulePeers)...)
-		node.Inputs.scanner = b.ctx.scannerForPlatform(platform)
-		node.Inputs.na = na
-		node.Inputs.deferred = true
+		Resources:    b.resources},
 	}
 
 	if b.inputContext != nil {
-		node.Inputs.files = na.rootInputList(dedupVFSKeepOrder(b.inputRoots))
-		node.Inputs.roots = node.Inputs.files
-		node.Inputs.text = b.textInputs
+		node.Inputs = na.rootInputList(dedupVFSKeepOrder(b.inputRoots))
+		node.input.roots = node.Inputs
+		node.input.text = b.textInputs
 		b.inputContext.resolveNodeCodegenDeps(&node)
 
 		own := make(map[VFS]bool, len(b.inputRoots))
@@ -166,10 +156,20 @@ func (b *javaNodeBuilder) emitTo(ref NodeRef) {
 			own[in] = true
 		}
 
-		node.Inputs.files = na.rootInputList(slices.DeleteFunc(dedupVFSKeepOrder(b.inputs), func(in VFS) bool { return own[in] }), node.Inputs.files...)
+		node.Inputs = na.rootInputList(slices.DeleteFunc(dedupVFSKeepOrder(b.inputs), func(in VFS) bool { return own[in] }), node.Inputs...)
 	}
 
-	b.ctx.emit.emitReservedNodePtr(&node, ref)
+	if len(b.modulePeers) > 0 {
+		scanner := b.ctx.scannerForPlatform(platform)
+
+		scanner.codegen.moduleBuildDeps.put(ref, node.DepRefs)
+
+		peerInputs := scanner.materializePeerInputs(&node.Node, b.modulePeers, na)
+
+		resolveCodegenInputRefs(&node.Node, peerInputs, scanner.codegen, na)
+	}
+
+	b.ctx.emit.emitReservedNodePtr(&node.Node, ref)
 }
 
 func dedupVFSKeepOrder(vs []VFS) []VFS {
@@ -254,9 +254,14 @@ func (ctx *GenCtx) javaRegisterOutputs(jm *JavaModule, frame *ModuleFrame) {
 	if jm.unit.kind == juExternal {
 		node := ctx.na.nodes.one()
 
-		*node = Node{Ref: jm.outRef, Outputs: outs, Inputs: NodeInputs{pending: pending}}
-		ctx.emit.nodes.s[jm.outRef] = node
+		*node = Node{Ref: jm.outRef, Outputs: outs}
+
+		scanner := ctx.scannerForPlatform(jm.instance.Platform)
+		id := scanner.addInputFix(node, outs[0], fixProducer)
+
+		scanner.fixer.entries.s[id-1].pending = pending
 		pending = nil
+		ctx.emit.nodes.s[jm.outRef] = node
 	}
 
 	for _, out := range outs {
@@ -313,7 +318,7 @@ func (ctx *GenCtx) javaRegisterFiles(jm *JavaModule) {
 		pending := ctx.javaPendingEmit(func() {
 			node := composeCPNode(jm.instance, src, dst, nil, ModuleToolchain{Python3: javaPython3}, ctx.scripts, ctx.na)
 
-			ctx.emit.emitReservedNodePtr(&node, ref)
+			ctx.emit.emitReservedNodePtr(&node.Node, ref)
 		})
 
 		reg.register(GeneratedFileSpec{

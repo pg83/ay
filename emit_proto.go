@@ -900,19 +900,14 @@ func (e *EmitContext) emitPB(
 	pbInputChunks = append(pbInputChunks, transitiveBuckets...)
 	na.inputs.commit(len(pbInputChunks))
 
-	node := Node{
-		Platform: instance.Platform,
+	node := NodeSpec{Node: Node{Platform: instance.Platform,
 		Cmds: na.cmdList(Cmd{CmdArgs: cmdArgs,
 			Cwd: protocCwd,
 			Env: env}),
-		Env: env,
-
-		Inputs: NodeInputs{files: pbInputChunks, roots: pbInputChunks[1:]},
-
-		Outputs:        outputs,
+		Env: env, Inputs: pbInputChunks, Outputs: outputs,
 		KV:             spec.kv,
 		ForeignDepRefs: foreignDepRefs,
-		Resources:      usesPython3,
+		Resources:      usesPython3}, input: InputSpec{roots: pbInputChunks[1:]},
 	}
 
 	e.emitReservedNode(node, id)

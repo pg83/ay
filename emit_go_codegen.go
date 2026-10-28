@@ -335,16 +335,12 @@ func (e *EmitContext) emitGoCodegenStmt(st GoCodegenStmt) {
 		cmds = []Cmd{{CmdArgs: na.chunkList(args), Cwd: bldRootDirVFS, Env: env, Stdout: out}}
 	}
 
-	ref := e.emitNode(Node{
-		Platform: instance.Platform,
-		Cmds:     na.cmdList(cmds...),
-		Env:      env,
-		Inputs:   NodeInputs{files: na.rootInputList(inputs), roots: na.inputList(inputs[toolEnd:])},
-
-		KV:             &goCodegenKVs[st.kind],
+	ref := e.emitNode(NodeSpec{Node: Node{Platform: instance.Platform,
+		Cmds: na.cmdList(cmds...),
+		Env:  env, Inputs: na.rootInputList(inputs), KV: &goCodegenKVs[st.kind],
 		Outputs:        na.vfsList(out),
 		ForeignDepRefs: toolRefs,
-		Resources:      usesPython3,
+		Resources:      usesPython3}, input: InputSpec{roots: na.inputList(inputs[toolEnd:])},
 	})
 
 	e.register(GeneratedFileSpec{OutputPath: out, ProducerRef: ref})

@@ -48,16 +48,12 @@ func (e *EmitContext) emitLibrarySfdlSource(meta SrcMeta) {
 			strS.any(),
 		)), Env: toolEnv, Stdout: incVFS}
 
-		node := Node{
-			Platform: instance.Platform,
-			Cmds:     na.cmdList(cmd0, cmd1),
-			Env:      toolEnv,
-			Inputs:   NodeInputs{files: na.inputList(na.vfsList(toolBin), na.vfsList(srcVFS)), roots: na.inputList(na.vfsList(srcVFS))},
-
-			KV:             &sfKV,
+		node := NodeSpec{Node: Node{Platform: instance.Platform,
+			Cmds: na.cmdList(cmd0, cmd1),
+			Env:  toolEnv, Inputs: na.inputList(na.vfsList(toolBin), na.vfsList(srcVFS)), KV: &sfKV,
 			Outputs:        na.vfsList(tmpVFS, incVFS),
 			ForeignDepRefs: na.refList(toolRef),
-			Resources:      instance.Platform.CCUsesResources,
+			Resources:      instance.Platform.CCUsesResources}, input: InputSpec{roots: na.inputList(na.vfsList(srcVFS))},
 		}
 
 		e.emitReservedNode(node, ref)

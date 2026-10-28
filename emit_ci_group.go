@@ -187,12 +187,10 @@ func (e *EmitContext) genCiGroup() *ModuleEmitResult {
 
 	na := e.ctx.na
 
-	node := Node{
-		Module: true, Platform: e.instance.Platform, KV: &ciGroupKV,
-		KVExts: []KVExt{{Key: "package", Val: "PACKAGE"}}, Env: envVarsVCS,
-		Inputs: NodeInputs{files: na.rootInputList(na.vfsList(dedup(inputs)...))}, Outputs: na.vfsList(out), Resources: usesPython3,
+	node := NodeSpec{Node: Node{Module: true, Platform: e.instance.Platform, KV: &ciGroupKV,
+		KVExts: []KVExt{{Key: "package", Val: "PACKAGE"}}, Env: envVarsVCS, Inputs: na.rootInputList(na.vfsList(dedup(inputs)...)), Outputs: na.vfsList(out), Resources: usesPython3,
 		DepRefs: na.refList(dedupRefs(e.refs)...),
-		Cmds:    na.cmdList(e.pythonScriptCmd("touch.py", out.string())),
+		Cmds:    na.cmdList(e.pythonScriptCmd("touch.py", out.string()))},
 	}
 
 	ref := e.emitLazyModuleNode(node, nil)

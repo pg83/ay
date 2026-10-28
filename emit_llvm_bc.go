@@ -17,7 +17,7 @@ type LlvmCompileStmt struct {
 	Options   []ANY
 }
 
-func (e *EmitContext) llvmCompileNode(src string, out VFS, compiler string, cxx bool, opts []ANY) Node {
+func (e *EmitContext) llvmCompileNode(src string, out VFS, compiler string, cxx bool, opts []ANY) NodeSpec {
 	na, d := e.ctx.na, e.d
 	input := e.llvmBcSourceInfo(src)
 	wrapper := buildScriptsClangWrapperPy
@@ -37,11 +37,10 @@ func (e *EmitContext) llvmCompileNode(src string, out VFS, compiler string, cxx 
 
 	inputs = na.inputList(na.vfsList(wrapper), inputs...)
 
-	return Node{
-		Platform: e.instance.Platform,
-		Cmds:     na.cmdList(Cmd{CmdArgs: na.chunkList(args), Env: envVarsVCS, Resources: value.Resources}),
-		Env:      envVarsVCS, Inputs: NodeInputs{files: inputs}, Outputs: na.vfsList(out),
-		KV: &llvmBcKV, Resources: usesPython3Clang16,
+	return NodeSpec{Node: Node{Platform: e.instance.Platform,
+		Cmds: na.cmdList(Cmd{CmdArgs: na.chunkList(args), Env: envVarsVCS, Resources: value.Resources}),
+		Env:  envVarsVCS, Inputs: inputs, Outputs: na.vfsList(out),
+		KV: &llvmBcKV, Resources: usesPython3Clang16},
 	}
 }
 
@@ -56,7 +55,7 @@ func (e *EmitContext) llvmClangRoot(root string) string {
 func (e *EmitContext) emitLlvmCompile(stmt LlvmCompileStmt) {
 	out := copyFileOutputVFS(e.instance.Path.relString(), stmt.Output)
 
-	var node Node
+	var node NodeSpec
 
 	if stmt.Kind == tokBpf || stmt.Kind == tokBpfStatic {
 		node = e.bpfCompileNode(stmt, out)
@@ -105,7 +104,7 @@ func (e *EmitContext) emitLlvmBcStmt(stmt *LlvmBcStmt) {
 	llvmLink := clangRoot + "/bin/llvm-link"
 	opt := clangRoot + "/bin/opt"
 	optWrapperVFS := intern(optWrapper)
-	pendNodes := make([]Node, 0, len(stmt.Sources)+2)
+	pendNodes := make([]NodeSpec, 0, len(stmt.Sources)+2)
 	pendRefs := make([]NodeRef, 0, len(stmt.Sources)+2)
 	bcRefs := make([]NodeRef, 0, len(stmt.Sources))
 	bcPaths := make([]VFS, 0, len(stmt.Sources))
@@ -131,23 +130,22 @@ func (e *EmitContext) emitLlvmBcStmt(stmt *LlvmBcStmt) {
 			compiler = clangRoot + "/bin/clang"
 		}
 
-		var node Node
+		var node NodeSpec
 
 		if strings.HasSuffix(src, ".ll") {
 			input := e.llvmBcSourceInfo(src)
 			tool := resourceGlobalArgumentValue(na.anyList(internAny(stmt.ClangBCRoot)), e.peers.ResourceGlobals)
 
-			node = Node{
-				Platform: instance.Platform,
-				Cmds:     na.cmdList(Cmd{CmdArgs: na.chunkList(na.anyList(internV(clangRoot, "/bin/llvm-as").any(), input.any(), argDashO.any(), bcOut.any())), Env: env}),
-				Env:      env, Inputs: NodeInputs{files: na.inputList(na.vfsList(input))}, Outputs: na.vfsList(bcOut), KV: &llvmBcKV,
-				Resources: tool.Resources,
+			node = NodeSpec{Node: Node{Platform: instance.Platform,
+				Cmds: na.cmdList(Cmd{CmdArgs: na.chunkList(na.anyList(internV(clangRoot, "/bin/llvm-as").any(), input.any(), argDashO.any(), bcOut.any())), Env: env}),
+				Env:  env, Inputs: na.inputList(na.vfsList(input)), Outputs: na.vfsList(bcOut), KV: &llvmBcKV,
+				Resources: tool.Resources},
 			}
 		} else {
 			node = e.llvmCompileNode(src, bcOut, compiler, cxx, nil)
 		}
 
-		allInputs := node.Inputs.files
+		allInputs := node.Inputs
 
 		for _, ch := range allInputs {
 			for _, v := range ch {
@@ -181,15 +179,12 @@ func (e *EmitContext) emitLlvmBcStmt(stmt *LlvmBcStmt) {
 		mergeInputs = na.inputList(bcPaths)
 	}
 
-	ldNode := Node{
-		Platform:  instance.Platform,
-		Cmds:      na.cmdList(Cmd{CmdArgs: na.chunkList(ldArgs), Env: env}),
-		Env:       env,
-		Inputs:    NodeInputs{files: mergeInputs},
-		Outputs:   na.vfsList(mergedOut),
+	ldNode := NodeSpec{Node: Node{Platform: instance.Platform,
+		Cmds: na.cmdList(Cmd{CmdArgs: na.chunkList(ldArgs), Env: env}),
+		Env:  env, Inputs: mergeInputs, Outputs: na.vfsList(mergedOut),
 		KV:        &llvmBcKV2,
 		DepRefs:   append([]NodeRef(nil), bcRefs...),
-		Resources: usesPython3Clang16,
+		Resources: usesPython3Clang16},
 	}
 
 	ldRef := ctx.emit.reserve()
@@ -209,15 +204,12 @@ func (e *EmitContext) emitLlvmBcStmt(stmt *LlvmBcStmt) {
 
 	optArgs = append(optArgs, internV(`-passes="`, strings.Join(passes, ","), `"`).any())
 
-	optNode := Node{
-		Platform:  instance.Platform,
-		Cmds:      na.cmdList(Cmd{CmdArgs: na.chunkList(optArgs), Env: env}),
-		Env:       env,
-		Inputs:    NodeInputs{files: na.inputList(na.vfsList(mergedOut), na.vfsList(optWrapperVFS))},
-		Outputs:   na.vfsList(optOut),
+	optNode := NodeSpec{Node: Node{Platform: instance.Platform,
+		Cmds: na.cmdList(Cmd{CmdArgs: na.chunkList(optArgs), Env: env}),
+		Env:  env, Inputs: na.inputList(na.vfsList(mergedOut), na.vfsList(optWrapperVFS)), Outputs: na.vfsList(optOut),
 		KV:        &llvmBcKV3,
 		DepRefs:   na.refList(ldRef),
-		Resources: usesPython3Clang16,
+		Resources: usesPython3Clang16},
 	}
 
 	opRef := ctx.emit.reserve()
@@ -249,11 +241,10 @@ func (e *EmitContext) emitLlvmBcStmt(stmt *LlvmBcStmt) {
 		toolRef, toolBin := ctx.tool(internArg(stmt.LLCTool))
 		object := build(optOut.relString(), ".o")
 
-		node := Node{
-			Platform: instance.Platform,
-			Cmds:     na.cmdList(Cmd{CmdArgs: na.chunkList(na.anyList(toolBin.any(), optOut.any(), internAny("--filetype"), internAny("obj"), argDashO.any(), object.any(), internAny("-O2"))), Env: env}),
-			Env:      env, Inputs: NodeInputs{files: na.inputList(na.vfsList(toolBin, optOut))}, Outputs: na.vfsList(object),
-			KV: &llvmLlcKV, DepRefs: na.refList(opRef), ForeignDepRefs: na.refList(toolRef),
+		node := NodeSpec{Node: Node{Platform: instance.Platform,
+			Cmds: na.cmdList(Cmd{CmdArgs: na.chunkList(na.anyList(toolBin.any(), optOut.any(), internAny("--filetype"), internAny("obj"), argDashO.any(), object.any(), internAny("-O2"))), Env: env}),
+			Env:  env, Inputs: na.inputList(na.vfsList(toolBin, optOut)), Outputs: na.vfsList(object),
+			KV: &llvmLlcKV, DepRefs: na.refList(opRef), ForeignDepRefs: na.refList(toolRef)},
 		}
 
 		ref := ctx.emit.reserve()

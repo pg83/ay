@@ -48,15 +48,11 @@ func (e *EmitContext) emitBaseCodegen(bc *BaseCodegenStmt) {
 	}
 
 	pe := func() {
-		node := Node{
-			Platform: instance.Platform,
-			Cmds:     na.cmdList(Cmd{CmdArgs: na.chunkList(cmdArgs), Env: env}),
-			Env:      env,
-			Inputs:   NodeInputs{files: na.inputList(na.vfsList(toolBin), na.vfsList(inputIn)), roots: na.inputList(na.vfsList(inputIn))},
-
-			Outputs:        na.vfsList(prefixCpp, prefixH),
+		node := NodeSpec{Node: Node{Platform: instance.Platform,
+			Cmds: na.cmdList(Cmd{CmdArgs: na.chunkList(cmdArgs), Env: env}),
+			Env:  env, Inputs: na.inputList(na.vfsList(toolBin), na.vfsList(inputIn)), Outputs: na.vfsList(prefixCpp, prefixH),
 			KV:             &baseCodegenKV,
-			ForeignDepRefs: na.refList(toolLDRef),
+			ForeignDepRefs: na.refList(toolLDRef)}, input: InputSpec{roots: na.inputList(na.vfsList(inputIn))},
 		}
 
 		e.emitReservedNode(node, bcRef)

@@ -158,7 +158,7 @@ func (ctx *GenCtx) emitTestData(uri string) NodeRef {
 
 	requirements.Network = nwFull
 
-	ref := ctx.emit.emit(&Node{Platform: testNoPlatform, Env: sortedEnvVars(ctx.tests.commonEnvMap()), Cmds: ctx.na.cmdList(Cmd{CmdArgs: ctx.na.chunkList(testArgs(args)), Cwd: cwdVFS(testBuildRoot)}), Outputs: ctx.na.vfsList(outputs...), ResourceURIs: []STR{internStr("sbr:" + id)}, KV: &KV{P: pkDL, PC: pcLightCyan, ShowOutBool: true}, Requirements: &requirements})
+	ref := ctx.emit.emit(&Node{Platform: testNoPlatform, Env: sortedEnvVars(ctx.tests.commonEnvMap()), Cmds: ctx.na.cmdList(Cmd{CmdArgs: ctx.na.chunkList(testArgs(args)), Cwd: cwdVFS(testBuildRoot)}), Outputs: ctx.na.vfsList(outputs...), Extra: &NodeExtra{ResourceURIs: []STR{internStr("sbr:" + id)}}, KV: &KV{P: pkDL, PC: pcLightCyan, ShowOutBool: true}, Requirements: &requirements})
 
 	registry.register(GeneratedFileSpec{OutputPath: out, ProducerRef: ref})
 
@@ -175,7 +175,7 @@ func (ctx *GenCtx) emitExternalLocalTestData(rel string) NodeRef {
 
 	src := source(rel)
 	args := []string{testYMakePython3, "$(S)/build/scripts/fs_tools.py", "copy", src.string(), out.string()}
-	ref := ctx.emit.emit(&Node{DisableCache: true, Platform: testNoPlatform, Cmds: ctx.na.cmdList(Cmd{CmdArgs: ctx.na.chunkList(testArgs(args))}), Inputs: NodeInputs{files: ctx.na.inputList(ctx.na.vfsList(src))}, Outputs: ctx.na.vfsList(out), KV: &testNodesKV})
+	ref := ctx.emit.emit(&Node{DisableCache: true, Platform: testNoPlatform, Cmds: ctx.na.cmdList(Cmd{CmdArgs: ctx.na.chunkList(testArgs(args))}), Inputs: ctx.na.inputList(ctx.na.vfsList(src)), Outputs: ctx.na.vfsList(out), KV: &testNodesKV})
 
 	registry.register(GeneratedFileSpec{OutputPath: out, ProducerRef: ref})
 

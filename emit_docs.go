@@ -108,11 +108,9 @@ func (e *EmitContext) genDocs() *ModuleEmitResult {
 func (e *EmitContext) docsNode(cmds []Cmd, inputs, buildFrom, outputs, needs []VFS, render, module bool, env EnvVars, resources []STR, foreign ...NodeRef) NodeRef {
 	na := e.ctx.na
 
-	node := Node{
-		Module: module, Cmds: na.cmdList(cmds...),
-		Inputs: NodeInputs{files: na.rootInputList(na.vfsList(dedup(inputs)...)), roots: na.inputList(na.vfsList(dedup(buildFrom)...))}, Outputs: na.vfsList(outputs...),
+	node := NodeSpec{Node: Node{Module: module, Cmds: na.cmdList(cmds...), Inputs: na.rootInputList(na.vfsList(dedup(inputs)...)), Outputs: na.vfsList(outputs...),
 		KV: &docsKV, Env: env, Platform: e.instance.Platform,
-		Resources: na.strs.list(resources...), ForeignDepRefs: na.refList(foreign...),
+		Resources: na.strs.list(resources...), ForeignDepRefs: na.refList(foreign...)}, input: InputSpec{roots: na.inputList(na.vfsList(dedup(buildFrom)...))},
 	}
 
 	if render {

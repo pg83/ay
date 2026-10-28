@@ -69,16 +69,12 @@ func (e *EmitContext) emitR6(srcRel string, inVFS VFS, ragel6LD NodeRef, ragel6B
 		head2 = na.vfsList(ragel6BinaryPath, inVFS)
 	}
 
-	node := Node{
-		Platform: instance.Platform,
+	node := NodeSpec{Node: Node{Platform: instance.Platform,
 		Cmds: na.cmdList(Cmd{CmdArgs: cmdArgs,
 			Env: env}),
-		Env:    env,
-		Inputs: NodeInputs{files: na.rootInputList(na.vfsList(closure...), head2), roots: na.inputList(head2[1:], na.vfsList(closure...))},
-
-		Outputs:        na.vfsList(outVFS),
+		Env: env, Inputs: na.rootInputList(na.vfsList(closure...), head2), Outputs: na.vfsList(outVFS),
 		KV:             &r6KV,
-		ForeignDepRefs: na.refList(ragel6LD),
+		ForeignDepRefs: na.refList(ragel6LD)}, input: InputSpec{roots: na.inputList(head2[1:], na.vfsList(closure...))},
 	}
 
 	e.emitReservedNode(node, id)

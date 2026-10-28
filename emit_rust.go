@@ -208,16 +208,11 @@ func (e *EmitContext) emitRustModule(result *ModuleEmitResult, peers []ResolvedP
 
 	command := resourceGlobalArgumentValue(args, globals)
 
-	ref := e.emitLazyModuleNode(Node{
-		Module: true, Platform: instance.Platform,
+	ref := e.emitLazyModuleNode(NodeSpec{Node: Node{Module: true, Platform: instance.Platform,
 		Cmds: na.cmdList(Cmd{CmdArgs: na.chunkList(na.anyList(command.Args...)), Env: envVarsVCS}),
-		Env:  envVarsVCS, Inputs: NodeInputs{
-			files: na.rootInputList(na.vfsList(dedup(inputs)...)),
-			roots: na.inputList(na.vfsList(script), na.vfsList(textInputs...)), text: na.vfsList(textInputs...),
-		},
-		Outputs: na.vfsList(outputs...), KV: &rustKV,
+		Env:  envVarsVCS, Inputs: na.rootInputList(na.vfsList(dedup(inputs)...)), Outputs: na.vfsList(outputs...), KV: &rustKV,
 		DepRefs: na.uniqueRefs(refs), ForeignDepRefs: na.uniqueRefs(toolRefs),
-		Resources: na.strs.list(dedup(append(command.Resources, strYMakePython3Name))...), ResourceGlobals: globals,
+		Resources: na.strs.list(dedup(append(command.Resources, strYMakePython3Name))...), ResourceGlobals: globals}, input: InputSpec{roots: na.inputList(na.vfsList(script), na.vfsList(textInputs...)), text: na.vfsList(textInputs...)},
 	}, nil)
 
 	if len(textTemplates) > 0 {

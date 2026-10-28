@@ -48,10 +48,9 @@ func (ctx *GenCtx) emitDockerImage(image string) NodeRef {
 		args[0] = "python3"
 	}
 
-	ref := ctx.emit.emit(&Node{
-		Platform: testNoPlatform, Env: sortedEnvVars(ctx.tests.commonEnvMap()),
+	ref := ctx.emit.emit(&Node{Platform: testNoPlatform, Env: sortedEnvVars(ctx.tests.commonEnvMap()),
 		Cmds:    ctx.na.cmdList(Cmd{CmdArgs: ctx.na.chunkList(testArgs(args)), Cwd: bldRootDirVFS}),
-		Outputs: ctx.na.vfsList(out, info), ResourceURIs: []STR{internStr(link)},
+		Outputs: ctx.na.vfsList(out, info), Extra: &NodeExtra{ResourceURIs: []STR{internStr(link)}},
 		KV: &KV{P: pkIM, PC: pcLightCyan, ShowOutBool: true}, Requirements: ctx.tests.contextReqs,
 	})
 

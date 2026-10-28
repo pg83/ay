@@ -223,14 +223,11 @@ func (e *EmitContext) emitGoCopyWithContext(srcVFS, dstVFS VFS, domain ScanDomai
 
 		args := na.anyList(srcVFS.any(), dstVFS.any())
 
-		node := Node{
-			Platform:  instance.Platform,
-			Cmds:      na.cmdList(Cmd{CmdArgs: na.chunkList(goCgoCopyCmdHead, args), Env: goVcsEnv}),
-			Env:       goVcsEnv,
-			Inputs:    NodeInputs{files: na.rootInputList(block[:k:k]), root: cv.self},
-			KV:        &cpKV,
+		node := NodeSpec{Node: Node{Platform: instance.Platform,
+			Cmds: na.cmdList(Cmd{CmdArgs: na.chunkList(goCgoCopyCmdHead, args), Env: goVcsEnv}),
+			Env:  goVcsEnv, Inputs: na.rootInputList(block[:k:k]), KV: &cpKV,
 			Outputs:   na.vfsList(dstVFS),
-			Resources: usesPython3,
+			Resources: usesPython3}, input: InputSpec{root: cv.self},
 		}
 
 		e.emitReservedNode(node, ref)
@@ -362,8 +359,7 @@ func (e *EmitContext) emitGoCgo1Stmt() {
 
 	na.vfs.commit(no)
 
-	node := Node{
-		Platform: instance.Platform,
+	node := NodeSpec{Node: Node{Platform: instance.Platform,
 		Cmds: na.cmdList(Cmd{CmdArgs: na.chunkList(
 			goCgo1Head,
 			pathBlock[:k:k],
@@ -376,11 +372,9 @@ func (e *EmitContext) emitGoCgo1Stmt() {
 			cflagsStr,
 			srcsBlock,
 		), Env: env, Cwd: srcRootDirVFS}),
-		Env:       env,
-		Inputs:    NodeInputs{files: na.rootInputList(inputs[:ni:ni])},
-		KV:        &goToolKV,
+		Env: env, Inputs: na.rootInputList(inputs[:ni:ni]), KV: &goToolKV,
 		Outputs:   outputs[:no:no],
-		Resources: goToolResources(na, e.peers.ResourceGlobals),
+		Resources: goToolResources(na, e.peers.ResourceGlobals)},
 	}
 
 	ref := e.emitNode(node)
@@ -533,8 +527,7 @@ func (e *EmitContext) flushGoCgo2() {
 
 	goEnv := goCmdEnv(ctx, p, d.tc)
 
-	node := Node{
-		Platform: instance.Platform,
+	node := NodeSpec{Node: Node{Platform: instance.Platform,
 		Cmds: na.cmdList(
 			Cmd{CmdArgs: na.chunkList(
 				na.anyList(d.tc.CC.any(), p.TargetArg.any()),
@@ -554,12 +547,10 @@ func (e *EmitContext) flushGoCgo2() {
 			), Env: goVcsEnv, Resources: resourceKeyUnion(e.peers.LDResources, e.d.localLDFlags.Resources)},
 			Cmd{CmdArgs: na.chunkList(cmd2Args), Env: goEnv},
 		),
-		Env:       goEnv,
-		Inputs:    NodeInputs{files: na.rootInputList(inputs[:ni:ni])},
-		KV:        &goToolKV,
+		Env: goEnv, Inputs: na.rootInputList(inputs[:ni:ni]), KV: &goToolKV,
 		Outputs:   na.vfsList(mainO, cgoO, importGo),
 		DepRefs:   deps[:nd],
-		Resources: goToolResources(na, e.peers.ResourceGlobals),
+		Resources: goToolResources(na, e.peers.ResourceGlobals)},
 	}
 
 	ref := e.emitNode(node)

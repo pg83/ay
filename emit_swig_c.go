@@ -70,16 +70,12 @@ func (e *EmitContext) emitSwigC() {
 				cOutVFS.any(),
 				srcVFS.any()))
 
-			e.emitReservedNode(Node{
-				Platform: instance.Platform,
+			e.emitReservedNode(NodeSpec{Node: Node{Platform: instance.Platform,
 				Cmds: na.cmdList(Cmd{CmdArgs: cmdArgs,
 					Env: envVarsVCS}),
 				DepRefs: na.refList(swigRef),
-				Env:     envVarsVCS,
-				Inputs:  NodeInputs{files: inputChunks, roots: inputChunks[1:]},
-
-				Outputs: na.vfsList(cOutVFS, pyOutVFS),
-				KV:      &swigCKV,
+				Env:     envVarsVCS, Inputs: inputChunks, Outputs: na.vfsList(cOutVFS, pyOutVFS),
+				KV: &swigCKV}, input: InputSpec{roots: inputChunks[1:]},
 			}, swRef)
 		}
 

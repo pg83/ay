@@ -77,17 +77,13 @@ func (e *EmitContext) emitYmapsSprotoHeaderSnap(scanner *IncludeScanner, p Ymaps
 	view := scanner.walkClosure(p.protoRel.source(), scanCtx, scanDomainProto)
 	closure := view.collect(na, func(VFS) bool { return true })
 
-	node := Node{
-		Platform: e.instance.Platform,
+	node := NodeSpec{Node: Node{Platform: e.instance.Platform,
 		Cmds: na.cmdList(Cmd{CmdArgs: cmdArgs,
 			Cwd: srcRootDirVFS,
 			Env: env}),
-		Env:    env,
-		Inputs: NodeInputs{files: na.rootInputList(closure, na.vfsList(sprotocBinary)), roots: na.inputList(closure)},
-
-		Outputs:        na.vfsList(p.sprotoH),
+		Env: env, Inputs: na.rootInputList(closure, na.vfsList(sprotocBinary)), Outputs: na.vfsList(p.sprotoH),
 		KV:             &ymapsSprotoKV,
-		ForeignDepRefs: na.refList(sprotocLDRef),
+		ForeignDepRefs: na.refList(sprotocLDRef)}, input: InputSpec{roots: na.inputList(closure)},
 	}
 
 	e.emitReservedNode(node, p.ref)

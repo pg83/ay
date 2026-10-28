@@ -52,15 +52,11 @@ func (e *EmitContext) emitNativeSwigSource(meta SrcMeta, python bool) {
 		roots := na.inputList(na.vfsList(src), buckets...)
 		inputs := na.inputList(na.vfsList(swigBin), roots...)
 
-		e.emitReservedNode(Node{
-			Platform: instance.Platform,
-			Cmds:     na.cmdList(Cmd{CmdArgs: na.chunkList(na.anyList(args...)), Env: envVarsVCS}),
-			Env:      envVarsVCS,
-			Inputs:   NodeInputs{files: inputs, roots: roots},
-
-			Outputs:        na.vfsList(cpp, moduleOutput),
+		e.emitReservedNode(NodeSpec{Node: Node{Platform: instance.Platform,
+			Cmds: na.cmdList(Cmd{CmdArgs: na.chunkList(na.anyList(args...)), Env: envVarsVCS}),
+			Env:  envVarsVCS, Inputs: inputs, Outputs: na.vfsList(cpp, moduleOutput),
 			KV:             &swigJNIKV,
-			ForeignDepRefs: na.refList(swigRef),
+			ForeignDepRefs: na.refList(swigRef)}, input: InputSpec{roots: roots},
 		}, ref)
 	})
 

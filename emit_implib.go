@@ -82,15 +82,11 @@ func (e *EmitContext) emitImplib(stmt ImplibStmt) {
 			inputs = na.inputList(na.vfsList(toolPath), na.vfsList(libInput))
 		}
 
-		e.emitReservedNode(Node{
-			Platform: e.instance.Platform,
-			Cmds:     na.cmdList(Cmd{CmdArgs: na.chunkList(na.anyList(args...)), Env: envVarsVCS, Resources: value.Resources}),
-			Env:      envVarsVCS,
-			Inputs:   NodeInputs{files: inputs, roots: inputs[1:]},
-
-			Outputs:        outs,
+		e.emitReservedNode(NodeSpec{Node: Node{Platform: e.instance.Platform,
+			Cmds: na.cmdList(Cmd{CmdArgs: na.chunkList(na.anyList(args...)), Env: envVarsVCS, Resources: value.Resources}),
+			Env:  envVarsVCS, Inputs: inputs, Outputs: outs,
 			KV:             &implibKV,
-			ForeignDepRefs: na.refList(toolRef),
+			ForeignDepRefs: na.refList(toolRef)}, input: InputSpec{roots: inputs[1:]},
 		}, ref)
 	})
 

@@ -534,14 +534,11 @@ func (e *EmitContext) flushGoSrcs() {
 
 	e.goRes.AsmInclSrcs = e.goAsmIncludeSrcs()
 
-	node := Node{
-		Platform:  instance.Platform,
-		Cmds:      na.cmdList(Cmd{CmdArgs: na.chunkList(e.goSymabisHeadFor(), e.goInclSplitArgs(), goSymabisDefs, tail[:nt:nt]), Env: goVcsEnv}),
-		Env:       goVcsEnv,
-		Inputs:    NodeInputs{files: na.rootInputList(na.vfsList(e.goRes.AsmFiles...), e.goRes.AsmInclSrcs)},
-		KV:        &goToolKV,
+	node := NodeSpec{Node: Node{Platform: instance.Platform,
+		Cmds: na.cmdList(Cmd{CmdArgs: na.chunkList(e.goSymabisHeadFor(), e.goInclSplitArgs(), goSymabisDefs, tail[:nt:nt]), Env: goVcsEnv}),
+		Env:  goVcsEnv, Inputs: na.rootInputList(na.vfsList(e.goRes.AsmFiles...), e.goRes.AsmInclSrcs), KV: &goToolKV,
 		Outputs:   na.vfsList(out),
-		Resources: goToolResources(na, e.peers.ResourceGlobals),
+		Resources: goToolResources(na, e.peers.ResourceGlobals)},
 	}
 
 	e.goRes.SymabisRef = e.emitNode(node)
@@ -955,9 +952,10 @@ func (e *EmitContext) goSrcList(goRes *GoSrcsResult, objOuts []VFS) (srcArgs, cg
 	return srcArgs, cgoSrcArgs, ownInputs, ownSources, ownBuilds
 }
 
-func (e *EmitContext) resolveGoBuildFromDeps(node *Node, inputs InputChunks) {
-	sources := Node{Inputs: NodeInputs{files: inputs}, DepRefs: node.DepRefs}
+func (e *EmitContext) resolveGoBuildFromDeps(node *NodeSpec, inputs InputChunks) {
+	sources := NodeSpec{Node: Node{Inputs: inputs, DepRefs: node.DepRefs}}
 
+	e.checkDeclaredInputs(&sources)
 	e.resolveNodeCodegenRefs(&sources)
 	node.DepRefs = sources.DepRefs
 }
@@ -1098,8 +1096,7 @@ func (e *EmitContext) emitGoPackage(resolved []ResolvedPeer, objRefs []NodeRef, 
 
 	env := goCmdEnv(ctx, instance.Platform, d.tc)
 
-	node := Node{
-		Platform: instance.Platform,
+	node := NodeSpec{Node: Node{Platform: instance.Platform,
 		Cmds: na.cmdList(Cmd{CmdArgs: na.chunkList(
 			instance.Platform.Go.HeadLib,
 			na.anyList(build(dir).any()),
@@ -1111,13 +1108,10 @@ func (e *EmitContext) emitGoPackage(resolved []ResolvedPeer, objRefs []NodeRef, 
 			tail[:nt:nt],
 			goToolCmdEnd,
 		), Env: env}),
-		Env:    env,
-		Inputs: NodeInputs{files: inputs, root: outPath},
-
-		KV:        &goKV,
+		Env: env, Inputs: inputs, KV: &goKV,
 		Outputs:   na.vfsList(outPath, build(dir, "/", outName, ".a.vet.out"), build(dir, "/", outName, ".a.vet.txt")),
 		DepRefs:   depBlock[:ndep],
-		Resources: goToolResources(na, resourceGlobals),
+		Resources: goToolResources(na, resourceGlobals)}, input: InputSpec{root: outPath},
 	}
 
 	e.resolveGoBuildFromDeps(&node, na.inputList(ownBuildInputs, embedInputs))
@@ -1369,15 +1363,11 @@ func (e *EmitContext) emitGoExe(resolved []ResolvedPeer, objRefs []NodeRef, objO
 		outputs = na.vfsList(outPath, build(dir, "/", outName, ".vet.txt"), header)
 	}
 
-	node := Node{
-		Platform: instance.Platform,
-		Env:      env,
-		Inputs:   NodeInputs{files: inputs, root: outPath},
-
-		KV:        kv,
+	node := NodeSpec{Node: Node{Platform: instance.Platform,
+		Env: env, Inputs: inputs, KV: kv,
 		Outputs:   outputs,
 		DepRefs:   deps[:k:k],
-		Resources: goToolResources(na, resourceGlobals),
+		Resources: goToolResources(na, resourceGlobals)}, input: InputSpec{root: outPath},
 	}
 
 	if !isTest {

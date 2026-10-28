@@ -68,7 +68,7 @@ func (e *EmitContext) modulePeerInputs(peers []VFS) InputChunks {
 	return inputs[:k:k]
 }
 
-func (e *EmitContext) emitModuleNode(node Node, useGlobals bool) NodeRef {
+func (e *EmitContext) emitModuleNode(node NodeSpec, useGlobals bool) NodeRef {
 	buildDeps := e.ctx.na.refList(node.DepRefs...)
 
 	var peers []VFS
@@ -79,25 +79,66 @@ func (e *EmitContext) emitModuleNode(node Node, useGlobals bool) NodeRef {
 
 	e.setModulePeerRoots(&node, peers)
 	e.includeNodeInputs(&node)
-	node.Inputs.files = e.appendModuleInputs(node.Inputs.files, peers, useGlobals)
+	node.Inputs = e.appendModuleInputs(node.Inputs, peers, useGlobals)
 	e.appendModuleOutputs(&node)
 	e.resolveNodeCodegenRefs(&node)
 
-	ref := e.ctx.emit.emitNodePtr(&node)
+	ref := e.ctx.emit.emitNodePtr(&node.Node)
 
 	e.codegen.moduleBuildDeps.put(ref, buildDeps)
 
 	return ref
 }
 
-func (e *EmitContext) setModulePeerRoots(node *Node, peers []VFS) {
-	for _, peer := range peers {
-		if info := e.codegen.moduleInputs(peer); info != nil && len(info.IncludeRoots) > 0 {
-			node.Inputs.modulePeers = peers
+func (e *EmitContext) setModulePeerRoots(node *NodeSpec, peers []VFS) {
+	e.scanner.materializePeerInputs(&node.Node, peers, e.ctx.na)
+}
 
-			return
+func (s *IncludeScanner) materializePeerInputs(node *Node, peers []VFS, na *NodeArenas) InputChunks {
+	var extra InputChunks
+
+	defer func() {
+		if extra != nil {
+			clear(extra)
+			inputChunkScratches.put(extra)
+		}
+	}()
+
+	for _, peer := range peers {
+		info := s.codegen.moduleInputs(peer)
+
+		if info == nil {
+			s.addInputFix(node, peer, fixModuleRoots)
+
+			continue
+		}
+
+		for _, root := range info.IncludeRoots {
+			cl, _ := s.closure(root)
+
+			s.deferClosure(node, cl, fixPeerIncludes)
+
+			for _, bucket := range cl.bucketList() {
+				if len(bucket) > 0 && bucket[0].isBuild() {
+					if extra == nil {
+						extra = inputChunkScratches.get()
+					}
+
+					extra = append(extra, bucket)
+				}
+			}
 		}
 	}
+
+	if len(extra) > 0 {
+		n := len(node.Inputs)
+
+		node.Inputs = appendInputChunks(na, node.Inputs, extra)
+
+		return node.Inputs[n:]
+	}
+
+	return nil
 }
 
 func (e *EmitContext) appendModuleInputs(inputs InputChunks, modules []VFS, useGlobals bool) InputChunks {

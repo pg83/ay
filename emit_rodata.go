@@ -44,18 +44,14 @@ func (e *EmitContext) emitRD(srcRel string, srcVFS VFS, yasmLD NodeRef, extraInp
 	na.inputs.commit(len(inputs))
 	inputs = inputs[:len(inputs):len(inputs)]
 
-	node := Node{
-		Platform: instance.Platform,
+	node := NodeSpec{Node: Node{Platform: instance.Platform,
 		Cmds: na.cmdList(Cmd{CmdArgs: na.chunkList(na.anyList(tc.Python3.any()), rodataConstArgs, na.anyList(internStr(toolName).any(), srcVFS.any(), asmVFS.any())),
 			Env: pythonEnv}, Cmd{CmdArgs: na.chunkList(yasmConstHead, na.anyList(argD.any(), internV("_", string(instance.Platform.ISA), "_").any()), rodataYasmConstArgs, na.anyList(outVFS.any(), asmVFS.any())),
 			Env: yasmEnv}),
-		Env:    yasmEnv,
-		Inputs: NodeInputs{files: inputs, roots: inputs[1:]},
-
-		KV:             &rodataKV,
+		Env: yasmEnv, Inputs: inputs, KV: &rodataKV,
 		Outputs:        na.vfsList(asmVFS, outVFS),
 		ForeignDepRefs: na.refList(yasmLD),
-		Resources:      usesPython3,
+		Resources:      usesPython3}, input: InputSpec{roots: inputs[1:]},
 	}
 
 	ref := e.emitNode(node)

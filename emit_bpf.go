@@ -4,7 +4,7 @@ import "path"
 
 var bpfKV = KV{P: pkBP, PC: pcLightGreen}
 
-func (e *EmitContext) bpfCompileNode(stmt LlvmCompileStmt, out VFS) Node {
+func (e *EmitContext) bpfCompileNode(stmt LlvmCompileStmt, out VFS) NodeSpec {
 	na, d, p := e.ctx.na, e.d, e.instance.Platform
 	input := e.llvmBcSourceInfo(stmt.Source)
 	compiler := resolveResourceGlobalRef("$CLANG18_RESOURCE_GLOBAL", e.peers.ResourceGlobals) + "/bin/clang"
@@ -54,5 +54,5 @@ func (e *EmitContext) bpfCompileNode(stmt LlvmCompileStmt, out VFS) Node {
 
 	inputs = na.inputList(na.vfsList(buildScriptsClangWrapperPy), inputs...)
 
-	return Node{Platform: p, Cmds: commands, Env: env, Inputs: NodeInputs{files: inputs}, Outputs: outputs, KV: &bpfKV, Resources: resources}
+	return NodeSpec{Node: Node{Platform: p, Cmds: commands, Env: env, Inputs: inputs, Outputs: outputs, KV: &bpfKV, Resources: resources}}
 }

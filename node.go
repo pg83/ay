@@ -27,11 +27,11 @@ type Cmd struct {
 }
 
 type Node struct {
-	ResourceURIs        []STR          `json:"-"`
+	Extra               *NodeExtra     `json:"-"`
 	Cmds                []Cmd          `json:"cmds"`
 	Env                 EnvVars        `json:"env"`
-	Inputs              NodeInputs     `json:"-"`
-	InputNames          []STR          `json:"-"`
+	Inputs              InputChunks    `json:"-"`
+	InputFixes          []FixID        `json:"-"`
 	KV                  *KV            `json:"kv"`
 	KVExts              []KVExt        `json:"-"`
 	Outputs             []VFS          `json:"outputs"`
@@ -116,3 +116,24 @@ func dedupRefs(refs []NodeRef) []NodeRef {
 }
 
 type InputChunks [][]VFS
+
+type NodeExtra struct {
+	InputNames   []STR
+	ResourceURIs []STR
+}
+
+func (n *Node) inputNames() []STR {
+	if n.Extra != nil {
+		return n.Extra.InputNames
+	}
+
+	return nil
+}
+
+func (n *Node) resourceURIs() []STR {
+	if n.Extra != nil {
+		return n.Extra.ResourceURIs
+	}
+
+	return nil
+}

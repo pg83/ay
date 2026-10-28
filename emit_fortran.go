@@ -82,10 +82,10 @@ func (e *EmitContext) emitFortranSource(meta SrcMeta) {
 	closure := e.scanner.walkClosure(src, e.d.scanCtx, scanDomainCC)
 	args := na.chunkList(e.d.cc.FortranHead, na.anyList(argDashC.any(), src.any(), argDashO.any(), out.any()))
 
-	ref := e.emitNode(Node{Platform: e.instance.Platform,
-		Cmds: na.cmdList(Cmd{CmdArgs: args, Env: envVarsVCS, Resources: e.d.cc.FortranResourceUses}), Env: envVarsVCS,
-		Inputs: NodeInputs{files: na.dedupClosureChunks(closure), root: closure.self}, Outputs: na.vfsList(out),
-		KV: &fortranKV, Resources: e.d.cc.FortranResources})
+	ref := e.emitNode(NodeSpec{Node: Node{Platform: e.instance.Platform,
+		Cmds: na.cmdList(Cmd{CmdArgs: args, Env: envVarsVCS, Resources: e.d.cc.FortranResourceUses}), Env: envVarsVCS, Inputs: na.dedupClosureChunks(closure), Outputs: na.vfsList(out),
+		KV: &fortranKV, Resources: e.d.cc.FortranResources}, input: InputSpec{root: closure.self},
+	})
 
 	e.collectObj(ref, out, meta)
 }

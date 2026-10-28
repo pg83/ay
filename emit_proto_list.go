@@ -39,11 +39,10 @@ func (e *EmitContext) emitListProto(stmt ListProtoStmt) {
 	args := na.anyList(append([]ANY{e.d.tc.Python3.any(), listScript.any()}, stmt.Files...)...)
 
 	pending := e.pendingEmit(func() {
-		e.emitReservedNode(Node{
-			Platform: e.instance.Platform,
-			Cmds:     na.cmdList(Cmd{CmdArgs: na.chunkList(args), Stdout: output, Env: envVarsVCS}),
-			Env:      envVarsVCS, Inputs: NodeInputs{files: na.inputList(na.vfsList(listScript), sources)}, Outputs: na.vfsList(output),
-			KV: &pbKV, Resources: usesPython3,
+		e.emitReservedNode(NodeSpec{Node: Node{Platform: e.instance.Platform,
+			Cmds: na.cmdList(Cmd{CmdArgs: na.chunkList(args), Stdout: output, Env: envVarsVCS}),
+			Env:  envVarsVCS, Inputs: na.inputList(na.vfsList(listScript), sources), Outputs: na.vfsList(output),
+			KV: &pbKV, Resources: usesPython3},
 		}, ref)
 	})
 
@@ -54,11 +53,10 @@ func (e *EmitContext) emitListProto(stmt ListProtoStmt) {
 	})
 
 	touch := e.pendingEmit(func() {
-		e.emitReservedNode(Node{
-			Platform: e.instance.Platform,
-			Cmds:     na.cmdList(Cmd{CmdArgs: na.chunkList(na.anyList(e.d.tc.Python3.any(), touchScript.any(), header.any())), Env: envVarsVCS}),
-			Env:      envVarsVCS, Inputs: NodeInputs{files: na.inputList(na.vfsList(touchScript), na.vfsList(output))}, Outputs: na.vfsList(header),
-			KV: &pbKV, Resources: usesPython3,
+		e.emitReservedNode(NodeSpec{Node: Node{Platform: e.instance.Platform,
+			Cmds: na.cmdList(Cmd{CmdArgs: na.chunkList(na.anyList(e.d.tc.Python3.any(), touchScript.any(), header.any())), Env: envVarsVCS}),
+			Env:  envVarsVCS, Inputs: na.inputList(na.vfsList(touchScript), na.vfsList(output)), Outputs: na.vfsList(header),
+			KV: &pbKV, Resources: usesPython3},
 		}, headerRef)
 	})
 

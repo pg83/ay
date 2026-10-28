@@ -22,8 +22,7 @@ func (e *EmitContext) emitBuildMnStmt(stmt *BuildMnStmt) {
 	python3 := d.tc.Python3
 
 	pe := func() {
-		node := Node{
-			Platform: instance.Platform,
+		node := NodeSpec{Node: Node{Platform: instance.Platform,
 			Cmds: na.cmdList(Cmd{CmdArgs: na.chunkList(na.anyList(
 				python3.any(),
 				buildMnScriptVFS.any(),
@@ -35,13 +34,10 @@ func (e *EmitContext) emitBuildMnStmt(stmt *BuildMnStmt) {
 				strRankingSuffix.any(),
 				cppVFS.any(),
 			)), Env: env}),
-			Env:    env,
-			Inputs: NodeInputs{files: na.inputList(na.vfsList(archiverBin), na.vfsList(buildMnScriptVFS), na.vfsList(infoVFS)), roots: na.inputList(na.vfsList(buildMnScriptVFS), na.vfsList(infoVFS))},
-
-			KV:             &mnKV,
+			Env: env, Inputs: na.inputList(na.vfsList(archiverBin), na.vfsList(buildMnScriptVFS), na.vfsList(infoVFS)), KV: &mnKV,
 			Outputs:        na.vfsList(cppVFS, rodataVFS),
 			ForeignDepRefs: na.refList(archiverRef),
-			Resources:      usesPython3,
+			Resources:      usesPython3}, input: InputSpec{roots: na.inputList(na.vfsList(buildMnScriptVFS), na.vfsList(infoVFS))},
 		}
 
 		e.emitReservedNode(node, ref)

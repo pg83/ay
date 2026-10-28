@@ -46,18 +46,14 @@ func (e *EmitContext) emitSCReserved(srcVFS, headerVFS, domschemecBinary VFS, do
 	closure := e.scanner.walkClosure(srcVFS, e.d.scanCtx, scanDomainSc)
 	inputs := appendInputChunks(na, na.inputList(na.vfsList(domschemecBinary)), na.dedupClosureChunks(closure))
 
-	node := Node{
-		Platform: e.instance.Platform,
+	node := NodeSpec{Node: Node{Platform: e.instance.Platform,
 		Cmds: na.cmdList(Cmd{
 			CmdArgs: na.chunkList(na.anyList(domschemecBinary.any(), argDashIn.any(), srcVFS.any(), argDashOut.any(), headerVFS.any())),
 			Env:     env,
 		}),
-		Env:    env,
-		Inputs: NodeInputs{files: inputs, roots: inputs[1:], root: closure.self},
-
-		KV:             &scKV,
+		Env: env, Inputs: inputs, KV: &scKV,
 		Outputs:        na.vfsList(headerVFS),
-		ForeignDepRefs: na.refList(domschemecLDRef),
+		ForeignDepRefs: na.refList(domschemecLDRef)}, input: InputSpec{roots: inputs[1:], root: closure.self},
 	}
 
 	e.emitReservedNode(node, id)

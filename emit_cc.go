@@ -81,7 +81,6 @@ type ModuleCCInputs struct {
 	Variant         *string
 	IncludeInputs   []VFS
 	IncludeView     Closure
-	IncludePending  *PendingEmit
 	ExistingSource  VFS
 }
 
@@ -196,9 +195,14 @@ func (e *EmitContext) emitCCWith(srcVFS VFS, in ModuleCCInputs, reserved NodeRef
 	}
 
 	if configuration && in.IncludeView.incomplete {
-		in.IncludePending = e.pendingEmit(func() {
-			e.scanner.walkClosure(srcVFS, e.d.scanCtx, scanDomainCC)
-		})
+		id := e.scanner.includeFix(in.IncludeView.self, fixIncludes)
+		fix := &e.scanner.fixer.entries.s[id-1]
+
+		if fix.pending == nil {
+			fix.pending = e.pendingEmit(func() {
+				e.scanner.walkClosure(srcVFS, e.d.scanCtx, scanDomainCC)
+			})
+		}
 	}
 
 	if e.d.multimodule == tokFbsLibrary {
@@ -383,15 +387,11 @@ func (e *EmitContext) composeCCNodeAt(srcVFS VFS, in ModuleCCInputs, hostP *Plat
 		cmds = na.cmdList(compilerCmd)
 	}
 
-	node := Node{
-		Platform: instance.Platform,
-		Cmds:     cmds,
-		Env:      env,
-		Inputs:   NodeInputs{files: allInputs, root: in.IncludeView.self, pending: in.IncludePending, existingSource: in.ExistingSource},
-
-		Outputs:   na.vfsList(outVFS),
+	node := NodeSpec{Node: Node{Platform: instance.Platform,
+		Cmds: cmds,
+		Env:  env, Inputs: allInputs, Outputs: na.vfsList(outVFS),
 		KV:        &ccKV,
-		Resources: resources,
+		Resources: resources}, input: InputSpec{root: in.IncludeView.self, existingSource: in.ExistingSource},
 	}
 
 	e.emitReservedNode(node, reserved)

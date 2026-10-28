@@ -77,9 +77,9 @@ func (e *EmitContext) emitSdcMetas() []VFS {
 
 		ref := e.ctx.emit.reserve()
 
-		node := Node{Platform: e.instance.Platform, Cmds: cmds, Env: envVarsVCS,
-			Inputs: NodeInputs{files: na.inputList(na.vfsList(tool), scripts), roots: na.inputList(scripts)}, Outputs: outputs,
-			KV: &sdcMetaKV, Resources: usesPython3, DepRefs: na.refList(toolRef)}
+		node := NodeSpec{Node: Node{Platform: e.instance.Platform, Cmds: cmds, Env: envVarsVCS, Inputs: na.inputList(na.vfsList(tool), scripts), Outputs: outputs,
+			KV: &sdcMetaKV, Resources: usesPython3, DepRefs: na.refList(toolRef)}, input: InputSpec{roots: na.inputList(scripts)},
+		}
 
 		pending := e.pendingEmit(func() { e.emitReservedNode(node, ref) })
 
@@ -93,7 +93,7 @@ func (e *EmitContext) emitSdcMetas() []VFS {
 	return globals
 }
 
-func (e *EmitContext) appendSdcMeta(node *Node, name string) bool {
+func (e *EmitContext) appendSdcMeta(node *NodeSpec, name string) bool {
 	if e.d.setVars[strUSE_SDC_META] != strYes {
 		return false
 	}
@@ -113,7 +113,7 @@ func (e *EmitContext) appendSdcMeta(node *Node, name string) bool {
 	}
 
 	node.Cmds = append(append([]Cmd(nil), node.Cmds...), Cmd{CmdArgs: na.chunkList(args), Env: envVarsVCS})
-	node.Inputs.files = append(append(InputChunks(nil), node.Inputs.files...), na.vfsList(script), inputs)
+	node.Inputs = append(append(InputChunks(nil), node.Inputs...), na.vfsList(script), inputs)
 	node.Outputs = append(append([]VFS(nil), node.Outputs...), out)
 	e.resolveNodeCodegenDeps(node)
 

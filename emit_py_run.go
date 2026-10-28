@@ -513,16 +513,12 @@ func (e *EmitContext) emitPYRun(
 		cmd.Cwd = cwdVFS((*stmt.CWD).string())
 	}
 
-	node := Node{
-		Platform: e.instance.Platform,
-		Cmds:     na.cmdList(cmd),
-		Env:      env,
-		Inputs:   NodeInputs{files: inputChunks, roots: appendInputChunks(na, na.inputList(directSources, dataBuilds), inputClosure), text: textInputs},
-
-		KV:             kv,
+	node := NodeSpec{Node: Node{Platform: e.instance.Platform,
+		Cmds: na.cmdList(cmd),
+		Env:  env, Inputs: inputChunks, KV: kv,
 		Outputs:        outputs,
 		ForeignDepRefs: toolRefs,
-		Resources:      resources,
+		Resources:      resources}, input: InputSpec{roots: appendInputChunks(na, na.inputList(directSources, dataBuilds), inputClosure), text: textInputs},
 	}
 
 	e.emitReservedNode(node, id)

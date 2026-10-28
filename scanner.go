@@ -69,6 +69,8 @@ func (d IncludeDirective) cythonProbe() bool {
 }
 
 type IncludeScanner struct {
+	fixer          *IncludeFixer
+	fixVisited     BitSet
 	sysincl        *SysinclCtx
 	parsers        *IncludeParserManager
 	buckets        *BucketCache

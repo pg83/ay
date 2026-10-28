@@ -156,15 +156,11 @@ func (e *EmitContext) emitASAsm(srcVFS VFS, in ModuleCCInputs, yasmLD NodeRef, n
 		inputs = na.inputList(na.vfsList(yasmBinaryVFS), inputs...)
 	}
 
-	node := Node{
-		Platform: instance.Platform,
+	node := NodeSpec{Node: Node{Platform: instance.Platform,
 		Cmds: na.cmdList(Cmd{CmdArgs: na.chunkList(cmdArgs),
 			Env: env}),
-		Env:    env,
-		Inputs: NodeInputs{files: inputs, roots: buildFrom, root: in.IncludeView.self},
-
-		Outputs: na.vfsList(outVFS),
-		KV:      &asKV,
+		Env: env, Inputs: inputs, Outputs: na.vfsList(outVFS),
+		KV: &asKV}, input: InputSpec{roots: buildFrom, root: in.IncludeView.self},
 	}
 
 	if nasm {

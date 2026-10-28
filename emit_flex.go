@@ -94,14 +94,10 @@ func (e *EmitContext) emitFlexLX(toolArgs []ANY, toolBins []VFS, toolRefs []Node
 
 	env := envVarsVCS
 
-	e.emitReservedNode(Node{
-		Platform: e.instance.Platform,
-		Cmds:     na.cmdList(Cmd{CmdArgs: cmdArgs, Env: env}),
-		Env:      env,
-		Inputs:   NodeInputs{files: na.inputList(toolBins, na.vfsList(srcVFS)), roots: na.inputList(na.vfsList(srcVFS))},
-
-		Outputs:        na.vfsList(outVFS),
+	e.emitReservedNode(NodeSpec{Node: Node{Platform: e.instance.Platform,
+		Cmds: na.cmdList(Cmd{CmdArgs: cmdArgs, Env: env}),
+		Env:  env, Inputs: na.inputList(toolBins, na.vfsList(srcVFS)), Outputs: na.vfsList(outVFS),
 		KV:             &flexKV,
-		ForeignDepRefs: toolRefs,
+		ForeignDepRefs: toolRefs}, input: InputSpec{roots: na.inputList(na.vfsList(srcVFS))},
 	}, id)
 }

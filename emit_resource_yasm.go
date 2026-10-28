@@ -174,11 +174,9 @@ func (e *EmitContext) emitResourceJoin(files []string, suffix string, tag STR, f
 
 	args = append(args, argYaEndCommandFile.any())
 
-	ref := e.emitNode(Node{
-		Platform: e.instance.Platform,
-		Cmds:     na.cmdList(Cmd{CmdArgs: na.chunkList(na.anyList(args...)), Env: envVarsVCS}),
-		Env:      envVarsVCS, Inputs: NodeInputs{files: na.rootInputList(na.vfsList(inputs...), e.ctx.scripts[script.rel()])},
-		Outputs: na.vfsList(out), KV: &jsNodeKV, Resources: usesPython3,
+	ref := e.emitNode(NodeSpec{Node: Node{Platform: e.instance.Platform,
+		Cmds: na.cmdList(Cmd{CmdArgs: na.chunkList(na.anyList(args...)), Env: envVarsVCS}),
+		Env:  envVarsVCS, Inputs: na.rootInputList(na.vfsList(inputs...), e.ctx.scripts[script.rel()]), Outputs: na.vfsList(out), KV: &jsNodeKV, Resources: usesPython3},
 	})
 
 	e.register(GeneratedFileSpec{OutputPath: out, ProducerRef: ref,

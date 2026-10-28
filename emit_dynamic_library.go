@@ -324,16 +324,12 @@ func (e *EmitContext) emitDynamicLibrary() *ModuleEmitResult {
 
 	deps = deps[:len(deps):len(deps)]
 
-	n := Node{
-		Platform: instance.Platform,
-		Cmds:     cmds[:len(cmds):len(cmds)],
-		Env:      envFull,
-		Inputs:   NodeInputs{files: inputs, roots: appendInputChunks(na, inputs[:2], inputs[3:])},
-
-		Outputs:   na.vfsList(build(instance.Path.relString(), "/", outputName)),
+	n := NodeSpec{Node: Node{Platform: instance.Platform,
+		Cmds: cmds[:len(cmds):len(cmds)],
+		Env:  envFull, Inputs: inputs, Outputs: na.vfsList(build(instance.Path.relString(), "/", outputName)),
 		KV:        &dynamicLibraryKV,
 		DepRefs:   deps,
-		Resources: instance.Platform.UsesLinkResources,
+		Resources: instance.Platform.UsesLinkResources}, input: InputSpec{roots: appendInputChunks(na, inputs[:2], inputs[3:])},
 	}
 
 	n.ForeignDepRefs = na.refList(fixElfRef)

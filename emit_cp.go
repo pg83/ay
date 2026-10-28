@@ -8,7 +8,7 @@ func (e *EmitContext) emitCPWithInputs(src VFS, dst VFS, extraInputs []VFS, id N
 	e.emitReservedNode(node, id)
 }
 
-func composeCPNode(instance ModuleInstance, src VFS, dst VFS, extraInputs []VFS, tc ModuleToolchain, scripts ScriptDeps, na *NodeArenas) Node {
+func composeCPNode(instance ModuleInstance, src VFS, dst VFS, extraInputs []VFS, tc ModuleToolchain, scripts ScriptDeps, na *NodeArenas) NodeSpec {
 	fsTools := copyFsToolsVFS
 
 	cmdArgs := na.anyList(
@@ -36,15 +36,11 @@ func composeCPNode(instance ModuleInstance, src VFS, dst VFS, extraInputs []VFS,
 
 	inputs := na.rootInputList(ownInputs, scripts[fsTools.rel()], na.vfsList(src))
 
-	return Node{
-		Platform: instance.Platform,
+	return NodeSpec{Node: Node{Platform: instance.Platform,
 		Cmds: na.cmdList(Cmd{CmdArgs: na.chunkList(cmdArgs),
 			Env: env}),
-		Env:    env,
-		Inputs: NodeInputs{files: inputs, text: na.vfsList(append([]VFS{src}, ownInputs...)...)},
-
-		KV:        &cpKV,
+		Env: env, Inputs: inputs, KV: &cpKV,
 		Outputs:   na.vfsList(dst),
-		Resources: usesPython3,
+		Resources: usesPython3}, input: InputSpec{text: na.vfsList(append([]VFS{src}, ownInputs...)...)},
 	}
 }

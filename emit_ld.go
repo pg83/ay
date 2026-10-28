@@ -282,15 +282,12 @@ func (e *EmitContext) emitLD(
 		kv = &yqlUdfProbeKV
 	}
 
-	n := Node{
-		Platform:  instance.Platform,
-		Cmds:      cmds,
-		Env:       envFull,
-		Inputs:    NodeInputs{files: inputs},
-		Outputs:   outputs,
+	n := NodeSpec{Node: Node{Platform: instance.Platform,
+		Cmds: cmds,
+		Env:  envFull, Inputs: inputs, Outputs: outputs,
 		KV:        kv,
 		DepRefs:   deps,
-		Resources: instance.Platform.UsesLinkResources,
+		Resources: instance.Platform.UsesLinkResources},
 	}
 
 	if dyn != nil {
@@ -383,8 +380,7 @@ func emitVCSNode(emit *StreamingEmitter, host *Platform) NodeRef {
 	na := emit.nodeArenas()
 	output := bldVcsJson
 
-	node := Node{
-		Platform: host,
+	node := NodeSpec{Node: Node{Platform: host,
 		Cmds: na.cmdList(Cmd{CmdArgs: na.chunkList(na.anyList(internStr(currentYatoolPath()).any(),
 			argFetch.any(),
 			strBase64.any(),
@@ -392,7 +388,7 @@ func emitVCSNode(emit *StreamingEmitter, host *Platform) NodeRef {
 			output.any()))}),
 		KV:           &ldKV2,
 		Outputs:      na.vfsList(output),
-		Requirements: &vcsRequirements,
+		Requirements: &vcsRequirements},
 	}
 
 	node.PresetUID = resourceFetchUID("base64:vcs.json:"+vcsJSONBase64, output.string())

@@ -34,16 +34,12 @@ func (e *EmitContext) emitJSReserved(allName string, sources []string, srcVFSs [
 	env := envVarsVCS
 	inputs := appendInputChunks(na, na.rootInputList(srcVFSs, scripts[joinSrcs.rel()]), na.rootInputList(closure))
 
-	node := Node{
-		Platform: statsPlatform,
+	node := NodeSpec{Node: Node{Platform: statsPlatform,
 		Cmds: na.cmdList(Cmd{CmdArgs: na.chunkList(cmdArgs),
 			Env: env}),
-		Env:    env,
-		Inputs: NodeInputs{files: inputs, text: srcVFSs},
-
-		KV:        &jsNodeKV,
+		Env: env, Inputs: inputs, KV: &jsNodeKV,
 		Outputs:   na.vfsList(outVFS),
-		Resources: usesPython3,
+		Resources: usesPython3}, input: InputSpec{text: srcVFSs},
 	}
 
 	e.emitReservedNode(node, id)

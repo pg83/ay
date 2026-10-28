@@ -14,8 +14,7 @@ func (e *EmitContext) emitLibraryFmlSource(meta SrcMeta) {
 	ref := ctx.emit.reserve()
 
 	pe := func() {
-		node := Node{
-			Platform: instance.Platform,
+		node := NodeSpec{Node: Node{Platform: instance.Platform,
 			Cmds: na.cmdList(Cmd{CmdArgs: na.chunkList(na.anyList(
 				toolBin.any(),
 				strB2.any(),
@@ -24,12 +23,9 @@ func (e *EmitContext) emitLibraryFmlSource(meta SrcMeta) {
 				strT.any(),
 				srcVFS.any(),
 			)), Env: env}),
-			Env:    env,
-			Inputs: NodeInputs{files: na.inputList(na.vfsList(toolBin), na.vfsList(srcVFS)), roots: na.inputList(na.vfsList(srcVFS))},
-
-			KV:             &fmKV,
+			Env: env, Inputs: na.inputList(na.vfsList(toolBin), na.vfsList(srcVFS)), KV: &fmKV,
 			Outputs:        na.vfsList(outVFS),
-			ForeignDepRefs: na.refList(toolRef),
+			ForeignDepRefs: na.refList(toolRef)}, input: InputSpec{roots: na.inputList(na.vfsList(srcVFS))},
 		}
 
 		e.emitReservedNode(node, ref)

@@ -17,15 +17,11 @@ func (e *EmitContext) emitLibraryAspSource(meta SrcMeta) {
 	pe := func() {
 		env := envVarsVCS
 
-		node := Node{
-			Platform: instance.Platform,
-			Cmds:     na.cmdList(Cmd{CmdArgs: na.chunkList(na.anyList(toolBin.any(), srcVFS.any(), outVFS.any())), Env: env}),
-			Env:      env,
-			Inputs:   NodeInputs{files: na.inputList(na.vfsList(toolBin), na.vfsList(srcVFS)), roots: na.inputList(na.vfsList(srcVFS))},
-
-			KV:             &htKV,
+		node := NodeSpec{Node: Node{Platform: instance.Platform,
+			Cmds: na.cmdList(Cmd{CmdArgs: na.chunkList(na.anyList(toolBin.any(), srcVFS.any(), outVFS.any())), Env: env}),
+			Env:  env, Inputs: na.inputList(na.vfsList(toolBin), na.vfsList(srcVFS)), KV: &htKV,
 			Outputs:        na.vfsList(outVFS),
-			ForeignDepRefs: na.refList(toolRef),
+			ForeignDepRefs: na.refList(toolRef)}, input: InputSpec{roots: na.inputList(na.vfsList(srcVFS))},
 		}
 
 		e.emitReservedNode(node, ref)

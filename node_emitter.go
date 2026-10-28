@@ -59,8 +59,8 @@ func (e *StreamingEmitter) emitReserved(n *Node, id NodeRef) {
 	e.resolveOrPend(n, id)
 }
 
-func (e *StreamingEmitter) emitNode(n Node) NodeRef {
-	return e.emitNodePtr(&n)
+func (e *StreamingEmitter) emitNode(n NodeSpec) NodeRef {
+	return e.emitNodePtr(&n.Node)
 }
 
 func (e *StreamingEmitter) emitNodePtr(n *Node) NodeRef {
@@ -73,8 +73,8 @@ func (e *StreamingEmitter) emitNodePtr(n *Node) NodeRef {
 	return e.emit(p)
 }
 
-func (e *StreamingEmitter) emitReservedNode(n Node, id NodeRef) {
-	e.emitReservedNodePtr(&n, id)
+func (e *StreamingEmitter) emitReservedNode(n NodeSpec, id NodeRef) {
+	e.emitReservedNodePtr(&n.Node, id)
 }
 
 func (e *StreamingEmitter) emitReservedNodePtr(n *Node, id NodeRef) {
@@ -114,7 +114,7 @@ func (e *StreamingEmitter) emitResolved(n *Node, id NodeRef) {
 	e.resolved.add(uint32(id))
 
 	if e.onNode != nil {
-		e.onNode(n, n.consumeInputs(), e.fetchRefs)
+		e.onNode(n, n.Inputs, e.fetchRefs)
 	}
 }
 
@@ -136,7 +136,7 @@ func (e *StreamingEmitter) result(r NodeRef) {
 	e.results = append(e.results, r)
 }
 
-func (ctx *GenCtx) activateSelectedInputs(activation map[*IncludeScanner]*BitSet, selected BitSet, stack []NodeRef) BitSet {
+func (ctx *GenCtx) activateSelectedInputs(selected BitSet, stack []NodeRef) BitSet {
 	e := ctx.emit
 
 	selectProducer := func(ref NodeRef) {
@@ -154,8 +154,8 @@ func (ctx *GenCtx) activateSelectedInputs(activation map[*IncludeScanner]*BitSet
 			continue
 		}
 
-		if len(node.Inputs.modulePeers) > 0 {
-			ctx.activateNodeInputs(node, activation, selectProducer, true)
+		if ctx.hasPeerInputFixes(node) {
+			ctx.activateNodeInputs(node, selectProducer, true)
 		}
 
 		if selected.has(uint32(ref)) {
@@ -163,7 +163,7 @@ func (ctx *GenCtx) activateSelectedInputs(activation map[*IncludeScanner]*BitSet
 		}
 
 		selected.add(uint32(ref))
-		ctx.activateNodeInputs(node, activation, selectProducer, false)
+		ctx.activateNodeInputs(node, selectProducer, false)
 		stack = append(stack, node.DepRefs...)
 
 		for _, dependency := range node.ForeignDepRefs {
@@ -185,12 +185,6 @@ func (ctx *GenCtx) activateSelectedInputs(activation map[*IncludeScanner]*BitSet
 }
 
 func (e *StreamingEmitter) finish() []NodeRef {
-	for _, node := range e.nodes.s {
-		if node != nil && e.exportEligible.has(uint32(node.Ref)) {
-			node.establishedInputRefs(e.na)
-		}
-	}
-
 	if e.stripPackagesFromResults {
 		e.stripPackageResults()
 	}

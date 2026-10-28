@@ -269,11 +269,11 @@ func (c *CanonBuf) writeNode(n *Node, inputs InputChunks) {
 		c.writeSTR(n.UIDSalt)
 	}
 
-	for _, uri := range n.ResourceURIs {
+	for _, uri := range n.resourceURIs() {
 		c.writeSTR(uri)
 	}
 
-	for _, name := range n.InputNames {
+	for _, name := range n.inputNames() {
 		c.writeSTR(name)
 	}
 }

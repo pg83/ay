@@ -19,14 +19,11 @@ func (e *EmitContext) emitGettextSource(input, output VFS) {
 	python := wrapccPython3STR
 
 	pending := e.pendingEmit(func() {
-		e.emitReservedNode(Node{
-			Platform:  instance.Platform,
-			Cmds:      na.cmdList(Cmd{CmdArgs: na.chunkList(na.anyList(python.any(), gettextScript.any(), strO.any(), output.any(), input.any())), Env: envVarsVCS}),
-			Env:       envVarsVCS,
-			Inputs:    NodeInputs{files: na.rootInputList(na.vfsList(gettextScript, input))},
-			Outputs:   na.vfsList(output),
+		e.emitReservedNode(NodeSpec{Node: Node{Platform: instance.Platform,
+			Cmds: na.cmdList(Cmd{CmdArgs: na.chunkList(na.anyList(python.any(), gettextScript.any(), strO.any(), output.any(), input.any())), Env: envVarsVCS}),
+			Env:  envVarsVCS, Inputs: na.rootInputList(na.vfsList(gettextScript, input)), Outputs: na.vfsList(output),
 			KV:        &gettextKV,
-			Resources: usesPython3,
+			Resources: usesPython3},
 		}, ref)
 	})
 

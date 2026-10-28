@@ -48,16 +48,12 @@ func (p *pyPBPending) emitPending() {
 	inputChunks = append(inputChunks, buckets...)
 	na.inputs.commit(len(inputChunks))
 
-	node := Node{
-		Platform: s.instance.Platform,
-		Cmds:     na.cmdList(Cmd{CmdArgs: s.cmdArgs, Cwd: s.protoCwd, Env: envVarsVCS}),
-		Env:      envVarsVCS,
-		Inputs:   NodeInputs{files: InputChunks(inputChunks[:len(inputChunks):len(inputChunks)]), roots: InputChunks(inputChunks[1:len(inputChunks):len(inputChunks)])},
-
-		Outputs:   s.outputs,
+	node := NodeSpec{Node: Node{Platform: s.instance.Platform,
+		Cmds: na.cmdList(Cmd{CmdArgs: s.cmdArgs, Cwd: s.protoCwd, Env: envVarsVCS}),
+		Env:  envVarsVCS, Inputs: InputChunks(inputChunks[:len(inputChunks):len(inputChunks)]), Outputs: s.outputs,
 		KV:        &pbKV,
 		KVExts:    s.extOut,
-		Resources: usesPython3,
+		Resources: usesPython3}, input: InputSpec{roots: InputChunks(inputChunks[1:len(inputChunks):len(inputChunks)])},
 	}
 
 	if len(s.toolRefs) > 0 {
