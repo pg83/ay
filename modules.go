@@ -1438,7 +1438,7 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 			d.unit = resolveModuleUnit(v.Name, kind, language)
 
 			platform.conf.initModule(env, v.Name.str(), moduleConfTag(v.Name, kind, language, d.unit.Tag), d.setVars)
-			env.setString(envPeerdirTags, expandAssignedScalarVarRef(modulePeerTags(v, d.unit, language), env))
+			env.setStringID(envPeerdirTags, platform.conf.peerTags(env, modulePeerTags(v, d.unit, language)))
 			env.setString(envREALPRJNAME, moduleRealPrjName(modulePath, v, d.unit))
 
 			if moduleType := confModuleType(v.Name, d); moduleType != "" {

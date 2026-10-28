@@ -944,12 +944,29 @@ func (t *confTables) build() {
 		})
 	}
 
+	names := make([]ENV, 0, len(counts.vals.s))
+
+	for key := range counts.idx.each() {
+		names = append(names, ENV(key))
+	}
+
+	slices.SortFunc(names, func(a, b ENV) int { return strings.Compare(a.string(), b.string()) })
+
+	var ranks DenseMap[ENV, int32]
+
+	for i, name := range names {
+		ranks.put(name, int32(i))
+	}
+
 	slices.SortFunc(dependencies, func(a, b confDependency) int {
 		if a.variable != b.variable {
 			return int(a.variable) - int(b.variable)
 		}
 
-		return strings.Compare(a.target.string(), b.target.string())
+		ra, _ := ranks.get(a.target)
+		rb, _ := ranks.get(b.target)
+
+		return int(ra) - int(rb)
 	})
 
 	dependencies = slices.Compact(dependencies)
@@ -1119,6 +1136,7 @@ type Conf struct {
 	state       *ConfState
 	program     *confProgram
 	tables      *confTables
+	tags        DenseMap[STR, confExpansion]
 	platformEnv Environment
 	inherited   DenseMap[ENV, ConfValue]
 	base        *EnvStore
@@ -1252,6 +1270,52 @@ func (c *Conf) sysincl() []string {
 
 func (c *Conf) alias(name STR) *ConfMacro {
 	return c.program.macros[name]
+}
+
+type confExpansion struct {
+	keys   []ENV
+	values []ConfValue
+	result STR
+}
+
+func (c *Conf) peerTags(env Environment, template string) STR {
+	key := internStr(template)
+
+	if memo, ok := c.tags.get(key); ok {
+		valid := true
+
+		for i, k := range memo.keys {
+			if confEnvValue(env, k) != memo.values[i] {
+				valid = false
+
+				break
+			}
+		}
+
+		if valid {
+			return memo.result
+		}
+	}
+
+	result := internStr(expandAssignedScalarVarRef(template, env))
+	memo := confExpansion{result: result}
+	nested := false
+
+	confValueVars(template, func(name string) {
+		k := internEnv(name)
+		v := confEnvValue(env, k)
+
+		nested = nested || v.kind != envAbsent && strings.IndexByte(v.value.string(), '$') >= 0
+
+		memo.keys = append(memo.keys, k)
+		memo.values = append(memo.values, v)
+	})
+
+	if !nested {
+		c.tags.put(key, memo)
+	}
+
+	return result
 }
 
 func (c *Conf) set(env Environment, variable ENV, originals map[STR]STR) {

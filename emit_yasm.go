@@ -19,11 +19,17 @@ var yasmConstHead = []ANY{
 	argReplaceToolRootT.any(),
 }
 
-func assemblerConfigValue(env Environment, name, fallback string) string {
-	value, bound := env.lookup(name)
+func assemblerConfigValue(env Environment, key ENV, fallback string) string {
+	value := fallback
 
-	if !bound {
-		value = fallback
+	if k, v := env.s.lookup(key); k != envAbsent {
+		env.recordResourceUse(key)
+
+		if k == envVFS {
+			value = VFS(uint32(v)).string()
+		} else {
+			value = v.string()
+		}
 	}
 
 	return expandToken(value, env, tokenExpandFinal)
@@ -47,14 +53,14 @@ func (d *ModuleData) collectAssemblerConfig(env Environment) {
 		prefix = "--prefix=" + value
 	}
 
-	d.asmFormat = internV(assemblerConfigValue(env, "_YASM_FMT_VALUE", format), assemblerConfigValue(env, "HARDWARE_ARCH", "64"))
-	d.yasmPlatformFlags = appendQuotedWords(d.yasmPlatformFlags[:0], assemblerConfigValue(env, "_YASM_PLATFORM_FLAGS_VALUE", platformFlags), 0)
+	d.asmFormat = internV(assemblerConfigValue(env, envYasmFmtValue, format), assemblerConfigValue(env, envHardwareArch, "64"))
+	d.yasmPlatformFlags = appendQuotedWords(d.yasmPlatformFlags[:0], assemblerConfigValue(env, envYasmPlatformFlagsValue, platformFlags), 0)
 
-	d.yasmFlags = appendQuotedWords(d.yasmFlags[:0], assemblerConfigValue(env, "ASM_PREFIX_VALUE", prefix)+" "+
-		assemblerConfigValue(env, "_YASM_PREDEFINED_FLAGS_VALUE", predefined)+" "+assemblerConfigValue(env, "YASM_FLAGS", ""), 0)
+	d.yasmFlags = appendQuotedWords(d.yasmFlags[:0], assemblerConfigValue(env, envAsmPrefixValue, prefix)+" "+
+		assemblerConfigValue(env, envYasmPredefinedFlagsValue, predefined)+" "+assemblerConfigValue(env, envYasmFlags, ""), 0)
 
-	d.nasmFlags = appendQuotedWords(d.nasmFlags[:0], assemblerConfigValue(env, "NASM_FLAGS", ""), 0)
-	d.asmPreincludes = internAnys(strings.Fields(assemblerConfigValue(env, "YASM_PREINCLUDES_VALUE", "")))
+	d.nasmFlags = appendQuotedWords(d.nasmFlags[:0], assemblerConfigValue(env, envNasmFlags, ""), 0)
+	d.asmPreincludes = internAnys(strings.Fields(assemblerConfigValue(env, envYasmPreincludesValue, "")))
 }
 
 func (e *EmitContext) asmOutputFor(srcVFS VFS) VFS {

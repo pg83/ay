@@ -3,18 +3,7 @@ package main
 import (
 	"bytes"
 	"path"
-	"regexp"
 	"strings"
-)
-
-var cythonCimportPattern = regexp.MustCompile(`^[\t\v\f\r ]*(?:from[\t\v\f\r ]+(` + cythonImportName + `)[\t\v\f\r ]+)?cimport[\t\v\f\r ]+(` + cythonImportList + `|` + cythonImportParens + `)[\t\v\f\r ]*(?:#[^\n]*)?\n`)
-
-const (
-	cythonImportName   = `[^\t\v\f\r\n #,()\\]+`
-	cythonImportItem   = cythonImportName + `(?:[\t\v\f\r ]+as[\t\v\f\r ]+` + cythonImportName + `)?`
-	cythonImportWS     = `(?:[\t\v\f\r ]|\\\n)*`
-	cythonImportList   = cythonImportItem + `(?:` + cythonImportWS + `,` + cythonImportWS + cythonImportItem + `)*`
-	cythonImportParens = `\([\t\v\f\r\n ]*` + cythonImportItem + `(?:[\t\v\f\r\n ]*,[\t\v\f\r\n ]*` + cythonImportItem + `)*[\t\v\f\r\n ]*,?[\t\v\f\r\n ]*\)`
 )
 
 type CythonIncludeDirectiveParser struct{}
@@ -117,18 +106,18 @@ func (CythonIncludeDirectiveParser) parse(rel string, data [][]byte, a *BumpAllo
 			continue
 		}
 
-		match := cythonCimportPattern.FindSubmatchIndex(statement)
+		end, module, list, ok := cythonCimport(statement)
 
-		if match == nil {
+		if !ok {
 			continue
 		}
 
-		raw = statement[match[1]:]
+		raw = statement[end:]
 
-		names := bytesString(statement[match[4]:match[5]])
+		names := bytesString(list)
 
 		if from {
-			addCythonCimportFrom(add, bytesString(statement[match[2]:match[3]]), names)
+			addCythonCimportFrom(add, bytesString(module), names)
 		} else {
 			eachCythonCimportName(names, func(name string) { addCythonPxdCandidates(add, name) })
 		}
@@ -272,4 +261,181 @@ func eachCythonCimportName(names string, fn func(string)) {
 
 		fn(strings.ReplaceAll(part, ".", "/"))
 	}
+}
+
+func cythonCimport(b []byte) (end int, module, names []byte, ok bool) {
+	i := cythonSkipSpace(b, 0)
+
+	if bytes.HasPrefix(b[i:], []byte("from")) {
+		j := cythonSkipSpace(b, i+4)
+
+		if j == i+4 {
+			return
+		}
+
+		k := cythonNameEnd(b, j)
+
+		if k == j {
+			return
+		}
+
+		module = b[j:k]
+		i = cythonSkipSpace(b, k)
+
+		if i == k {
+			return
+		}
+	}
+
+	if !bytes.HasPrefix(b[i:], []byte("cimport")) {
+		return
+	}
+
+	j := cythonSkipSpace(b, i+7)
+
+	if j == i+7 {
+		return
+	}
+
+	start := j
+
+	if j < len(b) && b[j] == '(' {
+		j, ok = cythonParenList(b, j+1)
+	} else {
+		j, ok = cythonPlainList(b, j)
+	}
+
+	if !ok {
+		return 0, nil, nil, false
+	}
+
+	names = b[start:j]
+	j = cythonSkipSpace(b, j)
+
+	if j < len(b) && b[j] == '#' {
+		for j < len(b) && b[j] != '\n' {
+			j++
+		}
+	}
+
+	if j >= len(b) || b[j] != '\n' {
+		return 0, nil, nil, false
+	}
+
+	return j + 1, module, names, true
+}
+
+func cythonPlainList(b []byte, i int) (int, bool) {
+	i, ok := cythonItem(b, i)
+
+	if !ok {
+		return i, false
+	}
+
+	for {
+		j := cythonSkipContinued(b, i)
+
+		if j >= len(b) || b[j] != ',' {
+			return i, true
+		}
+
+		if i, ok = cythonItem(b, cythonSkipContinued(b, j+1)); !ok {
+			return i, false
+		}
+	}
+}
+
+func cythonParenList(b []byte, i int) (int, bool) {
+	i, ok := cythonItem(b, cythonSkipSpaceLines(b, i))
+
+	if !ok {
+		return i, false
+	}
+
+	for {
+		j := cythonSkipSpaceLines(b, i)
+
+		if j < len(b) && b[j] == ',' {
+			k := cythonSkipSpaceLines(b, j+1)
+
+			if m, ok := cythonItem(b, k); ok {
+				i = m
+
+				continue
+			}
+
+			j = k
+		}
+
+		if j < len(b) && b[j] == ')' {
+			return j + 1, true
+		}
+
+		return j, false
+	}
+}
+
+func cythonItem(b []byte, i int) (int, bool) {
+	k := cythonNameEnd(b, i)
+
+	if k == i {
+		return i, false
+	}
+
+	if j := cythonSkipSpace(b, k); j > k && bytes.HasPrefix(b[j:], []byte("as")) {
+		if m := cythonSkipSpace(b, j+2); m > j+2 {
+			if n := cythonNameEnd(b, m); n > m {
+				return n, true
+			}
+		}
+	}
+
+	return k, true
+}
+
+func cythonSpace(c byte) bool {
+	return c == ' ' || c == '\t' || c == '\v' || c == '\f' || c == '\r'
+}
+
+func cythonNameEnd(b []byte, i int) int {
+	for i < len(b) {
+		switch b[i] {
+		case ' ', '\t', '\v', '\f', '\r', '\n', '#', ',', '(', ')', '\\':
+			return i
+		}
+
+		i++
+	}
+
+	return i
+}
+
+func cythonSkipSpace(b []byte, i int) int {
+	for i < len(b) && cythonSpace(b[i]) {
+		i++
+	}
+
+	return i
+}
+
+func cythonSkipSpaceLines(b []byte, i int) int {
+	for i < len(b) && (cythonSpace(b[i]) || b[i] == '\n') {
+		i++
+	}
+
+	return i
+}
+
+func cythonSkipContinued(b []byte, i int) int {
+	for i < len(b) {
+		if cythonSpace(b[i]) {
+			i++
+		} else if b[i] == '\\' && i+1 < len(b) && b[i+1] == '\n' {
+			i += 2
+		} else {
+			break
+		}
+	}
+
+	return i
 }
