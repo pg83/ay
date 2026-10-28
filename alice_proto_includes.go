@@ -4,39 +4,197 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"path"
-	"regexp"
 	"slices"
 	"strings"
+	"unicode"
+	"unicode/utf8"
 )
 
-var (
-	aliceProtoLineComment  = regexp.MustCompile(`(?m)//.*$`)
-	aliceProtoBlockComment = regexp.MustCompile(`(?s)/\*.*?\*/`)
-	aliceProtoPackage      = regexp.MustCompile(`(?:^|[^\p{L}\p{N}_])package[\s\p{Z}\x0b\x85\x1c-\x1f]+([^;]+);`)
-	aliceProtoMessage      = regexp.MustCompile(`(?:^|[^\p{L}\p{N}_])(message)[\s\p{Z}\x0b\x85\x1c-\x1f]+([\p{L}\p{N}_]+)[\s\p{Z}\x0b\x85\x1c-\x1f]*\{`)
-)
+func aliceProtoStripComments(data []byte) string {
+	var b strings.Builder
+
+	b.Grow(len(data))
+
+	for len(data) > 0 {
+		i := strings.Index(string(data), "//")
+
+		if i < 0 {
+			b.Write(data)
+
+			break
+		}
+
+		b.Write(data[:i])
+		data = data[i:]
+
+		if nl := strings.IndexByte(string(data), '\n'); nl >= 0 {
+			data = data[nl:]
+		} else {
+			data = nil
+		}
+	}
+
+	s := b.String()
+
+	if !strings.Contains(s, "/*") {
+		return s
+	}
+
+	var out strings.Builder
+
+	out.Grow(len(s))
+
+	for len(s) > 0 {
+		i := strings.Index(s, "/*")
+
+		if i < 0 {
+			break
+		}
+
+		end := strings.Index(s[i+2:], "*/")
+
+		if end < 0 {
+			break
+		}
+
+		out.WriteString(s[:i])
+		s = s[i+2+end+2:]
+	}
+
+	out.WriteString(s)
+
+	return out.String()
+}
+
+func aliceProtoSpace(r rune) bool {
+	switch r {
+	case ' ', '\t', '\n', '\f', '\r', '\v', 0x85:
+		return true
+	}
+
+	return r >= 0x1c && r <= 0x1f || unicode.Is(unicode.Z, r)
+}
+
+func aliceProtoWord(r rune) bool {
+	return r == '_' || unicode.IsLetter(r) || unicode.IsNumber(r)
+}
+
+func aliceProtoKeyword(content, keyword string, at, from int) bool {
+	if !strings.HasPrefix(content[at:], keyword) {
+		return false
+	}
+
+	if at == 0 {
+		return true
+	}
+
+	r, size := utf8.DecodeLastRuneInString(content[:at])
+
+	return at-size >= from && !aliceProtoWord(r)
+}
+
+func aliceProtoSpaces(content string, i int) int {
+	for i < len(content) {
+		r, size := utf8.DecodeRuneInString(content[i:])
+
+		if !aliceProtoSpace(r) {
+			break
+		}
+
+		i += size
+	}
+
+	return i
+}
+
+func aliceProtoPackageName(content string) string {
+	for from := 0; ; {
+		at := strings.Index(content[from:], "package")
+
+		if at < 0 {
+			return ""
+		}
+
+		at += from
+
+		if aliceProtoKeyword(content, "package", at, 0) {
+			start := at + len("package")
+			spaces := aliceProtoSpaces(content, start)
+
+			if spaces > start {
+				if semicolon := strings.IndexByte(content[spaces:], ';'); semicolon > 0 {
+					return content[spaces : spaces+semicolon]
+				} else if semicolon == 0 {
+					_, size := utf8.DecodeLastRuneInString(content[:spaces])
+
+					if spaces-size > start {
+						return content[spaces-size : spaces]
+					}
+				}
+			}
+		}
+
+		from = at + 1
+	}
+}
 
 func aliceProtoMessages(data []byte) []string {
-	content := aliceProtoLineComment.ReplaceAllString(string(data), "")
-
-	content = aliceProtoBlockComment.ReplaceAllString(content, "")
-
+	content := aliceProtoStripComments(data)
 	packageName := ""
 
-	if match := aliceProtoPackage.FindStringSubmatch(content); match != nil && strings.TrimSpace(match[1]) != "" {
-		packageName = strings.ReplaceAll(strings.TrimSpace(match[1]), ".", "::") + "::"
+	if name := strings.TrimSpace(aliceProtoPackageName(content)); name != "" {
+		packageName = strings.ReplaceAll(name, ".", "::") + "::"
 	}
 
 	messages := []string{}
+	depth := 0
+	counted := 0
 
-	for _, match := range aliceProtoMessage.FindAllStringSubmatchIndex(content, -1) {
-		prefix := content[:match[2]]
+	for from := 0; ; {
+		at := strings.Index(content[from:], "message")
 
-		if strings.Count(prefix, "{") > strings.Count(prefix, "}") {
+		if at < 0 {
+			break
+		}
+
+		at += from
+
+		if !aliceProtoKeyword(content, "message", at, from) {
+			from = at + 1
+
 			continue
 		}
 
-		messages = append(messages, packageName+content[match[4]:match[5]])
+		start := at + len("message")
+		spaces := aliceProtoSpaces(content, start)
+		nameEnd := spaces
+
+		for nameEnd < len(content) {
+			r, size := utf8.DecodeRuneInString(content[nameEnd:])
+
+			if !aliceProtoWord(r) {
+				break
+			}
+
+			nameEnd += size
+		}
+
+		brace := aliceProtoSpaces(content, nameEnd)
+
+		if spaces == start || nameEnd == spaces || brace >= len(content) || content[brace] != '{' {
+			from = at + 1
+
+			continue
+		}
+
+		depth += strings.Count(content[counted:at], "{") - strings.Count(content[counted:at], "}")
+		counted = at
+
+		if depth <= 0 {
+			messages = append(messages, packageName+content[spaces:nameEnd])
+		}
+
+		from = brace + 1
 	}
 
 	return messages
