@@ -49,8 +49,52 @@ type YmakeConfRun struct {
 
 type YaConfToolchains struct {
 	order   []string
+	raw     map[string]json.RawMessage
 	entries map[string]map[string]any
-	bottles map[string]any
+	bottles map[string]json.RawMessage
+}
+
+type yaConfPlatformSpec struct {
+	OS   string `json:"os"`
+	Arch string `json:"arch"`
+}
+
+type yaConfPlatform struct {
+	Host    yaConfPlatformSpec `json:"host"`
+	Target  yaConfPlatformSpec `json:"target"`
+	Default bool               `json:"default"`
+}
+
+type yaConfToolchainHead struct {
+	Name      string           `json:"name"`
+	Platforms []yaConfPlatform `json:"platforms"`
+}
+
+func (cfg *YaConfToolchains) entry(key string) map[string]any {
+	if entry, ok := cfg.entries[key]; ok {
+		return entry
+	}
+
+	var entry map[string]any
+
+	throw(json.Unmarshal(cfg.raw[key], &entry))
+	cfg.entries[key] = entry
+
+	return entry
+}
+
+func (cfg *YaConfToolchains) bottle(name string) (map[string]any, bool) {
+	raw, ok := cfg.bottles[name]
+
+	if !ok {
+		return nil, false
+	}
+
+	var bottle map[string]any
+
+	throw(json.Unmarshal(raw, &bottle))
+
+	return bottle, bottle != nil
 }
 
 func toolchainPlatformName(os OS, isa ISA) string {
@@ -69,7 +113,7 @@ func readYaConfToolchains(fs FS) *YaConfToolchains {
 	}
 
 	dec := json.NewDecoder(bytes.NewReader(concatChunks(fs.read(rel))))
-	out := &YaConfToolchains{entries: map[string]map[string]any{}}
+	out := &YaConfToolchains{raw: map[string]json.RawMessage{}, entries: map[string]map[string]any{}}
 
 	expectJSONDelim(dec, '{')
 
@@ -81,11 +125,11 @@ func readYaConfToolchains(fs FS) *YaConfToolchains {
 			for dec.More() {
 				name := jsonKey(dec)
 
-				var entry map[string]any
+				var entry json.RawMessage
 
 				throw(dec.Decode(&entry))
 				out.order = append(out.order, name)
-				out.entries[name] = entry
+				out.raw[name] = entry
 			}
 
 			expectJSONDelim(dec, '}')
@@ -131,15 +175,14 @@ func toolchainPlatform(name string, spec any, fallback map[string]any) map[strin
 	return map[string]any{"os": m["os"], "arch": arch, "toolchain": name, "visible_name": name}
 }
 
-func toolchainSpecName(toolchain string, spec map[string]any) string {
-	os, _ := spec["os"].(string)
-	arch, _ := spec["arch"].(string)
+func toolchainSpecName(toolchain string, spec *yaConfPlatformSpec) string {
+	arch := spec.Arch
 
 	if arch == "" {
 		arch = toolchainArchDflt
 	}
 
-	return strings.ToUpper(toolchain + "-" + os + "-" + arch)
+	return strings.ToUpper(toolchain + "-" + spec.OS + "-" + arch)
 }
 
 func stringizeToolchainPlatform(p map[string]any, sep string) string {
@@ -152,32 +195,25 @@ func stringizeToolchainPlatform(p map[string]any, sep string) string {
 
 func resolveCxxToolchain(fs FS, cfg *YaConfToolchains, host, target string) *Toolchain {
 	for _, key := range cfg.order {
-		descr := cfg.entries[key]
-		tools, _ := descr["tools"].(map[string]any)
-		tool, ok := tools[toolchainCxxTool].(map[string]any)
+		var head yaConfToolchainHead
 
-		if !ok {
-			continue
-		}
+		throw(json.Unmarshal(cfg.raw[key], &head))
 
 		name := key
 
-		if n, ok := descr["name"].(string); ok {
-			name = n
+		if head.Name != "" {
+			name = head.Name
 		}
 
-		platforms, _ := descr["platforms"].([]any)
+		for i := range head.Platforms {
+			spec := &head.Platforms[i]
+			hostSpec, targetSpec := &spec.Host, &spec.Target
 
-		for _, raw := range platforms {
-			spec, _ := raw.(map[string]any)
-			hostSpec, _ := spec["host"].(map[string]any)
-			targetSpec, _ := spec["target"].(map[string]any)
-
-			if hostSpec == nil {
+			if *hostSpec == (yaConfPlatformSpec{}) {
 				throwFmt("ya.conf.json: tool chain %s lacks a host platform", name)
 			}
 
-			if targetSpec == nil {
+			if *targetSpec == (yaConfPlatformSpec{}) {
 				targetSpec = hostSpec
 			}
 
@@ -188,15 +224,25 @@ func resolveCxxToolchain(fs FS, cfg *YaConfToolchains, host, target string) *Too
 			toolchain := name
 
 			if !matches(toolchain) {
-				if isDefault, _ := spec["default"].(bool); !isDefault || !matches(toolchainNameDflt) {
+				if !spec.Default || !matches(toolchainNameDflt) {
 					continue
 				}
 
 				toolchain = toolchainNameDflt
 			}
 
-			h := toolchainPlatform(name, spec["host"], nil)
-			t := toolchainPlatform(name, spec["target"], h)
+			descr := cfg.entry(key)
+			tools, _ := descr["tools"].(map[string]any)
+			tool, ok := tools[toolchainCxxTool].(map[string]any)
+
+			if !ok {
+				break
+			}
+
+			platforms, _ := descr["platforms"].([]any)
+			platform, _ := platforms[i].(map[string]any)
+			h := toolchainPlatform(name, platform["host"], nil)
+			t := toolchainPlatform(name, platform["target"], h)
 
 			h["toolchain"] = toolchain
 			t["toolchain"] = toolchain
@@ -218,7 +264,7 @@ func newToolchain(fs FS, cfg *YaConfToolchains, key string, descr, tool, host, t
 	var formula any
 
 	if bottle != "" {
-		if b, ok := cfg.bottles[bottle].(map[string]any); ok {
+		if b, ok := cfg.bottle(bottle); ok {
 			formula = b["formula"]
 		}
 	}

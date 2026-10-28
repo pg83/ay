@@ -34,10 +34,14 @@ func buildScriptTable(fs FS) ScriptDeps {
 
 	direct := make(map[string]map[string]bool, len(texts))
 
+	var imports []string
+
 	for rel, txt := range texts {
 		deps := map[string]bool{}
 
-		for _, mod := range scriptImports(txt) {
+		imports = scriptImports(txt, imports[:0])
+
+		for _, mod := range imports {
 			if target, ok := byStem[mod]; ok && target != rel {
 				deps[target] = true
 			}
@@ -96,10 +100,8 @@ func buildScriptTable(fs FS) ScriptDeps {
 	return table
 }
 
-func scriptImports(txt string) []string {
-	var out []string
-
-	for _, line := range strings.Split(txt, "\n") {
+func scriptImports(txt string, out []string) []string {
+	for line := range strings.SplitSeq(txt, "\n") {
 		l := strings.TrimSpace(line)
 
 		var mods string
@@ -119,7 +121,7 @@ func scriptImports(txt string) []string {
 			continue
 		}
 
-		for _, part := range strings.Split(mods, ",") {
+		for part := range strings.SplitSeq(mods, ",") {
 			p := strings.TrimSpace(part)
 
 			if k := strings.Index(p, " as "); k >= 0 {

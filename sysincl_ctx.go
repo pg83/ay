@@ -150,15 +150,37 @@ func buildSysinclIndex(set SysInclSet) *SysinclIndex {
 	m := &SysinclIndex{byLower: make(map[string]int32), byID: newIntMap[int32](4096)}
 	contribArena := newBumpAllocator[SysinclContribution]()
 
-	bucketFor := func(lc string) int32 {
-		if i, ok := m.byLower[lc]; ok {
+	var lower []byte
+
+	bucketFor := func(key string) int32 {
+		lower = lower[:0]
+
+		changed := false
+
+		for i := 0; i < len(key); i++ {
+			c := key[i]
+
+			if c >= 'A' && c <= 'Z' {
+				c += 'a' - 'A'
+				changed = true
+			}
+
+			lower = append(lower, c)
+		}
+
+		if i, ok := m.byLower[string(lower)]; ok {
 			return i
 		}
 
 		i := int32(len(m.buckets))
 
 		m.buckets = append(m.buckets, nil)
-		m.byLower[lc] = i
+
+		if changed {
+			m.byLower[string(lower)] = i
+		} else {
+			m.byLower[key] = i
+		}
 
 		return i
 	}
@@ -197,7 +219,7 @@ func buildSysinclIndex(set SysInclSet) *SysinclIndex {
 				}
 
 				if p.key != 0 {
-					bi := bucketFor(strings.ToLower(p.key.string()))
+					bi := bucketFor(p.key.string())
 
 					m.buckets[bi] = arenaAppend(contribArena, m.buckets[bi], SysinclContribution{
 						paths:    p.paths,

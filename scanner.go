@@ -95,6 +95,7 @@ type IncludeDiagnostic struct {
 	Directive  IncludeDirective
 	Includer   VFS
 	Unresolved bool
+	reported   bool
 }
 
 func (d IncludeDiagnostic) warn() Warn {
@@ -244,8 +245,11 @@ func (s *IncludeScanner) hasOwnDiagnostics(v VFS) bool {
 
 func (s *IncludeScanner) reportDiagnostics(diagnostics *IncludeDiagnostics) {
 	if diagnostics != nil {
-		for _, diagnostic := range diagnostics.Entries {
-			if diagnostic.Unresolved {
+		for i := range diagnostics.Entries {
+			diagnostic := &diagnostics.Entries[i]
+
+			if diagnostic.Unresolved && !diagnostic.reported {
+				diagnostic.reported = true
 				s.onWarn(diagnostic.warn())
 			}
 		}
@@ -266,11 +270,14 @@ func (s *IncludeScanner) reportClosureDiagnostics(input VFS, cl Closure) {
 			return
 		}
 
-		for _, diagnostic := range entry.Diagnostics.Entries {
-			if !diagnostic.Unresolved || info.providesSourceInclude(v, diagnostic.Directive) {
+		for i := range entry.Diagnostics.Entries {
+			diagnostic := &entry.Diagnostics.Entries[i]
+
+			if !diagnostic.Unresolved || diagnostic.reported || info.providesSourceInclude(v, diagnostic.Directive) {
 				continue
 			}
 
+			diagnostic.reported = true
 			s.onWarn(diagnostic.warn())
 		}
 	})

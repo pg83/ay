@@ -200,8 +200,10 @@ func (e *EmitContext) orderedProducerPositions(positions []ProducerPos) []Produc
 	}
 
 	if e.deferCC && (!e.producersOnly() || e.ctx.peerTests) {
+		outputs, inputs := vfsScratches.get(), vfsScratches.get()
+
 		for gi, group := range e.d.pySrcGroups {
-			var outputs, inputs []VFS
+			outputs, inputs = outputs[:0], inputs[:0]
 
 			for si := range group.Srcs {
 				decl := &group.Srcs[si]
@@ -219,8 +221,11 @@ func (e *EmitContext) orderedProducerPositions(positions []ProducerPos) []Produc
 				}
 			}
 
-			positions = append(positions, ProducerPos{kind: prodPyGroup, index: gi, outs: outputs, ins: inputs})
+			positions = append(positions, ProducerPos{kind: prodPyGroup, index: gi, outs: na.vfsList(outputs...), ins: na.vfsList(inputs...)})
 		}
+
+		vfsScratches.put(outputs)
+		vfsScratches.put(inputs)
 	}
 
 	var counts, starts [prodKindCount]int
