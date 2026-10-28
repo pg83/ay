@@ -1,6 +1,9 @@
 package main
 
-import "maps"
+import (
+	"maps"
+	"slices"
+)
 
 type EnvKind uint8
 
@@ -8,7 +11,7 @@ type EnvStore struct {
 	val              []STR
 	kind             []EnvKind
 	textInputs       map[ENV][]SourceTextRange
-	resourceBindings map[ENV]STR
+	resourceBindings []STR
 	included         map[string]bool
 }
 
@@ -104,7 +107,7 @@ func (e Environment) clone() Environment {
 		val:              append([]STR(nil), e.s.val...),
 		kind:             append([]EnvKind(nil), e.s.kind...),
 		textInputs:       maps.Clone(e.s.textInputs),
-		resourceBindings: maps.Clone(e.s.resourceBindings),
+		resourceBindings: slices.Clone(e.s.resourceBindings),
 		included:         maps.Clone(e.s.included),
 	}}
 }
@@ -113,7 +116,7 @@ func (e Environment) cloneInto(dst *EnvStore) Environment {
 	dst.val = append(dst.val[:0], e.s.val...)
 	dst.kind = append(dst.kind[:0], e.s.kind...)
 	dst.textInputs = maps.Clone(e.s.textInputs)
-	dst.resourceBindings = maps.Clone(e.s.resourceBindings)
+	dst.resourceBindings = append(dst.resourceBindings[:0], e.s.resourceBindings...)
 	dst.included = maps.Clone(e.s.included)
 
 	return Environment{s: dst}
@@ -121,7 +124,11 @@ func (e Environment) cloneInto(dst *EnvStore) Environment {
 
 func (e Environment) setVFS(id ENV, v VFS) {
 	delete(e.s.textInputs, id)
-	delete(e.s.resourceBindings, id)
+
+	if int(id) < len(e.s.resourceBindings) {
+		e.s.resourceBindings[id] = 0
+	}
+
 	e.s.ensure(id)
 	e.s.kind[id] = envVFS
 	e.s.val[id] = STR(uint32(v))
@@ -129,7 +136,11 @@ func (e Environment) setVFS(id ENV, v VFS) {
 
 func (e Environment) setStrID(id ENV, v STR) {
 	delete(e.s.textInputs, id)
-	delete(e.s.resourceBindings, id)
+
+	if int(id) < len(e.s.resourceBindings) {
+		e.s.resourceBindings[id] = 0
+	}
+
 	e.s.ensure(id)
 	e.s.kind[id] = envStr
 	e.s.val[id] = v
@@ -151,7 +162,11 @@ func (e Environment) setString(id ENV, v string) {
 
 func (e Environment) setInt(id ENV, n int) {
 	delete(e.s.textInputs, id)
-	delete(e.s.resourceBindings, id)
+
+	if int(id) < len(e.s.resourceBindings) {
+		e.s.resourceBindings[id] = 0
+	}
+
 	e.s.ensure(id)
 	e.s.kind[id] = envInt
 	e.s.val[id] = intSTR[n]

@@ -111,7 +111,7 @@ var py2CythonEmbeddedFiles = []string{
 }
 
 func cythonDefaultOptions(os OS) string {
-	options := "-X legacy_implicit_noexcept=True"
+	const options = "-X legacy_implicit_noexcept=True"
 
 	switch os {
 	case OSLinux:

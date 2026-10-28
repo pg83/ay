@@ -5,6 +5,7 @@ import (
 	"crypto/md5"
 	encb64 "encoding/base64"
 	enchex "encoding/hex"
+	"iter"
 	"sort"
 	"strings"
 )
@@ -252,7 +253,8 @@ func (it *ResourceItem) setInput(v VFS) {
 }
 
 func (e *EmitContext) resourceTextInputs(items []ResourceItem) []VFS {
-	var inputs []VFS
+	inputs := e.ctx.na.vfs.alloc(len(items))
+	k := 0
 
 	dedupers.with(func(dd *DeDuper) {
 		for _, item := range items {
@@ -265,12 +267,15 @@ func (e *EmitContext) resourceTextInputs(items []ResourceItem) []VFS {
 			input := item.input()
 
 			if item.DontParse && input != 0 && input.isSource() && dd.addStable(input.strID()) {
-				inputs = append(inputs, input)
+				inputs[k] = input
+				k++
 			}
 		}
 	})
 
-	return e.ctx.na.vfsList(inputs...)
+	e.ctx.na.vfs.commit(k)
+
+	return inputs[:k:k]
 }
 
 func resourceItemCmdLen(it ResourceItem, objcopy bool) int {
@@ -285,25 +290,26 @@ func resourceItemCmdLen(it ResourceItem, objcopy bool) int {
 	return rootCmdLen + len(it.Path) + len(it.Key)
 }
 
-func resourceChunkEnds(items []ResourceItem, objcopy bool) []int {
-	var ends []int
+func resourceChunkEnds(items []ResourceItem, objcopy bool) iter.Seq[int] {
+	return func(yield func(int) bool) {
+		cmdLen := 0
 
-	cmdLen := 0
+		for i, it := range items {
+			cmdLen += resourceItemCmdLen(it, objcopy)
 
-	for i, it := range items {
-		cmdLen += resourceItemCmdLen(it, objcopy)
+			if cmdLen >= maxCmdLen {
+				if !yield(i + 1) {
+					return
+				}
 
-		if cmdLen >= maxCmdLen {
-			ends = append(ends, i+1)
-			cmdLen = 0
+				cmdLen = 0
+			}
+		}
+
+		if cmdLen > 0 {
+			yield(len(items))
 		}
 	}
-
-	if cmdLen > 0 {
-		ends = append(ends, len(items))
-	}
-
-	return ends
 }
 
 func (e *EmitContext) packResources(p ResourcePack) (refs []NodeRef, outs []VFS) {
@@ -390,7 +396,7 @@ func (e *EmitContext) packObjcopyResourceChunks(items []ResourceItem, p Resource
 	ctx, instance := e.ctx, e.instance
 	na := ctx.na
 	oc := e.objcopyEmitCtx()
-	unitElem := joinRel("$S", cleanRel(instance.Path.relString()))
+	unitElem := internJoined("$S", cleanRel(instance.Path.relString())).string()
 	tag := ""
 
 	if p.Tag != 0 {
@@ -409,7 +415,7 @@ func (e *EmitContext) packObjcopyResourceChunks(items []ResourceItem, p Resource
 
 	lo := 0
 
-	for _, hi := range resourceChunkEnds(items, true) {
+	for hi := range resourceChunkEnds(items, true) {
 		chunk := items[lo:hi]
 
 		lo = hi
@@ -542,7 +548,13 @@ func (e *EmitContext) packObjcopyResourceChunks(items []ResourceItem, p Resource
 
 		hash, hashBuf = resourceHashInto(hashBuf, hashScratch, tag)
 
-		outputObj := buildJoined(instance.Path.relString(), "objcopy_"+hash+".o")
+		dir, sep := cleanRel(instance.Path.relString()), "/"
+
+		if dir == "" {
+			sep = ""
+		}
+
+		outputObj := build(dir, sep, "objcopy_", hash, ".o")
 		deps := depRefs(oc.rescompilerLDRef, oc.rescompressorLDRef)
 
 		refs = append(refs, e.buildObjcopyNode(oc, &pyObjcopyKV, outputObj, payload, resourceUses, inputs, buildFrom, e.resourceTextInputs(chunk), deps))
@@ -561,7 +573,7 @@ func (e *EmitContext) packRawResourceChunks(items []ResourceItem, p ResourcePack
 	ctx, instance := e.ctx, e.instance
 	na := ctx.na
 	rescompilerRef, _ := ctx.tool(argToolsRescompiler)
-	unitElem := joinRel("$S", cleanRel(instance.Path.relString()))
+	unitElem := internJoined("$S", cleanRel(instance.Path.relString())).string()
 	dash := str2
 	tag := ""
 
@@ -581,7 +593,7 @@ func (e *EmitContext) packRawResourceChunks(items []ResourceItem, p ResourcePack
 
 	lo := 0
 
-	for _, hi := range resourceChunkEnds(items, false) {
+	for hi := range resourceChunkEnds(items, false) {
 		chunk := items[lo:hi]
 
 		lo = hi

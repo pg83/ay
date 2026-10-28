@@ -126,7 +126,7 @@ func (d *ModuleData) finishNativeSwigConfig(env Environment) {
 
 func (d *ModuleData) nativeSwigPeerdirs() []ANY {
 	for _, meta := range d.srcs {
-		if !extIsSwg(meta.Source.string()) {
+		if !extIsSwg(meta.Source.relOrSelf().string()) {
 			continue
 		}
 

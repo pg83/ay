@@ -1,12 +1,12 @@
 package main
 
 import (
+	"cmp"
 	"fmt"
 	"path"
 	"path/filepath"
 	"regexp"
 	"slices"
-	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -209,6 +209,8 @@ type ModuleData struct {
 	srcs                    []SrcMeta
 	pySrcs                  []ANY
 	pySrcGroups             []PySrcGroup
+	pyGroupScopes           []PyScope
+	pyGroupSrcs             []ANY
 	pyPyiResources          []ResourceEntry
 	resKeyBuf               []byte
 	pyBuildNoPYC            bool
@@ -738,8 +740,8 @@ func (d *ModuleData) addCythonSysIncl() {
 }
 
 func (d *ModuleData) materializeAddIncl() {
-	sort.SliceStable(d.addInclP, func(i, j int) bool {
-		return d.addInclP[i].prio < d.addInclP[j].prio
+	slices.SortStableFunc(d.addInclP, func(a, b PrioVFS) int {
+		return cmp.Compare(a.prio, b.prio)
 	})
 
 	for _, p := range d.addInclP {
@@ -751,7 +753,7 @@ func (d *ModuleData) materializeAddIncl() {
 		}
 	}
 
-	d.addInclP = nil
+	d.addInclP = d.addInclP[:0]
 }
 
 func expandRunPythonStmt(stmt *RunPythonStmt, env Environment) *RunPythonStmt {
@@ -850,7 +852,9 @@ func collectModuleInto(ctx *GenCtx, instance ModuleInstance, stmts []Stmt, env E
 		}
 
 		if extIsPyx(meta.Source.relOrSelf().string()) {
-			d.cythonCpp = append(d.cythonCpp, &CythonStmt{Src: meta.Source.string(), Seq: meta.Seq, Native: &meta, Python3: env.bool(envPYTHON3)})
+			native := meta
+
+			d.cythonCpp = append(d.cythonCpp, &CythonStmt{Src: meta.Source.string(), Seq: meta.Seq, Native: &native, Python3: env.bool(envPYTHON3)})
 		} else {
 			nativeSources = append(nativeSources, meta)
 		}
@@ -935,8 +939,8 @@ func collectModuleInto(ctx *GenCtx, instance ModuleInstance, stmts []Stmt, env E
 	d.addIncl = append(d.addIncl, d.cfAddIncl...)
 	d.addInclGlobal = append(d.addInclGlobal, d.cfAddInclGlobal...)
 	d.addInclUserGlobal = append(d.addInclUserGlobal, d.cfAddInclGlobal...)
-	d.cfAddIncl = nil
-	d.cfAddInclGlobal = nil
+	d.cfAddIncl = d.cfAddIncl[:0]
+	d.cfAddInclGlobal = d.cfAddInclGlobal[:0]
 	finishPythonDllConfig(d, pythonHeaderEnv)
 	finishPythonHeaderConfig(d, pythonHeaderEnv)
 
@@ -1395,7 +1399,7 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 			expanded := *v
 
 			expanded.Args = expandSourceArguments(v.Args, env)
-			v = &expanded
+			v = astOne(astModules, expanded)
 
 			if v.Name == tokPy3Program && kind == KindBin {
 				d.peerdirs = append([]ANY{internStr(modulePath).any()}, d.peerdirs...)
@@ -4388,9 +4392,7 @@ func collectPySrcGroup(fs FS, modulePath string, v UnknownStmt, d *ModuleData, e
 		namespace = nil
 	}
 
-	var groupSrcs []string
-	var groupScopes []PyScope
-
+	srcStart, scopeStart := len(d.pyGroupSrcs), len(d.pyGroupScopes)
 	lintPy := false
 	cythonStmtStart := len(d.cythonCpp)
 	pyiBefore := len(d.pyPyiResources)
@@ -4643,13 +4645,13 @@ func collectPySrcGroup(fs FS, modulePath string, v UnknownStmt, d *ModuleData, e
 			throwFmt("in PY_SRCS: unrecognized arg %q", src)
 		}
 
-		if !d.usePython2 && scope.moduleName(modulePath, src) == "__main__" {
+		if !d.usePython2 && scope.isMain(src) {
 			throwFmt("TOP_LEVEL __main__.py is not allowed in PY3_PROGRAM")
 		}
 
 		d.pySrcs = append(d.pySrcs, internStr(src).any())
-		groupSrcs = append(groupSrcs, src)
-		groupScopes = append(groupScopes, scope)
+		d.pyGroupSrcs = append(d.pyGroupSrcs, internAny(src))
+		d.pyGroupScopes = append(d.pyGroupScopes, scope)
 	}
 
 	if len(cythonDirectives) > 0 {
@@ -4660,8 +4662,8 @@ func collectPySrcGroup(fs FS, modulePath string, v UnknownStmt, d *ModuleData, e
 
 	reorderCythonVariantBuckets(d, cythonStmtStart, cythonRegIdx)
 
-	d.pySrcGroups[group].Srcs = internAnys(groupSrcs)
-	d.pySrcGroups[group].Scopes = groupScopes
+	d.pySrcGroups[group].Srcs = d.pyGroupSrcs[srcStart:len(d.pyGroupSrcs):len(d.pyGroupSrcs)]
+	d.pySrcGroups[group].Scopes = d.pyGroupScopes[scopeStart:len(d.pyGroupScopes):len(d.pyGroupScopes)]
 	d.pySrcGroups[group].PyiStart = pyiBefore
 	d.pySrcGroups[group].PyiEnd = len(d.pyPyiResources)
 
@@ -4674,23 +4676,58 @@ func collectPySrcGroup(fs FS, modulePath string, v UnknownStmt, d *ModuleData, e
 	}
 }
 
+func (s PyScope) isMain(src string) bool {
+	if s.ModuleName != nil {
+		return s.ModuleName.string() == "__main__"
+	}
+
+	return s.TopLevel && strings.TrimSuffix(strings.TrimSuffix(src, ".py"), ".pyx") == "__main__"
+}
+
 func pythonModuleName(modulePath, src string, topLevel bool, namespace *ANY) string {
-	ns := strings.ReplaceAll(modulePath, "/", ".") + "."
+	prefix := modulePath
 
 	if namespace != nil {
-		ns = strings.TrimSuffix(namespace.string(), ".") + "."
+		prefix = strings.TrimSuffix(namespace.string(), ".")
 	}
 
 	if topLevel {
-		ns = ""
+		prefix = ""
 	}
 
-	modName := strings.TrimSuffix(src, ".py")
+	src = strings.TrimSuffix(strings.TrimSuffix(src, ".py"), ".pyx")
 
-	modName = strings.TrimSuffix(modName, ".pyx")
-	modName = strings.ReplaceAll(modName, "/", ".")
+	n := len(prefix) + len(src)
 
-	return ns + modName
+	if !topLevel {
+		n++
+	}
+
+	block := internTable.bytes.alloc(n)
+	k := copy(block, prefix)
+
+	if namespace == nil {
+		for i := 0; i < k; i++ {
+			if block[i] == '/' {
+				block[i] = '.'
+			}
+		}
+	}
+
+	if !topLevel {
+		block[k] = '.'
+		k++
+	}
+
+	copy(block[k:], src)
+
+	for i := k; i < n; i++ {
+		if block[i] == '/' {
+			block[i] = '.'
+		}
+	}
+
+	return internBlock(block, n).string()
 }
 
 func pythonInitSuffix(name string) string {
@@ -5899,7 +5936,9 @@ func appendCompilerFlags(args []ANY, env Environment, name string, allGlobal boo
 }
 
 func compilerFlagRootValue(value string, env Environment) string {
-	return configMacroVariable.ReplaceAllStringFunc(value, func(reference string) string {
+	return replaceConfigMacroVariables(value, func(start, end int) string {
+		reference := value[start:end]
+
 		if reference[0] == '$' {
 			name := strings.TrimSuffix(strings.TrimPrefix(reference[1:], "{"), "}")
 

@@ -81,11 +81,13 @@ func compilerCommandFlags(args []ANY, env Environment) CompilerFlagValue {
 
 	env.resourceUses = &resources
 
-	text := strings.Join(anyStrs(args), " ")
+	identity := internAnyWords(args)
 
 	for _, arg := range args {
-		if strings.ContainsAny(arg.string(), "$\\\"'&") || strings.ContainsFunc(arg.string(), unicode.IsSpace) {
-			values, identity := compilerFlagExpression(text, env, nil)
+		text := arg.relOrSelf().string()
+
+		if arg.vfs() != 0 || strings.ContainsAny(text, "$\\\"'&") || strings.ContainsFunc(text, unicode.IsSpace) {
+			values, identity := compilerFlagExpression(identity.string(), env, nil)
 
 			if parentUses != nil {
 				*parentUses = resourceKeyUnion(*parentUses, resources)
@@ -95,7 +97,7 @@ func compilerCommandFlags(args []ANY, env Environment) CompilerFlagValue {
 		}
 	}
 
-	return CompilerFlagValue{Name: internStr(text), Args: args}
+	return CompilerFlagValue{Name: identity, Args: args}
 }
 
 func ownCompilerFlagArgs(values []CompilerFlagValue, own []ANY) []ANY {
@@ -131,7 +133,7 @@ func compilerFlagForwarding(value string, env Environment, parameters map[string
 
 		for id, bound := range store.resourceBindings {
 			if bound == key {
-				store.textInputs[id] = []SourceTextRange{{0, len(env.string(id))}}
+				store.textInputs[ENV(id)] = []SourceTextRange{{0, len(env.string(ENV(id)))}}
 			}
 		}
 

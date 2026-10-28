@@ -9,6 +9,11 @@ import (
 	"strings"
 )
 
+var (
+	flake8MigrationParams  = []string{"DISABLE_FLAKE8_MIGRATIONS=yes"}
+	flake8MigrationConfigs = []string{"build/rules/flake8/migrations.yaml"}
+)
+
 const yamlfmtResourcePeer = "build/external_resources/yamlfmt"
 
 type StyleCheck struct {
@@ -80,20 +85,20 @@ func pythonStyleCheck(name string, env Environment) StyleCheck {
 
 	switch name {
 	case "flake8", "py2_flake8":
-		version := "PY3"
+		check.Peer = "build/external_resources/flake8_py3"
+		check.Resource = "FLAKE8_PY3_RESOURCE_GLOBAL"
 
 		if name == "py2_flake8" {
-			version = "PY2"
+			check.Peer = "build/external_resources/flake8_py2"
+			check.Resource = "FLAKE8_PY2_RESOURCE_GLOBAL"
 		}
 
-		check.Peer = "build/external_resources/flake8_" + strings.ToLower(version)
-		check.Resource = "FLAKE8_" + version + "_RESOURCE_GLOBAL"
 		check.Wrapper = "tools/flake8_linter/__main__.py"
 
 		if env.bool(envDisableFlake8Migrations) {
-			check.ExtraParams = []string{"DISABLE_FLAKE8_MIGRATIONS=yes"}
+			check.ExtraParams = flake8MigrationParams
 		} else {
-			check.ExtraConfigs = []string{"build/rules/flake8/migrations.yaml"}
+			check.ExtraConfigs = flake8MigrationConfigs
 		}
 	case "black":
 		check.Peer, check.Resource, check.Wrapper = "build/external_resources/black", "BLACK_RESOURCE_GLOBAL", "tools/black_linter/wrapper.py"

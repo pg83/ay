@@ -47,13 +47,13 @@ func (d *ModuleData) collectAssemblerConfig(env Environment) {
 		prefix = "--prefix=" + value
 	}
 
-	d.asmFormat = internStr(assemblerConfigValue(env, "_YASM_FMT_VALUE", format) + assemblerConfigValue(env, "HARDWARE_ARCH", "64"))
-	d.yasmPlatformFlags = internAnys(splitShellWords(assemblerConfigValue(env, "_YASM_PLATFORM_FLAGS_VALUE", platformFlags)))
+	d.asmFormat = internV(assemblerConfigValue(env, "_YASM_FMT_VALUE", format), assemblerConfigValue(env, "HARDWARE_ARCH", "64"))
+	d.yasmPlatformFlags = appendQuotedWords(d.yasmPlatformFlags[:0], assemblerConfigValue(env, "_YASM_PLATFORM_FLAGS_VALUE", platformFlags), 0)
 
-	d.yasmFlags = internAnys(splitShellWords(assemblerConfigValue(env, "ASM_PREFIX_VALUE", prefix) + " " +
-		assemblerConfigValue(env, "_YASM_PREDEFINED_FLAGS_VALUE", predefined) + " " + assemblerConfigValue(env, "YASM_FLAGS", "")))
+	d.yasmFlags = appendQuotedWords(d.yasmFlags[:0], assemblerConfigValue(env, "ASM_PREFIX_VALUE", prefix)+" "+
+		assemblerConfigValue(env, "_YASM_PREDEFINED_FLAGS_VALUE", predefined)+" "+assemblerConfigValue(env, "YASM_FLAGS", ""), 0)
 
-	d.nasmFlags = internAnys(splitShellWords(assemblerConfigValue(env, "NASM_FLAGS", "")))
+	d.nasmFlags = appendQuotedWords(d.nasmFlags[:0], assemblerConfigValue(env, "NASM_FLAGS", ""), 0)
 	d.asmPreincludes = internAnys(strings.Fields(assemblerConfigValue(env, "YASM_PREINCLUDES_VALUE", "")))
 }
 

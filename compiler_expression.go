@@ -3,9 +3,14 @@ package main
 import (
 	"slices"
 	"strings"
+	"sync"
 	"unicode"
 	"unicode/utf8"
 )
+
+var commandExpressionPool = sync.Pool{New: func() any { return &commandExpressionScratch{} }}
+
+type commandExpressionScratch struct{ word, key []byte }
 
 func compilerFlagExpression(text string, env Environment, expanding []string) ([]string, string) {
 	return commandArgumentExpression(text, func(name string, _ bool) ([]string, string) {
@@ -20,7 +25,11 @@ func compilerFlagExpression(text string, env Environment, expanding []string) ([
 }
 
 func commandArgumentExpression(text string, resolve func(string, bool) ([]string, string)) (args []string, identity string) {
-	var word, key strings.Builder
+	scratch := commandExpressionPool.Get().(*commandExpressionScratch)
+
+	defer commandExpressionPool.Put(scratch)
+
+	scratch.word, scratch.key = scratch.word[:0], scratch.key[:0]
 	var quote byte
 	var variable []string
 
@@ -30,10 +39,10 @@ func commandArgumentExpression(text string, resolve func(string, bool) ([]string
 		if standalone {
 			args = append(args, variable...)
 		} else if hasTerm {
-			args = append(args, word.String())
+			args = append(args, internBytes(scratch.word).string())
 		}
 
-		word.Reset()
+		scratch.word = scratch.word[:0]
 		hasTerm, standalone = false, false
 	}
 
@@ -44,7 +53,7 @@ func commandArgumentExpression(text string, resolve func(string, bool) ([]string
 
 		if quote == 0 && unicode.IsSpace(r) {
 			flush()
-			key.WriteRune(r)
+			scratch.key = utf8.AppendRune(scratch.key, r)
 			i += width
 
 			continue
@@ -57,12 +66,12 @@ func commandArgumentExpression(text string, resolve func(string, bool) ([]string
 				}
 
 				flush()
-				key.WriteString(text[i:])
+				scratch.key = append(scratch.key, text[i:]...)
 
-				return args, key.String()
+				return args, internBytes(scratch.key).string()
 			}
 
-			key.WriteString(text[i : i+2])
+			scratch.key = append(scratch.key, text[i:i+2]...)
 			i += 2
 
 			continue
@@ -73,7 +82,7 @@ func commandArgumentExpression(text string, resolve func(string, bool) ([]string
 		if ch == '\\' {
 			end := min(i+2, len(text))
 
-			word.WriteString(compilerFlagLiteral(text[i:end], quote != 0))
+			scratch.word = appendCompilerFlagLiteral(scratch.word, text[i:end], quote != 0)
 			i = end
 		} else if ch == quote {
 			quote = 0
@@ -89,7 +98,7 @@ func commandArgumentExpression(text string, resolve func(string, bool) ([]string
 					i += end + 1
 				}
 
-				word.WriteString(compilerFlagLiteral(text[start:i], quote != 0))
+				scratch.word = appendCompilerFlagLiteral(scratch.word, text[start:i], quote != 0)
 			} else {
 				braced := i < len(text) && text[i] == '{'
 
@@ -132,9 +141,9 @@ func commandArgumentExpression(text string, resolve func(string, bool) ([]string
 						value := text[begin:i]
 
 						if name == "comma" {
-							word.WriteByte(',')
+							scratch.word = append(scratch.word, ',')
 						} else {
-							word.WriteString(compilerFlagLiteral(value, true))
+							scratch.word = appendCompilerFlagLiteral(scratch.word, value, true)
 						}
 
 						i++
@@ -159,7 +168,7 @@ func commandArgumentExpression(text string, resolve func(string, bool) ([]string
 					i++
 
 					if literal {
-						key.WriteString(text[start:i])
+						scratch.key = append(scratch.key, text[start:i]...)
 						hasTerm, standalone = true, false
 
 						continue
@@ -179,8 +188,12 @@ func commandArgumentExpression(text string, resolve func(string, bool) ([]string
 
 					standalone = !hasTerm && quote == 0
 					variable = values
-					word.WriteString(strings.Join(values, ""))
-					key.WriteString(expanded)
+
+					for _, value := range values {
+						scratch.word = append(scratch.word, value...)
+					}
+
+					scratch.key = append(scratch.key, expanded...)
 					hasTerm = true
 
 					continue
@@ -190,18 +203,18 @@ func commandArgumentExpression(text string, resolve func(string, bool) ([]string
 					throwFmt("could not parse compiler command: unexpected $ in quoted string %q", text)
 				}
 
-				word.WriteByte('$')
+				scratch.word = append(scratch.word, '$')
 			}
 		} else {
 			if quote == 0 && ch == '&' {
 				throwFmt("could not parse compiler command: command separator in compiler arguments %q", text)
 			}
 
-			word.WriteString(text[i : i+width])
+			scratch.word = append(scratch.word, text[i:i+width]...)
 			i += width
 		}
 
-		key.WriteString(text[start:i])
+		scratch.key = append(scratch.key, text[start:i]...)
 		hasTerm, standalone = true, false
 	}
 
@@ -211,7 +224,7 @@ func commandArgumentExpression(text string, resolve func(string, bool) ([]string
 
 	flush()
 
-	return args, key.String()
+	return args, internBytes(scratch.key).string()
 }
 
 func commandSeparatorTail(text string) bool {
@@ -230,8 +243,10 @@ func commandSeparatorTail(text string) bool {
 	}
 }
 
-func compilerFlagLiteral(text string, quoted bool) string {
-	var value strings.Builder
+func appendCompilerFlagLiteral(value []byte, text string, quoted bool) []byte {
+	if !strings.ContainsRune(text, '\\') {
+		return append(value, text...)
+	}
 
 	for i := 0; i < len(text); i++ {
 		if text[i] == '\\' {
@@ -244,14 +259,14 @@ func compilerFlagLiteral(text string, quoted bool) string {
 			ch := text[i]
 
 			if quoted && ch != '\'' && ch != '"' && ch != '\\' && ch != '/' {
-				value.WriteByte('\\')
+				value = append(value, '\\')
 			}
 		}
 
-		value.WriteByte(text[i])
+		value = append(value, text[i])
 	}
 
-	return value.String()
+	return value
 }
 
 func (e *EmitContext) bindCompilerFlagResources(globals []ResourceDecl) {
@@ -320,4 +335,129 @@ func compilerExtraCFlags(env Environment) []ANY {
 
 func compilerExtraCFlagsValue(env Environment) CompilerFlagValue {
 	return compilerCommandFlags([]ANY{strExtraCFlags.any()}, env)
+}
+
+func nextConfigMacroVariable(s string, from int) (int, int) {
+	for i := from; i < len(s); i++ {
+		if s[i] == '\\' && i+1 < len(s) {
+			_, size := utf8.DecodeRuneInString(s[i+1:])
+
+			return i, i + 1 + size
+		}
+
+		if s[i] != '$' {
+			continue
+		}
+
+		j := i + 1
+		braced := j < len(s) && s[j] == '{'
+
+		if braced {
+			j++
+		}
+
+		if braced && j < len(s) && s[j] == '"' {
+			j++
+
+			for j < len(s) && s[j] != '"' {
+				if s[j] == '\\' {
+					j++
+
+					if j == len(s) || s[j] == '\n' {
+						break
+					}
+				}
+
+				_, size := utf8.DecodeRuneInString(s[j:])
+
+				j += size
+			}
+
+			if j+1 < len(s) && s[j] == '"' && s[j+1] == '}' {
+				return i, j + 2
+			}
+
+			continue
+		}
+
+		if j == len(s) || !macroVariableLetter(s[j]) {
+			continue
+		}
+
+		j++
+
+		for j < len(s) {
+			if macroVariableLetter(s[j]) || s[j] >= '0' && s[j] <= '9' {
+				j++
+
+				continue
+			}
+
+			if s[j] != '-' {
+				break
+			}
+
+			end := j
+
+			for end < len(s) && s[end] == '-' {
+				end++
+			}
+
+			if end == len(s) || !(macroVariableLetter(s[end]) || s[end] >= '0' && s[end] <= '9') {
+				break
+			}
+
+			j = end + 1
+		}
+
+		if !braced {
+			return i, j
+		}
+
+		if j < len(s) && s[j] == '}' {
+			return i, j + 1
+		}
+	}
+
+	return len(s), len(s)
+}
+
+func macroVariableLetter(b byte) bool {
+	return b == '_' || b >= 'a' && b <= 'z' || b >= 'A' && b <= 'Z'
+}
+
+func replaceConfigMacroVariables(value string, replace func(int, int) string) string {
+	var buf [256]byte
+
+	out := buf[:0]
+	cursor, copied := 0, 0
+	changed := false
+
+	for {
+		start, end := nextConfigMacroVariable(value, cursor)
+
+		if start == end {
+			break
+		}
+
+		replacement := replace(start, end)
+
+		if replacement != value[start:end] {
+			out = append(out, value[copied:start]...)
+			out = append(out, replacement...)
+
+			copied = end
+			changed = true
+		}
+
+		cursor = end
+	}
+
+	if !changed {
+		return value
+	}
+
+	out = append(out, value[copied:]...)
+
+	return string(out)
 }

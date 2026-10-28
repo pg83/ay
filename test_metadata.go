@@ -4,13 +4,10 @@ import (
 	"cmp"
 	"encoding/base64"
 	"path"
-	"regexp"
 	"slices"
 	"strconv"
 	"strings"
 )
-
-var configMacroVariable = regexp.MustCompile(`\\[\s\S]|\$\{"(?:[^"\\]|\\.)*"\}|\$\{[A-Za-z_][A-Za-z_0-9]*(?:-+[A-Za-z_0-9]+)*\}|\$[A-Za-z_][A-Za-z_0-9]*(?:-+[A-Za-z_0-9]+)*`)
 
 func testSuiteName(name TOK) string {
 	if isUnitTestModule(name) {
@@ -219,12 +216,10 @@ func continueConfigMacroBody(value string, env Environment, iteration int, param
 
 func continueConfigMacroBodyTracked(value string, env Environment, iteration int, parameters map[string][]string, track *SourceTextTracker) string {
 	for ; ; iteration++ {
-		cursor, delta := 0, 0
+		delta := 0
 
-		expanded := configMacroVariable.ReplaceAllStringFunc(value, func(reference string) string {
-			start := cursor + strings.Index(value[cursor:], reference)
-
-			cursor = start + len(reference)
+		expanded := replaceConfigMacroVariables(value, func(start, end int) string {
+			reference := value[start:end]
 
 			if reference[0] == '\\' || strings.HasPrefix(reference, `${"`) {
 				return reference
@@ -244,7 +239,7 @@ func continueConfigMacroBodyTracked(value string, env Environment, iteration int
 				if track != nil {
 					ranges := sliceSourceTextRanges(env.s.textInputs[internedEnv(name)], originalSize-len(replacement), originalSize)
 
-					track.replace(start+delta, cursor+delta, len(replacement), ranges)
+					track.replace(start+delta, end+delta, len(replacement), ranges)
 					delta += len(replacement) - len(reference)
 				}
 

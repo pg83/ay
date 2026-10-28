@@ -51,17 +51,21 @@ func (e *EmitContext) moduleCythonIncludes(peers []VFS) []VFS {
 }
 
 func (e *EmitContext) modulePeerInputs(peers []VFS) InputChunks {
-	var inputs InputChunks
+	inputs := e.ctx.na.inputs.alloc(len(peers))
+	k := 0
 
 	for _, peer := range peers {
 		if info := e.codegen.moduleInputs(peer); info != nil {
 			if len(info.Includes) > 0 {
-				inputs = append(inputs, info.Includes)
+				inputs[k] = info.Includes
+				k++
 			}
 		}
 	}
 
-	return inputs
+	e.ctx.na.inputs.commit(k)
+
+	return inputs[:k:k]
 }
 
 func (e *EmitContext) emitModuleNode(node Node, useGlobals bool) NodeRef {
@@ -226,12 +230,22 @@ func (e *EmitContext) publishModuleIncludes(result *ModuleEmitResult) {
 	}
 
 	if passPeers && e.peers != nil {
+		count := len(e.peers.Modules)
+		block := e.ctx.na.inputs.alloc(2 * count)
+
+		peerInputs, peerRoots = block[:count:count], block[count:2*count:2*count]
+
+		k := 0
+
 		for _, peer := range e.peers.Modules {
 			if info := e.codegen.moduleInputs(peer); info != nil {
-				peerInputs = append(peerInputs, info.Includes)
-				peerRoots = append(peerRoots, info.IncludeRoots)
+				peerInputs[k], peerRoots[k] = info.Includes, info.IncludeRoots
+				k++
 			}
 		}
+
+		peerInputs, peerRoots = peerInputs[:k:k], peerRoots[:k:k]
+		e.ctx.na.inputs.commit(count + k)
 	}
 
 	globals := e.ctx.na.dedupClosure(e.moduleGlobals, [][]VFS{e.globalSources})

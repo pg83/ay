@@ -1,6 +1,7 @@
 package main
 
 import (
+	"cmp"
 	"crypto/md5"
 	enchex "encoding/hex"
 	"path"
@@ -241,21 +242,48 @@ func (e *EmitContext) pyYapycOutFor(ps PySrc) VFS {
 		suffix := e.pyYapycExt()
 
 		if strings.Contains(srcRel, "/") {
-			suffix = "." + e.d.pyYapycSuffix + suffix
+			return build(rooted.relString(), ".", e.d.pyYapycSuffix, suffix)
 		}
 
 		return build(rooted.relString(), suffix)
 	}
 
 	if ps.Kind == pySourceGenerated {
-		srcRel = strings.TrimPrefix(ps.Path.relString(), module+"/")
+		srcRel = trimModulePrefix(ps.Path.relString(), module)
 	}
 
 	if ps.Kind == pySourceGenerated || strings.Contains(srcRel, "/") {
-		return buildJoinClean(module, srcRel+"."+e.d.pyYapycSuffix+e.pyYapycExt())
+		return pyYapycPath(module, srcRel, ".", e.d.pyYapycSuffix, e.pyYapycExt())
 	}
 
-	return buildJoinClean(module, srcRel+e.pyYapycExt())
+	return pyYapycPath(module, srcRel, e.pyYapycExt())
+}
+
+func pyYapycPath(module, src string, suffix ...string) VFS {
+	n := len(module) + 1 + len(src)
+
+	for _, part := range suffix {
+		n += len(part)
+	}
+
+	block := internTable.bytes.alloc(n)
+	k := copy(block, module)
+
+	block[k] = '/'
+	k++
+	k += copy(block[k:], src)
+
+	for _, part := range suffix {
+		k += copy(block[k:], part)
+	}
+
+	if pathIsClean(bytesString(block[:k])) {
+		return internBlock(block, k).build()
+	}
+
+	clean := path.Clean(bytesString(block[:k]))
+
+	return build(clean)
 }
 
 func (e *EmitContext) appendPyResEntries(out []PyGenResEntry, ps PySrc) []PyGenResEntry {
@@ -603,10 +631,15 @@ func (e *EmitContext) emitPyProtoGroupResources(group int) ([]NodeRef, []VFS) {
 	return refs, outputs
 }
 
+type pyNamespaceEntry struct {
+	root      STR
+	namespace STR
+}
+
 func (e *EmitContext) emitPyNamespaceForGroup(groupIndex int, group PySrcGroup) ([]NodeRef, []VFS) {
 	instance := e.instance
 	h := md5.New()
-	nsRoots := make(map[string][]string, len(group.Srcs))
+	namespaces := e.pyNamespaces[:0]
 	hasPy := false
 
 	for si, src := range group.Srcs {
@@ -635,39 +668,66 @@ func (e *EmitContext) emitPyNamespaceForGroup(groupIndex int, group PySrcGroup) 
 
 		resolvedRel := ps.Path.relString()
 		root := resolvedRel[:max(len(resolvedRel)-len(srcRel)-1, 0)]
+		entry := pyNamespaceEntry{internStr(root), internStr(nsValue)}
 
-		if !slices.Contains(nsRoots[root], nsValue) {
-			nsRoots[root] = append(nsRoots[root], nsValue)
+		if !slices.Contains(namespaces, entry) {
+			namespaces = append(namespaces, entry)
 		}
 	}
 
-	if !hasPy || len(nsRoots) == 0 {
+	e.pyNamespaces = namespaces
+
+	if !hasPy || len(namespaces) == 0 {
 		return nil, nil
 	}
 
-	modListMD5 := enchex.EncodeToString(h.Sum(nil))
-	keyPaths := make([]string, 0, len(nsRoots))
+	var digest [md5.Size]byte
+	var hexDigest [2 * md5.Size]byte
+	enchex.Encode(hexDigest[:], h.Sum(digest[:0]))
 
-	for keyPath := range nsRoots {
-		keyPaths = append(keyPaths, keyPath)
+	modListMD5 := bytesString(hexDigest[:])
+
+	slices.SortFunc(namespaces, func(a, b pyNamespaceEntry) int {
+		if c := strings.Compare(a.root.string(), b.root.string()); c != 0 {
+			return c
+		}
+
+		return cmp.Compare(a.namespace.string(), b.namespace.string())
+	})
+
+	kvsHash, kvsCmd := e.pyNamespaceHashes[:0], e.pyNamespaceCmds[:0]
+
+	for i := 0; i < len(namespaces); {
+		root := namespaces[i].root
+		start := len(e.resStrBuf)
+
+		e.resStrBuf = append(e.resStrBuf, "py/namespace/"...)
+		e.resStrBuf = append(e.resStrBuf, modListMD5...)
+		e.resStrBuf = append(e.resStrBuf, '/')
+		e.resStrBuf = append(e.resStrBuf, root.string()...)
+		e.resStrBuf = append(e.resStrBuf, '=', '"')
+
+		valueStart := len(e.resStrBuf)
+
+		for {
+			e.resStrBuf = append(e.resStrBuf, namespaces[i].namespace.string()...)
+			i++
+
+			if i == len(namespaces) || namespaces[i].root != root {
+				break
+			}
+
+			e.resStrBuf = append(e.resStrBuf, ':')
+		}
+
+		valueEnd := len(e.resStrBuf)
+
+		e.resStrBuf = append(e.resStrBuf, '"')
+		kvsHash = append(kvsHash, bytesString(e.resStrBuf[start:]))
+		kvsCmd = append(kvsCmd, internV(bytesString(e.resStrBuf[start:valueStart-1]), bytesString(e.resStrBuf[valueStart:valueEnd])))
 	}
 
-	sort.Strings(keyPaths)
-
-	kvsHash := make([]string, 0, len(keyPaths))
-	kvsCmd := make([]STR, 0, len(keyPaths))
-
-	for _, keyPath := range keyPaths {
-		key := "py/namespace/" + modListMD5 + "/" + keyPath
-		values := nsRoots[keyPath]
-
-		sort.Strings(values)
-
-		nsValue := strings.Join(values, ":")
-
-		kvsHash = append(kvsHash, key+"=\""+nsValue+"\"")
-		kvsCmd = append(kvsCmd, internStr(key+"="+nsValue))
-	}
+	e.pyNamespaceHashes, e.pyNamespaceCmds = kvsHash, kvsCmd
 
 	return e.emitKvOnlyResource(e.d.unit.HashTag, kvsHash, kvsCmd)
 }

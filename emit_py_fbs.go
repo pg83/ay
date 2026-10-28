@@ -8,9 +8,11 @@ import (
 )
 
 var (
-	pyFbsKV    = KV{P: pkFP, PC: pcLightGreen}
-	pyPysrcKV  = KV{P: pkP3, PC: pcLightGreen}
-	py2PysrcKV = KV{P: pkP2, PC: pcLightGreen}
+	pyFbsSingleQuote = strings.NewReplacer(`\`, `\\`, "\n", `\n`, "\r", `\r`, "\t", `\t`, "'", `\'`)
+	pyFbsDoubleQuote = strings.NewReplacer(`\`, `\\`, "\n", `\n`, "\r", `\r`, "\t", `\t`, `"`, `\"`)
+	pyFbsKV          = KV{P: pkFP, PC: pcLightGreen}
+	pyPysrcKV        = KV{P: pkP3, PC: pcLightGreen}
+	py2PysrcKV       = KV{P: pkP2, PC: pcLightGreen}
 )
 
 func pyFbsListID(files []PyFbsSource) string {
@@ -36,13 +38,13 @@ func pyFbsListID(files []PyFbsSource) string {
 }
 
 func pyFbsRepr(s string) string {
-	quote := "'"
+	quote, replacer := "'", pyFbsSingleQuote
 
 	if strings.Contains(s, "'") && !strings.Contains(s, `"`) {
-		quote = `"`
+		quote, replacer = `"`, pyFbsDoubleQuote
 	}
 
-	s = strings.NewReplacer(`\`, `\\`, "\n", `\n`, "\r", `\r`, "\t", `\t`, quote, `\`+quote).Replace(s)
+	s = replacer.Replace(s)
 
 	return quote + s + quote
 }

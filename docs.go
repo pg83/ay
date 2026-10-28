@@ -7,6 +7,8 @@ import (
 	"strings"
 )
 
+var docsJSONUnescape = strings.NewReplacer(`\u003c`, "<", `\u003e`, ">", `\u0026`, "&")
+
 type DocsData struct {
 	dirs            []string
 	sources         []VFS
@@ -209,7 +211,7 @@ func (d *DocsData) finish(fs FS, module string, env Environment) {
 func docsJSONString(s string) string {
 	encoded := string(throw2(json.Marshal(s)))
 
-	encoded = strings.NewReplacer(`\u003c`, "<", `\u003e`, ">", `\u0026`, "&").Replace(encoded)
+	encoded = docsJSONUnescape.Replace(encoded)
 	var out strings.Builder
 
 	for _, c := range encoded {

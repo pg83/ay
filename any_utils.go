@@ -67,3 +67,47 @@ func anyStrings(items []ANY) []string {
 
 	return out
 }
+
+func internAnyWords(args []ANY) STR {
+	n := max(len(args)-1, 0)
+
+	for _, arg := range args {
+		rel := arg.relOrSelf().string()
+
+		n += len(rel)
+
+		if arg.vfs() != 0 {
+			n += vfsPrefixLen
+
+			if rel == "" {
+				n--
+			}
+		}
+	}
+
+	block := internTable.bytes.alloc(n)
+	k := 0
+
+	for i, arg := range args {
+		if i > 0 {
+			block[k] = ' '
+			k++
+		}
+
+		rel := arg.relOrSelf().string()
+
+		if v := arg.vfs(); v != 0 {
+			prefix := v.prefix()
+
+			if rel == "" {
+				prefix = prefix[:len(prefix)-1]
+			}
+
+			k += copy(block[k:], prefix)
+		}
+
+		k += copy(block[k:], rel)
+	}
+
+	return internBlock(block, k)
+}

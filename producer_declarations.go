@@ -196,14 +196,33 @@ func (e *EmitContext) orderedProducerPositions(positions []ProducerPos) []Produc
 		}
 	}
 
-	ranks := make(map[producerDeclaration]int, len(positions))
+	var counts, starts [prodKindCount]int
+
+	for _, pos := range positions {
+		counts[pos.kind] = max(counts[pos.kind], pos.index+1)
+	}
+
+	for _, decl := range e.d.producerDeclarations {
+		counts[decl.kind] = max(counts[decl.kind], decl.index+1)
+	}
+
+	n := 0
+
+	for kind, count := range counts {
+		starts[kind] = n
+		n += count
+	}
+
+	e.prodRanks = slices.Grow(e.prodRanks[:0], n)[:n]
+
+	ranks := e.prodRanks
 
 	for i, pos := range positions {
-		ranks[producerDeclaration{pos.kind, pos.index}] = len(e.d.producerDeclarations) + i
+		ranks[starts[pos.kind]+pos.index] = len(e.d.producerDeclarations) + i
 	}
 
 	for i, decl := range e.d.producerDeclarations {
-		ranks[decl] = i
+		ranks[starts[decl.kind]+decl.index] = i
 	}
 
 	slices.SortStableFunc(positions, func(a, b ProducerPos) int {
@@ -211,7 +230,7 @@ func (e *EmitContext) orderedProducerPositions(positions []ProducerPos) []Produc
 			return order
 		}
 
-		return cmp.Compare(ranks[producerDeclaration{a.kind, a.index}], ranks[producerDeclaration{b.kind, b.index}])
+		return cmp.Compare(ranks[starts[a.kind]+a.index], ranks[starts[b.kind]+b.index])
 	})
 
 	return positions

@@ -804,8 +804,9 @@ func composeCCModuleArgBlocks(na *NodeArenas, p *Platform, in *ModuleCompileEnv)
 			[]ANY{argSourceRoot.any(), strS.any(), argBuildRoot.any(), strB.any(), strWrapUnshareEnd.any()}, wrapHead)
 	}
 
-	binding := &compilerFlagBlocks{arena: na, platform: p, input: *in}
+	binding := na.flagBlocks.one()
 
+	*binding = compilerFlagBlocks{arena: na, platform: p, input: *in}
 	binding.input.CCBlocks = CcModuleArgBlocks{}
 
 	return CcModuleArgBlocks{

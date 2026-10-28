@@ -7,8 +7,8 @@ func (e Environment) setResource(decl ResourceDecl) {
 
 	e.setVFS(id, decl.Value)
 
-	if e.s.resourceBindings == nil {
-		e.s.resourceBindings = make(map[ENV]STR)
+	if n := int(id) + 1 - len(e.s.resourceBindings); n > 0 {
+		e.s.resourceBindings = append(e.s.resourceBindings, make([]STR, n)...)
 	}
 
 	e.s.resourceBindings[id] = decl.FetchKey
@@ -16,7 +16,11 @@ func (e Environment) setResource(decl ResourceDecl) {
 
 func (e Environment) recordResourceUse(id ENV) {
 	if e.resourceUses != nil {
-		if key, ok := e.s.resourceBindings[id]; ok && !slices.Contains(*e.resourceUses, key) {
+		if int(id) >= len(e.s.resourceBindings) {
+			return
+		}
+
+		if key := e.s.resourceBindings[id]; key != 0 && !slices.Contains(*e.resourceUses, key) {
 			*e.resourceUses = append(*e.resourceUses, key)
 		}
 	}

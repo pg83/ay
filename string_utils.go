@@ -108,23 +108,52 @@ func splitJavaCommandWords(s string) []string {
 }
 
 func splitQuotedWords(s string, quotedEscapeSlashes int) []string {
-	if s == "" {
-		return nil
-	}
-
 	var out []string
-	var b strings.Builder
+
+	eachQuotedWord(s, quotedEscapeSlashes, func(word STR) {
+		out = append(out, word.string())
+	})
+
+	return out
+}
+
+func appendQuotedWords(out []ANY, s string, quotedEscapeSlashes int) []ANY {
+	eachQuotedWord(s, quotedEscapeSlashes, func(word STR) {
+		out = append(out, pathAny(word))
+	})
+
+	return out
+}
+
+func eachQuotedWord(s string, quotedEscapeSlashes int, emit func(STR)) {
+	start := 0
+
+	var block []byte
+
+	k := 0
+
 	var quote byte
 
 	escaped := false
 
-	flush := func() {
-		if b.Len() == 0 {
-			return
+	materialize := func(end int) {
+		if block == nil {
+			block = internTable.bytes.alloc((len(s)-start)*(1+quotedEscapeSlashes) + 1)
+			k = copy(block, s[start:end])
+		}
+	}
+
+	flush := func(end int) {
+		if block != nil {
+			if k > 0 {
+				emit(internBlock(block, k))
+			}
+		} else if end > start {
+			emit(internStr(s[start:end]))
 		}
 
-		out = append(out, b.String())
-		b.Reset()
+		block, k = nil, 0
+		start = end + 1
 	}
 
 	for i := 0; i < len(s); i++ {
@@ -133,17 +162,20 @@ func splitQuotedWords(s string, quotedEscapeSlashes int) []string {
 		if escaped {
 			if quotedEscapeSlashes > 0 && quote != 0 && ch != '\'' && ch != '"' && ch != '\\' && ch != '/' {
 				for range quotedEscapeSlashes {
-					b.WriteByte('\\')
+					block[k] = '\\'
+					k++
 				}
 			}
 
-			b.WriteByte(ch)
+			block[k] = ch
+			k++
 			escaped = false
 
 			continue
 		}
 
 		if ch == '\\' {
+			materialize(i)
 			escaped = true
 
 			continue
@@ -153,7 +185,8 @@ func splitQuotedWords(s string, quotedEscapeSlashes int) []string {
 			if ch == quote {
 				quote = 0
 			} else {
-				b.WriteByte(ch)
+				block[k] = ch
+				k++
 			}
 
 			continue
@@ -161,21 +194,24 @@ func splitQuotedWords(s string, quotedEscapeSlashes int) []string {
 
 		switch ch {
 		case '\t', '\n', '\r', ' ':
-			flush()
+			flush(i)
 		case '\'', '"':
+			materialize(i)
 			quote = ch
 		default:
-			b.WriteByte(ch)
+			if block != nil {
+				block[k] = ch
+				k++
+			}
 		}
 	}
 
 	if escaped {
-		b.WriteByte('\\')
+		block[k] = '\\'
+		k++
 	}
 
-	flush()
-
-	return out
+	flush(len(s))
 }
 
 func humanBytes(n int64) string {

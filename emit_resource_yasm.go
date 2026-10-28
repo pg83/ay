@@ -21,7 +21,7 @@ func (e *EmitContext) packYasmResourceChunks(items []ResourceItem, p ResourcePac
 
 	lo := 0
 
-	for _, hi := range resourceChunkEnds(items, false) {
+	for hi := range resourceChunkEnds(items, false) {
 		var compressed []string
 		var args, outputs, srcgen []ANY
 		var srcHash []string

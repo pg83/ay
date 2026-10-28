@@ -1034,7 +1034,7 @@ func applyImplicitPeerdirs(ctx *GenCtx, instance ModuleInstance, d *ModuleData) 
 	hasProto := false
 
 	for _, meta := range d.srcs {
-		src := meta.Source.string()
+		src := meta.Source.relOrSelf().string()
 
 		if !hasGztproto && extIsGztproto(src) {
 			d.peerdirs = append(d.peerdirs, strKernelGazetteerProto.any())
@@ -1269,10 +1269,9 @@ func genModule(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResult) 
 
 	if instance.Demand == demandNone || ctx.emit.deferPublication > 0 {
 		parent := ctx.warningSink
+		warnings := ctx.na.warnings.one()
 
-		var warnings moduleWarnings
-
-		ctx.warningSink = &warnings
+		ctx.warningSink = warnings
 
 		defer func() { ctx.warningSink = parent }()
 
@@ -1283,7 +1282,7 @@ func genModule(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResult) 
 				warnings.dependencies = append(warnings.dependencies, r.deferredWarnings)
 			}
 
-			r.deferredWarnings = &warnings
+			r.deferredWarnings = warnings
 		}
 
 		if parent != nil && r.deferredWarnings != nil {

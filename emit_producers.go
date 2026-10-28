@@ -695,7 +695,10 @@ func (e *EmitContext) producerPositions(cythonPlans []CythonStmtPlan) ([]Produce
 		if isCodegenProducingSrcID(m.Source) {
 			outs, ins = e.srcPosition(m)
 		} else {
-			ins = []VFS{e.sourceInputForScheduling(m.Source.string())}
+			mark := len(e.prodVFS)
+
+			e.prodVFS = append(e.prodVFS, e.sourceInputForScheduling(m.Source.string()))
+			ins = e.prodVFSTake(mark)
 
 			if m.Prio == stmtPrioSrcs && srcExtClassOf(m.Source) == srcExtCSource {
 				if _, known := moduleRootedVFS(module, m.Source.string()); known {
@@ -946,9 +949,12 @@ func (e *EmitContext) emitDeclaredProducers(cythonPlans []CythonStmtPlan) {
 	positions, srcs := e.producerPositions(cythonPlans)
 
 	positions = e.orderedProducerPositions(positions)
-
 	e.prodPos = positions
-	e.producerOutputs = make(map[VFS]int, len(positions))
+
+	if e.producerOutputs == nil {
+		e.producerOutputs = make(map[VFS]int, len(positions))
+	}
+
 	e.prodOrder = e.prodOrder[:0]
 
 	for i, pos := range positions {

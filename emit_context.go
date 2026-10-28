@@ -51,6 +51,9 @@ type EmitContext struct {
 	goInclJoined       []ANY
 	pyMetas            []PySourceMeta
 	pySrcsReg          []PySrc
+	pyNamespaces       []pyNamespaceEntry
+	pyNamespaceHashes  []string
+	pyNamespaceCmds    []STR
 	resources          []ResourceEntry
 	localObjs          CollectedObjs
 	globalObjs         CollectedObjs
@@ -70,6 +73,7 @@ type EmitContext struct {
 	sbomOrder          []ResolvedPeer
 	orderedCC          []VFS
 	prodOrder          []int
+	prodRanks          []int
 	protoPaths         []protoPathEntry
 	protoPathPos       int
 	pbEmission         [3]PbModuleEmission
@@ -154,33 +158,38 @@ func newEmitContextIn(frame *ModuleFrame, ctx *GenCtx, instance ModuleInstance, 
 		ctx: ctx, frame: frame, serial: frame.serial, instance: instance, d: d, peers: peers, scanner: scanner, codegen: scanner.codegen,
 		resources: d.resources[:k:k],
 
-		ccPending:   scrub(prev.ccPending),
-		filePending: scrub(prev.filePending),
-		srcs:        prev.srcs[:0],
-		refs:        prev.refs[:0],
-		outs:        prev.outs[:0],
-		metas:       prev.metas[:0],
-		pyMetas:     scrub(prev.pyMetas),
-		pySrcsReg:   prev.pySrcsReg[:0],
-		localObjs:   prev.localObjs.reset(),
-		globalObjs:  prev.globalObjs.reset(),
-		prodPos:     scrub(prev.prodPos),
-		prodBacking: prev.prodBacking[:0],
-		prodSrcs:    prev.prodSrcs[:0],
-		scInputs:    prev.scInputs[:0],
-		objScratch:  scrub(prev.objScratch),
-		rawScratch:  scrub(prev.rawScratch),
-		resItems:    scrub(prev.resItems),
-		dirScratch:  prev.dirScratch[:0],
-		resEntries:  scrub(prev.resEntries),
-		resStrBuf:   prev.resStrBuf[:0],
-		prodVFS:     prev.prodVFS[:0],
-		cvScratch:   scrub(prev.cvScratch),
-		peerScratch: scrub(prev.peerScratch),
-		sbomOrder:   scrub(prev.sbomOrder),
-		orderedCC:   prev.orderedCC[:0],
-		prodOrder:   prev.prodOrder[:0],
-		protoPaths:  prev.protoPaths[:0],
+		ccPending:         scrub(prev.ccPending),
+		filePending:       scrub(prev.filePending),
+		srcs:              prev.srcs[:0],
+		refs:              prev.refs[:0],
+		outs:              prev.outs[:0],
+		metas:             prev.metas[:0],
+		pyMetas:           scrub(prev.pyMetas),
+		pySrcsReg:         prev.pySrcsReg[:0],
+		pyNamespaces:      prev.pyNamespaces[:0],
+		pyNamespaceHashes: scrub(prev.pyNamespaceHashes),
+		pyNamespaceCmds:   prev.pyNamespaceCmds[:0],
+		localObjs:         prev.localObjs.reset(),
+		globalObjs:        prev.globalObjs.reset(),
+		prodPos:           scrub(prev.prodPos),
+		prodBacking:       prev.prodBacking[:0],
+		prodSrcs:          prev.prodSrcs[:0],
+		scInputs:          prev.scInputs[:0],
+		objScratch:        scrub(prev.objScratch),
+		rawScratch:        scrub(prev.rawScratch),
+		resItems:          scrub(prev.resItems),
+		dirScratch:        prev.dirScratch[:0],
+		resEntries:        scrub(prev.resEntries),
+		resStrBuf:         prev.resStrBuf[:0],
+		prodVFS:           prev.prodVFS[:0],
+		cvScratch:         scrub(prev.cvScratch),
+		peerScratch:       scrub(prev.peerScratch),
+		sbomOrder:         scrub(prev.sbomOrder),
+		orderedCC:         prev.orderedCC[:0],
+		prodOrder:         prev.prodOrder[:0],
+		prodRanks:         prev.prodRanks[:0],
+		producerOutputs:   clearedMap(prev.producerOutputs),
+		protoPaths:        prev.protoPaths[:0],
 	}
 
 	return &frame.emitCtx

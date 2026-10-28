@@ -1,6 +1,8 @@
 package main
 
 type NodeArenas struct {
+	warnings      *BumpAllocator[moduleWarnings]
+	flagBlocks    *BumpAllocator[compilerFlagBlocks]
 	compilerFlags *BumpAllocator[CompilerFlagValue]
 	cmds          *BumpAllocator[Cmd]
 	envs          *BumpAllocator[EnvVar]
@@ -23,6 +25,8 @@ type NodeArenas struct {
 }
 
 func (na *NodeArenas) resetWindows() {
+	na.warnings.open = false
+	na.flagBlocks.open = false
 	na.compilerFlags.open = false
 	na.cmds.open = false
 	na.envs.open = false
@@ -45,6 +49,8 @@ func (na *NodeArenas) resetWindows() {
 }
 
 func (na *NodeArenas) markStrict() {
+	na.warnings.markStrict()
+	na.flagBlocks.markStrict()
 	na.compilerFlags.markStrict()
 	na.cmds.markStrict()
 	na.envs.markStrict()
@@ -68,6 +74,8 @@ func (na *NodeArenas) markStrict() {
 
 func newNodeArenas() *NodeArenas {
 	return &NodeArenas{
+		warnings:      newBumpAllocator[moduleWarnings](),
+		flagBlocks:    newBumpAllocator[compilerFlagBlocks](),
 		compilerFlags: newBumpAllocator[CompilerFlagValue](),
 		cmds:          newBumpAllocator[Cmd](),
 		envs:          newBumpAllocator[EnvVar](),
