@@ -2,6 +2,8 @@ package main
 
 func (x *ModuleData) reset() {
 	*x = ModuleData{
+		sourceEnv:            x.sourceEnv,
+		recurses:             scrub(x.recurses),
 		producerDeclarations: x.producerDeclarations[:0],
 		pyGroupScopes:        scrub(x.pyGroupScopes),
 		pyGroupSrcs:          x.pyGroupSrcs[:0],

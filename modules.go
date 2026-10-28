@@ -157,6 +157,7 @@ type ModuleData struct {
 	discarded bool
 
 	confMacroDepth int
+	sourceEnv      EnvStore
 
 	styleChecks []StyleCheck
 
@@ -867,7 +868,7 @@ func collectModuleInto(ctx *GenCtx, instance ModuleInstance, stmts []Stmt, env E
 	finishPythonImportMask(env, d)
 	d.sandboxTaskDeprecation = d.multimodule == tokSandboxTask && env.string(envFAIL_PY2) != "yes" && env.string(envOPENSOURCE) != "yes"
 
-	bindRunProgramCalls(d.runPrograms, env)
+	bindRunProgramCalls(d.runPrograms, env, &d.sourceEnv)
 
 	if len(d.runJavaPrograms) > 0 {
 		d.runJavaJdk = env.string(envJdkRealVersion)
@@ -947,9 +948,7 @@ func collectModuleInto(ctx *GenCtx, instance ModuleInstance, stmts []Stmt, env E
 	finishPythonDllConfig(d, pythonHeaderEnv)
 	finishPythonHeaderConfig(d, pythonHeaderEnv)
 
-	dedupers.with(func(deduper *DeDuper) {
-		filterInvalidAddIncl(fs, deduper, d, modulePath, onWarn)
-	})
+	filterInvalidAddIncl(fs, d, modulePath, onWarn)
 
 	if d.unit.Tag == unitTagPy3BinLib {
 		d.pyMain = nil
@@ -1009,10 +1008,17 @@ func collectModuleInto(ctx *GenCtx, instance ModuleInstance, stmts []Stmt, env E
 		d.moduleScopeCFlags = grown
 	}
 
-	dedupers.with(func(deduper *DeDuper) {
-		d.addIncl = dedupInPlaceWith(deduper, d.addIncl)
-		d.addInclGlobal = dedupInPlaceWith(deduper, d.addInclGlobal)
-	})
+	if len(d.addIncl) > 1 || len(d.addInclGlobal) > 1 {
+		dedupers.with(func(deduper *DeDuper) {
+			if len(d.addIncl) > 1 {
+				d.addIncl = dedupInPlaceWith(deduper, d.addIncl)
+			}
+
+			if len(d.addInclGlobal) > 1 {
+				d.addInclGlobal = dedupInPlaceWith(deduper, d.addInclGlobal)
+			}
+		})
+	}
 
 	for _, a := range d.addIncl {
 		pm.indexAddincl(a)
@@ -1168,52 +1174,57 @@ func ensureResourcePeer(modulePath string, d *ModuleData) {
 	d.peerdirs = append(d.peerdirs, internStr(resourcePeer).any())
 }
 
-func filterInvalidAddIncl(fs FS, dd *DeDuper, d *ModuleData, modulePath string, onWarn func(Warn)) {
+func filterInvalidAddIncl(fs FS, d *ModuleData, modulePath string, onWarn func(Warn)) {
 	d.addIncl = filterOwnAddIncl(fs, d.addIncl, modulePath, onWarn)
 	d.addInclGlobal = filterOwnAddIncl(fs, d.addInclGlobal, modulePath, onWarn)
 	d.cythonAddIncl = filterOwnAddIncl(fs, d.cythonAddIncl, modulePath, onWarn)
-
-	if len(d.cythonAddInclGlobal) > 0 {
-		dd.reset()
-
-		for _, p := range d.cythonAddIncl {
-			dd.add(p.strID())
-		}
-
-		out := d.cythonAddInclGlobal[:0]
-
-		for _, p := range d.cythonAddInclGlobal {
-			if dd.has(p.strID()) {
-				out = append(out, p)
-			}
-		}
-
-		d.cythonAddInclGlobal = out
-	}
-
 	d.asmAddIncl = filterOwnAddIncl(fs, d.asmAddIncl, modulePath, onWarn)
 
-	if len(d.addInclUserGlobal) > 0 {
-		dd.reset()
-
-		for _, p := range d.addInclGlobal {
-			dd.add(p.strID())
-		}
-
-		for _, p := range d.addInclOneLevel {
-			dd.add(p.strID())
-		}
-
-		out := d.addInclUserGlobal[:0]
-
-		for _, p := range d.addInclUserGlobal {
-			if dd.has(p.strID()) {
-				out = append(out, p)
-			}
-		}
-
-		d.addInclUserGlobal = out
+	if len(d.cythonAddInclGlobal) == 0 && len(d.addInclUserGlobal) == 0 {
+		return
 	}
+
+	dedupers.with(func(dd *DeDuper) {
+		if len(d.cythonAddInclGlobal) > 0 {
+			dd.reset()
+
+			for _, p := range d.cythonAddIncl {
+				dd.add(p.strID())
+			}
+
+			out := d.cythonAddInclGlobal[:0]
+
+			for _, p := range d.cythonAddInclGlobal {
+				if dd.has(p.strID()) {
+					out = append(out, p)
+				}
+			}
+
+			d.cythonAddInclGlobal = out
+		}
+
+		if len(d.addInclUserGlobal) > 0 {
+			dd.reset()
+
+			for _, p := range d.addInclGlobal {
+				dd.add(p.strID())
+			}
+
+			for _, p := range d.addInclOneLevel {
+				dd.add(p.strID())
+			}
+
+			out := d.addInclUserGlobal[:0]
+
+			for _, p := range d.addInclUserGlobal {
+				if dd.has(p.strID()) {
+					out = append(out, p)
+				}
+			}
+
+			d.addInclUserGlobal = out
+		}
+	})
 }
 
 func filterOwnAddIncl(fs FS, paths []VFS, modulePath string, onWarn func(Warn)) []VFS {
@@ -1642,7 +1653,7 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 			if isPythonProtoModule(d) || d.multimodule == tokFbsLibrary && language == LangPy {
 				stmt := UnknownStmt{Name: tokPySrcs, Args: expandRootDeferredTokens(v.Sources, env, tokenExpandPathArguments)}
 
-				d.pySrcGroups = append(d.pySrcGroups, PySrcGroup{DeclSeq: d.nextDeclSeq(), Statement: &stmt, ResourceOffset: len(d.resources), Prio: stmtPrioSrcs})
+				d.pySrcGroups = append(d.pySrcGroups, PySrcGroup{DeclSeq: d.nextDeclSeq(), Statement: astOne(astUnknowns, stmt), ResourceOffset: len(d.resources), Prio: stmtPrioSrcs})
 
 				continue
 			}
@@ -2166,7 +2177,7 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 				})
 			} else {
 				if v.Name == tokNoCheckImports {
-					expanded.Args = prepareRunProgramArguments(runProgramSourceArguments(v.LexicalArgs, env), pythonImportMaskSourceEnv(env))
+					expanded.Args = prepareRunProgramArguments(runProgramSourceArguments(v.LexicalArgs, env), runProgramSourceEnv(env, &d.sourceEnv))
 				} else if v.Name == tokSetAppend && len(v.Args) > 0 && v.Args[0].string() == importMaskVariable {
 					expanded.Args = runProgramSourceArguments(v.LexicalArgs, env)
 				} else if v.Name == tokRun {
@@ -3700,7 +3711,7 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 
 		stmt := v
 
-		d.pySrcGroups = append(d.pySrcGroups, PySrcGroup{DeclSeq: d.nextDeclSeq(), Statement: &stmt, ResourceOffset: len(d.resources), Prio: stmtPrioSrcs})
+		d.pySrcGroups = append(d.pySrcGroups, PySrcGroup{DeclSeq: d.nextDeclSeq(), Statement: astOne(astUnknowns, stmt), ResourceOffset: len(d.resources), Prio: stmtPrioSrcs})
 	case tokAllPytestSrcs:
 
 		applyUnknownStmt(fs, modulePath, UnknownStmt{Name: tokTestSrcs, Args: allPytestSrcArgs(fs, modulePath, v)}, d, env, onWarn)
@@ -5858,6 +5869,10 @@ func confProtoPlugin(fs FS, confRel, macro string) ConfProtoPlugin {
 }
 
 func appendCompilerFlags(args []ANY, env Environment, name string, allGlobal bool, global, own []ANY, uses *CompilerFlagResourceUses) ([]ANY, []ANY) {
+	if slices.IndexFunc(args, func(arg ANY) bool { return !literalCompilerFlag(arg) }) < 0 {
+		return appendLiteralCompilerFlags(args, env, name, allGlobal, global, own)
+	}
+
 	var values []string
 
 	for _, arg := range args {
@@ -5880,12 +5895,6 @@ func appendCompilerFlags(args []ANY, env Environment, name string, allGlobal boo
 		}
 	}
 
-	locals := env.clone()
-
-	for _, root := range []string{"ARCADIA_ROOT", "ARCADIA_BUILD_ROOT", "CURDIR", "BINDIR"} {
-		locals.unbind(internEnv(root))
-	}
-
 	bound := make([]string, len(values))
 
 	for i, value := range values {
@@ -5896,7 +5905,7 @@ func appendCompilerFlags(args []ANY, env Environment, name string, allGlobal boo
 		}
 	}
 
-	body, origins := compilerFlagForwarding(name+" "+strings.Join(bound, " "), locals, map[string][]string{"Flags": values})
+	body, origins := compilerFlagForwardingWithoutRoots(name+" "+strings.Join(bound, " "), env, map[string][]string{"Flags": values})
 	words := sourceWordSpans(body, func(r rune) bool { return r == ' ' })
 
 	var globalValues, ownValues []string

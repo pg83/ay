@@ -5,6 +5,8 @@ import (
 	"unicode"
 )
 
+var literalCompilerFlagMemo TwoBitSet
+
 const (
 	compilerFlagsCommon CompilerFlagKind = iota
 	compilerFlagsCxx
@@ -116,6 +118,79 @@ type CompilerFlagResourceUses struct {
 type compilerFlagResourceOrigin struct {
 	key   STR
 	track SourceTextTracker
+}
+
+func literalCompilerFlag(arg ANY) bool {
+	if arg.vfs() != 0 {
+		return false
+	}
+
+	id := arg.str()
+
+	if state := literalCompilerFlagMemo.get(uint32(id)); state != 0 {
+		return state == 1
+	}
+
+	text := id.string()
+	literal := text != "" && !strings.ContainsAny(text, "$ \t\r\n\\\"'&;")
+	state := uint8(2)
+
+	if literal {
+		state = 1
+	}
+
+	literalCompilerFlagMemo.set(uint32(id), state)
+
+	return literal
+}
+
+func appendLiteralCompilerFlags(args []ANY, env Environment, name string, allGlobal bool, global, own []ANY) ([]ANY, []ANY) {
+	globalStart, ownStart := len(global), len(own)
+	nextGlobal := false
+
+	for _, arg := range args {
+		if arg == kwGLOBAL.any() {
+			nextGlobal = true
+
+			continue
+		}
+
+		if allGlobal || nextGlobal {
+			global = append(global, arg)
+		} else {
+			own = append(own, arg)
+		}
+
+		nextGlobal = false
+	}
+
+	if len(own) > ownStart {
+		appendMacroEnv(env, name, internAnyWords(own[ownStart:]).string())
+	}
+
+	if len(global) > globalStart {
+		appendMacroEnv(env, name+"_GLOBAL", internAnyWords(global[globalStart:]).string())
+	}
+
+	return global, own
+}
+
+func compilerFlagForwardingWithoutRoots(value string, env Environment, parameters map[string][]string) (string, []compilerFlagResourceOrigin) {
+	roots := [...]ENV{envARCADIA_ROOT, envARCADIA_BUILD_ROOT, envCURDIR, envBINDIR}
+
+	var kinds [len(roots)]EnvKind
+
+	for i, root := range roots {
+		kinds[i] = env.unbind(root)
+	}
+
+	defer func() {
+		for i, root := range roots {
+			env.rebind(root, kinds[i])
+		}
+	}()
+
+	return compilerFlagForwarding(value, env, parameters)
 }
 
 func compilerFlagForwarding(value string, env Environment, parameters map[string][]string) (string, []compilerFlagResourceOrigin) {

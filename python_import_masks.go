@@ -67,18 +67,6 @@ func appendPythonImportMask(value string, env Environment, d *ModuleData) string
 	return previous + " " + value
 }
 
-func pythonImportMaskSourceEnv(env Environment) Environment {
-	locals := env.clone()
-
-	for i, kind := range locals.s.kind {
-		if kind != envAbsent && runProgramReservedVariable(ENV(i).string()) {
-			locals.unbind(ENV(i))
-		}
-	}
-
-	return locals
-}
-
 func finishPythonImportMask(env Environment, d *ModuleData) {
 	raw := env.string(internEnv(importMaskVariable))
 
@@ -88,7 +76,7 @@ func finishPythonImportMask(env Environment, d *ModuleData) {
 		return
 	}
 
-	base := pythonImportMaskSourceEnv(env)
+	base := runProgramSourceEnv(env, &d.sourceEnv)
 
 	base.setString(internEnv(importMaskVariable), d.importMask.base)
 

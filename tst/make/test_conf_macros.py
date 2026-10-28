@@ -9,6 +9,34 @@ def args(node):
 
 
 class ConfMacrosTest(MakeTest):
+    def test_repeated_body_reads_updated_environment(self):
+        config = self.root / "build/ymake.core.conf"
+        self.write_tree("build/ymake.core.conf", config.read_text() + "\nmacro E2E_BODY_SOURCE() {\n    SRCS($E2E_SOURCE)\n}\nmacro E2E_BODY_CHANGE() {\n    SET(E2E_SOURCE second.cpp)\n    E2E_BODY_SOURCE()\n}\n")
+        self.write("ya.make", "LIBRARY()\nSET(E2E_SOURCE first.cpp)\nE2E_BODY_SOURCE()\nE2E_BODY_CHANGE()\nEND()\n")
+        self.write("first.cpp", "int first() { return 1; }\n")
+        self.write("second.cpp", "int second() { return 2; }\n")
+        graph = self.graph()
+        self.node(graph, "first.cpp.o")
+        self.node(graph, "second.cpp.o")
+
+    def test_repeated_body_arguments_keep_module_and_variable_scope(self):
+        self.write("ya.make", f"PROGRAM(answer)\nSRCS(main.cpp)\nPEERDIR({PROJECT}/left {PROJECT}/right)\nEND()\n")
+        self.write("main.cpp", "int main() { return 0; }\n")
+        for name in ("left", "right"):
+            self.write(f"{name}/ya.make", f"LIBRARY()\nALL_SRCS(GLOBAL common.cpp)\nSET(LOCAL {name}.cpp)\nALL_SRCS($LOCAL)\nSET(LOCAL second.cpp)\nALL_SRCS($LOCAL)\nCFLAGS(-DE2E_OWN GLOBAL -DE2E_EXPORTED)\nGLOBAL_CFLAGS(-DE2E_ALL_GLOBAL)\nEND()\n")
+            for source in ("common", name, "second"):
+                self.write(f"{name}/{source}.cpp", f"int {name}_{source}() {{ return 42; }}\n")
+        graph = self.graph()
+        for name in ("left", "right"):
+            for source in ("common", name, "second"):
+                flags = args(self.node(graph, f"{name}/{source}.cpp.o"))
+                for flag in ("-DE2E_OWN", "-DE2E_EXPORTED", "-DE2E_ALL_GLOBAL"):
+                    self.assertIn(flag, flags)
+        flags = args(self.node(graph, "main.cpp.o"))
+        self.assertNotIn("-DE2E_OWN", flags)
+        self.assertIn("-DE2E_EXPORTED", flags)
+        self.assertIn("-DE2E_ALL_GLOBAL", flags)
+
     def test_body_runs_a_tool_of_the_same_build(self):
         self.write("ya.make", f"PY3_PROGRAM(monobinary)\nPEERDIR({PROJECT}/lib)\nPY_MONOBINARY(answer lib.answer)\nEND()\n")
         self.write("lib/ya.make", "PY3_LIBRARY()\nPY_SRCS(answer.py)\nEND()\n")

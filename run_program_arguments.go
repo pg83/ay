@@ -2,6 +2,11 @@ package main
 
 import "strings"
 
+var runProgramEnvVars struct {
+	classified uint32
+	reserved   []ENV
+}
+
 func runProgramSourceArguments(args []ANY, env Environment) []ANY {
 	values, _ := runProgramSourceArgumentValues(args, env, false)
 
@@ -54,18 +59,32 @@ func runProgramReservedVariable(name string) bool {
 	return keepDeferredVar(name) || name == "ARCADIA_ROOT" || name == "ARCADIA_BUILD_ROOT"
 }
 
-func bindRunProgramCalls(programs []*RunProgramStmt, env Environment) {
+func runProgramSourceEnv(env Environment, scratch *EnvStore) Environment {
+	for runProgramEnvVars.classified < envTable.count {
+		id := ENV(runProgramEnvVars.classified)
+
+		if runProgramReservedVariable(id.string()) {
+			runProgramEnvVars.reserved = append(runProgramEnvVars.reserved, id)
+		}
+
+		runProgramEnvVars.classified++
+	}
+
+	locals := env.cloneInto(scratch)
+
+	for _, id := range runProgramEnvVars.reserved {
+		locals.unbind(id)
+	}
+
+	return locals
+}
+
+func bindRunProgramCalls(programs []*RunProgramStmt, env Environment, scratch *EnvStore) {
 	if len(programs) == 0 {
 		return
 	}
 
-	locals := env.clone()
-
-	for i, kind := range locals.s.kind {
-		if kind != envAbsent && runProgramReservedVariable(ENV(i).string()) {
-			locals.unbind(ENV(i))
-		}
-	}
+	locals := runProgramSourceEnv(env, scratch)
 
 	for i, captured := range programs {
 		if captured.CallArgs == nil {

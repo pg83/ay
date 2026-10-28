@@ -262,7 +262,7 @@ func collectJavaData(ctx *GenCtx, jm *JavaModule, stmts []Stmt, env Environment)
 		}
 	}
 
-	bindRunProgramCalls(d.runPrograms, env)
+	bindRunProgramCalls(d.runPrograms, env, &ctx.frames[ctx.frameDepth-1].d.sourceEnv)
 
 	d.validateData = resourceValidationEnabled(env)
 	d.fakeModule = env.bool(envFakeModule)

@@ -1977,6 +1977,7 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 	var pchFlagsGlobal []ANY
 
 	resGlobalsSum := len(ownResourceGlobals)
+	linkExcludeCap := len(d.linkExcludeLibraries)
 	archiveCap := 0
 	sbomCap := 0
 	globalCap := 0
@@ -1998,6 +1999,7 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 	for _, rp := range resolved {
 		pr := rp.result
 
+		linkExcludeCap += len(pr.LinkExcludeLibraries)
 		resGlobalsSum += len(pr.ResourceGlobalClosure)
 		globalSources = append(globalSources, pr.GlobalSources...)
 		pchFlagsGlobal = append(pchFlagsGlobal, pr.PchFlagsGlobal...)
@@ -2429,21 +2431,23 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 
 	var linkExcludeLibraries []ANY
 
-	dedupers.with(func(deduper *DeDuper) {
-		for _, rp := range resolved {
-			for _, lib := range rp.result.LinkExcludeLibraries {
+	if linkExcludeCap > 0 {
+		dedupers.with(func(deduper *DeDuper) {
+			for _, rp := range resolved {
+				for _, lib := range rp.result.LinkExcludeLibraries {
+					if deduper.addStable(lib.strID()) {
+						linkExcludeLibraries = append(linkExcludeLibraries, lib)
+					}
+				}
+			}
+
+			for _, lib := range d.linkExcludeLibraries {
 				if deduper.addStable(lib.strID()) {
 					linkExcludeLibraries = append(linkExcludeLibraries, lib)
 				}
 			}
-		}
-
-		for _, lib := range d.linkExcludeLibraries {
-			if deduper.addStable(lib.strID()) {
-				linkExcludeLibraries = append(linkExcludeLibraries, lib)
-			}
-		}
-	})
+		})
+	}
 
 	linkExcludeLibraries = ctx.argSlices.internCopy(linkExcludeLibraries)
 

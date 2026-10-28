@@ -7,6 +7,8 @@ import (
 	"strings"
 )
 
+var globSegmentMemo DenseMap[STR, *regexp.Regexp]
+
 const (
 	globFixed GlobPartKind = iota
 	globPattern
@@ -20,6 +22,20 @@ type GlobPart struct {
 	kind  GlobPartKind
 	fixed string
 	re    *regexp.Regexp
+}
+
+func globSegmentMatcher(segment string) *regexp.Regexp {
+	id := internStr(segment)
+
+	if re, ok := globSegmentMemo.get(id); ok {
+		return re
+	}
+
+	re := regexp.MustCompile("^" + globSegmentRegex(segment, true) + "$")
+
+	globSegmentMemo.put(id, re)
+
+	return re
 }
 
 func globParts(pattern string) []GlobPart {
@@ -44,7 +60,7 @@ func globParts(pattern string) []GlobPart {
 			parts = append(parts, GlobPart{kind: globRecursive})
 		case strings.ContainsAny(seg, "*?"):
 			flush()
-			parts = append(parts, GlobPart{kind: globPattern, re: regexp.MustCompile("^" + globSegmentRegex(seg, true) + "$")})
+			parts = append(parts, GlobPart{kind: globPattern, re: globSegmentMatcher(seg)})
 		default:
 			fixed = append(fixed, seg)
 		}
