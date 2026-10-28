@@ -63,6 +63,7 @@ type OsFS struct {
 	dirNames       *BumpAllocator[uint32]
 	dirEntries     *IntSet
 	contentHashes  ContentHashes
+	hashContent    bool
 	sourceUnder    *IntMap[STR]
 	sourceUnderHot [sourceUnderHotMask + 1]sourceUnderHotEntry
 	readResult     [2][]byte
@@ -344,8 +345,13 @@ func (fs *OsFS) read(rel string) [][]byte {
 
 func (fs *OsFS) readPath(rel STR) [][]byte {
 	chunks := fs.readFileRel(rel.string())
+	hash := uint64(1)
 
-	fs.contentHashes.store(rel, contentHashChunks(chunks))
+	if fs.hashContent {
+		hash = contentHashChunks(chunks)
+	}
+
+	fs.contentHashes.store(rel, hash)
 
 	return chunks
 }
