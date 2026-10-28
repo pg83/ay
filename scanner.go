@@ -45,7 +45,7 @@ const (
 	scanDomainCount
 )
 
-type IncludeKind int
+type IncludeKind uint8
 
 type IncludeDirective struct {
 	kind   IncludeKind
@@ -283,25 +283,25 @@ func newIncludeScannerWith(parsers *IncludeParserManager, sysincl SysInclSet, on
 type ScanDomain uint8
 
 type ScanContext struct {
-	dontResolveIncludes bool
-	configs             [scanDomainCount]*ScanConfig
-	base                []VFS
-	ccOwn               []VFS
-	ccPeer              []VFS
-	fullPeer            []VFS
-	parsers             *IncludeParserManager
+	configs  [scanDomainCount]*ScanConfig
+	base     []VFS
+	ccOwn    []VFS
+	ccPeer   []VFS
+	fullPeer []VFS
+	parsers  *IncludeParserManager
 
-	asmAddIncl     []VFS
-	cythonAddIncl  []VFS
-	cythonPeerIncl []VFS
-	protoInclude   []VFS
-	rosInclude     []VFS
-	swigInclude    []VFS
-	scInclude      []VFS
-	flatcInclude   []VFS
-	protoOutRoot   VFS
-	goAsmIncl      []VFS
-	cythonSys      []VFS
+	asmAddIncl          []VFS
+	cythonAddIncl       []VFS
+	cythonPeerIncl      []VFS
+	protoInclude        []VFS
+	rosInclude          []VFS
+	swigInclude         []VFS
+	scInclude           []VFS
+	flatcInclude        []VFS
+	goAsmIncl           []VFS
+	cythonSys           []VFS
+	protoOutRoot        VFS
+	dontResolveIncludes bool
 }
 
 type ScanConfig struct {

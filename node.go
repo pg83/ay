@@ -21,15 +21,13 @@ func (c ArgChunks) flat() []ANY {
 type Cmd struct {
 	Resources []STR     `json:"-"`
 	CmdArgs   ArgChunks `json:"cmd_args"`
-	Cwd       VFS       `json:"cwd,omitempty"`
 	Env       EnvVars   `json:"env,omitempty"`
+	Cwd       VFS       `json:"cwd,omitempty"`
 	Stdout    VFS       `json:"stdout,omitempty"`
 }
 
 type Node struct {
-	DisableCache        bool           `json:"-"`
 	ResourceURIs        []STR          `json:"-"`
-	Module              bool           `json:"-"`
 	Cmds                []Cmd          `json:"cmds"`
 	Env                 EnvVars        `json:"env"`
 	Inputs              NodeInputs     `json:"-"`
@@ -39,13 +37,15 @@ type Node struct {
 	Outputs             []VFS          `json:"outputs"`
 	Platform            *Platform      `json:"platform"`
 	Requirements        *Requirements  `json:"requirements"`
-	Ref                 NodeRef        `json:"-"`
 	PresetUID           *UID           `json:"-"`
-	UIDSalt             STR            `json:"-"`
 	DepRefs             []NodeRef      `json:"-"`
 	ForeignDepRefs      []NodeRef      `json:"-"`
 	Resources           []STR          `json:"-"`
 	ResourceGlobals     []ResourceDecl `json:"-"`
+	Ref                 NodeRef        `json:"-"`
+	UIDSalt             STR            `json:"-"`
+	DisableCache        bool           `json:"-"`
+	Module              bool           `json:"-"`
 	foreignToolsPending bool
 }
 

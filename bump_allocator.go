@@ -4,7 +4,7 @@ import "unsafe"
 
 const (
 	bumpChunkInitial = 128
-	bumpChunkBytes   = 1 << 21
+	bumpChunkBytes   = 1 << 18
 )
 
 type BumpAllocator[T any] struct {

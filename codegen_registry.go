@@ -6,27 +6,17 @@ import (
 )
 
 type GeneratedFileInfo struct {
-	InputsOnly         bool
-	ResourceObjcopy    bool
 	GztProto           *GztProtoProducer
-	ModuleType         TOK
 	ModuleIncludedDeps *ModuleIncludedDeps
 	ModuleInputs       *ModuleInputInfo
 	CollectionPeers    *CollectionPeerInfo
 	Nots               *NotsPrepared
 	NotsInputs         []VFS
 	Sandbox            *SandboxRecipe
-	OutputPath         VFS
-	SourcePath         VFS
-	PrimaryInput       VFS
 	BuildInputs        []VFS
-	OwnerModule        VFS
-	OwnerSerial        uint32
-	ProducerRef        NodeRef
 	OnUse              *PendingEmit
 	Scoped             *ScopedCommand
 	GeneratorRefs      []NodeRef
-	ProducerMainOut    VFS
 	ClosureLeaves      []VFS
 	InputLoopSources   []VFS
 	LateOutputs        []VFS
@@ -35,6 +25,16 @@ type GeneratedFileInfo struct {
 
 	IncludedBuildInputs []VFS
 	IncludedInputs      *IncludedInputPlan
+	OutputPath          VFS
+	SourcePath          VFS
+	PrimaryInput        VFS
+	OwnerModule         VFS
+	OwnerSerial         uint32
+	ProducerRef         NodeRef
+	ProducerMainOut     VFS
+	ModuleType          TOK
+	InputsOnly          bool
+	ResourceObjcopy     bool
 }
 
 type CollectionPeerInfo struct {
@@ -102,7 +102,7 @@ func (p *PendingEmit) fire() {
 
 type CodegenRegistry struct {
 	inducedIncludes map[VFS][]TypedInclude
-	files           DenseMap2[VFS, ScannedChildren, Closure]
+	files           ScannedFileCache
 	moduleBuildDeps DenseMap[NodeRef, []NodeRef]
 	byRel           DenseMap[STR, *GeneratedFileInfo]
 	bySplit         *IntMap[splitLookup]
