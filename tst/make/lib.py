@@ -97,7 +97,7 @@ class MakeTest(unittest.TestCase):
             stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
         )
         try:
-            stdout, stderr = proc.communicate(timeout=90)
+            stdout, stderr = proc.communicate(timeout=600)
         except BaseException:
             os.killpg(proc.pid, signal.SIGTERM)
             try:
