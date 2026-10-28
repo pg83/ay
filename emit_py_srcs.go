@@ -163,6 +163,11 @@ func (e *EmitContext) collectPySrcGroup(gi int, group PySrcGroup) {
 			resolved = e.resolvePythonDeclaration(src, group.SourceRoot)
 		}
 
+		if resolved.GeneratedDirs > 1 {
+			resolved.Path = resolved.withGeneratedDirs(e.codegen, src.string(), d.srcDirs)
+			resolved.Existing = resolved.Existing && resolved.Path.isSource()
+		}
+
 		path := resolved.Path
 		kind := pySourcePlain
 

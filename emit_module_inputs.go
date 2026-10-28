@@ -77,8 +77,8 @@ func (e *EmitContext) emitModuleNode(node NodeSpec, useGlobals bool) NodeRef {
 		peers = e.peers.Modules
 	}
 
-	e.setModulePeerRoots(&node, peers)
 	e.includeNodeInputs(&node)
+	e.setModulePeerRoots(&node, peers)
 	node.Inputs = e.appendModuleInputs(node.Inputs, peers, useGlobals)
 	e.appendModuleOutputs(&node)
 	e.resolveNodeCodegenRefs(&node)

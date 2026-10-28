@@ -2,6 +2,22 @@ from tst.make.lib import MakeTest, PROJECT
 
 
 class LateIncludeInputsTest(MakeTest):
+    def test_peer_generated_header_sources_are_not_link_inputs(self):
+        self.write('ya.make', f'PROGRAM(answer)\nPEERDIR({PROJECT}/lib)\nSRCS(main.cpp)\nEND()\n')
+        self.write('main.cpp', 'int main() { return 0; }\n')
+        self.write('lib/ya.make', 'LIBRARY()\nCOPY_FILE_WITH_CONTEXT(template.h generated.h)\nSRCS(public.h ordinary.cpp)\nEND()\n')
+        self.write('lib/public.h', f'#include <{PROJECT}/lib/generated.h>\n')
+        self.write('lib/template.h', '#include "leaf.h"\n')
+        self.write('lib/leaf.h', 'int leaf;\n')
+        self.write('lib/ordinary.cpp', 'int ordinary;\n')
+        graph = self.graph()
+        linked = self.node(graph, 'answer')
+        generated = self.node(graph, 'lib/generated.h')
+        self.assertIn(f'$(B)/{PROJECT}/lib/generated.h', linked['inputs'])
+        self.assertIn(generated['uid'], linked['deps'])
+        for name in ('public.h', 'template.h', 'leaf.h'):
+            self.assertNotIn(f'$(S)/{PROJECT}/lib/{name}', linked['inputs'])
+
     def test_shared_bison_header_after_consumers(self):
         self.write("ya.make", f"LIBRARY()\nADDINCL(${{ARCADIA_BUILD_ROOT}}/{PROJECT})\nSRCS(first.cpp second.cpp parser.y)\nEND()\n")
         self.write("parser.y", "%token NUMBER\n%%\nexpression: NUMBER;\n%%\n")
