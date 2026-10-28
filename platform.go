@@ -30,7 +30,7 @@ func confProtoHeaderEpilogue(fs FS) bool {
 }
 
 type Platform struct {
-	conditions            *ConfConditions
+	conf                  *Conf
 	YqlStableABI          bool
 	ProtoHeaderEpilogue   bool
 	picVariant            *Platform
@@ -59,7 +59,6 @@ type Platform struct {
 	BuildInfoKV           KV
 	Linker                LinkerFlags
 	Sysincl               []string
-	confMacros            map[STR]*ConfMacro
 	peerPolicies          *PeerPolicies
 	LinkPreludeExtra      []ANY
 	ClangVer              string
@@ -220,8 +219,9 @@ func newPlatform(os OS, isa ISA, buildType string, tc *Toolchain, flags map[stri
 	p.Go = newGoStd(goStdVersion)
 	p.ifEnv = buildPlatformIfEnv(p)
 	p.Linker = pc.Linker.flags(p)
-	p.Sysincl, p.confMacros, p.conditions = sysinclFiles(pc.Parsers, root, p.ifEnv)
-	p.peerPolicies = pc.Parsers.peerPolicies(strings.Fields(expandConfScalar(p.ifEnv.string(envPeerdirsRulesPath), p.ifEnv)))
+	p.conf = loadConf(pc.Parsers, root, p.ifEnv)
+	p.Sysincl = p.conf.sysincl()
+	p.peerPolicies = pc.Parsers.peerPolicies(strings.Fields(p.ifEnv.expand(p.ifEnv.string(envPeerdirsRulesPath))))
 	p.BuildTypeUpperSTR = internStr(p.ifEnv.string(envBUILD_TYPE))
 	p.DebugInfoFlags = debugInfoFlags(p.ifEnv, flags)
 	p.CompileCFlags = composeCompileCFlags(p.ifEnv, flags, p.DebugInfoFlags)

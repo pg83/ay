@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"regexp"
 	"regexp/syntax"
-	"slices"
 	"strings"
 )
 
@@ -12,21 +11,6 @@ var (
 	envSYSINCL          = internEnv(sysinclVar)
 	sysinclLowerScratch []byte
 )
-
-var confBindingScratch struct {
-	selected EnvStore
-	all      EnvStore
-	needed   BitSet
-	seen     BitSet
-	keys     []ENV
-	used     []bool
-}
-
-var confCommandVariables = []ENV{
-	internEnv("__COMMA__"), internEnv(importMaskVariable), internEnv("DEFAULT_ALLOCATOR"),
-	internEnv("C_AS_CXX_FLAGS"), envYqlPythonDir, envPmScript,
-	envSetTsInputsBaseExcludes, envNotsTool, envPeerdirsRulesPath,
-}
 
 const (
 	sysinclVar             = "SYSINCL"
@@ -76,121 +60,6 @@ func (rec *SysIncl) setMapping(k []byte, paths []VFS) {
 		rec.pairs = append(rec.pairs, SysinclPair{keyCI: internBytes(lower).string(), paths: paths})
 	} else {
 		rec.pairs = append(rec.pairs, SysinclPair{key: internBytes(k), paths: paths})
-	}
-}
-
-type ConfStmtRef struct {
-	file *ConfFile
-	stmt *ConfStmt
-}
-
-func (pm *IncludeParserManager) confFile(rel string) *ConfFile {
-	key := internStr(rel)
-
-	if f, ok := pm.cache.confFiles.get(key); ok {
-		return f
-	}
-
-	if !pm.fs.isFile(srcRootRel, rel) {
-		throwFmt("conf: @import %s: no such file", rel)
-	}
-
-	f := readConfFile(rel, string(concatChunks(pm.fs.readPath(key))))
-
-	pm.cache.confFiles.put(key, f)
-
-	return f
-}
-
-func sysinclFiles(pm *IncludeParserManager, root *ConfFile, platformEnv Environment) ([]string, map[STR]*ConfMacro, *ConfConditions) {
-	program := pm.confProgram(root, nil)
-	stmts := program.stmts
-	scratch := &confBindingScratch
-	needed := &scratch.needed
-
-	clear(needed.words.s)
-
-	neededKeys := append(scratch.keys[:0], envSYSINCL)
-
-	neededKeys = append(neededKeys, confCommandVariables...)
-
-	for _, key := range neededKeys {
-		needed.add(uint32(key))
-	}
-
-	scratch.used = slices.Grow(scratch.used[:0], len(stmts))[:len(stmts)]
-
-	used := scratch.used
-
-	clear(used)
-
-	need := func(key ENV) {
-		if !needed.has(uint32(key)) {
-			needed.add(uint32(key))
-			neededKeys = append(neededKeys, key)
-		}
-	}
-
-	for grown := true; grown; {
-		grown = false
-
-		for i, r := range stmts {
-			if used[i] || !needed.has(uint32(r.stmt.name)) {
-				continue
-			}
-
-			used[i], grown = true, true
-			confValueVars(r.stmt.value, func(name string) { need(internEnv(name)) })
-			r.file.condVars(r.stmt.branch, need)
-		}
-	}
-
-	scratch.keys = neededKeys
-
-	env := platformEnv.cloneInto(&scratch.selected)
-
-	for _, key := range neededKeys {
-		env.unbind(key)
-	}
-
-	for i, r := range stmts {
-		if used[i] && r.stmt.branch == 0 {
-			applyConfStmt(env, *r.stmt, false)
-		}
-	}
-
-	for i, r := range stmts {
-		if used[i] && r.stmt.branch != 0 && r.file.holds(r.stmt.branch, env) {
-			applyConfStmt(env, *r.stmt, true)
-		}
-	}
-
-	all := confVariables(stmts, platformEnv)
-
-	for _, r := range stmts {
-		if key := r.stmt.name; r.stmt.name != 0 && !platformEnv.hasBindingID(key) && all.hasBindingID(key) {
-			confStringBinding(all, key).apply(platformEnv, key)
-		}
-	}
-
-	for _, key := range confCommandVariables {
-		clear(scratch.seen.words.s)
-		bindConfCommandVariable(key, env, platformEnv, &scratch.seen)
-	}
-
-	return strings.Fields(expandConfScalar(env.string(envSYSINCL), env)), program.macros, program.conditionsFor(pm).bind(platformEnv)
-}
-
-func bindConfCommandVariable(key ENV, values, target Environment, seen *BitSet) {
-	if seen.has(uint32(key)) {
-		return
-	}
-
-	seen.add(uint32(key))
-
-	if values.hasBindingID(key) {
-		confStringBinding(values, key).apply(target, key)
-		confValueVars(values.string(key), func(dependency string) { bindConfCommandVariable(internEnv(dependency), values, target, seen) })
 	}
 }
 
@@ -619,26 +488,4 @@ func extractLiteralAnchoredPrefix(pat string) string {
 	}
 
 	return body
-}
-
-func confVariables(stmts []ConfStmtRef, platformEnv Environment) Environment {
-	all := platformEnv.cloneInto(&confBindingScratch.all)
-
-	for _, r := range stmts {
-		if r.stmt.branch == 0 {
-			applyConfStmt(all, *r.stmt, false)
-		}
-	}
-
-	for _, r := range stmts {
-		if r.stmt.branch == 0 {
-			continue
-		}
-
-		if r.file.holds(r.stmt.branch, all) {
-			applyConfStmt(all, *r.stmt, true)
-		}
-	}
-
-	return all
 }

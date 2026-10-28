@@ -291,7 +291,7 @@ func makePlatforms(fs FS, mf *MakeFlags, parsers *IncludeParserManager, rootYaCo
 
 	picRun := startYmakeConf(fs, srcRoot, mf.buildType, !mf.dist, localFlags, picFlags, targetTC)
 	pc := readPlatformConf(fs, parsers)
-	hostVars, hostRoot := hostRun.wait()
+	hostVars, hostRoot := hostRun.wait(parsers)
 
 	hostP = newPlatform(
 		hOS,
@@ -307,11 +307,11 @@ func makePlatforms(fs FS, mf *MakeFlags, parsers *IncludeParserManager, rootYaCo
 
 	targetCFlags := compilerFlagsFromConfig(rootTargetYaFlags, targetInternalYaFlags, "CFLAGS", os.Getenv("CFLAGS"))
 	targetCXXFlags := compilerFlagsFromConfig(rootTargetYaFlags, targetInternalYaFlags, "CXXFLAGS", os.Getenv("CXXFLAGS"))
-	targetVars, targetRoot := targetRun.wait()
+	targetVars, targetRoot := targetRun.wait(parsers)
 
 	targetP = newPlatform(tOS, tISA, mf.buildType, targetTC, targetVars, targetRoot, pc, targetCFlags, targetCXXFlags)
 	targetP.picMake = func() *Platform {
-		picVars, picRoot := picRun.wait()
+		picVars, picRoot := picRun.wait(parsers)
 
 		return newPlatform(tOS, tISA, mf.buildType, targetTC, picVars, picRoot, pc, targetCFlags, targetCXXFlags)
 	}

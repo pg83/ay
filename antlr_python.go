@@ -58,22 +58,8 @@ func bindRunAntlr4Python(args []ANY, version string) *antlrPythonArguments {
 	return stmt
 }
 
-func antlrPythonConfigValue(pm *IncludeParserManager, env Environment, name string) string {
-	if value, bound := env.lookup(name); bound {
-		return expandConfScalar(value, env)
-	}
-
-	conf := pm.confFile("build/ymake.core.conf")
-	local := env.clone()
-	key := internEnv(name)
-
-	for _, stmt := range conf.stmts {
-		if stmt.name == key && conf.holds(stmt.branch, local) {
-			applyConfStmt(local, stmt, stmt.branch != 0)
-		}
-	}
-
-	return expandConfScalar(local.string(internEnv(name)), local)
+func antlrPythonConfigValue(env Environment, name string) string {
+	return env.expand(env.string(internEnv(name)))
 }
 
 func collectAntlrPython(pm *IncludeParserManager, module string, source *RunAntlr4PythonStmt, env Environment, d *ModuleData) {
@@ -128,8 +114,8 @@ func collectAntlrPython(pm *IncludeParserManager, module string, source *RunAntl
 
 	run := AntlrRunInfo{DeclSeq: d.nextDeclSeq(), Macro: lowered.Macro, Args: lowered.Args, INFiles: lowered.INFiles,
 		OUTFiles: lowered.OUTFiles, OUTNoAutoFiles: lowered.OUTNoAutoFiles, CWD: lowered.CWD, OutputIncludes: lowered.OutputIncludes,
-		Jar: internStr(antlrPythonConfigValue(pm, env, prefix+"_JAR")).any()}
+		Jar: internStr(antlrPythonConfigValue(env, prefix+"_JAR")).any()}
 
 	d.antlrRuns = append(d.antlrRuns, run)
-	d.peerdirs = append(d.peerdirs, internStr(antlrPythonConfigValue(pm, env, prefix+"_PYTHON_RUNTIME")).any())
+	d.peerdirs = append(d.peerdirs, internStr(antlrPythonConfigValue(env, prefix+"_PYTHON_RUNTIME")).any())
 }

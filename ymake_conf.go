@@ -540,7 +540,7 @@ func ymakeConfEnv() []string {
 	return env
 }
 
-func (r *YmakeConfRun) wait() (map[string]string, *ConfFile) {
+func (r *YmakeConfRun) wait(parsers *IncludeParserManager) (map[string]string, *ConfFile) {
 	<-r.done
 
 	if r.err != nil {
@@ -551,7 +551,7 @@ func (r *YmakeConfRun) wait() (map[string]string, *ConfFile) {
 		fmt.Fprintf(os.Stderr, "Non-empty stderr from ymake_conf.py:\n%s", r.stderr.String())
 	}
 
-	return parseYmakeConf(r.stdout.Bytes()), readConfFile(ymakeConfScript, r.stdout.String())
+	return parseYmakeConf(r.stdout.Bytes()), parsers.cache.conf.readFile(ymakeConfScript, r.stdout.String())
 }
 
 func parseYmakeConf(out []byte) map[string]string {

@@ -211,3 +211,61 @@ func makeDefaultIfEnv() Environment {
 
 	return e
 }
+
+func evalConfAtomString(nodes []CondNode, i int32, env Environment) string {
+	n := &nodes[i]
+
+	switch n.Kind {
+	case ckConfIdent:
+		return env.string(n.Env)
+	case ckString:
+		return n.Name
+	case ckInt:
+		return strconv.Itoa(n.Ival)
+	}
+
+	throwFmt("macros: unexpected cond kind %d in comparator operand position", n.Kind)
+
+	return ""
+}
+
+func evalConfEq(nodes []CondNode, n *CondNode, env Environment) bool {
+	if confStringOperand(&nodes[n.L]) && confStringOperand(&nodes[n.R]) {
+		return evalConfAtomString(nodes, n.L, env) == evalConfAtomString(nodes, n.R, env)
+	}
+
+	return confNumber(nodes, n.L, env) == confNumber(nodes, n.R, env)
+}
+
+func evalConfLt(nodes []CondNode, n *CondNode, env Environment) bool {
+	if confStringOperand(&nodes[n.L]) && confStringOperand(&nodes[n.R]) {
+		return evalConfAtomString(nodes, n.L, env) < evalConfAtomString(nodes, n.R, env)
+	}
+
+	return confNumber(nodes, n.L, env) < confNumber(nodes, n.R, env)
+}
+
+func confStringOperand(n *CondNode) bool {
+	return n.Kind == ckConfIdent || n.Kind == ckString
+}
+
+func confNumber(nodes []CondNode, i int32, env Environment) int {
+	n := &nodes[i]
+
+	switch n.Kind {
+	case ckInt:
+		return n.Ival
+	case ckConfIdent, ckString:
+		if evalConfAtomString(nodes, i, env) != "" {
+			return 1
+		}
+
+		return 0
+	}
+
+	if evalCondAt(nodes, i, env) {
+		return 1
+	}
+
+	return 0
+}

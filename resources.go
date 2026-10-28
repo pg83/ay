@@ -636,7 +636,7 @@ func (e *EmitContext) genPrebuiltProgram() *ModuleEmitResult {
 	ctx, instance, d := e.ctx, e.instance, e.d
 	na := ctx.na
 	globals := e.resourceDeclarations()
-	primary := expandConfScalar(d.primaryOutput, Environment{s: &e.frame.ifEnv})
+	primary := Environment{s: &e.frame.ifEnv}.expand(d.primaryOutput)
 
 	var resourceRefs []NodeRef
 

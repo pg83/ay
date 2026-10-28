@@ -1437,7 +1437,7 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 
 			d.unit = resolveModuleUnit(v.Name, kind, language)
 
-			platform.initConfModule(env, v.Name.str(), moduleConfTag(v.Name, kind, language, d.unit.Tag), d.setVars)
+			platform.conf.initModule(env, v.Name.str(), moduleConfTag(v.Name, kind, language, d.unit.Tag), d.setVars)
 			env.setString(envPeerdirTags, expandAssignedScalarVarRef(modulePeerTags(v, d.unit, language), env))
 			env.setString(envREALPRJNAME, moduleRealPrjName(modulePath, v, d.unit))
 
@@ -1466,7 +1466,7 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 			d.moduleStmt = moduleStmtForKind(v, d.unit)
 
 			if hasCppDefaultAllocator(d.unit.Type) {
-				env.setDefaultString(envALLOCATOR, expandConfScalar("$DEFAULT_ALLOCATOR", env))
+				env.setDefaultString(envALLOCATOR, env.expand("$DEFAULT_ALLOCATOR"))
 			}
 
 			if isProgramModuleType(d.unit.Type) && !isGoModuleType(d.unit.Type) {
@@ -1802,7 +1802,7 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 			}
 
 			d.setVars[internStr(v.Name)] = internStr(value)
-			platform.recalcConf(env, v.NameEnv, d.setVars)
+			platform.conf.set(env, v.NameEnv, d.setVars)
 
 			if v.Name == "SWIG_LANG" {
 				d.unit.SwigLang = internStr(value)
@@ -1829,7 +1829,7 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 			}
 
 			collectModuleAutoinclude(ctx, modulePath, kind, language, env, d, onWarn, platform)
-			platform.finishConfModule(env, d.moduleStmt.Name.str(), moduleConfTag(d.moduleStmt.Name, kind, language, d.unit.Tag), d.setVars)
+			platform.conf.finishModule(env, d.moduleStmt.Name.str(), moduleConfTag(d.moduleStmt.Name, kind, language, d.unit.Tag), d.setVars)
 			d.pythonLint.bind(env)
 			d.finishResourcePeerPolicy()
 
@@ -1948,7 +1948,7 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 				}
 
 				d.setVars[internStr(v.VarName)] = internStr(value)
-				platform.recalcConf(env, v.NameEnv, d.setVars)
+				platform.conf.set(env, v.NameEnv, d.setVars)
 			}
 
 		case *ConfigureFileStmt:
@@ -2221,7 +2221,7 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 							break
 						}
 
-						platform.recalcConf(env, internEnv(arg.string()), d.setVars)
+						platform.conf.set(env, internEnv(arg.string()), d.setVars)
 					}
 				}
 			}
@@ -2732,7 +2732,7 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 		d.flags.NoRuntime = true
 		d.flags.NoUtil = true
 	case tokCompileCAsCxx:
-		env.setString(envExtraCFlags, expandConfScalar("$C_AS_CXX_FLAGS", env))
+		env.setString(envExtraCFlags, env.expand("$C_AS_CXX_FLAGS"))
 	case tokNoWshadow:
 		d.flags.NoWShadow = true
 	case tokNoExportDynamicSymbols:
@@ -2870,7 +2870,7 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 		if v.Name == tokGoEmbedPattern || d.moduleStmt != nil && d.moduleStmt.Name == tokGoTest {
 			importPath := modulePath
 
-			if imp := expandConfScalar(env.string(env_GO_IMPORT_PATH), env); imp != "" {
+			if imp := env.expand(env.string(env_GO_IMPORT_PATH)); imp != "" {
 				importPath = imp
 			}
 
@@ -2878,7 +2878,7 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 		}
 	case tokGoEmbedBindir, tokGoTestEmbedBindir, tokGoXtestEmbedBindir:
 		if v.Name == tokGoEmbedBindir || d.moduleStmt != nil && d.moduleStmt.Name == tokGoTest {
-			importPath := expandConfScalar(env.string(env_GO_IMPORT_PATH), env)
+			importPath := env.expand(env.string(env_GO_IMPORT_PATH))
 
 			if importPath == "" {
 				importPath = modulePath
@@ -2901,7 +2901,7 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 
 			importPath := modulePath
 
-			if imp := expandConfScalar(env.string(env_GO_IMPORT_PATH), env); imp != "" {
+			if imp := env.expand(env.string(env_GO_IMPORT_PATH)); imp != "" {
 				importPath = imp
 			}
 
@@ -2910,7 +2910,7 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 	case tokAllGoTestSrcs:
 		dir := modulePath
 
-		if imp := expandConfScalar(env.string(env_GO_IMPORT_PATH), env); imp != "" {
+		if imp := env.expand(env.string(env_GO_IMPORT_PATH)); imp != "" {
 			dir = imp
 		}
 
@@ -2926,7 +2926,7 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 	case tokAllGoSrcs:
 		dir := modulePath
 
-		if imp := expandConfScalar(env.string(env_GO_IMPORT_PATH), env); imp != "" {
+		if imp := env.expand(env.string(env_GO_IMPORT_PATH)); imp != "" {
 			dir = imp
 		}
 

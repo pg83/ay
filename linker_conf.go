@@ -55,26 +55,15 @@ func (c *LinkerConf) flags(p *Platform) LinkerFlags {
 	env.setString(envExportsFile, "${input:EXPORTS_FILE}")
 	env.setString(envSoname, "$_SONAME")
 
-	active := make([]bool, len(c.stmts))
-
-	for i, a := range c.stmts {
-		active[i] = linkerConfNameSet[a.name.string()] && c.holds(a.branch, env)
-	}
-
-	for i, a := range c.stmts {
-		if !active[i] {
-			continue
-		}
-
-		key := a.name
+	c.activeStatements(env, func(key ENV) bool { return linkerConfNameSet[key.string()] }, func(a ConfStmt) {
 		value := a.value
 
 		if a.op == confAppend {
-			value = env.string(key) + " " + value
+			value = env.string(a.name) + " " + value
 		}
 
-		env.setString(key, value)
-	}
+		env.setString(a.name, value)
+	})
 
 	for _, name := range linkerConfNames {
 		key := internEnv(name)

@@ -66,20 +66,21 @@ func (p ParsedSource) walkable(cache *SharedParseCache) []IncludeDirective {
 }
 
 type SharedParseCache struct {
-	confConditions []*ConfConditions
-	notsJSON       DenseMap[STR, ParsedJSON]
-	notsYAML       DenseMap[STR, map[string]any]
-	notsLocks      DenseMap[STR, *NotsLockfile]
-	directives     *BumpAllocator[IncludeDirective]
-	parsed         DenseMap[STR, ParsedSource]
-	parsedExtras   Vec[ParsedIncludeSet]
-	confFiles      DenseMap[STR, *ConfFile]
-	sysinclYAMLs   DenseMap[STR, []SysIncl]
-	peerPolicies   DenseMap[STR, *PeerPolicies]
+	notsJSON     DenseMap[STR, ParsedJSON]
+	notsYAML     DenseMap[STR, map[string]any]
+	notsLocks    DenseMap[STR, *NotsLockfile]
+	directives   *BumpAllocator[IncludeDirective]
+	parsed       DenseMap[STR, ParsedSource]
+	parsedExtras Vec[ParsedIncludeSet]
+	conf         *ConfState
+	confFiles    DenseMap[STR, *ConfFile]
+	sysinclYAMLs DenseMap[STR, []SysIncl]
+	peerPolicies DenseMap[STR, *PeerPolicies]
 }
 
 func newSharedParseCache() *SharedParseCache {
 	return &SharedParseCache{
+		conf:       newConfState(),
 		directives: newBumpAllocator[IncludeDirective](),
 	}
 }

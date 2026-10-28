@@ -74,7 +74,7 @@ func isNotsLegacyModule(name TOK) bool {
 func newNotsModule(kind TOK, language Language, env Environment) *NotsModule {
 	c := &NotsModule{Kind: kind, Configs: []string{"tsconfig.json"}, LocalCLI: env.bool(envTsLocalCli), Prepare: language == LangTSPrepare}
 
-	c.BaseExcludes = strings.Fields(expandConfScalar(env.string(envSetTsInputsBaseExcludes), env))
+	c.BaseExcludes = strings.Fields(env.expand(env.string(envSetTsInputsBaseExcludes)))
 	c.Hermetic = env.bool(envAutocheck) && !env.bool(envTsDisableHermeticNodeModules) && !c.LocalCLI
 
 	switch kind {
@@ -363,7 +363,7 @@ func (e *EmitContext) notsBaseArgsFor(pj map[string]any, c *NotsModule) ([]strin
 
 	env.setString(envPnpmRoot, pnpm.Value.string())
 
-	pmScript := expandConfScalar(env.string(envPmScript), env)
+	pmScript := env.expand(env.string(envPmScript))
 	args := []string{"--arcadia-root", "$(S)", "--arcadia-build-root", "$(B)", "--moddir", e.instance.Path.relString(), "--local-cli", local, "--nodejs-bin", node.Value.string() + "/node", "--pm-script", pmScript, "--pm-type", "pnpm"}
 
 	if parts[0] >= 25 && e.instance.Platform.OS == OSLinux {
@@ -408,15 +408,24 @@ func (e *EmitContext) notsRequirements() *Requirements {
 
 func (e *EmitContext) emitNotsNode(n NodeSpec) NodeRef {
 	env := Environment{s: &e.frame.ifEnv}
+	tool := env.string(envNotsTool)
 
-	for _, reference := range confVarRefRe.FindAllStringSubmatch(env.string(envNotsTool), -1) {
-		modifiers, _, _ := strings.Cut(reference[0], ":")
+	for from := 0; ; {
+		start, end, name := nextConfReference(tool, from, true)
+
+		if start == end {
+			break
+		}
+
+		from = end
+
+		modifiers, _, _ := strings.Cut(tool[start:end], ":")
 
 		if !slices.Contains(strings.Split(strings.TrimPrefix(modifiers, "${"), ";"), "input") {
 			continue
 		}
 
-		for _, input := range strings.Fields(expandConfScalar(env.string(internEnv(reference[1])), env)) {
+		for _, input := range strings.Fields(env.expand(env.string(internEnv(name)))) {
 			n.Inputs = append(n.Inputs, e.ctx.na.vfsList(source(input)))
 		}
 	}
@@ -625,7 +634,7 @@ func (e *EmitContext) emitNotsPrepare() *ModuleEmitResult {
 			env.setString(envTsProtoPeers, strings.Join(values, " "))
 
 			prepArgs = append(prepArgs, "--ts-proto-workspace-peers")
-			prepArgs = append(prepArgs, strings.Fields(expandConfScalar(strings.Join(slices.Compact(peers), " "), env))...)
+			prepArgs = append(prepArgs, strings.Fields(env.expand(strings.Join(slices.Compact(peers), " ")))...)
 		}
 	}
 

@@ -3,6 +3,7 @@ package main
 import (
 	"maps"
 	"slices"
+	"strings"
 )
 
 type EnvKind uint8
@@ -262,4 +263,93 @@ func (e Environment) setDefaultString(id ENV, v string) {
 	}
 
 	e.setString(id, v)
+}
+
+func (env Environment) expand(value string) string {
+	if !strings.Contains(value, "$") {
+		return value
+	}
+
+	for iteration := 1; value != ""; iteration++ {
+		var out strings.Builder
+
+		from := 0
+
+		for {
+			start, end, name := nextConfReference(value, from, false)
+
+			if start == end {
+				break
+			}
+
+			out.WriteString(value[from:start])
+			out.WriteString(env.string(internedEnv(name)))
+			from = end
+		}
+
+		expanded := value
+
+		if from != 0 {
+			out.WriteString(value[from:])
+			expanded = out.String()
+		}
+
+		if iteration >= 128 {
+			throwFmt("conf: scalar substitution exceeded the limit 128")
+		}
+
+		if expanded == value {
+			return value
+		}
+
+		value = expanded
+	}
+
+	return value
+}
+
+func nextConfReference(text string, from int, modifiers bool) (start, end int, name string) {
+	for from < len(text) {
+		dollar := strings.IndexByte(text[from:], '$')
+
+		if dollar < 0 {
+			break
+		}
+
+		start = from + dollar
+		from = start + 1
+
+		first := from
+		braced := first < len(text) && text[first] == '{'
+
+		if braced {
+			first++
+
+			if modifiers {
+				for i := first; i < len(text) && text[i] != '}'; i++ {
+					if text[i] == ':' {
+						first = i + 1
+
+						break
+					}
+				}
+			}
+		}
+
+		end = confNameEnd(text, first)
+
+		if end == first {
+			continue
+		}
+
+		if !braced {
+			return start, end, text[first:end]
+		}
+
+		if end < len(text) && text[end] == '}' {
+			return start, end + 1, text[first:end]
+		}
+	}
+
+	return len(text), len(text), ""
 }

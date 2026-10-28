@@ -10,7 +10,7 @@ var rustKV = KV{P: pkRS, PC: pcLightRed, ShowOut: true}
 func (e *EmitContext) emitRustModule(result *ModuleEmitResult, peers []ResolvedPeer, globals []ResourceDecl) *ModuleEmitResult {
 	ctx, instance, d, na := e.ctx, e.instance, e.d, e.ctx.na
 	env := Environment{s: &e.frame.ifEnv}
-	value := func(name string) string { return expandConfScalar(env.string(internEnv(name)), env) }
+	value := func(name string) string { return env.expand(env.string(internEnv(name))) }
 	values := func(name string) []string { return strings.Fields(value(name)) }
 	host := envRustHost(env)
 	kind := value("_RUST_KIND")
