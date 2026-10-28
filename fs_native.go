@@ -9,7 +9,11 @@ import (
 	"syscall"
 )
 
-const dirFDCacheSize = 768
+const (
+	dirFDCacheSize      = 768
+	fdCloseBatchSize    = 32
+	fdCloseQueueBatches = 8
+)
 
 type dirFDCacheEntry struct {
 	rel string
@@ -19,6 +23,8 @@ type dirFDCacheEntry struct {
 type fsBackend struct {
 	testReadErrors map[string]error
 	readBuf        []byte
+	fileCloseQueue chan fdCloseBatch
+	closePending   fdCloseBatch
 	direntBuf      []byte
 	mmapCur        []byte
 	rootFD         int
@@ -33,14 +39,38 @@ type fsBackend struct {
 func (fs *OsFS) initBackend() {
 	fs.readBuf = make([]byte, readChunkSize)
 	fs.testReadErrors = map[string]error{}
+	fs.fileCloseQueue = make(chan fdCloseBatch, fdCloseQueueBatches)
 	fs.dirFD = -1
 	fs.dirFDs = make(map[string]int, dirFDCacheSize)
 
 	fs.platformInit()
+
+	go fs.closeFiles()
+}
+
+type fdCloseBatch struct {
+	n   int
+	fds [fdCloseBatchSize]int32
+}
+
+func (fs *OsFS) closeFiles() {
+	for batch := range fs.fileCloseQueue {
+		for i := 0; i < batch.n; i++ {
+			syscall.Close(int(batch.fds[i]))
+		}
+	}
 }
 
 func (fs *OsFS) closeFile(fd int) {
-	syscall.Close(fd)
+	batch := &fs.closePending
+
+	batch.fds[batch.n] = int32(fd)
+	batch.n++
+
+	if batch.n == len(batch.fds) {
+		fs.fileCloseQueue <- *batch
+		batch.n = 0
+	}
 }
 
 func (fs *OsFS) sourcePathExists(rel string) bool {
