@@ -5156,6 +5156,10 @@ func peerdirModulePath(path ANY) STR {
 		path = peer.rel().any()
 	}
 
+	if s := path.string(); s != "" && s[0] != '/' && s[len(s)-1] != '/' && path.str().cleanPath() {
+		return path.str()
+	}
+
 	return internStr(cleanRel(strings.Trim(path.string(), "/")))
 }
 

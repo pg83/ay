@@ -18,6 +18,9 @@ var internTable = struct {
 	count    uint32
 	bound    uint32
 	bytes    *BumpAllocator[byte]
+
+	cleanSeen BitSet
+	cleanYes  BitSet
 }{
 	ids:      newIntMap[STR](1 << 19),
 	overflow: make(map[string]STR),
@@ -402,4 +405,31 @@ func internJoined(dir, rel string) STR {
 
 func (s STR) any() ANY {
 	return ANY(uint32(s) << 1)
+}
+
+func (id STR) cleanPath() bool {
+	t := &internTable
+
+	if t.cleanSeen.has(uint32(id)) {
+		return t.cleanYes.has(uint32(id))
+	}
+
+	s := id.string()
+	clean := s != "" && pathIsClean(s)
+
+	t.cleanSeen.add(uint32(id))
+
+	if clean {
+		t.cleanYes.add(uint32(id))
+	}
+
+	return clean
+}
+
+func (id STR) cleanRel() string {
+	if id.cleanPath() {
+		return id.string()
+	}
+
+	return cleanRel(id.string())
 }

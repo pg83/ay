@@ -285,7 +285,7 @@ func (fs *OsFS) resolveSourceUnder0(prefix, target STR, targetClean, cleanKnown 
 	clean := targetClean
 
 	if !cleanKnown {
-		clean = suffix != "" && pathIsClean(suffix)
+		clean = target.cleanPath()
 	}
 
 	var v STR

@@ -457,7 +457,7 @@ func (r *CodegenRegistry) lookupSplit(prefix VFS, suffixID STR) *GeneratedFileIn
 		}
 	}
 
-	if info == nil && suffixID.string() != "" && !pathIsClean(suffixID.string()) {
+	if info == nil && suffixID.string() != "" && !suffixID.cleanPath() {
 		joined := suffixID.string()
 
 		if prefixRel != "" {

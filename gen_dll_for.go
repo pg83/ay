@@ -64,7 +64,7 @@ func withDllForStmts(ctx *GenCtx, dir string, stmt *UnknownStmt, visit func([]St
 		out = append(out, set("EXPORTS_FILE", exports.string()))
 	}
 
-	out = appendDllForModule(out, ctx.parseFileCached(internJoined(forDir, "ya.make").string()), args)
+	out = appendDllForModule(out, ctx.parseFileCached(internJoined(forDir, "ya.make")), args)
 	visit(out)
 }
 

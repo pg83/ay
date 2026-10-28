@@ -29,7 +29,7 @@ func (ctx *GenCtx) withIncludedStmts(stmt *IncludeStmt, env Environment, visit f
 		throwFmt("%s:%d: INCLUDE file %s not found", stmt.File, stmt.Line, target)
 	}
 
-	stmts := ctx.parseFileCached(target)
+	stmts := ctx.parseFileCached(internStr(target))
 
 	if ctx.parsedFiles[target].IncludeOnce {
 		if env.s.included[target] {

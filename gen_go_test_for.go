@@ -30,7 +30,7 @@ func (d *ModuleData) withGoTestForStmts(ctx *GenCtx, dir string, stmt *UnknownSt
 		&SrcDirStmt{Dirs: []ANY{internStr(forDir).any()}, Line: stmt.Line},
 	})
 
-	visit(ctx.parseFileCached(internJoined(forDir, "ya.make").string()))
+	visit(ctx.parseFileCached(internJoined(forDir, "ya.make")))
 }
 
 func (d *ModuleData) moduleContentDeclaration(stmt *ModuleStmt) *ModuleStmt {

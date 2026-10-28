@@ -1023,8 +1023,8 @@ func unittestForPeerPath(moduleStmt *ModuleStmt) string {
 	return path.Clean(moduleStmt.Args[0].string())
 }
 
-func (ctx *GenCtx) parseFileCached(rel string) []Stmt {
-	rel = cleanRel(rel)
+func (ctx *GenCtx) parseFileCached(id STR) []Stmt {
+	rel := id.cleanRel()
 
 	if mf, ok := ctx.parsedFiles[rel]; ok {
 		return mf.Stmts
@@ -1038,12 +1038,12 @@ func (ctx *GenCtx) parseFileCached(rel string) []Stmt {
 }
 
 func moduleStmts(ctx *GenCtx, dir string) []Stmt {
-	return ctx.parseFileCached(internJoined(dir, "ya.make").string())
+	return ctx.parseFileCached(internJoined(dir, "ya.make"))
 }
 
 func (ctx *GenCtx) autoincludeStmts(dir string) []Stmt {
 	if inc, ok := ctx.autoincludeIdx.lintersMakeIncFor(dir); ok && ctx.fs.isFile(srcRootRel, inc.relString()) {
-		return ctx.parseFileCached(inc.relString())
+		return ctx.parseFileCached(inc.rel())
 	}
 
 	return nil

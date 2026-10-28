@@ -461,7 +461,7 @@ func composeCCPaths(instance ModuleInstance, srcRel string, srcVFS VFS, in Modul
 		return build(in.OutputStem.relString(), suffix), input
 	}
 
-	dir := cleanRel(instance.Path.relString())
+	dir := instance.Path.rel().cleanRel()
 	separator := "/"
 
 	if dir == "" {
