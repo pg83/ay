@@ -202,7 +202,13 @@ func stringizeToolchainPlatform(p map[string]any, sep string) string {
 }
 
 func resolveCxxToolchain(fs FS, cfg *YaConfToolchains, host, target string) *Toolchain {
+	cxxKey := []byte(`"` + toolchainCxxTool + `"`)
+
 	for _, key := range cfg.order {
+		if !bytes.Contains(cfg.raw[key], cxxKey) {
+			continue
+		}
+
 		var head yaConfToolchainHead
 
 		throw(json.Unmarshal(cfg.raw[key], &head))
