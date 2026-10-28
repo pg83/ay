@@ -33,7 +33,7 @@ func (e *EmitContext) emitLibraryAspSource(meta SrcMeta) {
 
 	pending := e.pendingEmit(pe)
 
-	e.register(GeneratedFileInfo{
+	e.register(GeneratedFileSpec{
 		OutputPath:     outVFS,
 		SourcePath:     srcVFS,
 		ProducerRef:    ref,

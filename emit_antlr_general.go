@@ -83,7 +83,7 @@ func (e *EmitContext) emitAntlrRunStmt(run AntlrRunInfo) {
 	}
 
 	for _, outVFS := range outVFSByToken {
-		e.register(GeneratedFileInfo{
+		e.register(GeneratedFileSpec{
 			OutputPath:      outVFS,
 			ProducerRef:     jvRef,
 			ProducerMainOut: outputs[0],

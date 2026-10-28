@@ -260,7 +260,7 @@ func (ctx *GenCtx) javaRegisterOutputs(jm *JavaModule, frame *ModuleFrame) {
 	}
 
 	for _, out := range outs {
-		reg.register(GeneratedFileInfo{
+		reg.register(GeneratedFileSpec{
 			OutputPath:      out,
 			OwnerModule:     jm.path,
 			ProducerRef:     jm.outRef,
@@ -316,7 +316,7 @@ func (ctx *GenCtx) javaRegisterFiles(jm *JavaModule) {
 			ctx.emit.emitReservedNodePtr(&node, ref)
 		})
 
-		reg.register(GeneratedFileInfo{
+		reg.register(GeneratedFileSpec{
 			OutputPath:      dst,
 			SourcePath:      src,
 			OwnerModule:     jm.path,
@@ -725,7 +725,7 @@ func (ctx *GenCtx) javaEmitEvProto(jm *JavaModule, scanCtx *ScanContext, ev VFS)
 
 	ref := ctx.emit.reserve()
 
-	ctx.javaReg(jm).register(GeneratedFileInfo{
+	ctx.javaReg(jm).register(GeneratedFileSpec{
 		OutputPath:      out,
 		OwnerModule:     jm.path,
 		ProducerRef:     ref,
@@ -813,7 +813,7 @@ func (ctx *GenCtx) javaEmitProtoPB(jm *JavaModule, globals map[string]VFS, scanC
 	ref := ctx.emit.reserve()
 	pending := ctx.javaPendingEmit(func() { b.emitTo(ref) })
 
-	ctx.javaReg(jm).register(GeneratedFileInfo{
+	ctx.javaReg(jm).register(GeneratedFileSpec{
 		OutputPath:      out,
 		OwnerModule:     jm.path,
 		ProducerRef:     ref,

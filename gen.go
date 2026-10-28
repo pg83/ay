@@ -225,7 +225,7 @@ type GenCtx struct {
 	tools            DenseMap[ARG, *ModuleEmitResult]
 	frames           []*ModuleFrame
 	frameDepth       int
-	exportLog        []ExportEntry
+	exportLog        Vec[ExportEntry]
 	exportRoots      [][2]int32
 	exportOrder      []*ModuleEmitResult
 	py3ccHeadChunk   []ANY
@@ -456,7 +456,7 @@ func (ctx *GenCtx) rootInstanceForDeclaration(dir string, demand ModuleDemand, d
 func (ctx *GenCtx) genTarget(targets DiscoveredTargets, rootDemand ModuleDemand) {
 	target := targets.Root
 	targetDir := target.Path
-	start := int32(len(ctx.exportLog))
+	start := int32(len(ctx.exportLog.s))
 
 	if target.Declaration != nil && isJavaModuleType(target.Declaration.Name) {
 		dirs := ctx.recurseClosure(filepath.Clean(targetDir))

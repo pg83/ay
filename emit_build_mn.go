@@ -49,7 +49,7 @@ func (e *EmitContext) emitBuildMnStmt(stmt *BuildMnStmt) {
 
 	pending := e.pendingEmit(pe)
 
-	e.register(GeneratedFileInfo{
+	e.register(GeneratedFileSpec{
 		OutputPath:     cppVFS,
 		ProducerRef:    ref,
 		GeneratorRefs:  e.ctx.na.refList(archiverRef),
@@ -58,7 +58,7 @@ func (e *EmitContext) emitBuildMnStmt(stmt *BuildMnStmt) {
 		OnUse: pending,
 	})
 
-	e.register(GeneratedFileInfo{
+	e.register(GeneratedFileSpec{
 		OutputPath:     rodataVFS,
 		ProducerRef:    ref,
 		GeneratorRefs:  e.ctx.na.refList(archiverRef),

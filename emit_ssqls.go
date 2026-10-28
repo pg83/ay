@@ -43,7 +43,7 @@ func (e *EmitContext) emitSsqlsSource(meta SrcMeta) {
 			bucket = parsedIncludesCpp
 		}
 
-		e.register(GeneratedFileInfo{OutputPath: output, PrimaryInput: src, ProducerRef: ref, ProducerMainOut: cpp, GeneratorRefs: na.refList(toolRef), ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: parsed[bucket]}, OnUse: pending})
+		e.register(GeneratedFileSpec{OutputPath: output, PrimaryInput: src, ProducerRef: ref, ProducerMainOut: cpp, GeneratorRefs: na.refList(toolRef), ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: parsed[bucket]}, OnUse: pending})
 	}
 
 	meta.Source = cpp.any()

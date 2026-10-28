@@ -57,7 +57,7 @@ func (e *EmitContext) emitGolaunchSource(kv *KV, script VFS, args []ANY, out VFS
 	node := Node{Platform: e.instance.Platform, KV: kv, Resources: usesPython3, Env: envVarsVCS, Cmds: na.cmdList(Cmd{CmdArgs: na.chunkList(args), Stdout: out, Env: envVarsVCS}), Inputs: NodeInputs{files: na.rootInputList(na.vfsList(inputs...))}, Outputs: na.vfsList(out)}
 	pending := e.pendingEmit(func() { e.emitReservedNode(node, ref) })
 
-	e.register(GeneratedFileInfo{OutputPath: out, ProducerRef: ref, OnUse: pending})
+	e.register(GeneratedFileSpec{OutputPath: out, ProducerRef: ref, OnUse: pending})
 	e.collectGoAutoSource(out, 0)
 }
 

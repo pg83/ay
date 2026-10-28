@@ -226,7 +226,7 @@ func (e *EmitContext) planCythonCpp() []CythonStmtPlan {
 			headerParsed = headerParsed[:len(headerParsed):len(headerParsed)]
 
 			for _, h := range headerVFS {
-				infos = append(infos, e.register(GeneratedFileInfo{
+				infos = append(infos, e.register(GeneratedFileSpec{
 					OutputPath:      h,
 					ProducerRef:     cyRef,
 					ParsedIncludes:  ParsedIncludeSet{parsedIncludesLocal: headerParsed},
@@ -387,7 +387,7 @@ func (e *EmitContext) emitCythonCppPlanned(plans []CythonStmtPlan) {
 			e.scanner.inheritInducedIncludes(output, nil, sourceInputs)
 		}
 
-		e.register(GeneratedFileInfo{
+		e.register(GeneratedFileSpec{
 			OutputPath:     generatedVFS,
 			BuildInputs:    buildInputs,
 			ProducerRef:    cyRef,

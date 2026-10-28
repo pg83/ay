@@ -194,11 +194,7 @@ func newConfConditions(stmts []ConfStmtRef) *ConfConditions {
 
 	refs := make([]ConfStmtRef, conditionalCount)
 
-	for key, slot := range counts.idx.s {
-		if slot == 0 {
-			continue
-		}
-
+	for key, slot := range counts.idx.each() {
 		n := counts.vals.s[slot]
 
 		c.byTarget.put(ENV(key), ConfTarget{stmts: refs[:0:n]})
@@ -235,10 +231,8 @@ func (c *ConfConditions) bind(env Environment) *ConfConditions {
 
 	copy(targets, c.byTarget.vals.s)
 
-	for key, slot := range c.byTarget.idx.s {
-		if slot != 0 {
-			targets[slot].inherited = confStringBinding(env, ENV(key))
-		}
+	for key, slot := range c.byTarget.idx.each() {
+		targets[slot].inherited = confStringBinding(env, ENV(key))
 	}
 
 	confTargetArena.commit(len(c.byTarget.vals.s))

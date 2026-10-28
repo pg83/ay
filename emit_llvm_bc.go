@@ -70,7 +70,7 @@ func (e *EmitContext) emitLlvmCompile(stmt LlvmCompileStmt) {
 	pending := e.pendingEmit(func() { e.emitReservedNode(node, ref) })
 
 	for _, output := range node.Outputs {
-		e.register(GeneratedFileInfo{OutputPath: output, ProducerRef: ref, ProducerMainOut: out, OnUse: pending})
+		e.register(GeneratedFileSpec{OutputPath: output, ProducerRef: ref, ProducerMainOut: out, OnUse: pending})
 	}
 
 	if stmt.Kind == tokBpfStatic && !e.producersOnly() {
@@ -238,7 +238,7 @@ func (e *EmitContext) emitLlvmBcStmt(stmt *LlvmBcStmt) {
 	}
 
 	for i, node := range pendNodes {
-		e.register(GeneratedFileInfo{
+		e.register(GeneratedFileSpec{
 			OutputPath:  node.Outputs[0],
 			ProducerRef: pendRefs[i],
 			OnUse:       pending,
@@ -263,7 +263,7 @@ func (e *EmitContext) emitLlvmBcStmt(stmt *LlvmBcStmt) {
 			e.emitReservedNode(node, ref)
 		})
 
-		e.register(GeneratedFileInfo{OutputPath: object, ProducerRef: ref, OnUse: llcPending})
+		e.register(GeneratedFileSpec{OutputPath: object, ProducerRef: ref, OnUse: llcPending})
 
 		if !e.producersOnly() {
 			e.codegen.use(object)

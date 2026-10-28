@@ -45,7 +45,7 @@ func (e *EmitContext) emitJVDownstreamCPCC(
 
 		pending := e.pendingEmit(pe)
 
-		e.register(GeneratedFileInfo{
+		e.register(GeneratedFileSpec{
 			OutputPath:     g4CppPath,
 			ProducerRef:    cpRef,
 			GeneratorRefs:  nil,

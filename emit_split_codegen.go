@@ -95,7 +95,7 @@ func (e *EmitContext) emitSplitCodegen(sc *SplitCodegenStmt) (NodeRef, []string)
 	e.collectCPPStyleInputs(inputIn)
 
 	for _, out := range outputs {
-		info := GeneratedFileInfo{
+		info := GeneratedFileSpec{
 			OutputPath:      out,
 			ProducerRef:     scRef,
 			ProducerMainOut: part0,

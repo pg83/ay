@@ -6,6 +6,31 @@ import (
 )
 
 type GeneratedFileInfo struct {
+	attributes       *GeneratedFileAttributes
+	id               uint32
+	BuildInputs      []VFS
+	OnUse            *PendingEmit
+	GeneratorRefs    []NodeRef
+	ClosureLeaves    []VFS
+	InputLoopSources []VFS
+	LateOutputs      []VFS
+	ModuleOutputs    []VFS
+
+	IncludedBuildInputs []VFS
+	IncludedInputs      *IncludedInputPlan
+	OutputPath          VFS
+	SourcePath          VFS
+	PrimaryInput        VFS
+	OwnerModule         VFS
+	OwnerSerial         uint32
+	ProducerRef         NodeRef
+	ProducerMainOut     VFS
+	ModuleType          TOK
+	InputsOnly          bool
+	ResourceObjcopy     bool
+}
+
+type GeneratedFileSpec struct {
 	GztProto           *GztProtoProducer
 	ModuleIncludedDeps *ModuleIncludedDeps
 	ModuleInputs       *ModuleInputInfo
@@ -101,6 +126,8 @@ func (p *PendingEmit) fire() {
 }
 
 type CodegenRegistry struct {
+	attributes      GeneratedFileAttributes
+	infoCount       uint32
 	inducedIncludes map[VFS][]TypedInclude
 	files           ScannedFileCache
 	moduleBuildDeps DenseMap[NodeRef, []NodeRef]
@@ -138,11 +165,11 @@ func fireGenerated(info *GeneratedFileInfo) {
 	pending.fire()
 }
 
-func (r *CodegenRegistry) register(info GeneratedFileInfo) *GeneratedFileInfo {
+func (r *CodegenRegistry) register(info GeneratedFileSpec) *GeneratedFileInfo {
 	if existing, ok := r.byRel.get(info.OutputPath.rel()); ok {
 		if existing.InputsOnly {
 			info.ClosureLeaves = r.na.dedupClosure(info.ClosureLeaves, [][]VFS{existing.ClosureLeaves})
-			*existing = info
+			r.store(existing, info)
 			r.splitGeneration++
 
 			return existing
@@ -155,14 +182,14 @@ func (r *CodegenRegistry) register(info GeneratedFileInfo) *GeneratedFileInfo {
 
 		discarded := r.na.geninfos.one()
 
-		*discarded = info
+		r.store(discarded, info)
 
 		return discarded
 	}
 
 	stored := r.na.geninfos.one()
 
-	*stored = info
+	r.store(stored, info)
 
 	r.byRel.put(stored.OutputPath.rel(), stored)
 	r.splitGeneration++
@@ -175,7 +202,7 @@ func (r *CodegenRegistry) forwardTemplateInputs(output VFS, templates, textTempl
 
 	if !ok {
 		info = r.na.geninfos.one()
-		*info = GeneratedFileInfo{OutputPath: output, InputsOnly: true}
+		r.store(info, GeneratedFileSpec{OutputPath: output, InputsOnly: true})
 		r.byRel.put(output.rel(), info)
 	}
 
@@ -192,11 +219,11 @@ func (r *CodegenRegistry) forwardModuleIncludedDeps(output VFS, deps *ModuleIncl
 
 	if !ok {
 		info = r.na.geninfos.one()
-		*info = GeneratedFileInfo{OutputPath: output, InputsOnly: true}
+		r.store(info, GeneratedFileSpec{OutputPath: output, InputsOnly: true})
 		r.byRel.put(output.rel(), info)
 	}
 
-	info.ModuleIncludedDeps = deps
+	info.attributes.moduleIncludedDeps.put(info.id, deps)
 }
 
 func (r *CodegenRegistry) moduleIncludedDeps(input VFS) *ModuleIncludedDeps {
@@ -205,7 +232,7 @@ func (r *CodegenRegistry) moduleIncludedDeps(input VFS) *ModuleIncludedDeps {
 	}
 
 	if info, ok := r.byRel.get(input.rel()); ok {
-		return info.ModuleIncludedDeps
+		return info.moduleIncludedDeps()
 	}
 
 	return nil
@@ -271,6 +298,8 @@ func (r *CodegenRegistry) inheritParsedIncludes(output VFS, producer NodeRef, in
 		return
 	}
 
+	parsed := info.parsedIncludes()
+
 	for _, pair := range [...][2]ParsedIncludeBucket{
 		{parsedIncludesAll, parsedIncludesLocal},
 		{parsedIncludesAll, parsedIncludesAll},
@@ -283,14 +312,16 @@ func (r *CodegenRegistry) inheritParsedIncludes(output VFS, producer NodeRef, in
 			continue
 		}
 
-		previous := info.ParsedIncludes[pair[1]]
+		previous := parsed[pair[1]]
 		merged := r.na.dirs.alloc(len(previous) + len(added))
 		k := copy(merged, previous)
 
 		k += copy(merged[k:], added)
 		r.na.dirs.commit(k)
-		info.ParsedIncludes[pair[1]] = merged[:k:k]
+		parsed[pair[1]] = merged[:k:k]
 	}
+
+	info.attributes.parsedIncludes.put(info.id, parsed)
 }
 
 func (r *CodegenRegistry) setMainOut(ref NodeRef, outputs []VFS) {
@@ -328,7 +359,7 @@ func (r *CodegenRegistry) moduleInputs(path VFS) *ModuleInputInfo {
 		return nil
 	}
 
-	return info.ModuleInputs
+	return info.moduleInputs()
 }
 
 func (r *CodegenRegistry) setModuleInputs(output VFS, moduleType TOK, includes, roots, globals, globalInputs, cythonIncludes []VFS, passPeers bool) {
@@ -336,15 +367,18 @@ func (r *CodegenRegistry) setModuleInputs(output VFS, moduleType TOK, includes, 
 
 	if !ok {
 		info = r.na.geninfos.one()
-		*info = GeneratedFileInfo{OutputPath: output, InputsOnly: true, ModuleType: moduleType}
+		r.store(info, GeneratedFileSpec{OutputPath: output, InputsOnly: true, ModuleType: moduleType})
 		r.byRel.put(output.rel(), info)
 	}
 
-	if info.ModuleInputs == nil {
-		info.ModuleInputs = r.na.moduleInputs.one()
+	inputs := info.moduleInputs()
+
+	if inputs == nil {
+		inputs = r.na.moduleInputs.one()
+		info.attributes.moduleInputs.put(info.id, inputs)
 	}
 
-	*info.ModuleInputs = ModuleInputInfo{Includes: includes, IncludeRoots: roots, Globals: globals, GlobalInputs: globalInputs, CythonGlobalIncludes: cythonIncludes, PassPeers: passPeers}
+	*inputs = ModuleInputInfo{Includes: includes, IncludeRoots: roots, Globals: globals, GlobalInputs: globalInputs, CythonGlobalIncludes: cythonIncludes, PassPeers: passPeers}
 }
 
 func (r *CodegenRegistry) lookupSTR(id STR) *GeneratedFileInfo {
@@ -408,7 +442,7 @@ func (r *CodegenRegistry) lookupSplit(prefix VFS, suffixID STR) *GeneratedFileIn
 	var slot uint32
 
 	if info != nil {
-		slot = r.byRel.idx.s[info.OutputPath.rel()]
+		slot = r.byRel.idx.get(uint32(info.OutputPath.rel()))
 	}
 
 	r.bySplit.put(key, splitLookup{slot: slot, generation: r.splitGeneration})
@@ -446,7 +480,7 @@ func (r *CodegenRegistry) generatorRefsFor(closure Closure) []NodeRef {
 
 func (r *CodegenRegistry) buildParsedFor(out VFS) ParsedIncludeSet {
 	if info := r.use(out); info != nil {
-		return info.ParsedIncludes
+		return info.parsedIncludes()
 	}
 
 	return ParsedIncludeSet{}
@@ -479,7 +513,7 @@ func (info *GeneratedFileInfo) providesOutputInclude(d IncludeDirective) bool {
 
 	rel := normalisePath(pathDir(info.OutputPath.relString()) + "/" + d.target.string())
 
-	for _, entry := range info.ParsedIncludes.bucket(parsedIncludesLocal) {
+	for _, entry := range info.parsedIncludes().bucket(parsedIncludesLocal) {
 		if v := entry.target.vfs(); v.isBuild() && v.relString() == rel {
 			return true
 		}

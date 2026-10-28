@@ -112,7 +112,7 @@ func (e *EmitContext) emitArchiveAsmNode(
 
 	rodataRef := e.emitNode(n)
 
-	e.register(GeneratedFileInfo{
+	e.register(GeneratedFileSpec{
 		OutputPath:  rodataVFS,
 		ProducerRef: rodataRef,
 	})

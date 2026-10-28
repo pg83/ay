@@ -61,7 +61,7 @@ func (e *EmitContext) emitFromArchive(stmt FromArchiveEntry) {
 	parsed := extractionOutputIncludes(na, stmt.OutputIncludes)
 
 	for i, out := range outputs {
-		e.register(GeneratedFileInfo{
+		e.register(GeneratedFileSpec{
 			OutputPath: out, ProducerRef: ref, OnUse: pending,
 			ParsedIncludes:  ParsedIncludeSet{parsedIncludesLocal: parsed},
 			ProducerMainOut: outputs[0],

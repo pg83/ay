@@ -61,7 +61,7 @@ func (e *EmitContext) emitRD(srcRel string, srcVFS VFS, yasmLD NodeRef, extraInp
 	ref := e.emitNode(node)
 
 	for _, output := range node.Outputs {
-		e.register(GeneratedFileInfo{
+		e.register(GeneratedFileSpec{
 			OutputPath:      output,
 			ProducerRef:     ref,
 			ProducerMainOut: asmVFS,

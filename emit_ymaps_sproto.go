@@ -50,7 +50,7 @@ func (e *EmitContext) emitYmapsSprotoStmt(srcTok ANY) {
 
 	onUse := e.pendingEmit(pe)
 
-	e.register(GeneratedFileInfo{
+	e.register(GeneratedFileSpec{
 		OutputPath:     sprotoH,
 		ProducerRef:    sprotoRef,
 		GeneratorRefs:  e.ctx.na.refList(sprotocLDRef),

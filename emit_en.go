@@ -112,7 +112,7 @@ func (e *EmitContext) emitEnumSrcStmt(stmt *GenerateEnumSerializationStmt) {
 
 	e.collectCPPStyleInputs(headerInput)
 
-	e.register(GeneratedFileInfo{
+	e.register(GeneratedFileSpec{
 		OutputPath:      serializedCPPPath,
 		SourcePath:      headerInput,
 		ProducerRef:     enRef,
@@ -122,7 +122,7 @@ func (e *EmitContext) emitEnumSrcStmt(stmt *GenerateEnumSerializationStmt) {
 	})
 
 	if withHeader {
-		e.register(GeneratedFileInfo{
+		e.register(GeneratedFileSpec{
 			OutputPath:      serializedHPath,
 			SourcePath:      headerInput,
 			ProducerRef:     enRef,
@@ -165,7 +165,7 @@ func (e *EmitContext) emitAliceEnumSrcStmt(stmt *GenerateEnumSerializationStmt) 
 		}, ref)
 	})
 
-	info = e.register(GeneratedFileInfo{
+	info = e.register(GeneratedFileSpec{
 		OutputPath:     output,
 		SourcePath:     header,
 		ProducerRef:    ref,

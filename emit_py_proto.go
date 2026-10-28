@@ -422,7 +422,7 @@ func (e *EmitContext) emitPyProtoSource(srcTok ANY, protoSrcVFS VFS, srcGroup in
 	pyPBPE := e.pendingEmitter(pending)
 
 	for _, out := range outputs {
-		e.register(GeneratedFileInfo{OutputPath: out, ProducerRef: pyPBRef, OnUse: pyPBPE})
+		e.register(GeneratedFileSpec{OutputPath: out, ProducerRef: pyPBRef, OnUse: pyPBPE})
 	}
 
 	e.codegen.setMainOut(pyPBRef, outputs)

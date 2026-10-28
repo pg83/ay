@@ -55,7 +55,7 @@ func (e *EmitContext) emitSwigC() {
 			inputChunks := InputChunks(inputs[:len(inputs):len(inputs)])
 			swigClosure := collectBucketVFS(ctx.na, cvBuckets, func(VFS) bool { return true })
 
-			outputInfo.ParsedIncludes = ParsedIncludeSet{parsedIncludesLocal: collectSwigInducedIncludes(e.scanner, srcVFS, swigClosure)}
+			outputInfo.attributes.parsedIncludes.put(outputInfo.id, ParsedIncludeSet{parsedIncludesLocal: collectSwigInducedIncludes(e.scanner, srcVFS, swigClosure)})
 
 			var cppArgs []ANY
 
@@ -85,14 +85,14 @@ func (e *EmitContext) emitSwigC() {
 
 		pending := e.pendingEmit(pe)
 
-		outputInfo = e.register(GeneratedFileInfo{
+		outputInfo = e.register(GeneratedFileSpec{
 			OutputPath:    cOutVFS,
 			ProducerRef:   swRef,
 			GeneratorRefs: e.ctx.na.refList(swigRef),
 			OnUse:         pending,
 		})
 
-		e.register(GeneratedFileInfo{
+		e.register(GeneratedFileSpec{
 			OutputPath:      pyOutVFS,
 			ProducerRef:     swRef,
 			ProducerMainOut: cOutVFS,

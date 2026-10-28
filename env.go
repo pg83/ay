@@ -11,7 +11,7 @@ type EnvStore struct {
 	val              []STR
 	kind             []EnvKind
 	textInputs       map[ENV][]SourceTextRange
-	resourceBindings []STR
+	resourceBindings []EnvResourceBinding
 	included         map[string]bool
 }
 
@@ -29,11 +29,7 @@ func (s *EnvStore) ensure(e ENV) {
 		return
 	}
 
-	n := len(s.kind) * 2
-
-	if n <= int(e) {
-		n = int(e) + 1
-	}
+	n := max(int(e)+1, int(envTable.count))
 
 	if cap(s.kind) >= n && cap(s.val) >= n {
 		old := len(s.kind)
@@ -46,6 +42,8 @@ func (s *EnvStore) ensure(e ENV) {
 
 		return
 	}
+
+	n = max(n, 2*len(s.kind))
 
 	nk := make([]EnvKind, n)
 
@@ -113,8 +111,12 @@ func (e Environment) clone() Environment {
 }
 
 func (e Environment) cloneInto(dst *EnvStore) Environment {
-	dst.val = append(dst.val[:0], e.s.val...)
-	dst.kind = append(dst.kind[:0], e.s.kind...)
+	if len(e.s.kind) > 0 {
+		dst.ensure(ENV(len(e.s.kind) - 1))
+	}
+
+	clear(dst.val[copy(dst.val, e.s.val):])
+	clear(dst.kind[copy(dst.kind, e.s.kind):])
 	dst.textInputs = maps.Clone(e.s.textInputs)
 	dst.resourceBindings = append(dst.resourceBindings[:0], e.s.resourceBindings...)
 	dst.included = maps.Clone(e.s.included)
@@ -125,9 +127,7 @@ func (e Environment) cloneInto(dst *EnvStore) Environment {
 func (e Environment) setVFS(id ENV, v VFS) {
 	delete(e.s.textInputs, id)
 
-	if int(id) < len(e.s.resourceBindings) {
-		e.s.resourceBindings[id] = 0
-	}
+	e.s.clearResourceBinding(id)
 
 	e.s.ensure(id)
 	e.s.kind[id] = envVFS
@@ -137,9 +137,7 @@ func (e Environment) setVFS(id ENV, v VFS) {
 func (e Environment) setStrID(id ENV, v STR) {
 	delete(e.s.textInputs, id)
 
-	if int(id) < len(e.s.resourceBindings) {
-		e.s.resourceBindings[id] = 0
-	}
+	e.s.clearResourceBinding(id)
 
 	e.s.ensure(id)
 	e.s.kind[id] = envStr
@@ -163,9 +161,7 @@ func (e Environment) setString(id ENV, v string) {
 func (e Environment) setInt(id ENV, n int) {
 	delete(e.s.textInputs, id)
 
-	if int(id) < len(e.s.resourceBindings) {
-		e.s.resourceBindings[id] = 0
-	}
+	e.s.clearResourceBinding(id)
 
 	e.s.ensure(id)
 	e.s.kind[id] = envInt

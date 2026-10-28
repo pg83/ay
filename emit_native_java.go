@@ -29,7 +29,7 @@ func (e *EmitContext) emitNativeJavaProgram(program NativeJavaProgram) {
 	})
 
 	for _, output := range outputs {
-		e.register(GeneratedFileInfo{OutputPath: output, ProducerRef: ref, ProducerMainOut: outputs[0], OnUse: pending})
+		e.register(GeneratedFileSpec{OutputPath: output, ProducerRef: ref, ProducerMainOut: outputs[0], OnUse: pending})
 	}
 
 	for _, name := range r.out {

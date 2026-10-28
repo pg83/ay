@@ -234,7 +234,7 @@ func (e *EmitContext) emitRunProgram(stmt *RunProgramStmt) {
 		registeredPROut[out] = true
 		e.scanner.inheritInducedIncludes(out, induced, snap.inVFSs[:len(snap.inVFSs)-stmt.INNoParse])
 
-		e.register(GeneratedFileInfo{
+		e.register(GeneratedFileSpec{
 			OutputPath:      out,
 			BuildInputs:     snap.inVFSs,
 			ProducerRef:     prRef,
@@ -338,7 +338,7 @@ func prInputInducedIncludes(ctx *GenCtx, registry *CodegenRegistry, scanner *Inc
 
 			if input.isBuild() {
 				if info := registry.lookup(input); info != nil {
-					parsed = info.ParsedIncludes
+					parsed = info.parsedIncludes()
 				}
 			} else {
 				if extIsProto(input.relString()) {

@@ -1,15 +1,13 @@
 package main
 
 type DenseMap[K ~uint32, V any] struct {
-	idx  Vec[uint32]
+	idx  DenseIndex
 	vals Vec[V]
 }
 
 func (m *DenseMap[K, V]) get(k K) (V, bool) {
-	if int(k) < len(m.idx.s) {
-		if slot := m.idx.s[k]; slot != 0 {
-			return *unsafeAt(m.vals.s, uint64(slot)), true
-		}
+	if slot := m.idx.get(uint32(k)); slot != 0 {
+		return *unsafeAt(m.vals.s, uint64(slot)), true
 	}
 
 	var zero V
@@ -18,19 +16,16 @@ func (m *DenseMap[K, V]) get(k K) (V, bool) {
 }
 
 func (m *DenseMap[K, V]) put(k K, v V) {
-	if int(k) < len(m.idx.s) {
-		if slot := m.idx.s[k]; slot != 0 {
-			*unsafeAt(m.vals.s, uint64(slot)) = v
+	if slot := m.idx.get(uint32(k)); slot != 0 {
+		*unsafeAt(m.vals.s, uint64(slot)) = v
 
-			return
-		}
+		return
 	}
 
 	if len(m.vals.s) == 0 {
 		m.vals.pushBack(*new(V))
 	}
 
-	m.idx.ensureLen(int(k) + 1)
 	m.vals.pushBack(v)
-	m.idx.s[k] = uint32(len(m.vals.s) - 1)
+	m.idx.put(uint32(k), uint32(len(m.vals.s)-1))
 }

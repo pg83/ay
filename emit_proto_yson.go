@@ -80,7 +80,7 @@ func (e *EmitContext) emitYtOrmProtoYson(st GoCodegenStmt) {
 	})
 
 	for _, out := range outs {
-		e.register(GeneratedFileInfo{OutputPath: out, ProducerRef: ref, ProducerMainOut: outs[0]})
+		e.register(GeneratedFileSpec{OutputPath: out, ProducerRef: ref, ProducerMainOut: outs[0]})
 		e.collectGoAutoSource(out, st.seq)
 	}
 }

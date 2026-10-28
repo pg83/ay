@@ -206,9 +206,9 @@ func compilerFlagForwarding(value string, env Environment, parameters map[string
 
 		store.textInputs = make(map[ENV][]SourceTextRange)
 
-		for id, bound := range store.resourceBindings {
-			if bound == key {
-				store.textInputs[ENV(id)] = []SourceTextRange{{0, len(env.string(ENV(id)))}}
+		for _, bound := range store.resourceBindings {
+			if bound.key == key {
+				store.textInputs[bound.id] = []SourceTextRange{{0, len(env.string(bound.id))}}
 			}
 		}
 

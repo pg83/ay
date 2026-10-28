@@ -123,7 +123,7 @@ func (e *EmitContext) emitArchive(
 		e.emitReservedNode(n, arRef)
 	})
 
-	e.register(GeneratedFileInfo{
+	e.register(GeneratedFileSpec{
 		OutputPath:  archiveVFS,
 		ProducerRef: arRef,
 		OnUse:       pending,

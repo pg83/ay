@@ -32,7 +32,7 @@ func (e *EmitContext) emitNativeSwigSource(meta SrcMeta, python bool) {
 		buckets := cv.bucketList()
 		closure := collectBucketVFS(na, buckets, func(VFS) bool { return true })
 
-		cppInfo.ParsedIncludes = ParsedIncludeSet{parsedIncludesLocal: collectSwigInducedIncludes(e.scanner, src, closure)}
+		cppInfo.attributes.parsedIncludes.put(cppInfo.id, ParsedIncludeSet{parsedIncludesLocal: collectSwigInducedIncludes(e.scanner, src, closure)})
 
 		var args []ANY
 
@@ -64,7 +64,7 @@ func (e *EmitContext) emitNativeSwigSource(meta SrcMeta, python bool) {
 		}, ref)
 	})
 
-	cppInfo = e.register(GeneratedFileInfo{
+	cppInfo = e.register(GeneratedFileSpec{
 		OutputPath:    cpp,
 		ProducerRef:   ref,
 		GeneratorRefs: na.refList(swigRef),
@@ -72,7 +72,7 @@ func (e *EmitContext) emitNativeSwigSource(meta SrcMeta, python bool) {
 		OnUse:         pending,
 	})
 
-	e.register(GeneratedFileInfo{
+	e.register(GeneratedFileSpec{
 		OutputPath:      moduleOutput,
 		ProducerRef:     ref,
 		ProducerMainOut: cpp,

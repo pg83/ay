@@ -125,7 +125,7 @@ func (e *EmitContext) emitRagel6Source(meta SrcMeta, options, constArgs []ANY) {
 
 	pending := e.pendingEmit(pe)
 
-	e.register(GeneratedFileInfo{
+	e.register(GeneratedFileSpec{
 		OutputPath:     r6Out,
 		ProducerRef:    r6Ref,
 		GeneratorRefs:  e.ctx.na.refList(ragelLDRef),

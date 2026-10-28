@@ -63,8 +63,8 @@ func (e *EmitContext) completePackagePeer(instance ModuleInstance) (*ModuleEmitR
 			e.refs = append(e.refs, res.LDRef)
 		}
 
-		if info := e.codegen.lookup(moduleOutputPath(res)); info != nil && info.CollectionPeers != nil {
-			for _, peer := range info.CollectionPeers.Modules {
+		if info := e.codegen.lookup(moduleOutputPath(res)); info != nil && info.collectionPeers() != nil {
+			for _, peer := range info.collectionPeers().Modules {
 				peer.Demand = demandLinked
 
 				if isLinkingModuleType(e.ctx.moduleName(peer.Path.relString())) {
@@ -88,8 +88,8 @@ func (e *EmitContext) appendPackagePeer(out []VFS, res *ModuleEmitResult, seen m
 
 	seen[res] = true
 
-	if info := e.codegen.lookup(moduleOutputPath(res)); info != nil && info.CollectionPeers != nil && info.CollectionPeers.PassPeers {
-		for _, peer := range info.CollectionPeers.Modules {
+	if info := e.codegen.lookup(moduleOutputPath(res)); info != nil && info.collectionPeers() != nil && info.collectionPeers().PassPeers {
+		for _, peer := range info.collectionPeers().Modules {
 			peer.Demand = demandLinked
 
 			if isLinkingModuleType(e.ctx.moduleName(peer.Path.relString())) {

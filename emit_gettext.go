@@ -30,5 +30,5 @@ func (e *EmitContext) emitGettextSource(input, output VFS) {
 		}, ref)
 	})
 
-	e.register(GeneratedFileInfo{OutputPath: output, ProducerRef: ref, OnUse: pending})
+	e.register(GeneratedFileSpec{OutputPath: output, ProducerRef: ref, OnUse: pending})
 }

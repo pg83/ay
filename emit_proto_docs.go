@@ -86,7 +86,7 @@ func (e *EmitContext) emitDocsProtoSubmodule() *ModuleEmitResult {
 			Outputs: na.vfsList(out), KV: &protoDocsKV, ForeignDepRefs: na.refList(protocRef, docRef), Resources: usesPython3,
 		})
 
-		e.register(GeneratedFileInfo{OutputPath: out, ProducerRef: ref})
+		e.register(GeneratedFileSpec{OutputPath: out, ProducerRef: ref})
 		generated = append(generated, out)
 	}
 

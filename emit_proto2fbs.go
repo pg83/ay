@@ -46,7 +46,7 @@ func (e *EmitContext) emitProto2Fbs(stmt Proto2FbsStmt, output VFS) {
 		e.emitReservedNode(node, ref)
 	})
 
-	e.register(GeneratedFileInfo{
+	e.register(GeneratedFileSpec{
 		OutputPath: output, SourcePath: input, PrimaryInput: input, ProducerRef: ref,
 		GeneratorRefs: na.refList(toolRef), OnUse: pending,
 		ParsedIncludes: ParsedIncludeSet{

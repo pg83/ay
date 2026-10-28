@@ -551,7 +551,7 @@ func (e *EmitContext) producersOnly() bool {
 	return e.instance.Demand == demandNone && (e.instance.Kind == KindForeignDescent || e.instance.Language == LangFbsJavaNative)
 }
 
-func (e *EmitContext) register(info GeneratedFileInfo) *GeneratedFileInfo {
+func (e *EmitContext) register(info GeneratedFileSpec) *GeneratedFileInfo {
 	info.OwnerModule = e.instance.Path
 	info.OwnerSerial = e.frame.serial
 

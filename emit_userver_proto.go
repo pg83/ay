@@ -237,7 +237,7 @@ func (e *EmitContext) emitUserverProtos(batch UserverProtoBatch) {
 		})
 
 		for _, out := range outputs {
-			e.register(GeneratedFileInfo{
+			e.register(GeneratedFileSpec{
 				OutputPath: out, PrimaryInput: src, ProducerRef: ref,
 				ProducerMainOut: outputs[0],
 				GeneratorRefs:   na.refList(protocRef, toolRef), ParsedIncludes: parsed, OnUse: pending,

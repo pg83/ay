@@ -475,7 +475,7 @@ func (s *IncludeScanner) parsedIncludes(vfsPath VFS, ctxParser IncludeDirectiveP
 			return nil, nil, info, parsedIncludesLocal
 		}
 
-		set := info.ParsedIncludes
+		set := info.parsedIncludes()
 
 		if _, ok := parser.(CIncludeDirectiveParser); ok {
 			inducedBucket = parsedIncludesCpp

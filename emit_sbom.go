@@ -121,7 +121,7 @@ func (e *EmitContext) emitSbomComponent(realPrjName string) (*NodeRef, *VFS) {
 
 	ref := e.emitNode(node)
 
-	e.register(GeneratedFileInfo{OutputPath: out, ProducerRef: ref})
+	e.register(GeneratedFileSpec{OutputPath: out, ProducerRef: ref})
 
 	return &ref, &out
 }
@@ -162,7 +162,7 @@ func (e *EmitContext) emitSbomToolchainComponent(toolchainName, ver string) (*No
 
 	ref := e.emitNode(node)
 
-	e.register(GeneratedFileInfo{OutputPath: out, ProducerRef: ref})
+	e.register(GeneratedFileSpec{OutputPath: out, ProducerRef: ref})
 
 	return &ref, &out
 }

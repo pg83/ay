@@ -441,7 +441,7 @@ func (ctx *GenCtx) javaRegisterRunPrograms(jm *JavaModule) {
 		pending := ctx.javaPendingEmit(func() { ctx.javaEmitRunProgram(jm, r, ref) })
 
 		for _, output := range outputs {
-			ctx.javaReg(jm).register(GeneratedFileInfo{
+			ctx.javaReg(jm).register(GeneratedFileSpec{
 				OutputPath:      output,
 				OwnerModule:     jm.path,
 				ProducerRef:     ref,

@@ -209,7 +209,7 @@ func (e *EmitContext) buildObjcopyNode(oc *ObjcopyEmitCtx, kv *KV, outputObj VFS
 
 	ref := e.emitNode(node)
 
-	e.register(GeneratedFileInfo{OutputPath: outputObj, ProducerRef: ref, ResourceObjcopy: true})
+	e.register(GeneratedFileSpec{OutputPath: outputObj, ProducerRef: ref, ResourceObjcopy: true})
 
 	return ref
 }
@@ -659,7 +659,7 @@ func (e *EmitContext) packRawResourceChunk(chunk []ResourceItem, p ResourcePack)
 	auxRef := ctx.emit.reserve()
 	meta := e.resourceSourceMeta(chunk, aux)
 
-	e.register(GeneratedFileInfo{
+	e.register(GeneratedFileSpec{
 		OutputPath:    aux,
 		ProducerRef:   auxRef,
 		GeneratorRefs: na.refList(rescompilerRef),

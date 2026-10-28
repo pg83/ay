@@ -99,9 +99,9 @@ func (e *EmitContext) emitUsrvFile(file UsrvFile) {
 	info := e.codegen.mustInfo(out)
 
 	if strings.HasSuffix(file.File, ".proto") || strings.HasSuffix(file.File, ".fbs") {
-		info.ParsedIncludes = ParsedIncludeSet{parsedIncludesLocal: parsed}
+		info.attributes.parsedIncludes.put(info.id, ParsedIncludeSet{parsedIncludesLocal: parsed})
 	} else {
-		info.ParsedIncludes = ParsedIncludeSet{parsedIncludesCpp: parsed, parsedIncludesHeader: parsed}
+		info.attributes.parsedIncludes.put(info.id, ParsedIncludeSet{parsedIncludesCpp: parsed, parsedIncludesHeader: parsed})
 	}
 
 	if file.Auto {

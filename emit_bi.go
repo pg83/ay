@@ -86,7 +86,7 @@ func (e *EmitContext) emitBuildInfoStmt() {
 
 	pending := e.pendingEmit(pe)
 
-	e.register(GeneratedFileInfo{
+	e.register(GeneratedFileSpec{
 		OutputPath:  build(outPrefix, d.createBuildInfoFor.string()),
 		ProducerRef: biRef,
 		OnUse:       pending,

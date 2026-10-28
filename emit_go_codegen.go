@@ -347,7 +347,7 @@ func (e *EmitContext) emitGoCodegenStmt(st GoCodegenStmt) {
 		Resources:      usesPython3,
 	})
 
-	e.register(GeneratedFileInfo{OutputPath: out, ProducerRef: ref})
+	e.register(GeneratedFileSpec{OutputPath: out, ProducerRef: ref})
 	e.collectGoAutoSource(out, st.seq)
 }
 

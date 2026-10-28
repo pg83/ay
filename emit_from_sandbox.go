@@ -41,7 +41,7 @@ func (e *EmitContext) existingSandbox(stmt *FromSandboxStmt) *GeneratedFileInfo 
 	out := copyFileOutputVFS(e.instance.Path.relString(), outputs[0].string())
 	info := e.codegen.lookup(out)
 
-	if info == nil || info.OwnerModule != e.instance.Path || info.Sandbox == nil || info.Sandbox.Python3 != e.d.tc.Python3 || !sameSandboxStmt(info.Sandbox.Stmt, stmt) {
+	if info == nil || info.OwnerModule != e.instance.Path || info.sandbox() == nil || info.sandbox().Python3 != e.d.tc.Python3 || !sameSandboxStmt(info.sandbox().Stmt, stmt) {
 		return nil
 	}
 
@@ -65,15 +65,15 @@ func (r *SandboxRecipe) linkMembers(ref NodeRef) (memberRefs []NodeRef, memberPa
 
 func (e *EmitContext) emitFromSandbox(stmt *FromSandboxStmt) (memberRefs []NodeRef, memberPaths []VFS) {
 	if info := e.existingSandbox(stmt); info != nil {
-		for _, out := range info.Sandbox.Outputs {
-			local := *info
+		for _, out := range info.sandbox().Outputs {
+			local := info.specification()
 
 			local.OutputPath = out
 
 			e.register(local)
 		}
 
-		return info.Sandbox.linkMembers(info.ProducerRef)
+		return info.sandbox().linkMembers(info.ProducerRef)
 	}
 
 	ctx := e.ctx
@@ -84,7 +84,7 @@ func (e *EmitContext) emitFromSandbox(stmt *FromSandboxStmt) (memberRefs []NodeR
 	recipe := &SandboxRecipe{Stmt: stmt, Outputs: outVFSs, Auto: auto, Python3: e.d.tc.Python3}
 
 	for _, out := range outVFSs {
-		e.register(GeneratedFileInfo{
+		e.register(GeneratedFileSpec{
 			OutputPath:     out,
 			Sandbox:        recipe,
 			ProducerRef:    ref,

@@ -37,7 +37,7 @@ func (e *EmitContext) emitLibraryFmlSource(meta SrcMeta) {
 
 	pending := e.pendingEmit(pe)
 
-	e.register(GeneratedFileInfo{
+	e.register(GeneratedFileSpec{
 		OutputPath:    outVFS,
 		ProducerRef:   ref,
 		GeneratorRefs: e.ctx.na.refList(toolRef),

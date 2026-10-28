@@ -431,7 +431,7 @@ func (e *EmitContext) emitNotsNode(n Node) NodeRef {
 	ref := e.emitNode(n)
 
 	for _, out := range n.Outputs {
-		e.register(GeneratedFileInfo{OutputPath: out, ProducerRef: ref, ProducerMainOut: n.Outputs[0]})
+		e.register(GeneratedFileSpec{OutputPath: out, ProducerRef: ref, ProducerMainOut: n.Outputs[0]})
 	}
 
 	return ref
@@ -479,7 +479,7 @@ func (e *EmitContext) emitNotsPrepare() *ModuleEmitResult {
 	output := build(dir, "/package.json")
 
 	if info := e.codegen.use(output); info != nil {
-		return notsResult(output, info.ProducerRef, c, info.Nots.Globals)
+		return notsResult(output, info.ProducerRef, c, info.nots().Globals)
 	}
 
 	var pj map[string]any
@@ -509,7 +509,7 @@ func (e *EmitContext) emitNotsPrepare() *ModuleEmitResult {
 
 		if info := e.codegen.lookup(*result.ARPath); info != nil {
 			peerRefs = append(peerRefs, info.GeneratorRefs...)
-			peerInputs = append(peerInputs, info.NotsInputs...)
+			peerInputs = append(peerInputs, info.notsInputs()...)
 		}
 
 		peerRefs = append(peerRefs, result.ARRef)
@@ -653,9 +653,9 @@ func (e *EmitContext) emitNotsPrepare() *ModuleEmitResult {
 	state := &NotsPrepared{Head: head, Globals: globals, Nodejs: nodejs, ResourceNames: resourceNames, ToolRef: toolRef, ToolPath: toolPath, HasDependencies: hasDeps, Schema: e.d.moduleStmt.Schema}
 	info := e.codegen.lookup(output)
 
-	info.Nots = state
+	info.attributes.nots.put(info.id, state)
 	info.GeneratorRefs = peerRefs
-	info.NotsInputs = peerInputs
+	info.attributes.notsInputs.put(info.id, peerInputs)
 
 	return notsResult(output, prepRef, c, globals)
 }
@@ -675,24 +675,24 @@ func (e *EmitContext) emitNotsBuild() *ModuleEmitResult {
 	}
 
 	if info := e.codegen.use(output); info != nil {
-		result := notsResult(output, info.ProducerRef, c, info.Nots.Globals)
+		result := notsResult(output, info.ProducerRef, c, info.nots().Globals)
 
-		result.TestSuites = e.notsBuildSuites(dir, info.Nots, e.notsFiles(dir, c.Outputs, c.Excludes))
+		result.TestSuites = e.notsBuildSuites(dir, info.nots(), e.notsFiles(dir, c.Outputs, c.Excludes))
 
 		return result
 	}
 
 	prepRef := prepare.ARRef
-	state := e.codegen.lookup(*prepare.ARPath).Nots
+	state := e.codegen.lookup(*prepare.ARPath).nots()
 	head, globals, resourceNames, peerRefs, toolRef, hasDeps := state.Head, state.Globals, state.ResourceNames, e.codegen.lookup(*prepare.ARPath).GeneratorRefs, state.ToolRef, state.HasDependencies
 	autotar := buildScriptsAutotarGendirsPy
 	cmds := []Cmd{{CmdArgs: na.chunkList(na.anyList(wrapccPython3STR.any(), autotar.any(), strUnpack.any(), strExt.any(), strGentar.any())), Env: envVarsVCS, Cwd: build(dir)}}
 	inputs := []VFS{autotar, state.ToolPath, *prepare.ARPath}
 
-	inputs = append(inputs, e.codegen.lookup(*prepare.ARPath).NotsInputs...)
+	inputs = append(inputs, e.codegen.lookup(*prepare.ARPath).notsInputs()...)
 
 	buildFrom := append([]VFS{autotar}, inputs[2:]...)
-	buildLeaves := append(slices.Clone(e.codegen.lookup(*prepare.ARPath).NotsInputs), *prepare.ARPath)
+	buildLeaves := append(slices.Clone(e.codegen.lookup(*prepare.ARPath).notsInputs()), *prepare.ARPath)
 	outputs := []VFS{output}
 
 	if c.VCSInfo != "" && c.Kind != tokTsPackage {
@@ -810,9 +810,9 @@ func (e *EmitContext) emitNotsBuild() *ModuleEmitResult {
 	ref := e.emitNotsNode(n)
 	info := e.codegen.lookup(output)
 
-	info.Nots = state
+	info.attributes.nots.put(info.id, state)
 	info.GeneratorRefs = dedupRefs(append(slices.Clone(peerRefs), prepRef))
-	info.NotsInputs = dedup(buildLeaves)
+	info.attributes.notsInputs.put(info.id, dedup(buildLeaves))
 
 	result := notsResult(output, ref, c, globals)
 
@@ -859,7 +859,7 @@ func (e *EmitContext) emitNotsTest() *ModuleEmitResult {
 
 		if info := e.codegen.lookup(*result.ARPath); info != nil {
 			refs = append(refs, info.GeneratorRefs...)
-			inputs = append(inputs, info.NotsInputs...)
+			inputs = append(inputs, info.notsInputs()...)
 		}
 	}
 

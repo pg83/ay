@@ -101,7 +101,7 @@ func (ctx *GenCtx) emitCanonicalTestData(resource string) NodeRef {
 
 	ref := ctx.emit.emit(&Node{Platform: testNoPlatform, Env: sortedEnvVars(ctx.tests.commonEnvMap()), Cmds: ctx.na.cmdList(Cmd{CmdArgs: ctx.na.chunkList(testArgs(args)), Cwd: cwdVFS(testBuildRoot)}), Inputs: NodeInputs{files: ctx.na.inputList(ctx.na.vfsList(buildScriptsFetchFromPy, script))}, Outputs: ctx.na.vfsList(output, log), KV: &KV{P: pkDL, PC: pcCyan, ShowOutBool: true}, Requirements: &requirements})
 
-	registry.register(GeneratedFileInfo{OutputPath: output, ProducerRef: ref})
+	registry.register(GeneratedFileSpec{OutputPath: output, ProducerRef: ref})
 
 	return ref
 }

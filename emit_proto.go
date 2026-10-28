@@ -370,7 +370,7 @@ func (e *EmitContext) emitProtoPB(protoVFS VFS, cfg ProtoPBConfig, pe *PbModuleE
 
 	if generatedProto {
 		if info := e.codegen.use(protoVFS); info != nil {
-			genProtoParsed = info.ParsedIncludes.bucket(parsedIncludesLocal)
+			genProtoParsed = info.parsedIncludes().bucket(parsedIncludesLocal)
 		}
 	}
 
@@ -439,7 +439,7 @@ func (e *EmitContext) emitProtoPB(protoVFS VFS, cfg ProtoPBConfig, pe *PbModuleE
 			genRefs = genRefs[:len(genRefs):len(genRefs)]
 		}
 
-		e.register(GeneratedFileInfo{
+		e.register(GeneratedFileSpec{
 			OutputPath:     pbH,
 			PrimaryInput:   protoVFS,
 			ProducerRef:    pbRef,
@@ -456,7 +456,7 @@ func (e *EmitContext) emitProtoPB(protoVFS VFS, cfg ProtoPBConfig, pe *PbModuleE
 		na.dirs.commit(cn)
 		ccParsed = ccParsed[:cn:cn]
 
-		e.register(GeneratedFileInfo{
+		e.register(GeneratedFileSpec{
 			OutputPath:     pbCC,
 			ProducerRef:    pbRef,
 			GeneratorRefs:  genRefs,
@@ -499,7 +499,7 @@ func (e *EmitContext) emitProtoPB(protoVFS VFS, cfg ProtoPBConfig, pe *PbModuleE
 	pbGenRefs := pe.pbGenRefs
 	pbCCRefs := pe.pbGenRefs[:pbCCRefCount:pbCCRefCount]
 
-	e.register(GeneratedFileInfo{
+	e.register(GeneratedFileSpec{
 		OutputPath:    pbH,
 		PrimaryInput:  protoVFS,
 		ProducerRef:   pbRef,
@@ -527,7 +527,7 @@ func (e *EmitContext) emitProtoPB(protoVFS VFS, cfg ProtoPBConfig, pe *PbModuleE
 		yaffCC := build(protoBase, plugin.OutputSuffixes[1])
 		yaffParsed := ParsedIncludeSet{parsedIncludesLocal: na.dirList(IncludeDirective{kind: includeQuoted, target: includeTarget(pbH.rel().any())})}
 
-		e.register(GeneratedFileInfo{
+		e.register(GeneratedFileSpec{
 			OutputPath:     yaffH,
 			ProducerRef:    pbRef,
 			GeneratorRefs:  pluginRefs,
@@ -536,7 +536,7 @@ func (e *EmitContext) emitProtoPB(protoVFS VFS, cfg ProtoPBConfig, pe *PbModuleE
 			Scoped:         &pending.scoped,
 		})
 
-		e.register(GeneratedFileInfo{
+		e.register(GeneratedFileSpec{
 			OutputPath:     yaffCC,
 			ProducerRef:    pbRef,
 			GeneratorRefs:  pbGenRefs,
@@ -554,7 +554,7 @@ func (e *EmitContext) emitProtoPB(protoVFS VFS, cfg ProtoPBConfig, pe *PbModuleE
 		na.dirs.commit(len(depsParsed))
 		depsParsed = depsParsed[:len(depsParsed):len(depsParsed)]
 
-		e.register(GeneratedFileInfo{
+		e.register(GeneratedFileSpec{
 			OutputPath:     pbDepsH,
 			ProducerRef:    pbRef,
 			GeneratorRefs:  pbGenRefs,
@@ -566,7 +566,7 @@ func (e *EmitContext) emitProtoPB(protoVFS VFS, cfg ProtoPBConfig, pe *PbModuleE
 
 	pbCCParsed := pbHCompile
 
-	e.register(GeneratedFileInfo{
+	e.register(GeneratedFileSpec{
 		OutputPath:     pbCC,
 		ProducerRef:    pbRef,
 		GeneratorRefs:  pbCCRefs,
@@ -616,7 +616,7 @@ func (e *EmitContext) emitProtoPB(protoVFS VFS, cfg ProtoPBConfig, pe *PbModuleE
 				parsed = ParsedIncludeSet{parsedIncludesLocal: grpcHParsed}
 			}
 
-			e.register(GeneratedFileInfo{
+			e.register(GeneratedFileSpec{
 				OutputPath:     out,
 				ProducerRef:    pbRef,
 				GeneratorRefs:  outputRefs,
@@ -628,7 +628,7 @@ func (e *EmitContext) emitProtoPB(protoVFS VFS, cfg ProtoPBConfig, pe *PbModuleE
 	}
 
 	if cfg.grpc {
-		e.register(GeneratedFileInfo{
+		e.register(GeneratedFileSpec{
 			OutputPath:     grpcPbCC,
 			ProducerRef:    pbRef,
 			GeneratorRefs:  pbCCRefs,
@@ -637,7 +637,7 @@ func (e *EmitContext) emitProtoPB(protoVFS VFS, cfg ProtoPBConfig, pe *PbModuleE
 			Scoped:         &pending.scoped,
 		})
 
-		e.register(GeneratedFileInfo{
+		e.register(GeneratedFileSpec{
 			OutputPath:     grpcPbH,
 			ProducerRef:    pbRef,
 			GeneratorRefs:  pe.grpcHRefs,

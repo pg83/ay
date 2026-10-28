@@ -83,6 +83,6 @@ func (e *EmitContext) emitGoFlatcSource(meta SrcMeta) {
 
 	ref := e.emitNode(node)
 
-	e.register(GeneratedFileInfo{OutputPath: out, ProducerRef: ref})
+	e.register(GeneratedFileSpec{OutputPath: out, ProducerRef: ref})
 	e.collectGoAutoSource(out, meta.Seq)
 }

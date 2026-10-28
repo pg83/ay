@@ -84,7 +84,7 @@ func (e *EmitContext) emitSdcMetas() []VFS {
 		pending := e.pendingEmit(func() { e.emitReservedNode(node, ref) })
 
 		for _, output := range outputs {
-			e.register(GeneratedFileInfo{OutputPath: output, ProducerRef: ref, ProducerMainOut: out, GeneratorRefs: na.refList(toolRef), OnUse: pending})
+			e.register(GeneratedFileSpec{OutputPath: output, ProducerRef: ref, ProducerMainOut: out, GeneratorRefs: na.refList(toolRef), OnUse: pending})
 		}
 
 		globals = append(globals, global)

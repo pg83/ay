@@ -64,7 +64,7 @@ func (e *EmitContext) emitBaseCodegen(bc *BaseCodegenStmt) {
 
 	pending := e.pendingEmit(pe)
 
-	e.register(GeneratedFileInfo{
+	e.register(GeneratedFileSpec{
 		OutputPath:      prefixH,
 		ProducerRef:     bcRef,
 		ProducerMainOut: prefixCpp,
@@ -74,7 +74,7 @@ func (e *EmitContext) emitBaseCodegen(bc *BaseCodegenStmt) {
 		OnUse: pending,
 	})
 
-	e.register(GeneratedFileInfo{
+	e.register(GeneratedFileSpec{
 		OutputPath:      prefixCpp,
 		ProducerRef:     bcRef,
 		ProducerMainOut: prefixCpp,

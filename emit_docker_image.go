@@ -55,8 +55,8 @@ func (ctx *GenCtx) emitDockerImage(image string) NodeRef {
 		KV: &KV{P: pkIM, PC: pcLightCyan, ShowOutBool: true}, Requirements: ctx.tests.contextReqs,
 	})
 
-	registry.register(GeneratedFileInfo{OutputPath: out, ProducerRef: ref})
-	registry.register(GeneratedFileInfo{OutputPath: info, ProducerRef: ref})
+	registry.register(GeneratedFileSpec{OutputPath: out, ProducerRef: ref})
+	registry.register(GeneratedFileSpec{OutputPath: info, ProducerRef: ref})
 
 	return ref
 }

@@ -101,7 +101,7 @@ func (e *EmitContext) emitImplib(stmt ImplibStmt) {
 			leaves = na.vfsList(outs[0])
 		}
 
-		e.register(GeneratedFileInfo{OutputPath: out, ProducerRef: ref, OnUse: pending, ProducerMainOut: outs[0], ClosureLeaves: leaves})
+		e.register(GeneratedFileSpec{OutputPath: out, ProducerRef: ref, OnUse: pending, ProducerMainOut: outs[0], ClosureLeaves: leaves})
 		e.enqueueSrc(SrcMeta{Source: out.any(), Prio: stmtPrioDefault})
 	}
 }

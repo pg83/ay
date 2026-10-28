@@ -526,7 +526,7 @@ func (e *EmitContext) emitPyYapyc(ps PySrc, tool PyccTool) {
 
 	pyRef := e.emitNode(node)
 
-	e.register(GeneratedFileInfo{
+	e.register(GeneratedFileSpec{
 		OutputPath:    outputPath,
 		ProducerRef:   pyRef,
 		GeneratorRefs: generatorRefs,
@@ -866,7 +866,7 @@ func (e *EmitContext) emitPyRegistration(registration PyRegistration) {
 		spec.EnvAddIncl = appendCythonCCAddIncl(na, d.cc.AddIncl)
 	}
 
-	e.register(GeneratedFileInfo{
+	e.register(GeneratedFileSpec{
 		OutputPath:  regCppVFS,
 		ProducerRef: pyRef,
 	})

@@ -10,7 +10,7 @@ var internTable = struct {
 	ids      *IntMap[STR]
 	overflow map[string]STR
 	flatStr  []string
-	flatLo   []uint64
+	flatLo   Vec[uint64]
 	cells    PageVec[InternCell]
 	cellPage []InternCell
 	cellBase uint32
@@ -22,7 +22,7 @@ var internTable = struct {
 	ids:      newIntMap[STR](1 << 19),
 	overflow: make(map[string]STR),
 	flatStr:  make([]string, 1, 1<<20),
-	flatLo:   make([]uint64, 1, 1<<20),
+	flatLo:   Vec[uint64]{s: make([]uint64, 1, bumpChunkInitial)},
 	count:    1,
 	bytes:    newBumpAllocator[byte](),
 }
@@ -37,7 +37,7 @@ func internString(id STR) string {
 }
 
 func internLo(id STR) uint64 {
-	return *unsafeAt(internTable.flatLo, uint64(id))
+	return *unsafeAt(internTable.flatLo.s, uint64(id))
 }
 
 func internOwnedCopy(b []byte) string {
@@ -84,11 +84,11 @@ func internPlace(s string, lo uint64) STR {
 
 	if grow := int(id) + 1 - len(internTable.flatStr); grow > 0 {
 		internTable.flatStr = append(internTable.flatStr, make([]string, grow)...)
-		internTable.flatLo = append(internTable.flatLo, make([]uint64, grow)...)
+		internTable.flatLo.ensureLen(int(id) + 1)
 	}
 
 	internTable.flatStr[id] = s
-	internTable.flatLo[id] = lo
+	internTable.flatLo.s[id] = lo
 	internTable.cells.set(id, InternCell{str: s, lo: lo})
 
 	return STR(id)
@@ -103,7 +103,7 @@ func internAppend(s string, lo uint64) STR {
 	cell := InternCell{str: s, lo: lo}
 
 	internTable.flatStr = append(internTable.flatStr, s)
-	internTable.flatLo = append(internTable.flatLo, lo)
+	internTable.flatLo.pushBack(lo)
 
 	if internTable.cellPage == nil {
 		zeroPage := make([]InternCell, 1)

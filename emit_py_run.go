@@ -235,7 +235,7 @@ func (e *EmitContext) emitRunPython(stmt *RunPythonStmt, resourceUses []STR) []A
 	registerPYOutput := func(out VFS, parsed []IncludeDirective) {
 		e.scanner.inheritInducedIncludes(out, induced, snap.inVFSs[:len(snap.inVFSs)-stmt.INNoParse])
 
-		e.register(GeneratedFileInfo{
+		e.register(GeneratedFileSpec{
 			OutputPath:      out,
 			ProducerRef:     pyRef,
 			ProducerMainOut: outputs[0],

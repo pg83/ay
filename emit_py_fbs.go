@@ -116,7 +116,7 @@ func (e *EmitContext) emitPyFbsGroup(files []PyFbsSource) {
 
 	fp := e.emitNode(node)
 
-	e.register(GeneratedFileInfo{OutputPath: out, ProducerRef: fp})
+	e.register(GeneratedFileSpec{OutputPath: out, ProducerRef: fp})
 
 	cc := build(dir, "/", name, ".", version.string(), "_raw.cpp")
 	script := buildScriptsCompilePysrcPy
@@ -136,6 +136,6 @@ func (e *EmitContext) emitPyFbsGroup(files []PyFbsSource) {
 		Inputs: NodeInputs{files: na.rootInputList(na.vfsList(script, out, res), pycc.binaries, ctx.scripts[script.rel()]), roots: na.inputList(na.vfsList(script, out), ctx.scripts[script.rel()])}, Outputs: na.vfsList(cc), DepRefs: na.refList(fp), ForeignDepRefs: toolRefs, KV: kv, Resources: usesPython3,
 	})
 
-	e.register(GeneratedFileInfo{OutputPath: cc, ProducerRef: p3, GeneratorRefs: toolRefs})
+	e.register(GeneratedFileSpec{OutputPath: cc, ProducerRef: p3, GeneratorRefs: toolRefs})
 	e.enqueueSrc(SrcMeta{Source: cc.any(), Prio: stmtPrioDefault, Global: true})
 }

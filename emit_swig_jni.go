@@ -86,14 +86,14 @@ func (e *EmitContext) emitLibrarySwigSource(meta SrcMeta) {
 		swigClosure := collectBucketVFS(na, cvBuckets, func(VFS) bool { return true })
 		induced := collectSwigInducedIncludes(e.scanner, srcVFS, swigClosure)
 
-		hdrInfo.ParsedIncludes = ParsedIncludeSet{parsedIncludesLocal: induced}
+		hdrInfo.attributes.parsedIncludes.put(hdrInfo.id, ParsedIncludeSet{parsedIncludesLocal: induced})
 
 		cppParsed := make([]IncludeDirective, 0, 1+len(induced))
 
 		cppParsed = append(cppParsed, IncludeDirective{kind: includeQuoted, target: includeTarget(hdr.rel().any())})
 		cppParsed = append(cppParsed, induced...)
 
-		cppInfo.ParsedIncludes = ParsedIncludeSet{parsedIncludesLocal: cppParsed}
+		cppInfo.attributes.parsedIncludes.put(cppInfo.id, ParsedIncludeSet{parsedIncludesLocal: cppParsed})
 
 		args := swigJNIHead(python3, swigBin, srcVFS, srcRel)
 
@@ -123,14 +123,14 @@ func (e *EmitContext) emitLibrarySwigSource(meta SrcMeta) {
 
 	pending := e.pendingEmit(pe)
 
-	hdrInfo = e.register(GeneratedFileInfo{
+	hdrInfo = e.register(GeneratedFileSpec{
 		OutputPath:    hdr,
 		ProducerRef:   swRef,
 		GeneratorRefs: na.refList(swigRef),
 		OnUse:         pending,
 	})
 
-	cppInfo = e.register(GeneratedFileInfo{
+	cppInfo = e.register(GeneratedFileSpec{
 		OutputPath:      cpp,
 		ProducerRef:     swRef,
 		ProducerMainOut: hdr,
@@ -158,7 +158,7 @@ func (ctx *GenCtx) javaRegisterSwigJsrcs(jm *JavaModule) {
 		jsrc := build(jm.dir, "/", src, ".jsrc")
 		ref := ctx.emit.reserve()
 
-		reg.register(GeneratedFileInfo{
+		reg.register(GeneratedFileSpec{
 			OutputPath:      jsrc,
 			OwnerModule:     jm.path,
 			ProducerRef:     ref,

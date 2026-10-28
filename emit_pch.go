@@ -56,7 +56,7 @@ func (e *EmitContext) emitPchFile(stmt PchFileStmt) {
 		pch.scoped.rendered = pch
 	})
 
-	e.register(GeneratedFileInfo{OutputPath: out, PrimaryInput: header, ProducerRef: ref, GeneratorRefs: na.refList(toolRef), OnUse: pending, Scoped: &pch.scoped})
+	e.register(GeneratedFileSpec{OutputPath: out, PrimaryInput: header, ProducerRef: ref, GeneratorRefs: na.refList(toolRef), OnUse: pending, Scoped: &pch.scoped})
 }
 
 func (p *pchCommand) cmds(scope *CommandScope) []Cmd {

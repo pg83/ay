@@ -78,7 +78,7 @@ func (e *EmitContext) emitLibrarySCSource(meta SrcMeta) {
 
 	pending := e.pendingEmit(pe)
 
-	e.register(GeneratedFileInfo{
+	e.register(GeneratedFileSpec{
 		OutputPath:     headerVFS,
 		ProducerRef:    scRef,
 		GeneratorRefs:  e.ctx.na.refList(domLDRef),

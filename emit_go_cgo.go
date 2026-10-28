@@ -238,7 +238,7 @@ func (e *EmitContext) emitGoCopyWithContext(srcVFS, dstVFS VFS, domain ScanDomai
 
 	pending := e.pendingEmit(pe)
 
-	e.register(GeneratedFileInfo{
+	e.register(GeneratedFileSpec{
 		OutputPath:     dstVFS,
 		SourcePath:     srcVFS,
 		ProducerRef:    ref,
@@ -412,16 +412,16 @@ func (e *EmitContext) emitGoCgo1Stmt() {
 	cgo2Spec := CompileSpec{CFlags: cgo2CF[: cgo2N+1 : cgo2N+1]}
 
 	for _, f := range files {
-		e.register(GeneratedFileInfo{OutputPath: f.cgo1, ProducerRef: ref, ParsedIncludes: parsed})
-		e.register(GeneratedFileInfo{OutputPath: f.cgo2C, ProducerRef: ref, ClosureLeaves: leaves, ParsedIncludes: parsed})
+		e.register(GeneratedFileSpec{OutputPath: f.cgo1, ProducerRef: ref, ParsedIncludes: parsed})
+		e.register(GeneratedFileSpec{OutputPath: f.cgo2C, ProducerRef: ref, ClosureLeaves: leaves, ParsedIncludes: parsed})
 		e.enqueueSrc(SrcMeta{Source: f.cgo1.any(), Prio: stmtPrioDefault})
 		e.enqueueSrc(SrcMeta{Source: f.cgo2C.any(), Prio: stmtPrioDefault, Compile: cgo2Spec})
 	}
 
-	e.register(GeneratedFileInfo{OutputPath: exportH, ProducerRef: ref, ClosureLeaves: leaves, ParsedIncludes: parsed})
-	e.register(GeneratedFileInfo{OutputPath: exportC, ProducerRef: ref, ClosureLeaves: leaves, ParsedIncludes: parsed})
-	e.register(GeneratedFileInfo{OutputPath: gotypes, ProducerRef: ref, ClosureLeaves: leaves, ParsedIncludes: parsed})
-	e.register(GeneratedFileInfo{OutputPath: mainC, ProducerRef: ref, ClosureLeaves: leaves, ParsedIncludes: parsed})
+	e.register(GeneratedFileSpec{OutputPath: exportH, ProducerRef: ref, ClosureLeaves: leaves, ParsedIncludes: parsed})
+	e.register(GeneratedFileSpec{OutputPath: exportC, ProducerRef: ref, ClosureLeaves: leaves, ParsedIncludes: parsed})
+	e.register(GeneratedFileSpec{OutputPath: gotypes, ProducerRef: ref, ClosureLeaves: leaves, ParsedIncludes: parsed})
+	e.register(GeneratedFileSpec{OutputPath: mainC, ProducerRef: ref, ClosureLeaves: leaves, ParsedIncludes: parsed})
 
 	e.enqueueSrc(SrcMeta{Source: exportC.any(), Prio: stmtPrioDefault})
 	e.enqueueSrc(SrcMeta{Source: gotypes.any(), Prio: stmtPrioDefault})
@@ -564,7 +564,7 @@ func (e *EmitContext) flushGoCgo2() {
 
 	ref := e.emitNode(node)
 
-	e.register(GeneratedFileInfo{OutputPath: importGo, ProducerRef: ref})
+	e.register(GeneratedFileSpec{OutputPath: importGo, ProducerRef: ref})
 
 	e.goRes.GoFiles = append(e.goRes.GoFiles, importGo)
 }

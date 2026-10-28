@@ -64,6 +64,6 @@ func (ctx *GenCtx) javaRegisterFbsSources(jm *JavaModule) {
 			b.emitTo(ref)
 		})
 
-		ctx.javaReg(jm).register(GeneratedFileInfo{OutputPath: out, SourcePath: source, OwnerModule: jm.path, ProducerRef: ref, ProducerMainOut: out, OnUse: pending})
+		ctx.javaReg(jm).register(GeneratedFileSpec{OutputPath: out, SourcePath: source, OwnerModule: jm.path, ProducerRef: ref, ProducerMainOut: out, OnUse: pending})
 	}
 }

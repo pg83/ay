@@ -40,7 +40,7 @@ func (e *EmitContext) notsTestGlobals(globals []ResourceDecl) []ResourceDecl {
 
 func (e *EmitContext) notsAllFiles(dir string) []VFS {
 	info := e.codegen.lookup(build(dir, "/package.json"))
-	state := info.Nots
+	state := info.nots()
 
 	if !state.SourcesLoaded {
 		state.SourceFiles = notsAllSourceFiles(e.ctx.fs, dir)
@@ -83,7 +83,7 @@ func (e *EmitContext) notsSuite(name string, globals []ResourceDecl, addSource b
 
 func (e *EmitContext) notsSuiteDependencies(target string) []NodeRef {
 	prepare := e.codegen.use(build(target, "/package.json"))
-	refs := []NodeRef{prepare.ProducerRef, prepare.Nots.ToolRef}
+	refs := []NodeRef{prepare.ProducerRef, prepare.nots().ToolRef}
 	pj := e.ctx.parsers.notsJSON(target + "/package.json")
 
 	for _, peer := range e.ctx.parsers.notsPeers(target, pj) {
@@ -91,13 +91,13 @@ func (e *EmitContext) notsSuiteDependencies(target string) []NodeRef {
 
 		refs = append(refs, info.ProducerRef)
 
-		for _, input := range info.NotsInputs {
-			if dep := e.codegen.lookup(input); dep != nil && dep.Nots != nil {
+		for _, input := range info.notsInputs() {
+			if dep := e.codegen.lookup(input); dep != nil && dep.nots() != nil {
 				refs = append(refs, dep.ProducerRef)
 			}
 		}
 
-		if info.Nots.Schema {
+		if info.nots().Schema {
 			instance := e.notsPeerInstance(peer)
 
 			instance.Language = LangProtoDescriptions

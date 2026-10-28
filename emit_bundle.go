@@ -27,7 +27,7 @@ func (e *EmitContext) emitBundle(b BundleEntry) {
 		e.emitBundleNode(d.tc.Python3, src, dst, b.Suffix, srcRef, resolved, ref)
 	}
 
-	e.register(GeneratedFileInfo{
+	e.register(GeneratedFileSpec{
 		OutputPath:    dst,
 		ProducerRef:   ref,
 		GeneratorRefs: nil,

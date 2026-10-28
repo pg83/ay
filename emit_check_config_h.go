@@ -44,7 +44,7 @@ func (e *EmitContext) emitCheckConfigHStmt(conf ANY) {
 
 	pending := e.pendingEmit(pe)
 
-	e.register(GeneratedFileInfo{
+	e.register(GeneratedFileSpec{
 		OutputPath:  generatedVFS,
 		ProducerRef: chRef,
 		ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: e.ctx.na.dirList(

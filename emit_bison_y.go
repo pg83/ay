@@ -155,7 +155,7 @@ func (e *EmitContext) emitBisonProducer(meta SrcMeta) {
 
 	pending := e.pendingEmit(pe)
 
-	e.register(GeneratedFileInfo{
+	e.register(GeneratedFileSpec{
 		OutputPath:     headerVFS,
 		ProducerRef:    ycRef,
 		GeneratorRefs:  e.ctx.na.refList(bisonRef, m4Ref),
@@ -165,7 +165,7 @@ func (e *EmitContext) emitBisonProducer(meta SrcMeta) {
 
 	generatedParsed := na.dirList(append([]IncludeDirective{{kind: includeQuoted, target: includeTarget(headerVFS.rel().any())}}, localBucket...)...)
 
-	e.register(GeneratedFileInfo{
+	e.register(GeneratedFileSpec{
 		OutputPath:     generatedVFS,
 		ProducerRef:    ycRef,
 		GeneratorRefs:  e.ctx.na.refList(bisonRef, m4Ref),

@@ -47,7 +47,7 @@ func (e *EmitContext) emitLibraryFlexSource(meta SrcMeta) {
 
 	pending := e.pendingEmit(pe)
 
-	e.register(GeneratedFileInfo{
+	e.register(GeneratedFileSpec{
 		OutputPath:     outVFS,
 		ProducerRef:    lxRef,
 		GeneratorRefs:  toolRefs,

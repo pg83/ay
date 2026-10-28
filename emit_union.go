@@ -93,8 +93,9 @@ func (e *EmitContext) genUnion() *ModuleEmitResult {
 	e.codegen.mustInfo(out).LateOutputs = e.ctx.na.vfsList(generated...)
 
 	passPeers := e.d.resourcePassPeers
+	info := e.codegen.mustInfo(out)
 
-	e.codegen.mustInfo(out).CollectionPeers = &CollectionPeerInfo{Modules: peerContexts, PassPeers: passPeers}
+	info.attributes.collectionPeers.put(info.id, &CollectionPeerInfo{Modules: peerContexts, PassPeers: passPeers})
 
 	if !passPeers {
 		peers = nil

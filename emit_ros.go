@@ -162,7 +162,7 @@ func (e *EmitContext) emitRosSource(meta SrcMeta, outputs []VFS) {
 	}
 
 	for _, out := range outs {
-		info := GeneratedFileInfo{OutputPath: out, ProducerRef: ref, ProducerMainOut: outs[0], GeneratorRefs: ctx.na.refList(toolRef), ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: parsed}, OnUse: pending}
+		info := GeneratedFileSpec{OutputPath: out, ProducerRef: ref, ProducerMainOut: outs[0], GeneratorRefs: ctx.na.refList(toolRef), ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: parsed}, OnUse: pending}
 
 		e.register(info)
 
@@ -187,6 +187,6 @@ func (e *EmitContext) emitRosEmpty() {
 	node := Node{Platform: e.instance.Platform, Env: envVarsVCS, KV: &rosKV, Resources: usesPython3, Inputs: NodeInputs{files: na.rootInputList(na.vfsList(inputs...))}, Outputs: na.vfsList(out), Cmds: na.cmdList(Cmd{CmdArgs: na.chunkList(na.anyList(e.d.tc.Python3.any(), script.any(), strFile.any(), out.any(), strContent.any(), strPackageGenerated.any())), Env: envVarsVCS})}
 	pending := e.pendingEmit(func() { e.emitReservedNode(node, ref) })
 
-	e.register(GeneratedFileInfo{OutputPath: out, ProducerRef: ref, OnUse: pending})
+	e.register(GeneratedFileSpec{OutputPath: out, ProducerRef: ref, OnUse: pending})
 	e.collectGoAutoSource(out, 0)
 }

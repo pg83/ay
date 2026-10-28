@@ -181,7 +181,7 @@ func (e *EmitContext) emitResourceJoin(files []string, suffix string, tag STR, f
 		Outputs: na.vfsList(out), KV: &jsNodeKV, Resources: usesPython3,
 	})
 
-	e.register(GeneratedFileInfo{OutputPath: out, ProducerRef: ref,
+	e.register(GeneratedFileSpec{OutputPath: out, ProducerRef: ref,
 		ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: na.dirList(includes...)}})
 
 	return name

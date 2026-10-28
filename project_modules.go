@@ -9,7 +9,7 @@ func (ctx *GenCtx) setModuleOutput(reg *CodegenRegistry, owner, output VFS, ref 
 
 	if !ok {
 		info = reg.na.geninfos.one()
-		*info = GeneratedFileInfo{InputsOnly: true, OutputPath: output}
+		reg.store(info, GeneratedFileSpec{InputsOnly: true, OutputPath: output})
 		reg.byRel.put(output.rel(), info)
 	}
 

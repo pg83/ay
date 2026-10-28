@@ -188,7 +188,7 @@ func (e *EmitContext) emitSplitCudaSource(src ANY, arches []string, embedPTX boo
 				leaves = na.vfsList(outs[0])
 			}
 
-			e.register(GeneratedFileInfo{OutputPath: out, ProducerRef: ref, OnUse: pending, ProducerMainOut: outs[0], ClosureLeaves: leaves})
+			e.register(GeneratedFileSpec{OutputPath: out, ProducerRef: ref, OnUse: pending, ProducerMainOut: outs[0], ClosureLeaves: leaves})
 		}
 
 		if embedPTX {
@@ -219,7 +219,7 @@ func (e *EmitContext) emitSplitCudaSource(src ANY, arches []string, embedPTX boo
 			Inputs: NodeInputs{files: inputs}, Outputs: na.vfsList(fatbin), KV: &cudaKV, Resources: usesPython3}, fatRef)
 	})
 
-	e.register(GeneratedFileInfo{OutputPath: fatbin, ProducerRef: fatRef, OnUse: fatPending})
+	e.register(GeneratedFileSpec{OutputPath: fatbin, ProducerRef: fatRef, OnUse: fatPending})
 
 	hostOuts := na.vfsList(output(".ii"), output(".cudafe1.cpp"))
 	hostRef := e.ctx.emit.reserve()
@@ -252,11 +252,11 @@ func (e *EmitContext) emitSplitCudaSource(src ANY, arches []string, embedPTX boo
 			Inputs: NodeInputs{files: inputs, roots: appendInputChunks(na, inputs[:1], inputs[2:])}, Outputs: hostOuts, KV: &cudaKV, DepRefs: na.refList(mtimeRef, pidRef), Resources: e.instance.Platform.CCUsesResources}, hostRef)
 	})
 
-	e.register(GeneratedFileInfo{OutputPath: hostOuts[0], ProducerRef: hostRef, OnUse: hostPending})
+	e.register(GeneratedFileSpec{OutputPath: hostOuts[0], ProducerRef: hostRef, OnUse: hostPending})
 
 	parsed := na.dirList(IncludeDirective{kind: includeQuoted, target: includeTarget(stub.rel().any())}, IncludeDirective{kind: includeQuoted, target: includeTarget(fatbin.rel().any())})
 
-	e.register(GeneratedFileInfo{OutputPath: hostOuts[1], ProducerRef: hostRef, OnUse: hostPending, ProducerMainOut: hostOuts[0], ClosureLeaves: na.vfsList(hostOuts[0]), ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: parsed}})
+	e.register(GeneratedFileSpec{OutputPath: hostOuts[1], ProducerRef: hostRef, OnUse: hostPending, ProducerMainOut: hostOuts[0], ClosureLeaves: na.vfsList(hostOuts[0]), ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: parsed}})
 	e.emitOneSource(SrcMeta{Source: hostOuts[1].any(), Prio: stmtPrioDefault, Seq: seq + len(arches) + 2, Compile: CompileSpec{CFlags: cudaHostFlags, FlatOutput: true}})
 }
 

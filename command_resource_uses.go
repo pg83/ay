@@ -7,21 +7,21 @@ func (e Environment) setResource(decl ResourceDecl) {
 
 	e.setVFS(id, decl.Value)
 
-	if n := int(id) + 1 - len(e.s.resourceBindings); n > 0 {
-		e.s.resourceBindings = append(e.s.resourceBindings, make([]STR, n)...)
-	}
+	at := e.s.resourceBindingIndex(id)
 
-	e.s.resourceBindings[id] = decl.FetchKey
+	e.s.resourceBindings = append(e.s.resourceBindings, EnvResourceBinding{})
+	copy(e.s.resourceBindings[at+1:], e.s.resourceBindings[at:])
+	e.s.resourceBindings[at] = EnvResourceBinding{id: id, key: decl.FetchKey}
 }
 
 func (e Environment) recordResourceUse(id ENV) {
 	if e.resourceUses != nil {
-		if int(id) >= len(e.s.resourceBindings) {
-			return
-		}
+		at := e.s.resourceBindingIndex(id)
 
-		if key := e.s.resourceBindings[id]; key != 0 && !slices.Contains(*e.resourceUses, key) {
-			*e.resourceUses = append(*e.resourceUses, key)
+		if at < len(e.s.resourceBindings) && e.s.resourceBindings[at].id == id {
+			if key := e.s.resourceBindings[at].key; key != 0 && !slices.Contains(*e.resourceUses, key) {
+				*e.resourceUses = append(*e.resourceUses, key)
+			}
 		}
 	}
 }
@@ -103,4 +103,34 @@ func commandTokenValue(args []ANY, env Environment) CompilerFlagValue {
 	values := expandStmtTokens(args, env)
 
 	return CompilerFlagValue{Args: values, Resources: uses}
+}
+
+type EnvResourceBinding struct {
+	id  ENV
+	key STR
+}
+
+func (s *EnvStore) resourceBindingIndex(id ENV) int {
+	lo, hi := 0, len(s.resourceBindings)
+
+	for lo < hi {
+		mid := int(uint(lo+hi) >> 1)
+
+		if s.resourceBindings[mid].id < id {
+			lo = mid + 1
+		} else {
+			hi = mid
+		}
+	}
+
+	return lo
+}
+
+func (s *EnvStore) clearResourceBinding(id ENV) {
+	at := s.resourceBindingIndex(id)
+
+	if at < len(s.resourceBindings) && s.resourceBindings[at].id == id {
+		copy(s.resourceBindings[at:], s.resourceBindings[at+1:])
+		s.resourceBindings = s.resourceBindings[:len(s.resourceBindings)-1]
+	}
 }

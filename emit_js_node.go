@@ -73,7 +73,7 @@ func (e *EmitContext) emitJoinSrcsStmt(js *JoinSrcsStmt) {
 	pending := e.pendingEmit(pe)
 	joinOutVFS := copyFileOutputVFS(instance.Path.relString(), js.OutputName)
 
-	info := GeneratedFileInfo{
+	info := GeneratedFileSpec{
 		OutputPath:  joinOutVFS,
 		ProducerRef: jsRef,
 		OnUse:       pending,

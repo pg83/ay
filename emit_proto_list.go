@@ -47,7 +47,7 @@ func (e *EmitContext) emitListProto(stmt ListProtoStmt) {
 		}, ref)
 	})
 
-	e.register(GeneratedFileInfo{
+	e.register(GeneratedFileSpec{
 		OutputPath: output, ProducerRef: ref, OnUse: pending,
 
 		ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: na.dirs.list(parsed...)},
@@ -64,7 +64,7 @@ func (e *EmitContext) emitListProto(stmt ListProtoStmt) {
 
 	induced := protoInducedPbH(e.ctx.parsers, parsed, nil)
 
-	e.register(GeneratedFileInfo{
+	e.register(GeneratedFileSpec{
 		OutputPath: header, ProducerRef: headerRef, OnUse: touch,
 		ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: na.dirs.list(induced...)},
 	})

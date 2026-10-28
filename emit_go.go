@@ -1124,7 +1124,7 @@ func (e *EmitContext) emitGoPackage(resolved []ResolvedPeer, objRefs []NodeRef, 
 
 	ref := e.emitModuleNode(node, false)
 
-	e.register(GeneratedFileInfo{OutputPath: outPath, InputsOnly: true, ModuleType: d.moduleStmt.Name})
+	e.register(GeneratedFileSpec{OutputPath: outPath, InputsOnly: true, ModuleType: d.moduleStmt.Name})
 
 	return ref, outPath
 }

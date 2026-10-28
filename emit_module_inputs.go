@@ -308,7 +308,7 @@ func (e *EmitContext) emitLDPlugins() {
 
 		e.ctx.emit.emitReservedNode(node, ref)
 
-		e.register(GeneratedFileInfo{OutputPath: dst, PrimaryInput: src, ProducerRef: ref})
+		e.register(GeneratedFileSpec{OutputPath: dst, PrimaryInput: src, ProducerRef: ref})
 		e.moduleGlobals = append(e.moduleGlobals, dst)
 		e.moduleGlobalInputs = append(e.moduleGlobalInputs, dst)
 		e.moduleIncludeRoots = append(e.moduleIncludeRoots, dst)

@@ -65,14 +65,14 @@ func (e *EmitContext) emitLibrarySfdlSource(meta SrcMeta) {
 
 	pending := e.pendingEmit(pe)
 
-	e.register(GeneratedFileInfo{
+	e.register(GeneratedFileSpec{
 		OutputPath:    tmpVFS,
 		ProducerRef:   ref,
 		GeneratorRefs: e.ctx.na.refList(toolRef),
 		OnUse:         pending,
 	})
 
-	e.register(GeneratedFileInfo{
+	e.register(GeneratedFileSpec{
 		OutputPath:      incVFS,
 		ProducerRef:     ref,
 		ProducerMainOut: tmpVFS,

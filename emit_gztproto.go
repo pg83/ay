@@ -27,7 +27,7 @@ func (ctx *GenCtx) gztProtoSource(instance ModuleInstance, gztSource VFS, scanCt
 	reg := scanner.codegen
 
 	if info := reg.lookup(genProto); info != nil {
-		if info.GztProto == nil || info.SourcePath != gztSource || info.OwnerModule != instance.Path || info.GztProto.Instance == instance {
+		if info.gztProto() == nil || info.SourcePath != gztSource || info.OwnerModule != instance.Path || info.gztProto().Instance == instance {
 			throwFmt("CodegenRegistry: duplicate producer for %q (existing source=%q, new source=%q)",
 				genProto.string(), info.SourcePath.string(), gztSource.string())
 		}
@@ -75,7 +75,7 @@ func (ctx *GenCtx) gztProtoSource(instance ModuleInstance, gztSource VFS, scanCt
 
 	*pending = PendingEmit{fn: pe, publication: ctx.emit.pendingPublication()}
 
-	reg.register(GeneratedFileInfo{
+	reg.register(GeneratedFileSpec{
 		OutputPath:     genProto,
 		GztProto:       producer,
 		SourcePath:     gztSource,

@@ -87,11 +87,11 @@ func (e *EmitContext) registerCopyFile(entry CopyFileEntry) (CopyEmitState, *Gen
 	ref := ctx.emit.reserve()
 
 	if existing := reg.lookup(dstVFS); existing != nil {
-		existing.ParsedIncludes = ParsedIncludeSet{parsedIncludesLocal: parsed}
+		existing.attributes.parsedIncludes.put(existing.id, ParsedIncludeSet{parsedIncludesLocal: parsed})
 	} else {
 		e.collectCPPStyleInputs(srcVFS)
 
-		info := GeneratedFileInfo{
+		info := GeneratedFileSpec{
 			OutputPath:     dstVFS,
 			SourcePath:     srcVFS,
 			ProducerRef:    ref,

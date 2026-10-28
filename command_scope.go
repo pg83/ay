@@ -77,15 +77,15 @@ type ExportEntry struct {
 }
 
 func (ctx *GenCtx) enterExport() int32 {
-	ctx.exportLog = append(ctx.exportLog, ExportEntry{})
+	ctx.exportLog.pushBack(ExportEntry{})
 
-	return int32(len(ctx.exportLog) - 1)
+	return int32(len(ctx.exportLog.s) - 1)
 }
 
 func (ctx *GenCtx) leaveExport(at int32, result *ModuleEmitResult) {
-	end := int32(len(ctx.exportLog))
+	end := int32(len(ctx.exportLog.s))
 
-	ctx.exportLog[at] = ExportEntry{module: result, end: end}
+	ctx.exportLog.s[at] = ExportEntry{module: result, end: end}
 
 	if result != nil && result.exportAt == 0 && end > at+1 {
 		result.exportAt = at + 1
@@ -93,16 +93,16 @@ func (ctx *GenCtx) leaveExport(at int32, result *ModuleEmitResult) {
 }
 
 func (ctx *GenCtx) logExport(entry ExportEntry) {
-	entry.end = int32(len(ctx.exportLog) + 1)
-	ctx.exportLog = append(ctx.exportLog, entry)
+	entry.end = int32(len(ctx.exportLog.s) + 1)
+	ctx.exportLog.pushBack(entry)
 }
 
 func (ctx *GenCtx) markExportRoot(start int32) {
-	ctx.exportRoots = append(ctx.exportRoots, [2]int32{start, int32(len(ctx.exportLog))})
+	ctx.exportRoots = append(ctx.exportRoots, [2]int32{start, int32(len(ctx.exportLog.s))})
 }
 
 func (ctx *GenCtx) replayExport() {
-	log := ctx.exportLog
+	log := ctx.exportLog.s
 	tick := uint32(0)
 
 	var replay func(at int32)
@@ -227,8 +227,8 @@ func (ctx *GenCtx) bindCommandScopes() {
 			entry, _ := reg.files.get1(file)
 
 			if file.isBuild() {
-				if info := reg.lookup(file); info != nil && info.Scoped != nil {
-					info.Scoped.claim(scope)
+				if info := reg.lookup(file); info != nil && info.scoped() != nil {
+					info.scoped().claim(scope)
 				}
 
 				entry = scope.scanner.bindGeneratedIncludes(file)

@@ -70,14 +70,14 @@ func (e *EmitContext) emitLibraryRagel5Source(meta SrcMeta) {
 
 	pending := e.pendingEmit(pe)
 
-	e.register(GeneratedFileInfo{
+	e.register(GeneratedFileSpec{
 		OutputPath:    r5TmpOut,
 		ProducerRef:   r5Ref,
 		GeneratorRefs: e.ctx.na.refList(ragel5LDRef, rlgenCdLDRef),
 		OnUse:         pending,
 	})
 
-	e.register(GeneratedFileInfo{
+	e.register(GeneratedFileSpec{
 		OutputPath:      r5CppOut,
 		ProducerRef:     r5Ref,
 		ProducerMainOut: r5TmpOut,

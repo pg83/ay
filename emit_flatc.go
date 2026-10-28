@@ -236,7 +236,7 @@ func (e *EmitContext) emitFlatcProducer(srcVFS VFS, v *FlatcVariant) {
 		pending = e.pendingEmit(pe)
 	}
 
-	e.register(GeneratedFileInfo{
+	e.register(GeneratedFileSpec{
 		OutputPath:     headerVFS,
 		ProducerRef:    flRef,
 		GeneratorRefs:  e.ctx.na.refList(flatcLDRef),
@@ -254,7 +254,7 @@ func (e *EmitContext) emitFlatcProducer(srcVFS VFS, v *FlatcVariant) {
 
 	cppIncludes := ctx.na.dirList(IncludeDirective{kind: includeQuoted, target: includeTarget(headerVFS.rel().any())})
 
-	e.register(GeneratedFileInfo{
+	e.register(GeneratedFileSpec{
 		OutputPath:     cppVFS,
 		SourcePath:     srcVFS,
 		ProducerRef:    flRef,
@@ -267,7 +267,7 @@ func (e *EmitContext) emitFlatcProducer(srcVFS VFS, v *FlatcVariant) {
 		e.codegen.inheritParsedIncludes(cppVFS, flRef, inherited)
 	}
 
-	e.register(GeneratedFileInfo{
+	e.register(GeneratedFileSpec{
 		OutputPath:      bfbsVFS,
 		ProducerRef:     flRef,
 		ProducerMainOut: headerVFS,
