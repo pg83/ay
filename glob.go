@@ -175,7 +175,7 @@ func ymakeGlob(fs FS, pattern string, excludePatterns ...string) []string {
 		for _, dir := range dirs {
 			switch part.kind {
 			case globFixed:
-				rel := joinRel(dir, part.fixed)
+				rel := internJoined(dir, part.fixed).string()
 				present, isDir := fs.exists(srcRootRel, rel)
 
 				switch {
@@ -193,7 +193,7 @@ func ymakeGlob(fs FS, pattern string, excludePatterns ...string) []string {
 						continue
 					}
 
-					rel := joinRel(dir, name)
+					rel := internJoined(dir, name).string()
 
 					if isDir {
 						next = append(next, rel)

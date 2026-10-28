@@ -335,9 +335,15 @@ func (s *ResourceChunkSize) add(it *ResourceItem) {
 	s.builds += len(it.AuxBuilds)
 }
 
-func (e *EmitContext) packResources(p ResourcePack) (refs []NodeRef, outs []VFS) {
+func (e *EmitContext) packResources(p ResourcePack) ([]NodeRef, []VFS) {
 	objItems := e.objScratch[:0]
 	rawItems := e.rawScratch[:0]
+	refs, outs := nodeRefScratches.get(), vfsScratches.get()
+
+	defer func() {
+		nodeRefScratches.put(refs)
+		vfsScratches.put(outs)
+	}()
 
 	var objSize ResourceChunkSize
 
@@ -417,7 +423,7 @@ func (e *EmitContext) packResources(p ResourcePack) (refs []NodeRef, outs []VFS)
 	flushObj()
 	flushRaw()
 
-	return refs, outs
+	return e.ctx.na.refList(refs...), e.ctx.na.vfsList(outs...)
 }
 
 func (e *EmitContext) packObjcopyResourceChunk(chunk []ResourceItem, p ResourcePack, size ResourceChunkSize) (NodeRef, VFS) {

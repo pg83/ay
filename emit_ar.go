@@ -1,6 +1,9 @@
 package main
 
-var arKV = KV{P: pkAR, PC: pcLightRed, ShowOut: true}
+var (
+	arKV               = KV{P: pkAR, PC: pcLightRed, ShowOut: true}
+	archiveNameScratch []byte
+)
 
 const (
 	arTypeLLVM  = "LLVM_AR"
@@ -85,9 +88,7 @@ func archiveTailFor(moduleDir string) string {
 
 func archiveNameWithPrefix(moduleDir, prefix string) string {
 	tail := archiveTailFor(moduleDir)
-	b := make([]byte, 0, len(prefix)+len(tail)+2)
-
-	b = append(b, prefix...)
+	b := append(archiveNameScratch[:0], prefix...)
 
 	for i := 0; i < len(tail); i++ {
 		c := tail[i]
@@ -100,8 +101,9 @@ func archiveNameWithPrefix(moduleDir, prefix string) string {
 	}
 
 	b = append(b, ".a"...)
+	archiveNameScratch = b
 
-	return string(b)
+	return internBytes(b).string()
 }
 
 func (e *EmitContext) appendArchiveTail(moduleDir string) {

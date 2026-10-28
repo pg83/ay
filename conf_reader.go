@@ -60,6 +60,29 @@ type ConfFile struct {
 	modules  map[string]string
 	variants map[string][]string
 	calls    map[string][]string
+
+	callNames  []string
+	callsGuard string
+	callsStart int
+}
+
+func (f *ConfFile) flushCalls() {
+	if f.callsGuard == "" || f.callsStart == len(f.callNames) {
+		return
+	}
+
+	if f.calls == nil {
+		f.calls = map[string][]string{}
+	}
+
+	names := f.callNames[f.callsStart:len(f.callNames):len(f.callNames)]
+
+	if previous, ok := f.calls[f.callsGuard]; ok {
+		names = append(previous[:len(previous):len(previous)], names...)
+	}
+
+	f.calls[f.callsGuard] = names
+	f.callsStart = len(f.callNames)
 }
 
 type confParseFrame struct {
@@ -145,11 +168,12 @@ func readConfFile(rel, text string) *ConfFile {
 
 		if !strings.HasSuffix(line, "{") {
 			if name, _, ok := strings.Cut(line, "("); ok && top.guard != "" && !top.skipped && isIdentShapedName(strings.TrimSpace(name)) {
-				if conf.calls == nil {
-					conf.calls = map[string][]string{}
+				if top.guard != conf.callsGuard {
+					conf.flushCalls()
+					conf.callsGuard = top.guard
 				}
 
-				conf.calls[top.guard] = append(conf.calls[top.guard], internV("env", strings.TrimSpace(name)).string())
+				conf.callNames = append(conf.callNames, internV("env", strings.TrimSpace(name)).string())
 			}
 
 			continue
@@ -238,6 +262,8 @@ func readConfFile(rel, text string) *ConfFile {
 	if len(stack) != 1 || len(pending) != 0 {
 		throwFmt("conf: unfinished block or assignment in %s", rel)
 	}
+
+	conf.flushCalls()
 
 	return conf
 }
