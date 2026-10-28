@@ -35,6 +35,9 @@ type ConfState struct {
 	params     []string
 	active     []bool
 	lengths    []int
+	tables     []*confTables
+	written    []bool
+	original   []bool
 	selected   EnvStore
 	all        EnvStore
 	needed     BitSet
@@ -780,14 +783,60 @@ type ConfAssignment struct {
 }
 
 type confProgram struct {
-	stmts       []ConfStmtRef
-	macros      map[STR]*ConfMacro
+	stmts  []ConfStmtRef
+	macros map[STR]*ConfMacro
+}
+
+type confTables struct {
+	state       *ConfState
+	source      []ConfStmtRef
 	byVariable  DenseMap[ENV, []ENV]
 	byTarget    DenseMap[ENV, []ConfStmtRef]
+	targetReads DenseMap[ENV, []ENV]
 	modules     DenseMap[STR, *confModule]
 	variants    DenseMap[STR, []ConfVariant]
 	moduleCount int
-	built       bool
+}
+
+func confTableInput(r ConfStmtRef) bool {
+	return r.stmt.branch != 0 || len(r.file.modules) != 0 || len(r.file.variants) != 0 || len(r.file.calls) != 0
+}
+
+func (t *confTables) matches(stmts []ConfStmtRef) bool {
+	i := 0
+
+	for _, r := range stmts {
+		if confTableInput(r) {
+			if i == len(t.source) || t.source[i] != r {
+				return false
+			}
+
+			i++
+		}
+	}
+
+	return i == len(t.source)
+}
+
+func (s *ConfState) tablesFor(stmts []ConfStmtRef) *confTables {
+	for _, t := range s.tables {
+		if t.matches(stmts) {
+			return t
+		}
+	}
+
+	t := &confTables{state: s}
+
+	for _, r := range stmts {
+		if confTableInput(r) {
+			t.source = append(t.source, r)
+		}
+	}
+
+	t.build()
+	s.tables = append(s.tables, t)
+
+	return t
 }
 
 type confDependency struct{ variable, target ENV }
@@ -844,13 +893,7 @@ func (pm *IncludeParserManager) confProgram(f *ConfFile, walking []string) *conf
 	return p
 }
 
-func (p *confProgram) build() {
-	if p.built {
-		return
-	}
-
-	p.built = true
-
+func (t *confTables) build() {
 	seen := map[*ConfFile]bool{}
 	calls := map[string][]string{}
 
@@ -859,13 +902,13 @@ func (p *confProgram) build() {
 
 	conditionalCount := 0
 
-	for _, r := range p.stmts {
+	for _, r := range t.source {
 		if !seen[r.file] {
 			for name, parent := range r.file.modules {
-				module := &confModule{index: p.moduleCount, parent: internStr(parent), variable: internEnvSTR(internV("env", name))}
+				module := &confModule{index: t.moduleCount, parent: internStr(parent), variable: internEnvSTR(internV("env", name))}
 
-				p.moduleCount++
-				p.modules.put(internStr(name), module)
+				t.moduleCount++
+				t.modules.put(internStr(name), module)
 			}
 
 			for name, variants := range r.file.variants {
@@ -875,7 +918,7 @@ func (p *confProgram) build() {
 					ids[i] = ConfVariant{name: internStr(variant), value: variant}
 				}
 
-				p.variants.put(internStr(name), ids)
+				t.variants.put(internStr(name), ids)
 			}
 
 			for guard, names := range r.file.calls {
@@ -921,7 +964,7 @@ func (p *confProgram) build() {
 			i++
 		}
 
-		p.byVariable.put(variable, targets[start:i:i])
+		t.byVariable.put(variable, targets[start:i:i])
 	}
 
 	refs := make([]ConfStmtRef, conditionalCount)
@@ -929,26 +972,42 @@ func (p *confProgram) build() {
 	for key, slot := range counts.idx.each() {
 		n := counts.vals.s[slot]
 
-		p.byTarget.put(ENV(key), refs[:0:n])
+		t.byTarget.put(ENV(key), refs[:0:n])
 		refs = refs[n:]
 	}
 
-	for _, r := range p.stmts {
+	for _, r := range t.source {
 		if r.stmt.branch != 0 {
-			stmts, _ := p.byTarget.get(r.stmt.name)
+			stmts, _ := t.byTarget.get(r.stmt.name)
 
-			p.byTarget.put(r.stmt.name, append(stmts, r))
+			t.byTarget.put(r.stmt.name, append(stmts, r))
 		}
 	}
 
-	for _, module := range p.modules.vals.s {
+	reads := make([]ENV, 0, len(dependencies))
+
+	for key, slot := range t.byTarget.idx.each() {
+		start := len(reads)
+
+		for _, r := range t.byTarget.vals.s[slot] {
+			r.file.condVars(r.stmt.branch, func(variable ENV) {
+				if !slices.Contains(reads[start:], variable) {
+					reads = append(reads, variable)
+				}
+			})
+		}
+
+		t.targetReads.put(ENV(key), reads[start:len(reads):len(reads)])
+	}
+
+	for _, module := range t.modules.vals.s {
 		if module != nil {
-			module.builder = p.builderMacros(calls, module.variable.string(), map[string]bool{}, nil)
+			module.builder = t.builderMacros(calls, module.variable.string(), map[string]bool{}, nil)
 		}
 	}
 }
 
-func (p *confProgram) builderMacros(calls map[string][]string, guard string, seen map[string]bool, out []ENV) []ENV {
+func (t *confTables) builderMacros(calls map[string][]string, guard string, seen map[string]bool, out []ENV) []ENV {
 	for _, call := range calls[guard] {
 		if seen[call] {
 			continue
@@ -958,18 +1017,18 @@ func (p *confProgram) builderMacros(calls map[string][]string, guard string, see
 
 		variable := internEnv(call)
 
-		if targets, _ := p.byVariable.get(variable); len(targets) > 0 {
+		if targets, _ := t.byVariable.get(variable); len(targets) > 0 {
 			out = append(out, variable)
 		}
 
-		out = p.builderMacros(calls, call, seen, out)
+		out = t.builderMacros(calls, call, seen, out)
 	}
 
 	return out
 }
 
-func (p *confProgram) module(name STR, tag string) *confModule {
-	if variants, _ := p.variants.get(name); len(variants) > 0 {
+func (t *confTables) module(name STR, tag string) *confModule {
+	if variants, _ := t.variants.get(name); len(variants) > 0 {
 		for _, variant := range variants {
 			if strings.HasPrefix(variant.value, tag) && strings.HasPrefix(variant.value[len(tag):], "__from__") {
 				name = variant.name
@@ -979,20 +1038,20 @@ func (p *confProgram) module(name STR, tag string) *confModule {
 		}
 	}
 
-	module, _ := p.modules.get(name)
+	module, _ := t.modules.get(name)
 
 	return module
 }
 
-func (p *confProgram) plan(module *confModule) *confModule {
+func (t *confTables) plan(module *confModule) *confModule {
 	if module.planned {
 		return module
 	}
 
 	module.planned = true
 
-	if parent := p.module(module.parent, ""); parent != nil {
-		module.steps = append(module.steps, p.plan(parent).steps...)
+	if parent := t.module(module.parent, ""); parent != nil {
+		module.steps = append(module.steps, t.plan(parent).steps...)
 	}
 
 	module.steps = append(module.steps, confInitStep{variable: module.variable})
@@ -1004,9 +1063,14 @@ func (p *confProgram) plan(module *confModule) *confModule {
 		module.steps = append(module.steps, confInitStep{variable: envLinkerId, source: envDefaultLinkerId}, confInitStep{variable: envCommonLinkSettings})
 	}
 
-	written := make([]bool, envTable.count)
-	read := make([]bool, envTable.count)
-	original := make([]bool, envTable.count)
+	n := int(envTable.count)
+	written := slices.Grow(t.state.written[:0], n)[:n]
+	original := slices.Grow(t.state.original[:0], n)[:n]
+	read := make([]bool, n)
+
+	clear(written)
+	clear(original)
+	t.state.written, t.state.original = written, original
 
 	readVar := func(key ENV) {
 		if !written[key] {
@@ -1028,7 +1092,7 @@ func (p *confProgram) plan(module *confModule) *confModule {
 
 		writeVar(step.variable)
 
-		targets, _ := p.byVariable.get(step.variable)
+		targets, _ := t.byVariable.get(step.variable)
 
 		for _, target := range targets {
 			writeVar(target)
@@ -1038,10 +1102,10 @@ func (p *confProgram) plan(module *confModule) *confModule {
 				module.originals = append(module.originals, target)
 			}
 
-			stmts, _ := p.byTarget.get(target)
+			reads, _ := t.targetReads.get(target)
 
-			for _, r := range stmts {
-				r.file.condVars(r.stmt.branch, readVar)
+			for _, key := range reads {
+				readVar(key)
 			}
 		}
 	}
@@ -1054,6 +1118,7 @@ func (p *confProgram) plan(module *confModule) *confModule {
 type Conf struct {
 	state       *ConfState
 	program     *confProgram
+	tables      *confTables
 	platformEnv Environment
 	inherited   DenseMap[ENV, ConfValue]
 	base        *EnvStore
@@ -1156,13 +1221,12 @@ func loadConf(pm *IncludeParserManager, root *ConfFile, platformEnv Environment)
 		bindConfCommandVariable(key, env, platformEnv, &scratch.seen)
 	}
 
-	program.build()
-
-	c := &Conf{state: pm.cache.conf, program: program, platformEnv: platformEnv, bases: make([][]ConfAssignment, program.moduleCount)}
+	tables := pm.cache.conf.tablesFor(program.stmts)
+	c := &Conf{state: pm.cache.conf, program: program, tables: tables, platformEnv: platformEnv, bases: make([][]ConfAssignment, tables.moduleCount)}
 
 	c.sysinclList = strings.Fields(env.expand(env.string(envSYSINCL)))
 
-	for key := range program.byTarget.idx.each() {
+	for key := range tables.byTarget.idx.each() {
 		c.inherited.put(ENV(key), confStringBinding(platformEnv, ENV(key)))
 	}
 
@@ -1195,12 +1259,12 @@ func (c *Conf) set(env Environment, variable ENV, originals map[STR]STR) {
 }
 
 func (c *Conf) recalcInto(env Environment, variable ENV, originals map[STR]STR, recording []ConfAssignment) {
-	targets, _ := c.program.byVariable.get(variable)
+	targets, _ := c.tables.byVariable.get(variable)
 
 	for _, target := range targets {
 		env.unbind(target)
 
-		stmts, _ := c.program.byTarget.get(target)
+		stmts, _ := c.tables.byTarget.get(target)
 		base, _ := c.inherited.get(target)
 
 		if original, ok := originals[target.str()]; ok {
@@ -1228,13 +1292,13 @@ func (c *Conf) recalcInto(env Environment, variable ENV, originals map[STR]STR, 
 func (c *Conf) initModule(env Environment, name STR, tag string, originals map[STR]STR) {
 	defer func() { env.s.confBase = nil }()
 
-	module := c.program.module(name, tag)
+	module := c.tables.module(name, tag)
 
 	if module == nil {
 		return
 	}
 
-	plan := c.program.plan(module)
+	plan := c.tables.plan(module)
 
 	if env.resourceUses != nil {
 		env.s.confBase = nil
@@ -1336,20 +1400,20 @@ func recordConfAssignment(recording []ConfAssignment, key ENV, env Environment) 
 }
 
 func (c *Conf) finishModule(env Environment, name STR, tag string, originals map[STR]STR) {
-	if module := c.program.module(name, tag); module != nil {
+	if module := c.tables.module(name, tag); module != nil {
 		c.finishModuleParent(env, module, originals)
 	}
 }
 
 func (c *Conf) finishModuleParent(env Environment, module *confModule, originals map[STR]STR) {
-	if parent := c.program.module(module.parent, ""); parent != nil {
+	if parent := c.tables.module(module.parent, ""); parent != nil {
 		c.finishModuleParent(env, parent, originals)
 	}
 
 	for _, variable := range module.builder {
 		env.setBool(variable, true)
 
-		targets, _ := c.program.byVariable.get(variable)
+		targets, _ := c.tables.byVariable.get(variable)
 
 		if slices.ContainsFunc(targets, func(target ENV) bool { return originals[target.str()] != 0 }) {
 			c.set(env, variable, originals)
