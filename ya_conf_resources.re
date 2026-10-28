@@ -1,14 +1,29 @@
 package main
 
+import "bytes"
+
+var (
+	yaConfFormulaKey  = []byte(`"formula"`)
+	yaConfResourceKey = []byte(`"resource"`)
+)
+
 // yaConfFormulaNext finds the next `"formula": "<path>.json"` at or after
 // pos in a ya.conf.json-like text and returns the path bounds and the
-// offset past the match.
+// offset past the match. Candidates start at the literal key, found with
+// bytes.Index; the scanner only checks the rest.
 func yaConfFormulaNext(yyinput []byte, pos int) (ps, pe, end int, ok bool) {
-	yycursor, yymarker := pos, pos
 	yylimit := len(yyinput)
 	/*!stags:re2c format = "var @@ int\n\t_ = @@\n"; */
 
 	for {
+		i := bytes.Index(yyinput[pos:], yaConfFormulaKey)
+
+		if i < 0 {
+			return 0, 0, 0, false
+		}
+
+		yycursor := pos + i + len(yaConfFormulaKey)
+		yymarker := yycursor
 		/*!re2c
 		re2c:yyfill:enable = 0;
 		re2c:eof = 0;
@@ -25,9 +40,9 @@ func yaConfFormulaNext(yyinput []byte, pos int) (ps, pe, end int, ok bool) {
 
 		ysp = [\t\n\f\r ];
 
-		"\"formula\"" ysp* ":" ysp* "\"" @ps [^"]+ ".json" @pe "\"" { return ps, pe, yycursor, true }
-		* { continue }
-		$ { return 0, 0, 0, false }
+		ysp* ":" ysp* "\"" @ps [^"]+ ".json" @pe "\"" { return ps, pe, yycursor, true }
+		* { pos += i + 1; continue }
+		$ { pos += i + 1; continue }
 		*/
 	}
 }
@@ -35,11 +50,18 @@ func yaConfFormulaNext(yyinput []byte, pos int) (ps, pe, end int, ok bool) {
 // yaConfResourceNext finds the next `"resource": "<id>"` at or after pos
 // and returns the id bounds and the offset past the match.
 func yaConfResourceNext(yyinput []byte, pos int) (ps, pe, end int, ok bool) {
-	yycursor, yymarker := pos, pos
 	yylimit := len(yyinput)
 	/*!stags:re2c format = "var @@ int\n\t_ = @@\n"; */
 
 	for {
+		i := bytes.Index(yyinput[pos:], yaConfResourceKey)
+
+		if i < 0 {
+			return 0, 0, 0, false
+		}
+
+		yycursor := pos + i + len(yaConfResourceKey)
+		yymarker := yycursor
 		/*!re2c
 		re2c:yyfill:enable = 0;
 		re2c:eof = 0;
@@ -54,9 +76,9 @@ func yaConfResourceNext(yyinput []byte, pos int) (ps, pe, end int, ok bool) {
 		re2c:define:YYSTAGN = "@@{tag} = -1";
 		re2c:define:YYSHIFTSTAG = "@@{tag} += @@{shift}";
 
-		"\"resource\"" ysp* ":" ysp* "\"" @ps [^"]+ @pe "\"" { return ps, pe, yycursor, true }
-		* { continue }
-		$ { return 0, 0, 0, false }
+		ysp* ":" ysp* "\"" @ps [^"]+ @pe "\"" { return ps, pe, yycursor, true }
+		* { pos += i + 1; continue }
+		$ { pos += i + 1; continue }
 		*/
 	}
 }
