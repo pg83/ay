@@ -77,3 +77,45 @@ func (a *BumpAllocator[T]) list(vs ...T) []T {
 
 	return block[:n:n]
 }
+
+type BumpSpan struct {
+	chunk  uint32
+	start  uint32
+	length uint32
+}
+
+type IndexedBumpAllocator[T any] struct {
+	BumpAllocator[T]
+	chunks Vec[[]T]
+}
+
+func newIndexedBumpAllocator[T any]() *IndexedBumpAllocator[T] {
+	return &IndexedBumpAllocator[T]{BumpAllocator: BumpAllocator[T]{next: bumpChunkInitial}}
+}
+
+func (a *IndexedBumpAllocator[T]) alloc(n int) []T {
+	if len(a.chunk) < n {
+		block := a.BumpAllocator.alloc(n)
+
+		a.chunks.pushBack(block)
+
+		return block
+	}
+
+	return a.BumpAllocator.alloc(n)
+}
+
+func (a *IndexedBumpAllocator[T]) commitSpan(n int) BumpSpan {
+	i := len(a.chunks.s) - 1
+	span := BumpSpan{chunk: uint32(i), start: uint32(len(a.chunks.s[i]) - len(a.chunk)), length: uint32(n)}
+
+	a.commit(n)
+
+	return span
+}
+
+func (a *IndexedBumpAllocator[T]) slice(span BumpSpan) []T {
+	end := span.start + span.length
+
+	return a.chunks.s[span.chunk][span.start:end:end]
+}

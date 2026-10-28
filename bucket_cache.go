@@ -46,7 +46,7 @@ func bucketListHash(buckets [][]VFS) (uint64, uint64) {
 
 type BucketVal struct {
 	verify uint64
-	slice  []VFS
+	span   BumpSpan
 }
 
 type BucketListVal struct {
@@ -57,7 +57,7 @@ type BucketListVal struct {
 type BucketCache struct {
 	chunks       *BumpAllocator[[]VFS]
 	lists        *BumpAllocator[BucketList]
-	pool         *BumpAllocator[VFS]
+	pool         *IndexedBumpAllocator[VFS]
 	intern       *IntValueMap[BucketVal]
 	overflow     *IntValueMap[BucketVal]
 	listIntern   *IntValueMap[BucketListVal]
@@ -73,7 +73,7 @@ func newBucketCache() *BucketCache {
 	c := &BucketCache{
 		chunks:       newBumpAllocator[[]VFS](),
 		lists:        newBumpAllocator[BucketList](),
-		pool:         newBumpAllocator[VFS](),
+		pool:         newIndexedBumpAllocator[VFS](),
 		intern:       newIntValueMap[BucketVal](1 << 17),
 		overflow:     newIntValueMap[BucketVal](1 << 4),
 		listIntern:   newIntValueMap[BucketListVal](1 << 16),
@@ -137,7 +137,7 @@ func (c *BucketCache) internBucket(elems []VFS) []VFS {
 
 	if found {
 		if cell.verify == h2 {
-			return cell.slice
+			return c.pool.slice(cell.span)[1:]
 		}
 
 		c.h1Mismatches++
@@ -149,34 +149,33 @@ func (c *BucketCache) internBucket(elems []VFS) []VFS {
 				throwFmt("BucketCache: bucket hash pair collision (h1=%#x h2=%#x, %d elems)", h1, h2, len(elems))
 			}
 
-			return cell2.slice
+			return c.pool.slice(cell2.span)[1:]
 		}
 
 		c.overflowed++
 
-		slice := c.storeBucket(elems)
+		span := c.storeBucket(elems)
 
-		*cell2 = BucketVal{verify: h1, slice: slice}
+		*cell2 = BucketVal{verify: h1, span: span}
 
-		return slice
+		return c.pool.slice(span)[1:]
 	}
 
-	slice := c.storeBucket(elems)
+	span := c.storeBucket(elems)
 
-	*cell = BucketVal{verify: h2, slice: slice}
+	*cell = BucketVal{verify: h2, span: span}
 
-	return slice
+	return c.pool.slice(span)[1:]
 }
 
-func (c *BucketCache) storeBucket(elems []VFS) []VFS {
+func (c *BucketCache) storeBucket(elems []VFS) BumpSpan {
 	n := len(elems) + 1
 	block := c.pool.alloc(n)[:n]
 
 	block[0] = 0
 	copy(block[1:], elems)
-	c.pool.commit(n)
 
-	return block[1:n:n]
+	return c.pool.commitSpan(n)
 }
 
 func bucketEpochCell(bucket []VFS) *uint32 {
@@ -197,11 +196,11 @@ func (c *BucketCache) firstBucketVisit(bucket []VFS) bool {
 
 func (c *BucketCache) clearBucketEpochs() {
 	for i := range c.intern.vals.s {
-		*bucketEpochCell(c.intern.vals.s[i].slice) = 0
+		*bucketEpochCell(c.pool.slice(c.intern.vals.s[i].span)[1:]) = 0
 	}
 
 	for i := range c.overflow.vals.s {
-		*bucketEpochCell(c.overflow.vals.s[i].slice) = 0
+		*bucketEpochCell(c.pool.slice(c.overflow.vals.s[i].span)[1:]) = 0
 	}
 }
 

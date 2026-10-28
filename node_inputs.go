@@ -2,6 +2,11 @@ package main
 
 import "slices"
 
+var (
+	closureScratches    = newSliceScratchPool[Closure](8)
+	inputChunkScratches = newSliceScratchPool[[]VFS](8)
+)
+
 type NodeInputs struct {
 	files          InputChunks
 	roots          InputChunks
@@ -104,8 +109,9 @@ func (p *NodeInputs) evaluate() InputChunks {
 		return p.files
 	}
 
-	var closures []Closure
-	var includedInputs InputChunks
+	na := p.na
+	closures := closureScratches.get()
+	includedInputs := inputChunkScratches.get()
 
 	p.eachRoot(func(root VFS) {
 		closures = append(closures, p.scanner.establishedClosure(root))
@@ -113,7 +119,7 @@ func (p *NodeInputs) evaluate() InputChunks {
 		if info := p.scanner.codegen.lookup(root); info != nil && info.IncludedInputs != nil {
 			for _, included := range info.IncludedInputs.Roots {
 				closure := p.scanner.establishedClosure(included)
-				sources := closure.collect(p.na, VFS.isSource)
+				sources := closure.collect(na, VFS.isSource)
 
 				includedInputs = append(includedInputs, sources)
 			}
@@ -128,7 +134,7 @@ func (p *NodeInputs) evaluate() InputChunks {
 				for _, parsed := range info.IncludedInputs.Roots {
 					closure := p.scanner.establishedClosure(parsed)
 
-					includedInputs = append(includedInputs, closure.collect(p.na, VFS.isSource))
+					includedInputs = append(includedInputs, closure.collect(na, VFS.isSource))
 				}
 			}
 		}
@@ -153,7 +159,7 @@ func (p *NodeInputs) evaluate() InputChunks {
 			bound += len(closure.bucketList())
 		}
 
-		chunks := p.na.inputs.alloc(bound)[:0]
+		chunks := na.inputs.alloc(bound)[:0]
 
 		for _, chunk := range p.files {
 			chunks = append(chunks, chunk)
@@ -164,22 +170,27 @@ func (p *NodeInputs) evaluate() InputChunks {
 		}
 
 		for _, bucket := range includedInputs {
-			if extra := p.na.filterSeen(seen, bucket); len(extra) > 0 {
+			if extra := na.filterSeen(seen, bucket); len(extra) > 0 {
 				chunks = append(chunks, extra)
 			}
 		}
 
 		for _, closure := range closures {
 			for _, bucket := range closure.bucketList() {
-				if extra := p.na.filterSeen(seen, bucket); len(extra) > 0 {
+				if extra := na.filterSeen(seen, bucket); len(extra) > 0 {
 					chunks = append(chunks, extra)
 				}
 			}
 		}
 
-		p.na.inputs.commit(len(chunks))
+		na.inputs.commit(len(chunks))
 		result = chunks[:len(chunks):len(chunks)]
 	})
+
+	clear(closures)
+	closureScratches.put(closures)
+	clear(includedInputs)
+	inputChunkScratches.put(includedInputs)
 
 	return result
 }

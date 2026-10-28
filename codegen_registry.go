@@ -112,7 +112,7 @@ type CodegenRegistry struct {
 }
 
 type splitLookup struct {
-	info       *GeneratedFileInfo
+	slot       uint32
 	generation uint32
 }
 
@@ -362,8 +362,12 @@ func (r *CodegenRegistry) lookupSplit(prefix VFS, suffixID STR) *GeneratedFileIn
 
 	if r.bySplit != nil {
 		if cached := r.bySplit.get(key); cached != nil {
-			if cached.info != nil || cached.generation == r.splitGeneration {
-				return cached.info
+			if cached.slot != 0 {
+				return *unsafeAt(r.byRel.vals.s, uint64(cached.slot))
+			}
+
+			if cached.generation == r.splitGeneration {
+				return nil
 			}
 		}
 	}
@@ -401,7 +405,13 @@ func (r *CodegenRegistry) lookupSplit(prefix VFS, suffixID STR) *GeneratedFileIn
 		r.bySplit = newIntMap[splitLookup](1 << 15)
 	}
 
-	r.bySplit.put(key, splitLookup{info: info, generation: r.splitGeneration})
+	var slot uint32
+
+	if info != nil {
+		slot = r.byRel.idx.s[info.OutputPath.rel()]
+	}
+
+	r.bySplit.put(key, splitLookup{slot: slot, generation: r.splitGeneration})
 
 	return info
 }
