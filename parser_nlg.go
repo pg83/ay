@@ -1,21 +1,6 @@
 package main
 
-import (
-	"regexp"
-	"strings"
-)
-
-var (
-	nlgFromImport   = regexp.MustCompile(`^[[:space:]]*(?:ext_)?from[[:space:]]*` + nlgPathPattern + `[[:space:]]*import[[:space:]]+` + nlgTargetPattern + `(?:[[:space:]]*,[[:space:]]*` + nlgTargetPattern + `)*(?:[[:space:]]+with[[:space:]]+context)?[[:space:]]*$`)
-	nlgSimpleImport = regexp.MustCompile(`^[[:space:]]*(?:ext_)?(?:import|nlgimport)[[:space:]]*` + nlgModulePattern + `(?:[[:space:]]*,[[:space:]]*` + nlgModulePattern + `)*[[:space:]]*$`)
-	nlgImportPath   = regexp.MustCompile(`["']([a-zA-Z0-9_/]+\.nlg)["']`)
-)
-
-const (
-	nlgPathPattern   = `(?:"[a-zA-Z0-9_/]+\.nlg"|'[a-zA-Z0-9_/]+\.nlg')`
-	nlgTargetPattern = `[a-zA-Z0-9_]+`
-	nlgModulePattern = nlgPathPattern + `(?:[[:space:]]*as[[:space:]]+` + nlgTargetPattern + `)?(?:[[:space:]]+with[[:space:]]+context)?`
-)
+import "strings"
 
 type NlgIncludeDirectiveParser struct{}
 
@@ -68,14 +53,22 @@ func (NlgIncludeDirectiveParser) parse(_ string, data [][]byte, a *BumpAllocator
 
 		text = text[end+4:]
 
-		if !nlgFromImport.MatchString(command) && !nlgSimpleImport.MatchString(command) {
+		if !nlgImportStatement(command) {
 			continue
 		}
 
 		external := strings.HasPrefix(command, "ext_")
 
-		for _, match := range nlgImportPath.FindAllStringSubmatch(command, -1) {
-			target := match[1]
+		for pos := 0; ; {
+			ps, pe, next, ok := nlgImportPathNext(command, pos)
+
+			if !ok {
+				break
+			}
+
+			pos = next
+
+			target := command[ps:pe]
 
 			headers = append(headers, IncludeDirective{kind: includeSystem, target: includeTarget(internV(target, ".h").any())})
 

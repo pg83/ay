@@ -1,9 +1,5 @@
 package main
 
-import "regexp"
-
-var scIncludePattern = regexp.MustCompile(`^include[[:space:]]+"([^"]+)"[[:space:]]*;`)
-
 type ScIncludeDirectiveParser struct{}
 
 func (ScIncludeDirectiveParser) parse(_ string, data [][]byte, a *BumpAllocator[IncludeDirective]) ParsedIncludeSet {
@@ -11,13 +7,15 @@ func (ScIncludeDirectiveParser) parse(_ string, data [][]byte, a *BumpAllocator[
 	k := 0
 
 	eachLine(data, func(line []byte) {
-		match := scIncludePattern.FindSubmatch(trimParserSpace(line))
+		line = trimParserSpace(line)
 
-		if match == nil {
+		ts, te, ok := scIncludeMatch(line)
+
+		if !ok {
 			return
 		}
 
-		k = addDirective(block, k, IncludeDirective{kind: includeQuoted, target: includeTarget(internBytes(match[1]).any())})
+		k = addDirective(block, k, IncludeDirective{kind: includeQuoted, target: includeTarget(internBytes(line[ts:te]).any())})
 	})
 
 	a.commit(k)

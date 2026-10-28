@@ -1,14 +1,6 @@
 package main
 
-import (
-	"regexp"
-	"strings"
-)
-
-var (
-	rosEnumPattern  = regexp.MustCompile(`^enum\s+(\w+)\s*(\w+)?$`)
-	rosFieldPattern = regexp.MustCompile(`^(?:Optional<([\w/]+)(?:\[\d*\])?>|([\w/]+))(?:\[\d*\])?\s+\w+$`)
-)
+import "strings"
 
 type RosIncludeDirectiveParser struct{}
 
@@ -22,23 +14,19 @@ func (RosIncludeDirectiveParser) parse(_ string, data [][]byte, a *BumpAllocator
 
 		text = strings.TrimSpace(text)
 
-		if enum := rosEnumPattern.FindStringSubmatch(text); enum != nil {
-			enums[enum[1]] = true
+		if ns, ne, ok := rosEnumMatch(text); ok {
+			enums[text[ns:ne]] = true
 
 			return
 		}
 
-		fields := rosFieldPattern.FindStringSubmatch(text)
+		ts, te, ok := rosFieldMatch(text)
 
-		if fields == nil {
+		if !ok {
 			return
 		}
 
-		name := fields[1]
-
-		if name == "" {
-			name = fields[2]
-		}
+		name := text[ts:te]
 
 		if enums[name] {
 			return

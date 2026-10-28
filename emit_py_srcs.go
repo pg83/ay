@@ -5,7 +5,6 @@ import (
 	"crypto/md5"
 	enchex "encoding/hex"
 	"path"
-	"regexp"
 	"slices"
 	"sort"
 	"strings"
@@ -16,8 +15,6 @@ var (
 	genPy3RegScriptChunk = []VFS{genPy3RegScriptVFS}
 	genPyRegScriptChunk  = []VFS{genPyRegScriptVFS}
 	pyCodegenKV          = KV{P: pkPY, PC: pcYellow}
-	yaConfFormulaRE      = regexp.MustCompile(`"formula"\s*:\s*"([^"]+\.json)"`)
-	yaConfResourceRE     = regexp.MustCompile(`"resource"\s*:\s*"([^"]+)"`)
 )
 
 const b32Lower = "abcdefghijklmnopqrstuvwxyz234567"
@@ -1013,8 +1010,16 @@ func yaConfFormulaResources(fs FS, confPath string) []string {
 
 	seen := map[string]struct{}{}
 
-	for _, m := range yaConfFormulaRE.FindAllSubmatch(raw, -1) {
-		formula := string(m[1])
+	for pos := 0; ; {
+		ps, pe, next, ok := yaConfFormulaNext(raw, pos)
+
+		if !ok {
+			break
+		}
+
+		pos = next
+
+		formula := string(raw[ps:pe])
 
 		if _, dup := seen[formula]; dup {
 			continue
@@ -1024,8 +1029,16 @@ func yaConfFormulaResources(fs FS, confPath string) []string {
 		out = append(out, formula)
 	}
 
-	for _, m := range yaConfResourceRE.FindAllSubmatch(raw, -1) {
-		path := "build/external_resources/" + string(m[1]) + "/resources.json"
+	for pos := 0; ; {
+		ps, pe, next, ok := yaConfResourceNext(raw, pos)
+
+		if !ok {
+			break
+		}
+
+		pos = next
+
+		path := "build/external_resources/" + string(raw[ps:pe]) + "/resources.json"
 
 		if _, dup := seen[path]; dup {
 			continue
