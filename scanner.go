@@ -129,9 +129,7 @@ func (s *IncludeScanner) putClosure(v VFS, cl Closure) {
 }
 
 func (s *IncludeScanner) cachedChildren(v VFS) ([]VFS, bool) {
-	entry, ok := s.codegen.files.get1(v)
-
-	return entry.Paths, ok
+	return s.codegen.files.DenseMap2.get1(v)
 }
 
 func (s *IncludeScanner) putChildren(v VFS, children []VFS, diagnostics []IncludeDiagnostic) ScannedChildren {
@@ -509,7 +507,7 @@ func (s *IncludeScanner) parsedBucketForInput(vfsPath VFS, sourceBucket ParsedIn
 	return s.parsers.sourceParsedBuckets(vfsPath, ctxParser).bucket(sourceBucket)
 }
 
-func (sc *ScanCtx) appendResolvedChildren(out []VFS, vfsPath VFS) []VFS {
+func (sc *ScanCtx) appendResolvedChildren(out []VFS, vfsPath VFS, previous ScannedChildren) []VFS {
 	s := sc.scanner
 
 	if vfsPath.isBuild() && !sc.initialOnly {
@@ -518,13 +516,17 @@ func (sc *ScanCtx) appendResolvedChildren(out []VFS, vfsPath VFS) []VFS {
 
 	own, compileExtra, info, inducedBucket := s.parsedIncludes(vfsPath, sc.parser)
 
+	if vfsPath.isBuild() && !sc.initialOnly {
+		previous, _ = s.codegen.files.get1(vfsPath)
+	}
+
 	if len(own) == 0 && len(compileExtra) == 0 && !vfsPath.isBuild() {
 		return out
 	}
 
 	incDir := internStr(pathDir(vfsPath.relString())).source()
 
-	if previous, cached := s.codegen.files.get1(vfsPath); cached && previous.Deferred && previous.Diagnostics != nil {
+	if previous.Deferred && previous.Diagnostics != nil {
 		for _, diagnostic := range previous.Diagnostics.Entries {
 			out = sc.resolve(out, vfsPath, incDir, diagnostic.Directive)
 		}
@@ -626,9 +628,10 @@ func (sc *ScanCtx) appendResolvedInducedDeps(out []VFS, vfsPath VFS, incDir VFS,
 
 func (sc *ScanCtx) resolvedChildren(abs VFS) ScannedChildren {
 	s := sc.scanner
+	previous, cached := s.codegen.files.get1(abs)
 
-	if cached, ok := s.codegen.files.get1(abs); ok && (!cached.Deferred || sc.noResolve && (abs.isSource() || cached.Diagnostics != nil) || sc.initialOnly || sc.readOnly) {
-		return cached
+	if cached && (!previous.Deferred || sc.noResolve && (abs.isSource() || previous.Diagnostics != nil) || sc.initialOnly || sc.readOnly) {
+		return previous
 	}
 
 	if sc.readOnly {
@@ -651,11 +654,11 @@ func (sc *ScanCtx) resolvedChildren(abs VFS) ScannedChildren {
 
 	sc.diagnostics = nil
 
-	if previous, cached := s.codegen.files.get1(abs); cached && previous.Deferred {
+	if previous.Deferred {
 		scratch = append(scratch, previous.Paths...)
 	}
 
-	scratch = sc.appendResolvedChildren(scratch, abs)
+	scratch = sc.appendResolvedChildren(scratch, abs, previous)
 
 	diagnostics := sc.diagnostics
 

@@ -213,6 +213,10 @@ func (fs *OsFS) isFilePathClean(rel string) bool {
 	return present && !isDir
 }
 
+func (fs *OsFS) isReadFile(rel STR) bool {
+	return fs.contentHashes.load(rel) != 0
+}
+
 func (fs *OsFS) resolveSourceUnder(prefix, target STR) STR {
 	return fs.resolveSourceUnder0(prefix, target, false, false)
 }

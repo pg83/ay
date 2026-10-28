@@ -40,7 +40,18 @@ func (d *ModuleData) recordProducerDeclarations() {
 		counts[prodDocsCopy] = len(d.docs.copies)
 	}
 
+	if counts == d.producerCounts {
+		return
+	}
+
 	start := len(d.producerDeclarations)
+	n := 0
+
+	for kind, count := range counts {
+		n += max(count-d.producerCounts[kind], 0)
+	}
+
+	d.producerDeclarations = slices.Grow(d.producerDeclarations, n)
 
 	for kind, count := range counts {
 		for index := d.producerCounts[kind]; index < count; index++ {
@@ -48,9 +59,11 @@ func (d *ModuleData) recordProducerDeclarations() {
 		}
 	}
 
-	slices.SortStableFunc(d.producerDeclarations[start:], func(a, b producerDeclaration) int {
-		return cmp.Compare(d.producerDeclarationSequence(a), d.producerDeclarationSequence(b))
-	})
+	if n > 1 {
+		slices.SortStableFunc(d.producerDeclarations[start:], func(a, b producerDeclaration) int {
+			return cmp.Compare(d.producerDeclarationSequence(a), d.producerDeclarationSequence(b))
+		})
+	}
 
 	d.producerCounts = counts
 }
@@ -232,8 +245,16 @@ func (e *EmitContext) orderedProducerPositions(positions []ProducerPos) []Produc
 		ranks[starts[decl.kind]+decl.index] = i
 	}
 
-	slices.SortStableFunc(positions, func(a, b ProducerPos) int {
-		if order := cmp.Compare(e.producerPriority(a), e.producerPriority(b)); order != 0 {
+	e.prodOrder = slices.Grow(e.prodOrder[:0], len(positions))[:len(positions)]
+
+	for i := range positions {
+		e.prodOrder[i] = i
+	}
+
+	slices.SortStableFunc(e.prodOrder, func(ai, bi int) int {
+		a, b := &positions[ai], &positions[bi]
+
+		if order := cmp.Compare(e.producerPriority(*a), e.producerPriority(*b)); order != 0 {
 			return order
 		}
 

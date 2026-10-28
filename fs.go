@@ -10,6 +10,7 @@ type FS interface {
 	isFile(prefix STR, suffix string) bool
 	isFileClean(prefix STR, suffix string) bool
 	isFilePathClean(rel string) bool
+	isReadFile(rel STR) bool
 	isDir(prefix STR, suffix string) bool
 	sourcePathExists(rel string) bool
 

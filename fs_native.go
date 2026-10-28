@@ -19,7 +19,6 @@ type dirFDCacheEntry struct {
 type fsBackend struct {
 	testReadErrors map[string]error
 	readBuf        []byte
-	fileCloseQueue chan int
 	direntBuf      []byte
 	mmapCur        []byte
 	rootFD         int
@@ -34,23 +33,14 @@ type fsBackend struct {
 func (fs *OsFS) initBackend() {
 	fs.readBuf = make([]byte, readChunkSize)
 	fs.testReadErrors = map[string]error{}
-	fs.fileCloseQueue = make(chan int, 256)
 	fs.dirFD = -1
 	fs.dirFDs = make(map[string]int, dirFDCacheSize)
 
 	fs.platformInit()
-
-	go fs.closeFiles()
-}
-
-func (fs *OsFS) closeFiles() {
-	for fd := range fs.fileCloseQueue {
-		syscall.Close(fd)
-	}
 }
 
 func (fs *OsFS) closeFile(fd int) {
-	fs.fileCloseQueue <- fd
+	syscall.Close(fd)
 }
 
 func (fs *OsFS) sourcePathExists(rel string) bool {

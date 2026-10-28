@@ -37,7 +37,7 @@ func (e *EmitContext) emitAS(srcVFS VFS, in ModuleCCInputs, hostP *Platform) (No
 			Env: env}),
 		Env: env, Inputs: na.rootInputList(na.vfsList(in.IncludeView.self), in.IncludeView.bucketList()...), Outputs: na.vfsList(outVFS),
 		KV:        &asKV,
-		Resources: instance.Platform.UsesClangOnly},
+		Resources: instance.Platform.UsesClangOnly}, input: InputSpec{root: in.IncludeView.self, existingSource: in.ExistingSource},
 	}
 
 	return e.emitNode(node), outVFS, true

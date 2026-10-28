@@ -19,7 +19,7 @@ type NodeSpec struct {
 
 func (e *EmitContext) checkDeclaredInputs(node *NodeSpec) {
 	missing := func(v VFS) {
-		if v != node.input.existingSource && v.isSource() && !e.ctx.fs.isFilePathClean(v.relString()) {
+		if v != node.input.existingSource && v.isSource() && !e.ctx.fs.isReadFile(v.rel()) && !e.ctx.fs.isFilePathClean(v.relString()) {
 			e.ctx.onWarn(Warn{Kind: WarnMissingSource, Message: "source file not found: " + v.string()})
 		}
 	}

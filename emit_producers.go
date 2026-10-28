@@ -970,10 +970,8 @@ func (e *EmitContext) emitDeclaredProducers(cythonPlans []CythonStmtPlan) {
 		e.producerOutputs = make(map[VFS]int, len(positions))
 	}
 
-	e.prodOrder = e.prodOrder[:0]
-
-	for i, pos := range positions {
-		e.prodOrder = append(e.prodOrder, i)
+	for _, i := range e.prodOrder {
+		pos := &positions[i]
 
 		for _, output := range pos.outs {
 			e.producerOutputs[output] = i
