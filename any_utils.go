@@ -2,6 +2,8 @@ package main
 
 import "strings"
 
+var joinAnysScratch []byte
+
 func appendArgGroupStr(dst []ANY, srcs ...[]ANY) []ANY {
 	for _, s := range srcs {
 		for _, a := range s {
@@ -118,4 +120,20 @@ func prependAny(xs []ANY, x ANY) []ANY {
 	xs[0] = x
 
 	return xs
+}
+
+func joinAnys(as []ANY, sep string) string {
+	b := joinAnysScratch[:0]
+
+	for i, a := range as {
+		if i > 0 {
+			b = append(b, sep...)
+		}
+
+		b = append(b, a.string()...)
+	}
+
+	joinAnysScratch = b
+
+	return internBytes(b).string()
 }

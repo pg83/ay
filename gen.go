@@ -2559,10 +2559,11 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 	ownCFlagsGlobalSelf := ownCompilerFlagArgs(effectiveCFlagsGlobal, d.cFlagsGlobal)
 	ownCXXFlagsGlobalSelf := ownCompilerFlagArgs(effectiveCXXFlagsGlobal, d.cxxFlagsGlobal)
 	ownCOnlyFlagsGlobalSelf := ownCompilerFlagArgs(effectiveCOnlyFlagsGlobal, d.cOnlyFlagsGlobal)
-	dedupedAddIncl := dedup(d.addIncl, d.addInclGlobal)
+	addInclScratch := vfsScratches.get()
+	dedupedAddIncl := dedupInto(addInclScratch, d.addIncl, d.addInclGlobal)
 
 	if d.multimodule == tokRosLibrary && instance.Language == LangRosBindings {
-		dedupedAddIncl = dedup(d.addInclGlobal, d.addIncl)
+		dedupedAddIncl = dedupInto(addInclScratch[:0], d.addInclGlobal, d.addIncl)
 	}
 
 	perModuleCCTag := d.unit.CCTag
@@ -2588,6 +2589,7 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 	}
 
 	dedupedAddIncl = ctx.na.vfsList(dedupedAddIncl...)
+	vfsScratches.put(addInclScratch)
 	selfPeerAddInclGlobal = ctx.na.vfsList(selfPeerAddInclGlobal...)
 
 	fullPeerAddInclGlobal := ctx.na.vfsList(peerAddInclGlobal...)

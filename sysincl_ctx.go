@@ -147,7 +147,13 @@ type SysinclIndex struct {
 }
 
 func buildSysinclIndex(set SysInclSet) *SysinclIndex {
-	m := &SysinclIndex{byLower: make(map[string]int32), byID: newIntMap[int32](4096)}
+	pairs := 0
+
+	for i := range set {
+		pairs += len(set[i].pairs)
+	}
+
+	m := &SysinclIndex{byLower: make(map[string]int32, pairs), byID: newIntMap[int32](4096)}
 	contribArena := newBumpAllocator[SysinclContribution]()
 
 	var lower []byte

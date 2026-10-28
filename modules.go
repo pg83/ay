@@ -1888,7 +1888,7 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 			d.cOnlyFlagsGlobal, d.cOnlyFlags = appendCompilerFlags(v.Flags, env, "USER_CONLYFLAGS", false, d.cOnlyFlagsGlobal, d.cOnlyFlags, &d.compilerFlagUses[compilerFlagsCOnly])
 		case *LDFlagsStmt:
 
-			value := strings.Join(anyStrs(expandStmtTokens(v.Flags, env)), " ")
+			value := joinAnys(expandStmtTokens(v.Flags, env), " ")
 
 			d.ldFlags = append(d.ldFlags, internAny(expandSourceScalarVarRef(value, env)))
 		case *SrcDirStmt:
@@ -2135,7 +2135,7 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 					raw = v.LexicalArgs
 				}
 
-				args := splitJavaCommandWords(expandStmtToken(strings.Join(anyStrs(raw), " "), env))
+				args := splitJavaCommandWords(expandStmtToken(joinAnys(raw, " "), env))
 
 				d.runJavaPrograms = append(d.runJavaPrograms, NativeJavaProgram{Call: JavaRunProgram{args: args, raw: javaRunProgramRawArgs(anyStrs(raw), env, nil)}, DeclSeq: d.nextDeclSeq()})
 				recordHandledMacro(v.Name, internAnys(args))
@@ -2589,10 +2589,10 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 		}
 
 		if len(args) > 0 && args[0].string() == "FATAL_ERROR" {
-			throwFmt("%s: %s", modulePath, strings.Join(anyStrs(args[1:]), " "))
+			throwFmt("%s: %s", modulePath, joinAnys(args[1:], " "))
 		}
 
-		onWarn(Warn{Kind: WarnPlugin, Message: modulePath + ": " + strings.Join(anyStrs(args), " ")})
+		onWarn(Warn{Kind: WarnPlugin, Message: modulePath + ": " + joinAnys(args, " ")})
 	case tokPireInline, tokPireInlineCmd:
 		if v.Name == tokPireInlineCmd && len(v.Args) != 1 {
 			throwFmt("PIRE_INLINE_CMD expects one source file")
@@ -3447,7 +3447,7 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 			throwFmt("PREPARE_INDUCED_DEPS expects a variable name and dependency type")
 		}
 
-		env.setString(internEnv(v.Args[0].string()), "$_FMT_INDUCED_DEPS("+strings.Join(anyStrs(v.Args[1:]), " ")+")")
+		env.setString(internEnv(v.Args[0].string()), "$_FMT_INDUCED_DEPS("+joinAnys(v.Args[1:], " ")+")")
 	case tokNoDebugInfo:
 		env.setStringID(envNO_DEBUGINFO, strYes)
 	case tokStrip:
@@ -3758,7 +3758,7 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 		d.resources = append(d.resources, ResourceEntry{Path: "-", Key: "py/constructors/" + arg})
 	case tokNoCheckImports:
 
-		value := strings.Join(anyStrs(v.Args), " ")
+		value := joinAnys(v.Args, " ")
 
 		env.setString(internEnv(importMaskVariable), value)
 		setPythonImportMask(value, d)
@@ -3797,7 +3797,7 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 			ToolPath:       "sdg/sdc/ros/configuration/golaunch/topology/generator",
 			OutputSuffixes: []string{".topology.pb.h"},
 			Deps:           []string{"sdg/sdc/ros/configuration/golaunch/topology/common_deps"},
-			ExtraOutFlag:   strings.Join(anyStrs(lists["ROS_MESSAGE_HEADERS"]), ","),
+			ExtraOutFlag:   joinAnys(lists["ROS_MESSAGE_HEADERS"], ","),
 		})
 	case tokAliceCapability:
 		addCPPProtoPlugin(d, CppProtoPlugin{
@@ -3922,7 +3922,7 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 			}
 
 			name := v.Args[0].string()
-			value := strings.Join(anyStrs(v.Args[1:]), " ")
+			value := joinAnys(v.Args[1:], " ")
 
 			if name == "TEST_ENV_VALUE" {
 				value = expandSourceScalarVarRef(value, env)

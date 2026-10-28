@@ -144,3 +144,17 @@ func dedup[T IdKey](lists ...[]T) []T {
 
 	return out
 }
+
+func dedupInto[T IdKey](out []T, lists ...[]T) []T {
+	dedupers.with(func(deduper *DeDuper) {
+		for _, l := range lists {
+			for _, x := range l {
+				if deduper.addStable(x.strID()) {
+					out = append(out, x)
+				}
+			}
+		}
+	})
+
+	return out
+}

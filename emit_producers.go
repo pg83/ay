@@ -558,7 +558,7 @@ func (e *EmitContext) producerPositions(cythonPlans []CythonStmtPlan) ([]Produce
 	for i, stmt := range d.proto2Fbs {
 		output := copyFileOutputVFS(module, strings.TrimSuffix(stmt.Source.string(), filepath.Ext(stmt.Source.string()))+".fbs").rel().build()
 
-		positions = append(positions, ProducerPos{kind: prodProto2Fbs, index: i, outs: []VFS{output}, ins: e.srcInsCandidate(stmt.Source)})
+		positions = append(positions, ProducerPos{kind: prodProto2Fbs, index: i, outs: e.ctx.na.vfsList(output), ins: e.srcInsCandidate(stmt.Source)})
 	}
 
 	for i, token := range d.pireInline {
@@ -764,16 +764,18 @@ func (e *EmitContext) producerPositions(cythonPlans []CythonStmtPlan) ([]Produce
 	for i, stmt := range d.pchFiles {
 		positions = append(positions, ProducerPos{
 			kind: prodPchFile, index: i,
-			outs: []VFS{copyFileOutputVFS(module, stmt.Output.string())},
+			outs: e.ctx.na.vfsList(copyFileOutputVFS(module, stmt.Output.string())),
 			ins:  e.srcInsCandidate(stmt.Header),
 		})
 	}
 
 	for i, stmt := range d.llvmCompile {
-		outputs := []VFS{copyFileOutputVFS(module, stmt.Output)}
+		var outputs []VFS
 
 		if stmt.Kind == tokBpfStatic {
-			outputs = append(outputs, copyFileOutputVFS(module, stmt.Source+".bpf.o"))
+			outputs = e.ctx.na.vfsList(copyFileOutputVFS(module, stmt.Output), copyFileOutputVFS(module, stmt.Source+".bpf.o"))
+		} else {
+			outputs = e.ctx.na.vfsList(copyFileOutputVFS(module, stmt.Output))
 		}
 
 		positions = append(positions, ProducerPos{
@@ -790,7 +792,7 @@ func (e *EmitContext) producerPositions(cythonPlans []CythonStmtPlan) ([]Produce
 
 		positions = append(positions, ProducerPos{
 			kind: prodLuaCompile, index: i,
-			outs: []VFS{copyFileOutputVFS(module, stmt.Source+".o")},
+			outs: e.ctx.na.vfsList(copyFileOutputVFS(module, stmt.Source+".o")),
 			ins:  e.srcInsCandidate(internStr(stmt.Source).any()),
 		})
 	}
