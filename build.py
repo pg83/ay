@@ -106,6 +106,23 @@ dense_maps = command(
     color="magenta",
 )
 
+GENERATED_SERVICE_TOKENS = ["$(B)/generated/go/service_tokens_gen.go"]
+
+# The macro audit's table of service keywords is mined from the Go sources at
+# build time (it used to be mined at run time from sources embedded in ay).
+service_tokens = command(
+    name="service_tokens",
+    inputs=["$(S)/dev/gen_service_tokens.py", *build.glob("$(S)/*.go")],
+    outputs=GENERATED_SERVICE_TOKENS,
+    cmd=[
+        "python3", "$(S)/dev/gen_service_tokens.py",
+        "--out", GENERATED_SERVICE_TOKENS[0],
+        *build.glob("$(S)/*.go"),
+    ],
+    descr="GS",
+    color="magenta",
+)
+
 GO_MODULE_FILES = [
     *GO_SOURCES,
     *build.glob("$(S)/*.s"),
@@ -117,6 +134,7 @@ GO_MODULE_FILES = [
 GO_INPUTS = [
     *GO_MODULE_FILES,
     *GENERATED_DENSE_MAPS,
+    *GENERATED_SERVICE_TOKENS,
     "$(S)/dev/go_overlay.py",
     "$(S)/.gitignore",
     "$(S)/LICENSE",
@@ -131,6 +149,7 @@ GO_OVERLAY_CMD = [
     "--output", GO_OVERLAY,
     "--source-root", "$(S)",
     *GENERATED_DENSE_MAPS,
+    *GENERATED_SERVICE_TOKENS,
 ]
 
 GO_ENV = {
@@ -165,7 +184,7 @@ def go_binary(name, output, cmd):
         name=name,
         inputs=GO_INPUTS,
         outputs=[output],
-        deps=[dense_maps],
+        deps=[dense_maps, service_tokens],
         cmd=cmd,
         cwd="$(S)",
         env=GO_ENV,
@@ -217,7 +236,7 @@ vet = command(
     name="vet",
     inputs=GO_INPUTS,
     outputs=[vet_stamp],
-    deps=[dense_maps],
+    deps=[dense_maps, service_tokens],
     cmd=[
         GO_OVERLAY_CMD,
         ["go", "vet", "-overlay=" + GO_OVERLAY, "."],

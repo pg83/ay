@@ -99,7 +99,7 @@ func recordHandledMacro(name TOK, args []ANY) {
 			a := aTok.string()
 
 			if looksLikeServiceWord(a) {
-				if _, ok := knownServiceTokens()[a]; !ok {
+				if !knownServiceToken(a) {
 					throwFmt("gen: macro %s received service-keyword %q that no handler models — open the upstream macro definition (yatool/build/conf, yatool/build/ymake.core.conf, yatool/build/plugins) and implement its semantics; only then drop the keyword as a \"…\" literal in the macro's handler", name.string(), a)
 				}
 			}
@@ -120,8 +120,6 @@ func recordHandledMacro(name TOK, args []ANY) {
 }
 
 func recordServiceArgsLocked(macroName string, args []string) {
-	known := knownServiceTokens()
-
 	for _, a := range args {
 		if !looksLikeServiceWord(a) {
 			continue
@@ -136,7 +134,7 @@ func recordServiceArgsLocked(macroName string, args []string) {
 
 		bucket[a]++
 
-		if _, modelled := known[a]; modelled {
+		if knownServiceToken(a) {
 			continue
 		}
 

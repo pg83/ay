@@ -1,76 +1,9 @@
 package main
 
-import (
-	"bytes"
-	"embed"
-	"sync"
-)
+import "slices"
 
-var (
-	//go:embed *.go
-	goSources              embed.FS
-	knownServiceTokensOnce sync.Once
-	knownServiceTokensVal  map[string]struct{}
-)
+func knownServiceToken(word string) bool {
+	_, ok := slices.BinarySearch(knownServiceTokenList[:], word)
 
-func knownServiceTokens() map[string]struct{} {
-	knownServiceTokensOnce.Do(func() {
-		knownServiceTokensVal = mineServiceTokensFromSources()
-	})
-
-	return knownServiceTokensVal
-}
-
-func mineServiceTokensFromSources() map[string]struct{} {
-	tokens := map[string]struct{}{}
-
-	for _, e := range throw2(goSources.ReadDir(".")) {
-		data := throw2(goSources.ReadFile(e.Name()))
-
-		for len(data) > 0 {
-			open := bytes.IndexByte(data, '"')
-
-			if open < 0 {
-				break
-			}
-
-			data = data[open+1:]
-
-			n := 0
-			hasLetter := false
-
-			for n < len(data) {
-				c := data[n]
-
-				if c >= 'A' && c <= 'Z' {
-					hasLetter = true
-					n++
-
-					continue
-				}
-
-				if (c >= '0' && c <= '9') || c == '_' {
-					n++
-
-					continue
-				}
-
-				break
-			}
-
-			if n < len(data) && data[n] == '"' {
-				if n > 0 && hasLetter && looksLikeServiceWord(bytesString(data[:n])) {
-					tokens[internBytes(data[:n]).string()] = struct{}{}
-				}
-
-				data = data[n+1:]
-
-				continue
-			}
-
-			data = data[n+1:]
-		}
-	}
-
-	return tokens
+	return ok
 }
