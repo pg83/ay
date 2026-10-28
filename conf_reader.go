@@ -7,13 +7,12 @@ import (
 )
 
 var (
-	confCondReplacer = strings.NewReplacer("&&", " AND ", "||", " OR ", "!=", "!=", "!", " NOT ")
-	confVarRefRe     = regexp.MustCompile(`\$\{(?:[^}:]*:)?([A-Za-z_][A-Za-z0-9_]*)\}|\$([A-Za-z_][A-Za-z0-9_]*)`)
-	confCondParser   Parser
-	confCondLexer    Lexer
-	confCondNodes    = newBumpAllocator[CondNode]()
-	confInputArena   = newBumpAllocator[ENV]()
-	confInputLists   = newBumpAllocator[[]ENV]()
+	confVarRefRe   = regexp.MustCompile(`\$\{(?:[^}:]*:)?([A-Za-z_][A-Za-z0-9_]*)\}|\$([A-Za-z_][A-Za-z0-9_]*)`)
+	confCondParser Parser
+	confCondLexer  Lexer
+	confCondNodes  = newBumpAllocator[CondNode]()
+	confInputArena = newBumpAllocator[ENV]()
+	confInputLists = newBumpAllocator[[]ENV]()
 )
 
 var confReadScratch struct {
@@ -291,11 +290,33 @@ func confStmtAssignment(line string) (name, value string, op ConfOp, ok bool) {
 	return name, strings.TrimSpace(value), op, ok && name != "" && isConfVarName(name)
 }
 
+func appendCondOperators(dst []byte, expr string) []byte {
+	for i := 0; i < len(expr); {
+		switch {
+		case strings.HasPrefix(expr[i:], "&&"):
+			dst = append(dst, " AND "...)
+			i += 2
+		case strings.HasPrefix(expr[i:], "||"):
+			dst = append(dst, " OR "...)
+			i += 2
+		case strings.HasPrefix(expr[i:], "!="):
+			dst = append(dst, "!="...)
+			i += 2
+		case expr[i] == '!':
+			dst = append(dst, " NOT "...)
+			i++
+		default:
+			dst = append(dst, expr[i])
+			i++
+		}
+	}
+
+	return dst
+}
+
 func parseConfCondition(rel, expr string) []CondNode {
 	expr = confInCondition(rel, expr)
-	expr = confCondReplacer.Replace(expr)
-
-	confCondLexer = Lexer{name: rel, src: append(confCondLexer.src[:0], expr...), line: 1, col: 1}
+	confCondLexer = Lexer{name: rel, src: appendCondOperators(confCondLexer.src[:0], expr), line: 1, col: 1}
 
 	p := &confCondParser
 

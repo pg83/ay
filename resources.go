@@ -764,8 +764,22 @@ func moduleSourceRel(modulePath, arg string) string {
 }
 
 func readResourceBundleJSON(fs FS, rel string) map[string]ResourceBundleEntry {
+	key := internStr(rel)
+
+	if bundle, ok := fs.resourceBundle(key); ok {
+		return bundle
+	}
+
+	bundle := parseResourceBundleJSON(concatChunks(fs.readPath(key)))
+
+	fs.storeResourceBundle(key, bundle)
+
+	return bundle
+}
+
+func parseResourceBundleJSON(text []byte) map[string]ResourceBundleEntry {
 	var data ResourceBundleJSON
-	throw(json.Unmarshal(concatChunks(fs.read(rel)), &data))
+	throw(json.Unmarshal(text, &data))
 
 	out := make(map[string]ResourceBundleEntry, len(data.ByPlatform.members))
 

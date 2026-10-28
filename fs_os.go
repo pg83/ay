@@ -66,6 +66,8 @@ type OsFS struct {
 	sourceUnder    *IntMap[STR]
 	sourceUnderHot [sourceUnderHotMask + 1]sourceUnderHotEntry
 	readResult     [2][]byte
+	bundleKeys     []STR
+	bundleVals     []map[string]ResourceBundleEntry
 
 	fsBackend
 }
@@ -215,6 +217,21 @@ func (fs *OsFS) isFilePathClean(rel string) bool {
 
 func (fs *OsFS) isReadFile(rel STR) bool {
 	return fs.contentHashes.load(rel) != 0
+}
+
+func (fs *OsFS) resourceBundle(rel STR) (map[string]ResourceBundleEntry, bool) {
+	for i, key := range fs.bundleKeys {
+		if key == rel {
+			return fs.bundleVals[i], true
+		}
+	}
+
+	return nil, false
+}
+
+func (fs *OsFS) storeResourceBundle(rel STR, bundle map[string]ResourceBundleEntry) {
+	fs.bundleKeys = append(fs.bundleKeys, rel)
+	fs.bundleVals = append(fs.bundleVals, bundle)
 }
 
 func (fs *OsFS) resolveSourceUnder(prefix, target STR) STR {

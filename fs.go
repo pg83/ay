@@ -20,6 +20,9 @@ type FS interface {
 	read(rel string) [][]byte
 	readPath(rel STR) [][]byte
 
+	resourceBundle(rel STR) (map[string]ResourceBundleEntry, bool)
+	storeResourceBundle(rel STR, bundle map[string]ResourceBundleEntry)
+
 	walk(rel string, visit func(rel string, isDir bool) bool)
 	testPathReadError(rel string) error
 
