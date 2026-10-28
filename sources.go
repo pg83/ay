@@ -12,28 +12,48 @@ var includeScannerBasePathsSlice = []VFS{
 	contribLibsLinuxHeadersNf,
 }
 
-func resolveSourceVFS(ctx *GenCtx, srcInstance ModuleInstance, srcRel string, srcDirs []VFS) VFS {
+type DeclaredSource struct {
+	Token    ANY
+	Resolved ResolvedSource
+}
+
+type ResolvedSource struct {
+	GeneratedDirs int
+	Path          VFS
+	Existing      bool
+	Fixed         bool
+}
+
+func resolveSourceVFS(ctx *GenCtx, instance ModuleInstance, src string, dirs []VFS) VFS {
+	return resolveSource(ctx, instance, src, dirs).Path
+}
+
+func resolveSource(ctx *GenCtx, srcInstance ModuleInstance, srcRel string, srcDirs []VFS) ResolvedSource {
 	if vfs, ok := moduleRootedVFS(srcInstance.Path.relString(), srcRel); ok {
-		return vfs
+		return ResolvedSource{Path: vfs, Existing: vfs.isSource() && ctx.fs.isFilePathClean(vfs.relString()), Fixed: true}
 	}
 
 	srcRelClean := srcRel != "" && pathIsClean(srcRel)
 
 	if srcRelClean {
 		if ctx.fs.isFileClean(srcInstance.Path.rel(), srcRel) {
-			return sourceJoined(cleanRel(srcInstance.Path.relString()), srcRel)
+			return ResolvedSource{Path: sourceJoined(cleanRel(srcInstance.Path.relString()), srcRel), Existing: true}
 		}
 	} else if ctx.fs.isFile(srcInstance.Path.rel(), srcRel) {
-		return source(filepath.ToSlash(filepath.Clean(srcInstance.Path.relString() + "/" + srcRel)))
+		return ResolvedSource{Path: source(filepath.ToSlash(filepath.Clean(srcInstance.Path.relString() + "/" + srcRel))), Existing: true}
 	}
+
+	generatedDirs := 0
 
 	for i := 1; i < len(srcDirs); i++ {
 		if srcDirs[i].isBuild() {
 			candidate := buildJoinClean(srcDirs[i].relString(), srcRel)
 
 			if ctx.scannerForPlatform(srcInstance.Platform).codegen.lookup(candidate) != nil {
-				return candidate
+				return ResolvedSource{Path: candidate, GeneratedDirs: generatedDirs}
 			}
+
+			generatedDirs = i + 1
 
 			continue
 		}
@@ -48,53 +68,108 @@ func resolveSourceVFS(ctx *GenCtx, srcInstance ModuleInstance, srcRel string, sr
 
 		if present {
 			if srcRelClean {
-				return sourceJoined(cleanRel(srcDirs[i].relString()), srcRel)
+				return ResolvedSource{Path: sourceJoined(cleanRel(srcDirs[i].relString()), srcRel), Existing: true, GeneratedDirs: generatedDirs}
 			}
 
-			return source(filepath.ToSlash(filepath.Clean(srcDirs[i].relString() + "/" + srcRel)))
+			return ResolvedSource{Path: source(filepath.ToSlash(filepath.Clean(srcDirs[i].relString() + "/" + srcRel))), Existing: true, GeneratedDirs: generatedDirs}
 		}
 	}
 
 	if srcRelClean && ctx.fs.isFilePathClean(srcRel) {
-		return source(srcRel)
+		return ResolvedSource{Path: source(srcRel), Existing: true, GeneratedDirs: generatedDirs}
 	}
 
 	if !srcRelClean && srcRel != "" {
 		if rooted := filepath.ToSlash(filepath.Clean(srcRel)); rooted != ".." && !strings.HasPrefix(rooted, "../") && ctx.fs.isFilePathClean(rooted) {
-			return source(rooted)
+			return ResolvedSource{Path: source(rooted), Existing: true, GeneratedDirs: generatedDirs}
 		}
 	}
 
 	if srcRelClean {
-		return sourceJoined(cleanRel(srcInstance.Path.relString()), srcRel)
+		return ResolvedSource{Path: sourceJoined(cleanRel(srcInstance.Path.relString()), srcRel), GeneratedDirs: generatedDirs}
 	}
 
 	srcRelOnDisk := filepath.ToSlash(filepath.Clean(srcInstance.Path.relString() + "/" + srcRel))
 
-	return source(srcRelOnDisk)
+	return ResolvedSource{Path: source(srcRelOnDisk), GeneratedDirs: generatedDirs}
 }
 
 func resolveSourceOrGeneratedVFS(ctx *GenCtx, instance ModuleInstance, src string, srcDirs []VFS) VFS {
-	vfs := resolveSourceVFS(ctx, instance, src, srcDirs)
+	return resolveSource(ctx, instance, src, srcDirs).withGenerated(ctx.scannerForPlatform(instance.Platform).codegen, src, srcDirs)
+}
 
-	if _, rooted := moduleRootedVFS(instance.Path.relString(), src); !rooted && vfs.isSource() {
-		registry := ctx.scannerForPlatform(instance.Platform).codegen
-		candidate := vfs.rel().build()
+func (r ResolvedSource) withGeneratedDirs(registry *CodegenRegistry, token string, dirs []VFS) VFS {
+	if !r.Fixed && r.GeneratedDirs > 1 {
+		for _, dir := range dirs[1:r.GeneratedDirs] {
+			if dir.isBuild() {
+				candidate := buildJoinClean(dir.relString(), token)
 
-		if registry.lookup(candidate) != nil && !ctx.fs.isFile(srcRootRel, vfs.relString()) {
-			return candidate
-		}
-
-		if pathIsClean(src) {
-			candidate = build(src)
-
-			if registry.lookup(candidate) != nil && !ctx.fs.isFile(srcRootRel, vfs.relString()) {
-				return candidate
+				if registry.lookup(candidate) != nil {
+					return candidate
+				}
 			}
 		}
 	}
 
-	return vfs
+	return r.Path
+}
+
+func (r ResolvedSource) withGenerated(registry *CodegenRegistry, token string, dirs []VFS) VFS {
+	if path := r.withGeneratedDirs(registry, token, dirs); path != r.Path {
+		return path
+	}
+
+	if r.Existing || r.Fixed || !r.Path.isSource() {
+		return r.Path
+	}
+
+	candidate := r.Path.rel().build()
+
+	if registry.lookup(candidate) != nil {
+		return candidate
+	}
+
+	if pathIsClean(token) {
+		candidate = build(token)
+
+		if registry.lookup(candidate) != nil {
+			return candidate
+		}
+	}
+
+	return r.Path
+}
+
+func (e *EmitContext) resolveDeclaredSource(token ANY) ResolvedSource {
+	if v := token.vfs(); v != 0 {
+		return ResolvedSource{Path: v, Existing: v.isSource() && e.ctx.fs.isFilePathClean(v.relString()), Fixed: true}
+	}
+
+	return resolveSource(e.ctx, e.instance, token.string(), e.d.srcDirs)
+}
+
+func (e *EmitContext) resolveSrc(meta *SrcMeta) {
+	if meta.Resolved.Path == 0 {
+		meta.Resolved = e.resolveDeclaredSource(meta.Source)
+	}
+}
+
+func (e *EmitContext) sourceForEmission(meta SrcMeta) VFS {
+	e.resolveSrc(&meta)
+
+	if meta.Resolved.Fixed || meta.Resolved.GeneratedDirs == 0 && (meta.Resolved.Existing || meta.Resolved.Path.isBuild()) {
+		return meta.Resolved.Path
+	}
+
+	return meta.Resolved.withGenerated(e.codegen, meta.Source.string(), e.d.srcDirs)
+}
+
+func (e *EmitContext) schedulingSource(token string, resolved ResolvedSource) VFS {
+	if resolved.Path.isSource() && !resolved.Existing {
+		return moduleInputCandidateVFS(e.instance.Path.relString(), token)
+	}
+
+	return resolved.Path
 }
 
 func (scanner *IncludeScanner) walkClosure(vfsPath VFS, ctx *ScanContext, domain ScanDomain) Closure {

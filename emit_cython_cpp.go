@@ -142,6 +142,7 @@ type CythonStmt struct {
 }
 
 type CythonStmtPlan struct {
+	source            ResolvedSource
 	stmt              *CythonStmt
 	generatedExplicit bool
 	generatedVFS      VFS
@@ -260,7 +261,7 @@ func (e *EmitContext) emitCythonCppPlanned(plans []CythonStmtPlan) {
 		generatedExplicit := p.generatedExplicit
 		generatedVFS := p.generatedVFS
 		headerVFS := p.headerVFS
-		srcVFS := e.resolveModuleSourceVFS(internStr(stmt.Src).any(), d.srcDirs)
+		srcVFS := p.source.withGenerated(e.codegen, stmt.Src, e.d.srcDirs)
 		sourceInputs := e.scanner.cythonPyxLangClosure(srcVFS, scanCtx)
 		cyRef := p.cyRef
 		emitsIncludes := p.emittedInputs

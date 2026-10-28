@@ -8,7 +8,7 @@ import (
 func (e *EmitContext) emitNativeSwigSource(meta SrcMeta, python bool) {
 	ctx, instance, d := e.ctx, e.instance, e.d
 	na := ctx.na
-	src := e.resolveModuleSourceVFS(meta.Source, d.cc.SrcDirs)
+	src := e.sourceForEmission(meta)
 	srcRel := composeSrcDirOutputRel(instance.Path.relString(), src.relString())
 	cpp := build(instance.Path.relString(), "/", strings.TrimSuffix(srcRel, path.Ext(srcRel)), "_wrap.swg.cpp")
 	name, module := e.nativeSwigModuleNames()

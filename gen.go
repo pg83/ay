@@ -1720,7 +1720,7 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 
 		for _, g := range d.pySrcGroups {
 			for _, s := range g.Srcs {
-				hasPyProto = hasPyProto || extIsProto(s.string())
+				hasPyProto = hasPyProto || extIsProto(s.Token.string())
 			}
 		}
 

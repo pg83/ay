@@ -7,13 +7,14 @@ var ljKV = KV{P: pkLJ, PC: pcLightCyan}
 const luajit21CwdRel = "contrib/libs/luajit_21"
 
 type LuaCompileStmt struct {
-	Source  string
-	Runtime string
-	Name    string
+	Resolved ResolvedSource
+	Source   string
+	Runtime  string
+	Name     string
 }
 
 func (e *EmitContext) emitLuaCompile(stmt LuaCompileStmt) {
-	src := e.resolveModuleSourceVFS(internStr(stmt.Source).any(), e.d.srcDirs)
+	src := stmt.Resolved.withGenerated(e.codegen, stmt.Source, e.d.srcDirs)
 	out := copyFileOutputVFS(e.instance.Path.relString(), stmt.Source+".o")
 	ref := e.ctx.emit.reserve()
 	compilerRef, compiler := e.ctx.tool(internArg(stmt.Runtime + "/compiler"))

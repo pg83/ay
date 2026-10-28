@@ -47,7 +47,7 @@ func (e *EmitContext) cudaCompileArgs(in ModuleCCInputs, mtime, pid VFS, flags [
 func (e *EmitContext) emitLibraryCudaSource(meta SrcMeta, in ModuleCCInputs) {
 	ctx, instance, d := e.ctx, e.instance, e.d
 	na := ctx.na
-	srcVFS := e.resolveModuleSourceVFS(meta.Source, d.cc.SrcDirs)
+	srcVFS := e.sourceForEmission(meta)
 
 	e.collectCPPStyleInputs(srcVFS, cudaCompileScriptVFS, cudaRuntimeIncludeVFS)
 

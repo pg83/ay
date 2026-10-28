@@ -265,7 +265,13 @@ func finishRosSources(module string, d *ModuleData, env Environment, msgs, srvs,
 			scopes[i] = PyScope{Namespace: &ns}
 		}
 
-		d.pySrcGroups = append(d.pySrcGroups, PySrcGroup{Srcs: pys, Scopes: scopes})
+		decls := make([]DeclaredSource, len(pys))
+
+		for i, src := range pys {
+			decls[i].Token = src
+		}
+
+		d.pySrcGroups = append(d.pySrcGroups, PySrcGroup{Srcs: decls, Scopes: scopes})
 	}
 
 	if d.ros.Language == LangRosBindings {

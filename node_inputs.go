@@ -3,16 +3,17 @@ package main
 import "slices"
 
 type NodeInputs struct {
-	files       InputChunks
-	roots       InputChunks
-	sourceRoots []VFS
-	modulePeers []VFS
-	text        []VFS
-	scanner     *IncludeScanner
-	na          *NodeArenas
-	pending     *PendingEmit
-	root        VFS
-	deferred    bool
+	files          InputChunks
+	roots          InputChunks
+	sourceRoots    []VFS
+	modulePeers    []VFS
+	text           []VFS
+	scanner        *IncludeScanner
+	na             *NodeArenas
+	pending        *PendingEmit
+	root           VFS
+	existingSource VFS
+	deferred       bool
 }
 
 func (e *EmitContext) prepareNodeInputs(node *Node) {
@@ -56,7 +57,7 @@ func (e *EmitContext) prepareNodeInputs(node *Node) {
 
 func (e *EmitContext) checkDeclaredInputs(plan *NodeInputs) {
 	missing := func(v VFS) {
-		if v.isSource() && !e.ctx.fs.isFilePathClean(v.relString()) {
+		if v != plan.existingSource && v.isSource() && !e.ctx.fs.isFilePathClean(v.relString()) {
 			e.ctx.onWarn(Warn{Kind: WarnMissingSource, Message: "source file not found: " + v.string()})
 		}
 	}

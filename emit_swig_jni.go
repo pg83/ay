@@ -68,7 +68,7 @@ func (e *EmitContext) emitLibrarySwigSource(meta SrcMeta) {
 
 	na := ctx.na
 	srcRel := e.moduleSourceRel(src)
-	srcVFS := e.resolveModuleSourceVFS(src, d.cc.SrcDirs)
+	srcVFS := e.sourceForEmission(meta)
 	hdr, cpp := swigWrapOutputs(instance.Path.relString(), srcRel)
 	swigRef, swigBin := ctx.tool(argContribToolsSwig)
 	swRef := ctx.emit.reserve()

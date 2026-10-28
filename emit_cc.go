@@ -82,6 +82,7 @@ type ModuleCCInputs struct {
 	IncludeInputs   []VFS
 	IncludeView     Closure
 	IncludePending  *PendingEmit
+	ExistingSource  VFS
 }
 
 func newModuleCCInputs(env *ModuleCompileEnv) ModuleCCInputs {
@@ -386,7 +387,7 @@ func (e *EmitContext) composeCCNodeAt(srcVFS VFS, in ModuleCCInputs, hostP *Plat
 		Platform: instance.Platform,
 		Cmds:     cmds,
 		Env:      env,
-		Inputs:   NodeInputs{files: allInputs, root: in.IncludeView.self, pending: in.IncludePending},
+		Inputs:   NodeInputs{files: allInputs, root: in.IncludeView.self, pending: in.IncludePending, existingSource: in.ExistingSource},
 
 		Outputs:   na.vfsList(outVFS),
 		KV:        &ccKV,
@@ -865,4 +866,14 @@ func cxxLanguageFlags(stem string) []ANY {
 	}
 
 	return nil
+}
+
+func (e *EmitContext) ccInputsForSource(meta SrcMeta) ModuleCCInputs {
+	in := e.ccInputsFor(meta.Compile)
+
+	if meta.Resolved.Existing {
+		in.ExistingSource = meta.Resolved.Path
+	}
+
+	return in
 }

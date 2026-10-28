@@ -7,12 +7,13 @@ import (
 
 var sfKV = KV{P: pkSF, PC: pcYellow}
 
-func (e *EmitContext) emitLibrarySfdlSource(src ANY) {
+func (e *EmitContext) emitLibrarySfdlSource(meta SrcMeta) {
+	src := meta.Source
 	ctx, instance, d := e.ctx, e.instance, e.d
 	na := ctx.na
 	srcRel := e.moduleSourceRel(src)
 	toolRef, toolBin := ctx.tool(argToolsCalcstaticopt)
-	srcVFS := e.resolveModuleSourceVFS(src, d.cc.SrcDirs)
+	srcVFS := e.sourceForEmission(meta)
 	tmpVFS := build(instance.Path.relString(), "/", srcRel, ".tmp")
 	incVFS := build(instance.Path.relString(), "/", strings.TrimSuffix(srcRel, filepath.Ext(srcRel)))
 	plainEnv := envVarsVCS

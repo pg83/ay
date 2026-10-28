@@ -35,7 +35,8 @@ func bisonGeneratedRel(srcRel, genExt string) string {
 	return srcRel + genExt
 }
 
-func (e *EmitContext) emitBisonProducer(src ANY) {
+func (e *EmitContext) emitBisonProducer(meta SrcMeta) {
+	src := meta.Source
 	ctx, instance, d := e.ctx, e.instance, e.d
 	na := ctx.na
 	srcRel := e.moduleSourceRel(src)
@@ -48,7 +49,7 @@ func (e *EmitContext) emitBisonProducer(src ANY) {
 	generatedRel := bisonGeneratedRel(srcRel, genExt)
 	headerVFS := build(instance.Path.relString(), "/", headerRel)
 	generatedVFS := build(instance.Path.relString(), "/", generatedRel)
-	srcVFS := e.resolveModuleSourceVFS(src, d.cc.SrcDirs)
+	srcVFS := e.sourceForEmission(meta)
 	localBucket := e.scanner.parsedBucketForInput(srcVFS, parsedIncludesHeader, nil)
 	ycRef := ctx.emit.reserve()
 	env := na.envList(EnvVar{Name: envARCADIA_ROOT_DISTBUILD, Value: strS.any()}, EnvVar{Name: envBISON_PKGDATADIR, Value: strBisonPkgData.any()}, EnvVar{Name: envM4, Value: m4Bin.any()})
@@ -177,7 +178,7 @@ func (e *EmitContext) emitBisonY(meta SrcMeta) {
 	_, instance, d := e.ctx, e.instance, e.d
 	src := meta.Source
 
-	e.emitBisonProducer(src)
+	e.emitBisonProducer(meta)
 
 	generatedRel := bisonGeneratedRel(e.moduleSourceRel(src), d.cc.BisonGenExt)
 	generatedVFS := build(instance.Path.relString(), "/", generatedRel)

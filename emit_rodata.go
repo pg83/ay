@@ -84,7 +84,7 @@ func (e *EmitContext) emitLibraryRodataSource(meta SrcMeta, in ModuleCCInputs) {
 	}
 
 	if srcVFS == 0 {
-		srcVFS = e.resolveModuleSourceVFS(src, d.cc.SrcDirs)
+		srcVFS = e.sourceForEmission(meta)
 	}
 
 	yasmLDRef, _ := ctx.tool(argContribToolsYasm)

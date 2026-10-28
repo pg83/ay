@@ -359,10 +359,9 @@ func (e *EmitContext) pbModuleEmission(cfg ProtoPBConfig, spec *ProtoSpec) *PbMo
 	return pe
 }
 
-func (e *EmitContext) emitProtoPB(srcRel string, cfg ProtoPBConfig, pe *PbModuleEmission, spec *ProtoSpec) []VFS {
+func (e *EmitContext) emitProtoPB(protoVFS VFS, cfg ProtoPBConfig, pe *PbModuleEmission, spec *ProtoSpec) []VFS {
 	ctx, d := e.ctx, e.d
 	na := ctx.na
-	protoVFS := resolveSourceOrGeneratedVFS(ctx, e.instance, srcRel, d.srcDirs)
 	protoRel := e.protoSourceRel(protoVFS.string())
 	protoRelPath := protoRel.string()
 	generatedProto := protoVFS.isBuild()
@@ -685,7 +684,7 @@ func (e *EmitContext) protoCCOutputs(outputs []VFS) []VFS {
 	return orderedCC
 }
 
-func (e *EmitContext) cppProtoPB(srcRel string, spec *ProtoSpec) []VFS {
+func (e *EmitContext) cppProtoPB(src VFS, spec *ProtoSpec) []VFS {
 	d := e.d
 
 	cfg := ProtoPBConfig{
@@ -695,7 +694,7 @@ func (e *EmitContext) cppProtoPB(srcRel string, spec *ProtoSpec) []VFS {
 
 	pe := e.pbModuleEmission(cfg, spec)
 
-	return e.emitProtoPB(srcRel, cfg, pe, spec)
+	return e.emitProtoPB(src, cfg, pe, spec)
 }
 
 func appendPbHCompanions(dst []IncludeDirective, pbhImports []IncludeDirective, ext string) []IncludeDirective {
@@ -709,7 +708,7 @@ func appendPbHCompanions(dst []IncludeDirective, pbhImports []IncludeDirective, 
 }
 
 func (e *EmitContext) emitCppProtoFamilySource(meta SrcMeta, spec *ProtoSpec) {
-	for _, cc := range e.cppProtoPB(meta.Source.string(), spec) {
+	for _, cc := range e.cppProtoPB(e.sourceForEmission(meta), spec) {
 		child := meta
 
 		child.Source = cc.any()

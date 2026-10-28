@@ -62,7 +62,7 @@ func (e *EmitContext) emitLibraryRagel5Source(meta SrcMeta) {
 	r5Ref := ctx.emit.reserve()
 	r5TmpOut := build(instance.Path.relString(), "/", srcRel, ".tmp")
 	r5CppOut := build(instance.Path.relString(), "/", strings.TrimSuffix(srcRel, filepath.Ext(srcRel)), ".rl5.cpp")
-	rlSourceVFS := e.resolveModuleSourceVFS(src, e.d.cc.SrcDirs)
+	rlSourceVFS := e.sourceForEmission(meta)
 
 	pe := func() {
 		e.emitR5Reserved(srcRel, rlSourceVFS, ragel5LDRef, rlgenCdLDRef, ragel5BinVFS, rlgenCdBinVFS, e.scanner.walkClosure(rlSourceVFS, e.d.scanCtx, scanDomainCC), r5Ref)

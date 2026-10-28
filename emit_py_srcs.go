@@ -59,18 +59,19 @@ func pyResourceKeyPrefix(topLevel bool, namespace *ANY, modulePath string) strin
 }
 
 type PySrc struct {
-	Path VFS
+	Existing bool
+	Path     VFS
 	PySourceMeta
 }
 
-func (e *EmitContext) resolvePythonSourceVFS(src string) VFS {
+func (e *EmitContext) resolvePythonSource(src string) ResolvedSource {
 	for _, dir := range e.d.srcDirs {
 		if dir.isSource() && e.ctx.fs.isFile(dir.rel(), src) {
-			return sourceJoinClean(dir.relString(), src)
+			return ResolvedSource{Path: sourceJoinClean(dir.relString(), src), Existing: true}
 		}
 	}
 
-	return resolveSourceVFS(e.ctx, e.instance, path.Clean(src), e.d.srcDirs)
+	return resolveSource(e.ctx, e.instance, path.Clean(src), e.d.srcDirs)
 }
 
 func resolvePySrcRelKnown(fs FS, srcDirs []VFS, moduleVFS VFS, srcRel string, srcRelClean bool) STR {
@@ -132,7 +133,9 @@ func (e *EmitContext) collectPySrcGroup(gi int, group PySrcGroup) {
 
 	keyPrefix := ""
 
-	for si, src := range group.Srcs {
+	for si, decl := range group.Srcs {
+		src := decl.Token
+
 		if si == 0 || group.Scopes[si] != scope {
 			scope = group.Scopes[si]
 			keyPrefix = pyResourceKeyPrefix(scope.TopLevel, scope.Namespace, module)
@@ -146,7 +149,7 @@ func (e *EmitContext) collectPySrcGroup(gi int, group PySrcGroup) {
 			}
 
 			e.emitOneSource(SrcMeta{
-				Source: src, Prio: stmtPrioDefault,
+				Source: src, Resolved: decl.Resolved, Prio: stmtPrioDefault,
 				PyMeta: e.addPyMeta(PySourceMeta{Module: internStr(logical), Group: gi, Kind: pySourceProtoInput}),
 			})
 
@@ -154,32 +157,24 @@ func (e *EmitContext) collectPySrcGroup(gi int, group PySrcGroup) {
 		}
 
 		token := src
-		path := src.vfs()
-		kind := pySourcePlain
+		resolved := decl.Resolved
 
-		if d.usePython2 && path == 0 {
-			path, _ = moduleRootedVFS(module, src.string())
+		if resolved.Path == 0 {
+			resolved = e.resolvePythonDeclaration(src, group.SourceRoot)
 		}
 
-		if group.SourceRoot {
-			path = source(module, "/", src.string())
-		} else if path != 0 {
-			if path.isBuild() && !d.usePython2 {
-				kind = pySourceGenerated
-				token = internStr(trimModulePrefix(path.relString(), module)).any()
-			}
-		} else {
-			path = build(module, "/", src.string())
+		path := resolved.Path
+		kind := pySourcePlain
 
-			if e.codegen.lookupSplit(instance.Path, src.str()) == nil {
-				path = e.resolvePythonSourceVFS(src.string())
-			} else if source := e.resolvePythonSourceVFS(src.string()); source.isSource() && e.ctx.fs.isFile(srcRootRel, source.relString()) {
-				path = source
-			}
+		if !group.SourceRoot && src.vfs().isBuild() && !d.usePython2 {
+			kind = pySourceGenerated
+			token = internStr(trimModulePrefix(path.relString(), module)).any()
+		} else if !resolved.Existing && !resolved.Fixed && e.codegen.lookupSplit(instance.Path, src.str()) != nil {
+			path = build(module, "/", src.string())
 		}
 
 		e.emitOneSource(SrcMeta{
-			Source: path.any(), Prio: stmtPrioDefault,
+			Source: path.any(), Resolved: ResolvedSource{Path: path, Existing: resolved.Existing, Fixed: true}, Prio: stmtPrioDefault,
 			PyMeta: e.addPyMeta(PySourceMeta{
 				Module: e.pyModuleKey(keyPrefix, scope, token.string()),
 				Scope:  scope,
@@ -498,11 +493,17 @@ func (e *EmitContext) emitPyYapyc(ps PySrc, tool PyccTool) {
 		generatorRefs = toolRefs
 	}
 
+	var existingSource VFS
+
+	if ps.Existing {
+		existingSource = ps.Path
+	}
+
 	node := Node{
 		Platform: instance.Platform,
 		Cmds:     na.cmdList(Cmd{CmdArgs: cmdArgs, Env: env}),
 		Env:      env,
-		Inputs:   NodeInputs{files: nodeInputs, roots: nodeInputs[1:], root: closure.self},
+		Inputs:   NodeInputs{files: nodeInputs, roots: nodeInputs[1:], root: closure.self, existingSource: existingSource},
 
 		Outputs:        na.vfsList(outputPath),
 		KV:             &pyCodegenKV,
@@ -642,7 +643,8 @@ func (e *EmitContext) emitPyNamespaceForGroup(groupIndex int, group PySrcGroup) 
 	namespaces := e.pyNamespaces[:0]
 	hasPy := false
 
-	for si, src := range group.Srcs {
+	for si, decl := range group.Srcs {
+		src := decl.Token
 		srcRel := src.string()
 
 		if !extIsPy(srcRel) {
@@ -1027,4 +1029,22 @@ func yaConfFormulaResources(fs FS, confPath string) []string {
 	}
 
 	return out
+}
+
+func (e *EmitContext) resolvePythonDeclaration(src ANY, sourceRoot bool) ResolvedSource {
+	if sourceRoot && !extIsProto(src.relOrSelf().string()) && !extIsEv(src.relOrSelf().string()) {
+		return e.resolveDeclaredSource(source(e.instance.Path.relString(), "/", src.string()).any())
+	}
+
+	if src.vfs() != 0 || extIsProto(src.relOrSelf().string()) || extIsEv(src.relOrSelf().string()) {
+		return e.resolveDeclaredSource(src)
+	}
+
+	if e.d.usePython2 {
+		if v, ok := moduleRootedVFS(e.instance.Path.relString(), src.string()); ok {
+			return e.resolveDeclaredSource(v.any())
+		}
+	}
+
+	return e.resolvePythonSource(src.string())
 }

@@ -6,7 +6,7 @@ var ssqlsKV = KV{P: pkSS, PC: pcYellow}
 
 func (e *EmitContext) emitSsqlsSource(meta SrcMeta) {
 	na := e.ctx.na
-	src := e.moduleSourceVFS(meta.Source)
+	src := e.sourceForEmission(meta)
 
 	var parsed ParsedIncludeSet
 	var header VFS

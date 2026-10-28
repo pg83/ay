@@ -144,6 +144,10 @@ func (e *EmitContext) cppStyleInputFiles(file VFS) []string {
 }
 
 func (e *EmitContext) cppStyleSource(src ANY) ANY {
+	return e.cppStyleSourceResolved(src, 0)
+}
+
+func (e *EmitContext) cppStyleSourceResolved(src ANY, input VFS) ANY {
 	if !e.ctx.testMode || !cppLinterSource(src.string()) {
 		return src
 	}
@@ -159,7 +163,12 @@ func (e *EmitContext) cppStyleSource(src ANY) ANY {
 		}
 
 		if resolved == 0 {
-			resolved = e.moduleSourceVFS(src)
+			resolved = input
+
+			if resolved == 0 {
+				resolved = e.moduleSourceVFS(src)
+			}
+
 			files = e.cppStyleInputFiles(resolved)
 		}
 

@@ -277,7 +277,7 @@ func (e *EmitContext) emitFlatcProducer(srcVFS VFS, v *FlatcVariant) {
 }
 
 func (e *EmitContext) emitLibraryFlatcSource(meta SrcMeta, variant *FlatcVariant) {
-	srcVFS := e.resolveModuleSourceVFS(meta.Source, e.d.srcDirs)
+	srcVFS := e.sourceForEmission(meta)
 
 	e.emitFlatcProducer(srcVFS, variant)
 

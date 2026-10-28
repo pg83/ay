@@ -473,7 +473,7 @@ func (e *EmitContext) collectGoSource(meta SrcMeta, asm bool) {
 		e.goRes = &GoSrcsResult{}
 	}
 
-	src := e.moduleSourceVFS(meta.Source)
+	src := e.sourceForEmission(meta)
 
 	if asm {
 		e.goRes.AsmFiles = append(e.goRes.AsmFiles, src)

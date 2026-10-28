@@ -502,6 +502,7 @@ func (e *EmitContext) collectObj(ref NodeRef, out VFS, meta SrcMeta) {
 }
 
 func (e *EmitContext) enqueueSrc(meta SrcMeta) {
+	meta.Resolved = ResolvedSource{}
 	assert(!e.srcsClosed, "enqueueSrc after source queue closed")
 
 	if isPythonProtoModule(e.d) {

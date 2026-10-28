@@ -6,7 +6,11 @@ import (
 )
 
 func (e *EmitContext) emitOneSource(meta SrcMeta) {
-	src := e.cppStyleSource(meta.Source)
+	e.resolveSrc(&meta)
+	meta.Resolved.Path = e.sourceForEmission(meta)
+	meta.Resolved.Fixed = true
+
+	src := e.cppStyleSourceResolved(meta.Source, meta.Resolved.Path)
 
 	meta.Source = src
 
@@ -17,9 +21,9 @@ func (e *EmitContext) emitOneSource(meta SrcMeta) {
 		e.pyMetas[i] = PySourceMeta{}
 
 		if py.Kind == pySourceProtoInput {
-			e.emitPyProtoSource(src, py.Group, py.Module)
+			e.emitPyProtoSource(src, e.sourceForEmission(meta), py.Group, py.Module)
 		} else {
-			ps := PySrc{Path: src.vfs(), PySourceMeta: py}
+			ps := PySrc{Path: src.vfs(), Existing: meta.Resolved.Existing, PySourceMeta: py}
 
 			e.collectPySource(ps.Path, py)
 
@@ -53,7 +57,7 @@ func (e *EmitContext) emitOneSource(meta SrcMeta) {
 			throwFmt("SRC(%s) produced no outputs", src.string())
 		}
 
-		header := e.moduleSourceVFS(src)
+		header := e.sourceForEmission(meta)
 
 		if header.isSource() {
 			e.moduleIncludeRoots = append(e.moduleIncludeRoots, header)
@@ -65,32 +69,32 @@ func (e *EmitContext) emitOneSource(meta SrcMeta) {
 		srcVFS := src.vfs()
 
 		if srcVFS == 0 {
-			srcVFS = e.moduleSourceVFS(src)
+			srcVFS = e.sourceForEmission(meta)
 		}
 
-		ref, out, accepted := e.emitCCWith(srcVFS, e.ccInputsFor(meta.Compile), meta.CompileRef)
+		ref, out, accepted := e.emitCCWith(srcVFS, e.ccInputsForSource(meta), meta.CompileRef)
 
 		if accepted {
 			e.collectObj(ref, out, meta)
 		}
 	case srcExtGettext:
-		input := e.moduleSourceVFS(src)
+		input := e.sourceForEmission(meta)
 
 		e.emitGettextSource(input, e.gettextOutput(input))
 	case srcExtFortran:
 		e.emitFortranSource(meta)
 	case srcExtRodata:
-		e.emitLibraryRodataSource(meta, e.ccInputsFor(meta.Compile))
+		e.emitLibraryRodataSource(meta, e.ccInputsForSource(meta))
 	case srcExtAsm:
 		if isGoModuleType(e.d.unit.Type) && strings.HasSuffix(src.string(), ".s") {
 			e.collectGoSource(meta, true)
 		} else {
-			e.emitLibraryAsmSource(meta, e.ccInputsFor(meta.Compile))
+			e.emitLibraryAsmSource(meta, e.ccInputsForSource(meta))
 		}
 	case srcExtYasm:
-		e.emitLibraryYasmSource(meta, e.ccInputsFor(meta.Compile))
+		e.emitLibraryYasmSource(meta, e.ccInputsForSource(meta))
 	case srcExtCuda:
-		e.emitLibraryCudaSource(meta, e.ccInputsFor(meta.Compile))
+		e.emitLibraryCudaSource(meta, e.ccInputsForSource(meta))
 	case srcExtGztProto:
 		e.emitLibraryGztProtoCompile(src)
 
@@ -103,7 +107,7 @@ func (e *EmitContext) emitOneSource(meta SrcMeta) {
 		if isGoModuleType(e.d.unit.Type) {
 			e.emitGoProtoSource(meta)
 		} else if isPythonProtoModule(e.d) {
-			e.emitPyProtoSource(src, meta.Stmt, 0)
+			e.emitPyProtoSource(src, e.sourceForEmission(meta), meta.Stmt, 0)
 			e.emitPyProtoGroupResources(meta.Stmt)
 		} else {
 			e.emitCppProtoFamilySource(meta, cppProtoSpec)
@@ -132,7 +136,7 @@ func (e *EmitContext) emitOneSource(meta SrcMeta) {
 		if isGoModuleType(e.d.unit.Type) {
 			e.emitGoEvSource(meta)
 		} else if isPythonProtoModule(e.d) {
-			e.emitPyProtoSource(src, meta.Stmt, 0)
+			e.emitPyProtoSource(src, e.sourceForEmission(meta), meta.Stmt, 0)
 			e.emitPyProtoGroupResources(meta.Stmt)
 		} else {
 			e.emitLibraryEvSource(meta)
@@ -140,19 +144,19 @@ func (e *EmitContext) emitOneSource(meta SrcMeta) {
 	case srcExtRl:
 		e.emitLibraryRagel5Source(meta)
 	case srcExtFml:
-		e.emitLibraryFmlSource(src)
+		e.emitLibraryFmlSource(meta)
 	case srcExtSfdl:
-		e.emitLibrarySfdlSource(src)
+		e.emitLibrarySfdlSource(meta)
 	case srcExtAsp:
 		e.emitLibraryAspSource(meta)
 	case srcExtFlex:
 		e.emitLibraryFlexSource(meta)
 	case srcExtHIn:
-		e.emitLibraryHInSource(src)
+		e.emitLibraryHInSource(meta)
 	case srcExtCppIn, srcExtCIn:
 		e.emitLibraryCInSource(meta)
 	case srcExtSc:
-		e.emitLibrarySCSource(src)
+		e.emitLibrarySCSource(meta)
 	case srcExtGperf:
 		e.emitLibraryGperfSource(meta)
 	case srcExtCfgProto:
@@ -188,7 +192,7 @@ func (e *EmitContext) collectObjectSource(meta SrcMeta) bool {
 		return false
 	}
 
-	input := e.moduleSourceVFS(meta.Source)
+	input := e.sourceForEmission(meta)
 	info := e.codegen.lookup(input)
 
 	if input.isBuild() && info == nil {

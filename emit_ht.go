@@ -3,13 +3,13 @@ package main
 var htKV = KV{P: pkHT, PC: pcYellow}
 
 func (e *EmitContext) emitLibraryAspSource(meta SrcMeta) {
-	ctx, instance, d := e.ctx, e.instance, e.d
+	ctx, instance := e.ctx, e.instance
 	src := meta.Source
 	na := ctx.na
 	module := instance.Path.relString()
 	srcRel := e.moduleSourceRel(src)
 	toolRef, toolBin := ctx.tool(argToolsHtml2cpp)
-	srcVFS := e.resolveModuleSourceVFS(src, d.srcDirs)
+	srcVFS := e.sourceForEmission(meta)
 	outVFS := build(module, "/", srcRel, ".cpp")
 	ref := ctx.emit.reserve()
 	parsed := e.scanner.parsedBucketForInput(srcVFS, parsedIncludesCpp, nil)

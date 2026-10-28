@@ -47,11 +47,17 @@ func (e *EmitContext) emitCopyFileStmt(entry CopyFileEntry) {
 func (e *EmitContext) registerCopyFile(entry CopyFileEntry) (CopyEmitState, *GeneratedFileInfo) {
 	ctx, instance := e.ctx, e.instance
 	reg := e.codegen
-	srcVFS := copyFileInputVFS(ctx.fs, instance.Path, entry.Src)
+	resolved := entry.Resolved
 
-	if len(e.d.srcDirs) > 0 {
-		srcVFS = resolveSourceVFS(ctx, instance, entry.Src, e.d.srcDirs)
+	if resolved.Path == 0 {
+		if len(e.d.srcDirs) > 0 {
+			resolved = resolveSource(ctx, instance, entry.Src, e.d.srcDirs)
+		} else {
+			resolved = e.resolveDeclaredSource(copyFileInputVFS(ctx.fs, instance.Path, entry.Src).any())
+		}
 	}
+
+	srcVFS := resolved.withGeneratedDirs(reg, entry.Src, e.d.srcDirs)
 
 	if _, rooted := moduleRootedVFS(instance.Path.relString(), entry.Src); !rooted && srcVFS.isSource() {
 		candidate := srcVFS.rel().build()
@@ -60,7 +66,7 @@ func (e *EmitContext) registerCopyFile(entry CopyFileEntry) (CopyEmitState, *Gen
 			candidate = buildClean(entry.Src)
 		}
 
-		if reg.lookup(candidate) != nil && !ctx.fs.isFile(srcRootRel, srcVFS.relString()) {
+		if reg.lookup(candidate) != nil && !resolved.Existing {
 			srcVFS = candidate
 		}
 	}

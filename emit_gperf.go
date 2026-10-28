@@ -51,11 +51,11 @@ func (e *EmitContext) emitGP(srcRel string, srcVFS, genVFS, gperfBin VFS, gperfL
 }
 
 func (e *EmitContext) emitLibraryGperfSource(meta SrcMeta) {
-	ctx, instance, d := e.ctx, e.instance, e.d
+	ctx, instance := e.ctx, e.instance
 	src := meta.Source
 	srcRel := e.moduleSourceRel(src)
 	gperfLDRef, gperfBinVFS := ctx.tool(argContribToolsGperf)
-	srcVFS := e.resolveModuleSourceVFS(src, d.cc.SrcDirs)
+	srcVFS := e.sourceForEmission(meta)
 	genVFS := build(instance.Path.relString(), "/", gperfGeneratedRel(srcRel))
 	gpRef := ctx.emit.reserve()
 

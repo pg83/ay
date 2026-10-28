@@ -31,7 +31,7 @@ func (e *EmitContext) registerSCInputs() {
 		parser, _ := e.ctx.parsers.registry.registeredParserFor(meta.Source.relOrSelf().string())
 
 		if _, ok := parser.(ScIncludeDirectiveParser); ok {
-			visit(e.resolveModuleSourceVFS(meta.Source, e.d.srcDirs))
+			visit(e.sourceForEmission(meta))
 		}
 	}
 
@@ -63,11 +63,11 @@ func (e *EmitContext) emitSCReserved(srcVFS, headerVFS, domschemecBinary VFS, do
 	e.emitReservedNode(node, id)
 }
 
-func (e *EmitContext) emitLibrarySCSource(src ANY) {
-	ctx, d := e.ctx, e.d
+func (e *EmitContext) emitLibrarySCSource(meta SrcMeta) {
+	ctx := e.ctx
 	domRes := ctx.toolResult(argToolsDomschemec)
 	domLDRef, domBinary := domRes.LDRef, *domRes.LDPath
-	srcVFS := e.resolveModuleSourceVFS(src, d.cc.SrcDirs)
+	srcVFS := e.sourceForEmission(meta)
 	headerVFS := build(srcVFS.relString(), ".h")
 	scRef := ctx.emit.reserve()
 	runtimeInclude := ctx.na.dirList(IncludeDirective{kind: includeQuoted, target: includeTarget(domschemeRuntimeVFS.rel().any())})

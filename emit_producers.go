@@ -104,13 +104,7 @@ func rootedBuildCandidate(modulePath, rel string) VFS {
 }
 
 func (e *EmitContext) sourceInputForScheduling(name string) VFS {
-	input := resolveSourceVFS(e.ctx, e.instance, name, e.d.srcDirs)
-
-	if input.isSource() && !e.ctx.fs.isFile(srcRootRel, input.relString()) {
-		return moduleInputCandidateVFS(e.instance.Path.relString(), name)
-	}
-
-	return input
+	return e.schedulingSource(name, resolveSource(e.ctx, e.instance, name, e.d.srcDirs))
 }
 
 func relUnderDir(rel, dir string) bool {
@@ -147,7 +141,7 @@ func (e *EmitContext) prodVFSTake(mark int) []VFS {
 
 func (e *EmitContext) srcPosition(meta SrcMeta) ([]VFS, []VFS) {
 	if srcExtClassOf(meta.Source) == srcExtGettext {
-		input := resolveSourceVFS(e.ctx, e.instance, meta.Source.string(), e.d.srcDirs)
+		input := meta.Resolved.Path
 		mark := len(e.prodVFS)
 
 		e.prodVFS = append(e.prodVFS, e.gettextOutput(input))
@@ -156,7 +150,7 @@ func (e *EmitContext) srcPosition(meta SrcMeta) ([]VFS, []VFS) {
 
 		mark = len(e.prodVFS)
 
-		if meta.Source.vfs() == 0 && input.isSource() && !e.ctx.fs.isFilePathClean(input.relString()) {
+		if meta.Source.vfs() == 0 && input.isSource() && !meta.Resolved.Existing {
 			e.prodVFS = append(e.prodVFS, input.rel().build())
 		}
 
@@ -184,12 +178,12 @@ func (e *EmitContext) srcPosition(meta SrcMeta) ([]VFS, []VFS) {
 
 	switch class {
 	case srcExtProto:
-		protoInput = resolveSourceVFS(e.ctx, e.instance, src, d.srcDirs)
+		protoInput = meta.Resolved.Path
 		protoRelID = e.protoSourceRel(protoInput.string())
 		protoRel = protoRelID.string()
 	case srcExtEv, srcExtCfgProto:
 		if class == srcExtEv && isPythonProtoModule(d) {
-			protoInput = resolveSourceVFS(e.ctx, e.instance, src, d.srcDirs)
+			protoInput = meta.Resolved.Path
 			protoRelID = e.protoSourceRel(protoInput.string())
 		} else {
 			protoRelID = e.protoSourceRel(src)
@@ -206,7 +200,7 @@ func (e *EmitContext) srcPosition(meta SrcMeta) ([]VFS, []VFS) {
 
 		e.prodVFS = append(e.prodVFS, build(e.instance.Path.relString(), "/", rel, ".tmp"), build(e.instance.Path.relString(), "/", strings.TrimSuffix(rel, filepath.Ext(rel))))
 	case srcExtSc:
-		input := e.resolveModuleSourceVFS(tok, d.cc.SrcDirs)
+		input := meta.Resolved.Path
 
 		e.prodVFS = append(e.prodVFS, build(input.relString(), ".h"))
 	case srcExtFbs, srcExtFbs64:
@@ -214,7 +208,7 @@ func (e *EmitContext) srcPosition(meta SrcMeta) ([]VFS, []VFS) {
 			break
 		}
 
-		input := resolveSourceVFS(e.ctx, e.instance, src, d.srcDirs)
+		input := meta.Resolved.Path
 		variant := flatcVariantForExt(src)
 
 		e.prodVFS = append(e.prodVFS, build(input.relString(), ".h"), build(input.relString(), ".cpp"), build(strings.TrimSuffix(input.relString(), variant.srcExt), variant.bfbsExt))
@@ -271,7 +265,7 @@ func (e *EmitContext) srcPosition(meta SrcMeta) ([]VFS, []VFS) {
 	insMark := len(e.prodVFS)
 
 	if class == srcExtProto || class == srcExtEv && isPythonProtoModule(d) {
-		if _, rooted := moduleRootedVFS(module, src); !rooted && protoInput.isSource() && !e.ctx.fs.isFile(srcRootRel, protoInput.relString()) {
+		if _, rooted := moduleRootedVFS(module, src); !rooted && protoInput.isSource() && !meta.Resolved.Existing {
 			protoInput = protoInput.rel().build()
 		}
 
@@ -407,26 +401,34 @@ func (e *EmitContext) producerPositions(cythonPlans []CythonStmtPlan) ([]Produce
 		push(prodImplib, i, start, outEnd)
 	}
 
-	for i, entry := range d.copyFiles {
+	for i := range d.copyFiles {
+		entry := &d.copyFiles[i]
+
+		entry.Resolved = resolveSource(e.ctx, e.instance, entry.Src, d.srcDirs)
+
 		start := len(backing)
 
 		backing = append(backing, copyFileOutputVFS(module, entry.Dst))
 
 		outEnd := len(backing)
 
-		backing = append(backing, e.sourceInputForScheduling(entry.Src))
+		backing = append(backing, e.schedulingSource(entry.Src, entry.Resolved))
 
 		push(prodCopyFile, i, start, outEnd)
 	}
 
-	for i, stmt := range d.ragel6Builds {
+	for i := range d.ragel6Builds {
+		stmt := &d.ragel6Builds[i]
+
+		stmt.Resolved = resolveSource(e.ctx, e.instance, stmt.Src, d.srcDirs)
+
 		start := len(backing)
 
 		backing = append(backing, ragel6OutVFS(e.instance, stmt.Src))
 
 		outEnd := len(backing)
 
-		backing = append(backing, e.sourceInputForScheduling(stmt.Src))
+		backing = append(backing, e.schedulingSource(stmt.Src, stmt.Resolved))
 
 		push(prodRagel6, i, start, outEnd)
 	}
@@ -619,9 +621,12 @@ func (e *EmitContext) producerPositions(cythonPlans []CythonStmtPlan) ([]Produce
 
 	srcs := e.prodSrcs[:0]
 
-	for _, meta := range d.srcs {
+	for i := range d.srcs {
+		meta := &d.srcs[i]
+
 		if e.deferCC || isCodegenProducingSrcID(meta.Source) {
-			srcs = append(srcs, meta)
+			e.resolveSrc(meta)
+			srcs = append(srcs, *meta)
 		}
 	}
 
@@ -673,7 +678,9 @@ func (e *EmitContext) producerPositions(cythonPlans []CythonStmtPlan) ([]Produce
 			outsMark := len(e.prodVFS)
 
 			e.prodVFS = append(e.prodVFS, out)
+
 			srcs[index].Source = out.any()
+			srcs[index].Resolved = ResolvedSource{Path: out, Fixed: true}
 
 			positions = append(positions, ProducerPos{
 				kind:  prodGoCgoCopy,
@@ -697,7 +704,7 @@ func (e *EmitContext) producerPositions(cythonPlans []CythonStmtPlan) ([]Produce
 		} else {
 			mark := len(e.prodVFS)
 
-			e.prodVFS = append(e.prodVFS, e.sourceInputForScheduling(m.Source.string()))
+			e.prodVFS = append(e.prodVFS, e.schedulingSource(m.Source.string(), m.Resolved))
 			ins = e.prodVFSTake(mark)
 
 			if m.Prio == stmtPrioSrcs && srcExtClassOf(m.Source) == srcExtCSource {
@@ -776,7 +783,11 @@ func (e *EmitContext) producerPositions(cythonPlans []CythonStmtPlan) ([]Produce
 		})
 	}
 
-	for i, stmt := range d.luaCompile {
+	for i := range d.luaCompile {
+		stmt := &d.luaCompile[i]
+
+		stmt.Resolved = resolveSource(e.ctx, e.instance, stmt.Source, d.srcDirs)
+
 		positions = append(positions, ProducerPos{
 			kind: prodLuaCompile, index: i,
 			outs: []VFS{copyFileOutputVFS(module, stmt.Source+".o")},
@@ -893,10 +904,14 @@ func (e *EmitContext) producerPositions(cythonPlans []CythonStmtPlan) ([]Produce
 		})
 	}
 
-	for i, plan := range cythonPlans {
+	for i := range cythonPlans {
+		plan := &cythonPlans[i]
+
+		plan.source = resolveSource(e.ctx, e.instance, plan.stmt.Src, d.srcDirs)
+
 		positions = append(positions, ProducerPos{kind: prodCython, index: i,
 			outs: append([]VFS{plan.generatedVFS}, plan.headerVFS...),
-			ins:  []VFS{e.sourceInputForScheduling(plan.stmt.Src)},
+			ins:  []VFS{e.schedulingSource(plan.stmt.Src, plan.source)},
 		})
 	}
 
@@ -976,6 +991,8 @@ func (e *EmitContext) emitDeclaredProducers(cythonPlans []CythonStmtPlan) {
 }
 
 func (e *EmitContext) queueSource(index int) {
+	e.resolveSrc(&e.srcs[index])
+
 	meta := e.srcs[index]
 	outs, ins := e.srcPosition(meta)
 	pos := ProducerPos{kind: prodQueuedSrc, index: index, outs: outs, ins: ins}
@@ -1147,7 +1164,7 @@ func (e *EmitContext) drainCommands(cythonPlans []CythonStmtPlan, srcs []SrcMeta
 				e.emitOneSource(meta)
 			}
 		case prodGoCgoCopy:
-			e.emitGoCgoCopyStmt(e.d.srcs[pos.index].Source)
+			e.emitGoCgoCopyStmt(e.d.srcs[pos.index])
 		case prodGoCgo1:
 			e.emitGoCgo1Stmt()
 		case prodGoCodegen:

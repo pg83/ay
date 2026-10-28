@@ -210,7 +210,7 @@ type ModuleData struct {
 	pySrcs                  []ANY
 	pySrcGroups             []PySrcGroup
 	pyGroupScopes           []PyScope
-	pyGroupSrcs             []ANY
+	pyGroupSrcs             []DeclaredSource
 	pyPyiResources          []ResourceEntry
 	resKeyBuf               []byte
 	pyBuildNoPYC            bool
@@ -423,6 +423,7 @@ type CompileSpec struct {
 }
 
 type SrcMeta struct {
+	Resolved    ResolvedSource
 	Source      ANY
 	Prio        int
 	Seq         int
@@ -457,6 +458,7 @@ type BundleEntry struct {
 }
 
 type ResourceEntry struct {
+	Resolved     ResolvedSource
 	DeclSeq      int
 	Path         string
 	Key          string
@@ -496,7 +498,7 @@ type PySrcGroup struct {
 	SourceRoot     bool
 	DeclSeq        int
 	Fbs            []PyFbsSource
-	Srcs           []ANY
+	Srcs           []DeclaredSource
 	Scopes         []PyScope
 	ResourceOffset int
 	Prio           int
@@ -538,6 +540,7 @@ type Lj21Archive struct {
 }
 
 type CopyFileEntry struct {
+	Resolved       ResolvedSource
 	DeclSeq        int
 	Src            string
 	Dst            string
@@ -4650,7 +4653,7 @@ func collectPySrcGroup(fs FS, modulePath string, v UnknownStmt, d *ModuleData, e
 		}
 
 		d.pySrcs = append(d.pySrcs, internStr(src).any())
-		d.pyGroupSrcs = append(d.pyGroupSrcs, internAny(src))
+		d.pyGroupSrcs = append(d.pyGroupSrcs, DeclaredSource{Token: internAny(src)})
 		d.pyGroupScopes = append(d.pyGroupScopes, scope)
 	}
 

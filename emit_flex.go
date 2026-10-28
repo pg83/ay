@@ -18,11 +18,11 @@ func flexGeneratedVFS(instance ModuleInstance, srcRel string) VFS {
 }
 
 func (e *EmitContext) emitLibraryFlexSource(meta SrcMeta) {
-	ctx, instance, d := e.ctx, e.instance, e.d
+	ctx, instance := e.ctx, e.instance
 	src := meta.Source
 	srcRel := e.moduleSourceRel(src)
 	toolArgs, toolBins, toolRefs := e.flexTool()
-	srcVFS := e.resolveModuleSourceVFS(src, d.cc.SrcDirs)
+	srcVFS := e.sourceForEmission(meta)
 	outVFS := flexGeneratedVFS(instance, srcRel)
 	na := ctx.na
 	localBucket := e.scanner.parsedBucketForInput(srcVFS, parsedIncludesCpp, nil)

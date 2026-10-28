@@ -171,21 +171,21 @@ func (e *EmitContext) goCgoOut(f ANY, suffix string) VFS {
 	return build(module, "/", strings.TrimSuffix(rel, ".go"), suffix)
 }
 
-func (e *EmitContext) emitGoCgoCopyStmt(srcRel ANY) {
+func (e *EmitContext) emitGoCgoCopyStmt(meta SrcMeta) {
+	srcRel := meta.Source
 	module := e.instance.Path.relString()
 	dstVFS := build(module, "/", srcRel.string())
 
 	if len(e.d.cgoSrcs) > 0 {
-		e.emitGoCopyWithContext(srcRel, dstVFS, scanDomainCC, build(module, "/_cgo_export.h"))
+		e.emitGoCopyWithContext(meta.Resolved.Path, dstVFS, scanDomainCC, build(module, "/_cgo_export.h"))
 	} else {
-		e.emitGoCopyWithContext(srcRel, dstVFS, scanDomainCC)
+		e.emitGoCopyWithContext(meta.Resolved.Path, dstVFS, scanDomainCC)
 	}
 }
 
-func (e *EmitContext) emitGoCopyWithContext(srcRel ANY, dstVFS VFS, domain ScanDomain, leaves ...VFS) {
+func (e *EmitContext) emitGoCopyWithContext(srcVFS, dstVFS VFS, domain ScanDomain, leaves ...VFS) {
 	ctx, instance, d := e.ctx, e.instance, e.d
 	na := ctx.na
-	srcVFS := resolveSourceVFS(ctx, instance, srcRel.string(), d.srcDirs)
 	ref := ctx.emit.reserve()
 	parsed := na.dirs.alloc(1 + len(leaves))[:1+len(leaves)]
 

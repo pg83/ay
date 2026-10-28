@@ -182,7 +182,7 @@ func (e *EmitContext) emitGoEvSource(meta SrcMeta) {
 	name := e.moduleSourceName(meta.Source)
 	dst := build(e.instance.Path.relString(), "/", name, ".proto")
 
-	e.emitGoCopyWithContext(internStr(name).any(), dst, scanDomainProto)
+	e.emitGoCopyWithContext(e.sourceForEmission(meta), dst, scanDomainProto)
 	e.emitGoProtoSource(SrcMeta{Source: dst.any()})
 }
 

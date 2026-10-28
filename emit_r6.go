@@ -11,9 +11,10 @@ var (
 const ragel6DefaultOutExt = ".rl6.cpp"
 
 type Ragel6BuildStmt struct {
-	Src     string
-	Options []ANY
-	DeclSeq int
+	Resolved ResolvedSource
+	Src      string
+	Options  []ANY
+	DeclSeq  int
 }
 
 func ragel6OutVFS(instance ModuleInstance, srcRel string) VFS {
@@ -88,7 +89,7 @@ func (e *EmitContext) emitLibraryRagel6Source(meta SrcMeta) {
 }
 
 func (e *EmitContext) emitRagel6Build(stmt Ragel6BuildStmt) {
-	e.emitRagel6Source(SrcMeta{Source: internStr(stmt.Src).any(), Prio: stmtPrioDefault, Seq: stmt.DeclSeq}, stmt.Options, ragel6BuildwithConstArgs)
+	e.emitRagel6Source(SrcMeta{Source: internStr(stmt.Src).any(), Resolved: stmt.Resolved, Prio: stmtPrioDefault, Seq: stmt.DeclSeq}, stmt.Options, ragel6BuildwithConstArgs)
 }
 
 func (e *EmitContext) emitRagel6Source(meta SrcMeta, options, constArgs []ANY) {
@@ -96,7 +97,7 @@ func (e *EmitContext) emitRagel6Source(meta SrcMeta, options, constArgs []ANY) {
 	src := meta.Source
 	srcRel := e.moduleSourceRel(src)
 	ragelLDRef, ragelBinaryVFS := ctx.tool(argContribToolsRagel6)
-	rl6SourceVFS := e.resolveModuleSourceVFS(src, d.cc.SrcDirs)
+	rl6SourceVFS := e.sourceForEmission(meta)
 	r6Out := ragel6OutVFS(instance, srcRel)
 	r6Parsed := e.scanner.parsedBucketForInput(rl6SourceVFS, parsedIncludesCpp, nil)
 

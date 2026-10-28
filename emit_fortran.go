@@ -77,7 +77,7 @@ func (e *EmitContext) emitFortranSource(meta SrcMeta) {
 	e.prepareFortran()
 
 	na := e.ctx.na
-	src := e.moduleSourceVFS(meta.Source)
+	src := e.sourceForEmission(meta)
 	out, _ := composeCCPaths(e.instance, e.moduleSourceRel(meta.Source), src, ModuleCCInputs{FlatOutput: meta.Compile.FlatOutput}, ".o")
 	closure := e.scanner.walkClosure(src, e.d.scanCtx, scanDomainCC)
 	args := na.chunkList(e.d.cc.FortranHead, na.anyList(argDashC.any(), src.any(), argDashO.any(), out.any()))

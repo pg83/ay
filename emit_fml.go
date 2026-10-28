@@ -2,12 +2,13 @@ package main
 
 var fmKV = KV{P: pkFM, PC: pcYellow}
 
-func (e *EmitContext) emitLibraryFmlSource(src ANY) {
+func (e *EmitContext) emitLibraryFmlSource(meta SrcMeta) {
+	src := meta.Source
 	ctx, instance := e.ctx, e.instance
 	na := ctx.na
 	srcRel := e.moduleSourceRel(src)
 	toolRef, toolBin := ctx.tool(argToolsRelevFmlCodegen)
-	srcVFS := e.resolveModuleSourceVFS(src, e.d.cc.SrcDirs)
+	srcVFS := e.sourceForEmission(meta)
 	outVFS := build(instance.Path.relString(), "/", srcRel, ".inc")
 	env := envVarsVCS
 	ref := ctx.emit.reserve()

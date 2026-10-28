@@ -49,7 +49,7 @@ func (e *EmitContext) emitRosSource(meta SrcMeta, outputs []VFS) {
 		return
 	}
 
-	src := resolveSourceVFS(ctx, e.instance, meta.Source.string(), d.srcDirs)
+	src := e.sourceForEmission(meta)
 	toolRef, tool := ctx.tool(internArg(rosGenerator))
 
 	if outputs == nil {

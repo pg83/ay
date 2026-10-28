@@ -279,7 +279,7 @@ func (e *EmitContext) newPyPBModuleEmission(protocBinary VFS, event bool) *PyPBM
 	return pe
 }
 
-func (e *EmitContext) emitPyProtoSource(srcTok ANY, srcGroup int, logicalModule STR) {
+func (e *EmitContext) emitPyProtoSource(srcTok ANY, protoSrcVFS VFS, srcGroup int, logicalModule STR) {
 	ctx, instance, d := e.ctx, e.instance, e.d
 	na := ctx.na
 	src := e.moduleSourceName(srcTok)
@@ -298,7 +298,6 @@ func (e *EmitContext) emitPyProtoSource(srcTok ANY, srcGroup int, logicalModule 
 
 	pe := e.newPyPBModuleEmission(protocBinary, event)
 	scanCtx := d.scanCtx
-	protoSrcVFS := resolveSourceOrGeneratedVFS(ctx, instance, srcTok.string(), d.srcDirs)
 	protoRel := e.protoSourceRel(protoSrcVFS.string())
 	protoRelPath := protoRel.string()
 	protoBase := strings.TrimSuffix(protoRelPath, filepath.Ext(protoRelPath))

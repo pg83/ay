@@ -52,7 +52,7 @@ func fbsNamespaceArgs(na *NodeArenas, vars []FbsNamespaceVar) []ANY {
 func (e *EmitContext) emitGoFlatcSource(meta SrcMeta) {
 	ctx, instance, d := e.ctx, e.instance, e.d
 	na := ctx.na
-	src := e.moduleSourceVFS(meta.Source)
+	src := e.sourceForEmission(meta)
 	toolRef, tool := ctx.tool(argContribLibsFlatbuffersFlatc)
 	imports := e.scanner.walkClosure(src, d.scanCtx, scanDomainFlatc)
 	module := instance.Path.relString()

@@ -2,7 +2,7 @@ package main
 
 var jsNodeKV = KV{P: pkJS, PC: pcMagenta}
 
-func (e *EmitContext) emitJSReserved(allName string, sources []string, closure []VFS, p *Platform, tc ModuleToolchain, scripts ScriptDeps, id NodeRef) VFS {
+func (e *EmitContext) emitJSReserved(allName string, sources []string, srcVFSs []VFS, closure []VFS, p *Platform, tc ModuleToolchain, scripts ScriptDeps, id NodeRef) VFS {
 	instance := e.instance
 	na := e.ctx.na
 	joinSrcs := buildScriptsGenJoinSrcsPy
@@ -32,16 +32,6 @@ func (e *EmitContext) emitJSReserved(allName string, sources []string, closure [
 	cmdArgs = cmdArgs[:len(cmdArgs):len(cmdArgs)]
 
 	env := envVarsVCS
-	srcVFSs := na.vfs.alloc(len(sources))
-
-	for i, s := range sources {
-		srcVFSs[i] = resolveSourceVFS(e.ctx, instance, s, e.d.srcDirs)
-	}
-
-	na.vfs.commit(len(sources))
-
-	srcVFSs = srcVFSs[:len(sources):len(sources)]
-
 	inputs := na.inputList(scripts[joinSrcs.rel()], srcVFSs, closure)
 
 	node := Node{
@@ -64,12 +54,20 @@ func (e *EmitContext) emitJSReserved(allName string, sources []string, closure [
 func (e *EmitContext) emitJoinSrcsStmt(js *JoinSrcsStmt) {
 	ctx, instance, d := e.ctx, e.instance, e.d
 	jsSources := anyStrs(js.Sources)
+	srcVFSs := ctx.na.vfs.alloc(len(jsSources))[:len(jsSources):len(jsSources)]
+
+	for i, s := range jsSources {
+		srcVFSs[i] = resolveSourceVFS(ctx, instance, s, d.srcDirs)
+	}
+
+	ctx.na.vfs.commit(len(jsSources))
+
 	jsRef := ctx.emit.reserve()
 	tc := d.tc
 	outputName := js.OutputName
 
 	pe := func() {
-		e.emitJSReserved(outputName, jsSources, nil, ctx.target, tc, ctx.scripts, jsRef)
+		e.emitJSReserved(outputName, jsSources, srcVFSs, nil, ctx.target, tc, ctx.scripts, jsRef)
 	}
 
 	pending := e.pendingEmit(pe)
@@ -84,8 +82,8 @@ func (e *EmitContext) emitJoinSrcsStmt(js *JoinSrcsStmt) {
 	includes := ctx.na.dirs.alloc(len(jsSources))
 
 	for i, s := range jsSources {
-		e.cppStyleSource(internStr(s).any())
-		includes[i] = IncludeDirective{kind: includeQuoted, target: includeTarget(resolveSourceVFS(ctx, instance, s, d.srcDirs).any())}
+		e.cppStyleSourceResolved(internStr(s).any(), srcVFSs[i])
+		includes[i] = IncludeDirective{kind: includeQuoted, target: includeTarget(srcVFSs[i].any())}
 	}
 
 	ctx.na.dirs.commit(len(jsSources))

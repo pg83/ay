@@ -91,7 +91,7 @@ func (e *EmitContext) emitLibraryAsmSource(meta SrcMeta, in ModuleCCInputs) {
 	srcVFS := src.vfs()
 
 	if srcVFS == 0 {
-		srcVFS = e.resolveModuleSourceVFS(src, d.cc.SrcDirs)
+		srcVFS = e.sourceForEmission(meta)
 	}
 
 	asIn := in

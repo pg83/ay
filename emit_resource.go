@@ -792,7 +792,7 @@ func (e *EmitContext) emitResourceFile(entries []ResourceEntry, moduleTag STR) (
 
 				it.Key = bytesString(e.resStrBuf[hashStart:])
 
-				r := e.resolveResourceInput(entry.SrcPath, e.resolveModuleSourceVFS(internStr(entry.SrcPath).any(), d.srcDirs))
+				r := e.resolveResourceInput(entry.SrcPath, e.resourceSource(entry.SrcPath, entry.Resolved))
 				cmdStart := len(e.resStrBuf)
 
 				e.resStrBuf = append(e.resStrBuf, "resfs/src/"...)
@@ -815,7 +815,7 @@ func (e *EmitContext) emitResourceFile(entries []ResourceEntry, moduleTag STR) (
 				it.Key = entry.Key
 
 				if head, inner, tail, ok := rootrelSplit(entry.Key); ok {
-					r := e.resolveResourceInput(inner, e.resolveModuleSourceVFS(internStr(inner).any(), d.srcDirs))
+					r := e.resolveResourceInput(inner, e.resourceSource(inner, entry.Resolved))
 
 					it.Cmd = internStr(renderResourceKvCmd(head+r.Input.relString()+tail, instance.Path.relString()))
 					it.setInput(r.Input)
@@ -827,7 +827,7 @@ func (e *EmitContext) emitResourceFile(entries []ResourceEntry, moduleTag STR) (
 
 			batch = append(batch, it)
 		} else {
-			fallback := e.resolveModuleSourceVFS(internStr(entry.Path).any(), d.srcDirs)
+			fallback := e.resourceSource(entry.Path, entry.Resolved)
 			r := e.resolveResourceInput(entry.Path, fallback)
 			it := ResourceItem{Path: entry.Path, Key: entry.Key, DontParse: entry.DontParse}
 
@@ -887,4 +887,12 @@ func (e *EmitContext) emitPySourceGroup(gi int) {
 	if len(e.d.pySrcs) > 0 {
 		e.emitPyProtoGroupResources(gi)
 	}
+}
+
+func (e *EmitContext) resourceSource(token string, resolved ResolvedSource) VFS {
+	if resolved.Path == 0 {
+		resolved = resolveSource(e.ctx, e.instance, token, e.d.srcDirs)
+	}
+
+	return resolved.withGenerated(e.codegen, token, e.d.srcDirs)
 }

@@ -138,7 +138,8 @@ func (e *EmitContext) orderedProducerPositions(positions []ProducerPos) []Produc
 
 			var inputs []VFS
 
-			for _, entry := range e.resources[lo:hi] {
+			for ri := lo; ri < hi; ri++ {
+				entry := &e.resources[ri]
 				name := entry.Path
 
 				if name == "-" {
@@ -150,7 +151,8 @@ func (e *EmitContext) orderedProducerPositions(positions []ProducerPos) []Produc
 				}
 
 				if name != "" {
-					inputs = append(inputs, e.sourceInputForScheduling(name))
+					entry.Resolved = resolveSource(e.ctx, e.instance, name, e.d.srcDirs)
+					inputs = append(inputs, e.schedulingSource(name, entry.Resolved))
 				}
 			}
 
@@ -181,14 +183,19 @@ func (e *EmitContext) orderedProducerPositions(positions []ProducerPos) []Produc
 		for gi, group := range e.d.pySrcGroups {
 			var outputs, inputs []VFS
 
-			for _, src := range group.Srcs {
+			for si := range group.Srcs {
+				decl := &group.Srcs[si]
+				src := decl.Token
+
+				decl.Resolved = e.resolvePythonDeclaration(src, group.SourceRoot)
+
 				if extIsProto(src.relOrSelf().string()) || extIsEv(src.relOrSelf().string()) {
-					outs, ins := e.srcPosition(SrcMeta{Source: src})
+					outs, ins := e.srcPosition(SrcMeta{Source: src, Resolved: decl.Resolved})
 
 					outputs = append(outputs, outs...)
 					inputs = append(inputs, ins...)
 				} else {
-					inputs = append(inputs, e.sourceInputForScheduling(src.string()))
+					inputs = append(inputs, e.schedulingSource(src.string(), decl.Resolved))
 				}
 			}
 
