@@ -119,26 +119,32 @@ func (d *ModuleData) producerDeclarationSequence(decl producerDeclaration) int {
 
 func (e *EmitContext) orderedProducerPositions(positions []ProducerPos) []ProducerPos {
 	module := e.instance.Path.relString()
+	na := e.ctx.na
 
 	for i, file := range e.d.usrvFiles {
 		positions = append(positions, ProducerPos{kind: prodUsrvFile, index: i,
-			outs: []VFS{copyFileOutputVFS(module, file.File)},
-			ins:  []VFS{e.sourceInputForScheduling(file.Tar)},
+			outs: na.vfsList(copyFileOutputVFS(module, file.File)),
+			ins:  na.vfsList(e.sourceInputForScheduling(file.Tar)),
 		})
 	}
 
 	for i, stmt := range e.d.fromSandboxes {
-		outputs := make([]VFS, 0, len(stmt.OUTFiles)+len(stmt.OUTNoAutoFiles))
+		outputs := vfsScratches.get()
 
-		for _, name := range concat(stmt.OUTFiles, stmt.OUTNoAutoFiles) {
+		for _, name := range stmt.OUTFiles {
 			outputs = append(outputs, copyFileOutputVFS(module, name.string()))
 		}
 
-		positions = append(positions, ProducerPos{kind: prodFromSandbox, index: i, outs: outputs})
+		for _, name := range stmt.OUTNoAutoFiles {
+			outputs = append(outputs, copyFileOutputVFS(module, name.string()))
+		}
+
+		positions = append(positions, ProducerPos{kind: prodFromSandbox, index: i, outs: na.vfsList(outputs...)})
+		vfsScratches.put(outputs)
 	}
 
 	for i, bundle := range e.d.bundles {
-		positions = append(positions, ProducerPos{kind: prodBundle, index: i, outs: []VFS{copyFileOutputVFS(module, bundle.Name)}})
+		positions = append(positions, ProducerPos{kind: prodBundle, index: i, outs: na.vfsList(copyFileOutputVFS(module, bundle.Name))})
 	}
 
 	if e.deferCC && !e.producersOnly() {
@@ -149,7 +155,7 @@ func (e *EmitContext) orderedProducerPositions(positions []ProducerPos) []Produc
 				hi++
 			}
 
-			var inputs []VFS
+			inputs := vfsScratches.get()
 
 			for ri := lo; ri < hi; ri++ {
 				entry := &e.resources[ri]
@@ -169,7 +175,8 @@ func (e *EmitContext) orderedProducerPositions(positions []ProducerPos) []Produc
 				}
 			}
 
-			positions = append(positions, ProducerPos{kind: prodResource, index: lo, end: hi, ins: inputs})
+			positions = append(positions, ProducerPos{kind: prodResource, index: lo, end: hi, ins: na.vfsList(inputs...)})
+			vfsScratches.put(inputs)
 			lo = hi
 		}
 
