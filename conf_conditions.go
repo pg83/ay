@@ -6,31 +6,103 @@ import (
 	"strings"
 )
 
+type ConfValue struct {
+	value STR
+	kind  EnvKind
+}
+
+func confStringValue(value string) ConfValue {
+	if vfsHasPrefix(value) {
+		return ConfValue{value: STR(intern(value)), kind: envVFS}
+	}
+
+	return ConfValue{value: internStr(value), kind: envStr}
+}
+
+func confStringValueID(value STR) ConfValue {
+	if vfsHasPrefix(value.string()) {
+		return ConfValue{value: STR(intern(value.string())), kind: envVFS}
+	}
+
+	return ConfValue{value: value, kind: envStr}
+}
+
+func confEnvValue(env Environment, key ENV) ConfValue {
+	kind, value := env.s.lookup(key)
+
+	if kind == envAbsent {
+		value = 0
+	}
+
+	return ConfValue{value: value, kind: kind}
+}
+
+func (v ConfValue) apply(env Environment, key ENV) {
+	switch v.kind {
+	case envAbsent:
+		env.unbind(key)
+	case envVFS:
+		env.setVFS(key, VFS(v.value))
+	default:
+		env.setStringID(key, v.value)
+		env.s.kind[key] = v.kind
+	}
+}
+
 type ConfConditions struct {
-	byVariable map[ENV][]ENV
-	byTarget   map[ENV][]ConfStmtRef
-	modules    map[string]ConfModule
-	variants   map[string][]string
+	byVariable  DenseMap[ENV, []ENV]
+	byTarget    DenseMap[ENV, ConfTarget]
+	modules     DenseMap[STR, *ConfModule]
+	variants    DenseMap[STR, []ConfVariant]
+	values      *BumpAllocator[ConfValue]
+	assignments *BumpAllocator[ConfAssignment]
+}
+
+type ConfTarget struct {
+	stmts     []ConfStmtRef
+	inherited ConfValue
+}
+
+type ConfVariant struct {
+	name  STR
+	value string
 }
 
 type ConfModule struct {
-	parent   string
+	parent   STR
 	variable ENV
 	builder  []ENV
+	init     *ConfModuleInit
 }
 
-func newConfConditions(stmts []ConfStmtRef) *ConfConditions {
-	c := &ConfConditions{byVariable: map[ENV][]ENV{}, byTarget: map[ENV][]ConfStmtRef{}, modules: map[string]ConfModule{}, variants: map[string][]string{}}
+type confDependency struct{ variable, target ENV }
+
+func newConfConditions(stmts []ConfStmtRef, platformEnv Environment) *ConfConditions {
+	c := &ConfConditions{values: newBumpAllocator[ConfValue](), assignments: newBumpAllocator[ConfAssignment]()}
 	seen := map[*ConfFile]bool{}
 	calls := map[string][]string{}
+
+	var counts DenseMap[ENV, int]
+	var dependencies []confDependency
+
+	conditionalCount := 0
 
 	for _, r := range stmts {
 		if !seen[r.file] {
 			for name, parent := range r.file.modules {
-				c.modules[name] = ConfModule{parent: parent, variable: internEnv("env" + name)}
+				c.modules.put(internStr(name), &ConfModule{parent: internStr(parent), variable: internEnvSTR(internV("env", name))})
 			}
 
-			maps.Copy(c.variants, r.file.variants)
+			for name, variants := range r.file.variants {
+				ids := make([]ConfVariant, len(variants))
+
+				for i, variant := range variants {
+					ids[i] = ConfVariant{name: internStr(variant), value: variant}
+				}
+
+				c.variants.put(internStr(name), ids)
+			}
+
 			maps.Copy(calls, r.file.calls)
 			seen[r.file] = true
 		}
@@ -39,26 +111,75 @@ func newConfConditions(stmts []ConfStmtRef) *ConfConditions {
 			continue
 		}
 
-		target := internEnv(r.stmt.name)
+		conditionalCount++
 
-		c.byTarget[target] = append(c.byTarget[target], r)
+		target := r.stmt.name
+		count, _ := counts.get(target)
 
-		r.file.condVars(r.stmt.branch, func(name string) {
-			variable := internEnv(name)
+		counts.put(target, count+1)
 
-			if !slices.Contains(c.byVariable[variable], target) {
-				c.byVariable[variable] = append(c.byVariable[variable], target)
-			}
+		r.file.condVars(r.stmt.branch, func(variable ENV) {
+			dependencies = append(dependencies, confDependency{variable, target})
 		})
 	}
 
-	for _, targets := range c.byVariable {
-		slices.SortFunc(targets, func(a, b ENV) int { return strings.Compare(a.string(), b.string()) })
+	slices.SortFunc(dependencies, func(a, b confDependency) int {
+		if a.variable != b.variable {
+			return int(a.variable) - int(b.variable)
+		}
+
+		return strings.Compare(a.target.string(), b.target.string())
+	})
+
+	dependencies = slices.Compact(dependencies)
+
+	targets := make([]ENV, len(dependencies))
+
+	for i := 0; i < len(dependencies); {
+		start, variable := i, dependencies[i].variable
+
+		for i < len(dependencies) && dependencies[i].variable == variable {
+			targets[i] = dependencies[i].target
+			i++
+		}
+
+		c.byVariable.put(variable, targets[start:i:i])
 	}
 
-	for name, module := range c.modules {
-		module.builder = c.builderMacros(calls, "env"+name, map[string]bool{}, nil)
-		c.modules[name] = module
+	refs := make([]ConfStmtRef, conditionalCount)
+
+	for key, slot := range counts.idx.s {
+		if slot == 0 {
+			continue
+		}
+
+		n := counts.vals.s[slot]
+
+		var inherited ConfValue
+
+		if platformEnv.hasBindingID(ENV(key)) {
+			inherited = confStringValue(platformEnv.string(ENV(key)))
+		}
+
+		c.byTarget.put(ENV(key), ConfTarget{stmts: refs[:0:n], inherited: inherited})
+		refs = refs[n:]
+	}
+
+	for _, r := range stmts {
+		if r.stmt.branch != 0 {
+			target, _ := c.byTarget.get(r.stmt.name)
+
+			target.stmts = append(target.stmts, r)
+			c.byTarget.put(r.stmt.name, target)
+		}
+	}
+
+	for _, module := range c.modules.vals.s {
+		if module == nil {
+			continue
+		}
+
+		module.builder = c.builderMacros(calls, module.variable.string(), map[string]bool{}, nil)
 	}
 
 	return c
@@ -72,7 +193,9 @@ func (c *ConfConditions) builderMacros(calls map[string][]string, guard string, 
 
 		seen[call] = true
 
-		if variable := internEnv(call); len(c.byVariable[variable]) > 0 {
+		variable := internEnv(call)
+
+		if targets, _ := c.byVariable.get(variable); len(targets) > 0 {
 			out = append(out, variable)
 		}
 
@@ -83,106 +206,86 @@ func (c *ConfConditions) builderMacros(calls map[string][]string, guard string, 
 }
 
 func (p *Platform) recalcConf(env Environment, variable ENV, originals map[STR]STR) {
-	if p.conditions == nil {
-		return
+	if p.conditions != nil {
+		p.recalcConfInto(env, variable, originals, nil)
 	}
+}
 
-	for _, target := range p.conditions.byVariable[variable] {
+func (p *Platform) recalcConfInto(env Environment, variable ENV, originals map[STR]STR, recording []ConfAssignment) {
+	c := p.conditions
+	targets, _ := c.byVariable.get(variable)
+
+	for _, target := range targets {
 		env.unbind(target)
 
-		base, inherited := p.ifEnv.lookup(target.string())
+		definition, _ := c.byTarget.get(target)
+		base := definition.inherited
 
-		if original, ok := originals[internStr(target.string())]; ok {
-			if inherited && base != "" {
-				env.setString(target, base+" "+original.string())
+		if original, ok := originals[target.str()]; ok {
+			if inherited := p.ifEnv.string(target); base.kind != envAbsent && inherited != "" {
+				confStringValueID(internV(inherited, " ", original.string())).apply(env, target)
 			} else {
 				env.setStringID(target, original)
 			}
-		} else if inherited {
-			env.setString(target, base)
+		} else if base.kind != envAbsent {
+			base.apply(env, target)
 		}
 
-		for _, r := range p.conditions.byTarget[target] {
+		for _, r := range definition.stmts {
 			if r.file.holds(r.stmt.branch, env) {
 				applyConfStmt(env, r.stmt, true)
 			}
 		}
+
+		if recording != nil {
+			recordConfAssignment(recording, target, env)
+		}
 	}
 }
 
-func (p *Platform) initConfModule(env Environment, name, tag string, originals map[STR]STR) {
-	if p.conditions == nil {
-		return
-	}
-
-	if variants := p.conditions.variants[name]; len(variants) > 0 {
+func (c *ConfConditions) module(name STR, tag string) *ConfModule {
+	if variants, _ := c.variants.get(name); len(variants) > 0 {
 		for _, variant := range variants {
-			if strings.HasPrefix(variant, tag+"__from__") {
-				name = variant
+			if strings.HasPrefix(variant.value, tag) && strings.HasPrefix(variant.value[len(tag):], "__from__") {
+				name = variant.name
 
 				break
 			}
 		}
 	}
 
-	module, ok := p.conditions.modules[name]
+	module, _ := c.modules.get(name)
 
-	if !ok {
-		return
-	}
-
-	if module.parent != "" {
-		p.initConfModule(env, module.parent, "", originals)
-	}
-
-	env.setBool(module.variable, true)
-	p.recalcConf(env, module.variable, originals)
-
-	if name == "_BASE_UNIT" {
-		env.setBool(envBisonFlexSetDefaults, true)
-		p.recalcConf(env, envBisonFlexSetDefaults, originals)
-	}
-
-	if name == "_LINK_UNIT" || name == "GO_PROGRAM" {
-		env.setString(envLinkerId, env.string(envDefaultLinkerId))
-		p.recalcConf(env, envLinkerId, originals)
-
-		common := envCommonLinkSettings
-
-		env.setBool(common, true)
-		p.recalcConf(env, common, originals)
-	}
+	return module
 }
 
-func (p *Platform) finishConfModule(env Environment, name, tag string, originals map[STR]STR) {
+func (p *Platform) finishConfModule(env Environment, name STR, tag string, originals map[STR]STR) {
 	if p.conditions == nil {
 		return
 	}
 
-	if variants := p.conditions.variants[name]; len(variants) > 0 {
-		for _, variant := range variants {
-			if strings.HasPrefix(variant, tag+"__from__") {
-				name = variant
+	module := p.conditions.module(name, tag)
 
-				break
-			}
-		}
-	}
-
-	module, ok := p.conditions.modules[name]
-
-	if !ok {
+	if module == nil {
 		return
 	}
 
-	if module.parent != "" {
-		p.finishConfModule(env, module.parent, "", originals)
+	p.finishConfModuleParent(env, module, originals)
+}
+
+func (p *Platform) finishConfModuleParent(env Environment, module *ConfModule, originals map[STR]STR) {
+	c := p.conditions
+
+	if parent := c.module(module.parent, ""); parent != nil {
+		p.finishConfModuleParent(env, parent, originals)
 	}
 
 	for _, variable := range module.builder {
 		env.setBool(variable, true)
 
-		if slices.ContainsFunc(p.conditions.byVariable[variable], func(target ENV) bool { return originals[target.str()] != 0 }) {
+		targets, _ := c.byVariable.get(variable)
+
+		if slices.ContainsFunc(targets, func(target ENV) bool { return originals[target.str()] != 0 }) {
 			p.recalcConf(env, variable, originals)
 		}
 	}

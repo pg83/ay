@@ -2,6 +2,19 @@ from tst.make.lib import MakeTest, PROJECT
 
 
 class ConfReactiveTest(MakeTest):
+    def test_module_initialization_reads_pre_module_settings(self):
+        self.write("ya.make", "RECURSE(first second third fourth)\n")
+        cases = (("first", "no", "shared"), ("second", "yes", "shared"), ("third", "no", "other"), ("fourth", "no", "shared"))
+        for directory, nvprune, original in cases:
+            self.write(f"{directory}/ya.make", f"SET(CUDA_NVPRUNE {nvprune})\nSET(LDFLAGS -L{original})\nPROGRAM({directory})\nSRCS(main.cpp)\nEND()\n")
+            self.write(f"{directory}/main.cpp", "int main() { return 0; }\n")
+        graph = self.graph()
+        for directory, nvprune, original in cases:
+            args = [arg for cmd in self.node(graph, f"{directory}/{directory}")["cmds"] for arg in cmd["cmd_args"]]
+            self.assertEqual(args.count("-L/CUDA:PRUNE=False"), int(nvprune == "no"))
+            self.assertEqual(args.count(f"-L{original}"), 1)
+            self.assertEqual(args.count("-Wl,--gdb-index"), 1)
+
     def test_jni_dll_inherits_link_settings(self):
         self.write("ya.make", "DLL_JAVA(answer)\nJDK_VERSION(17)\nSRCS(answer.cpp)\nEND()\n")
         self.write("answer.cpp", "int answer() { return 42; }\n")

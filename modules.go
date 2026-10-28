@@ -1418,7 +1418,7 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 
 			d.unit = resolveModuleUnit(v.Name, kind, language)
 
-			platform.initConfModule(env, v.Name.string(), moduleConfTag(v.Name, kind, language, d.unit.Tag), d.setVars)
+			platform.initConfModule(env, v.Name.str(), moduleConfTag(v.Name, kind, language, d.unit.Tag), d.setVars)
 			env.setString(envPeerdirTags, expandAssignedScalarVarRef(modulePeerTags(v, d.unit, language), env))
 			env.setString(envREALPRJNAME, moduleRealPrjName(modulePath, v, d.unit))
 
@@ -1810,7 +1810,7 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 			}
 
 			collectModuleAutoinclude(ctx, modulePath, kind, language, env, d, onWarn, platform)
-			platform.finishConfModule(env, d.moduleStmt.Name.string(), moduleConfTag(d.moduleStmt.Name, kind, language, d.unit.Tag), d.setVars)
+			platform.finishConfModule(env, d.moduleStmt.Name.str(), moduleConfTag(d.moduleStmt.Name, kind, language, d.unit.Tag), d.setVars)
 			d.pythonLint.bind(env)
 			d.finishResourcePeerPolicy()
 

@@ -65,9 +65,10 @@ func antlrPythonConfigValue(pm *IncludeParserManager, env Environment, name stri
 
 	conf := pm.confFile("build/ymake.core.conf")
 	local := env.clone()
+	key := internEnv(name)
 
 	for _, stmt := range conf.stmts {
-		if stmt.name == name && conf.holds(stmt.branch, local) {
+		if stmt.name == key && conf.holds(stmt.branch, local) {
 			applyConfStmt(local, stmt, stmt.branch != 0)
 		}
 	}

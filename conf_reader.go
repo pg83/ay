@@ -7,10 +7,14 @@ import (
 )
 
 var (
-	confScalarRefRe = regexp.MustCompile(`\$\{[A-Za-z_][A-Za-z0-9_]*\}|\$[A-Za-z_][A-Za-z0-9_]*`)
-	confVarRefRe    = regexp.MustCompile(`\$\{(?:[^}:]*:)?([A-Za-z_][A-Za-z0-9_]*)\}|\$([A-Za-z_][A-Za-z0-9_]*)`)
-	confInRe        = regexp.MustCompile(`^\(\s*(\$[A-Za-z_][A-Za-z0-9_]*|"[^"]*")\s+in\s+\[(.*)\]\s*\)$`)
-	confInItemRe    = regexp.MustCompile(`^\s*("[^"]*")\s*(?:,|$)`)
+	confCondReplacer = strings.NewReplacer("&&", " AND ", "||", " OR ", "!=", "!=", "!", " NOT ")
+	confCondParser   Parser
+	confCondLexer    Lexer
+	confCondNodes    = newBumpAllocator[CondNode]()
+	confScalarRefRe  = regexp.MustCompile(`\$\{[A-Za-z_][A-Za-z0-9_]*\}|\$[A-Za-z_][A-Za-z0-9_]*`)
+	confVarRefRe     = regexp.MustCompile(`\$\{(?:[^}:]*:)?([A-Za-z_][A-Za-z0-9_]*)\}|\$([A-Za-z_][A-Za-z0-9_]*)`)
+	confInRe         = regexp.MustCompile(`^\(\s*(\$[A-Za-z_][A-Za-z0-9_]*|"[^"]*")\s+in\s+\[(.*)\]\s*\)$`)
+	confInItemRe     = regexp.MustCompile(`^\s*("[^"]*")\s*(?:,|$)`)
 )
 
 const (
@@ -36,7 +40,8 @@ type ConfBranch struct {
 
 type ConfStmt struct {
 	branch int
-	name   string
+	name   ENV
+	scalar ConfValue
 	value  string
 	op     ConfOp
 }
@@ -60,24 +65,30 @@ func readConfFile(rel, text string) *ConfFile {
 	owners := []string{""}
 	guards := []string{""}
 	previous := 0
-	pending := ""
+
+	var pending []byte
+
 	lines := strings.Split(text, "\n")
 	macroBodies := map[int]*confMacroBody{}
 
 	for _, raw := range lines {
 		line := strings.TrimSpace(raw)
 
-		if pending != "" {
-			line = pending + line
-			pending = ""
-		} else if line == "" || strings.HasPrefix(line, "#") {
+		if len(pending) == 0 && (line == "" || strings.HasPrefix(line, "#")) {
 			continue
 		}
 
 		if strings.HasSuffix(line, "\\") {
-			pending = strings.TrimSuffix(line, "\\") + " "
+			pending = append(pending, strings.TrimSuffix(line, "\\")...)
+			pending = append(pending, ' ')
 
 			continue
+		}
+
+		if len(pending) != 0 {
+			pending = append(pending, line...)
+			line = internOwnedCopy(pending)
+			pending = pending[:0]
 		}
 
 		if body := macroBodies[stack[len(stack)-1]]; body != nil && !strings.HasPrefix(line, "}") {
@@ -109,7 +120,7 @@ func readConfFile(rel, text string) *ConfFile {
 
 		if name, value, op, ok := confStmtAssignment(line); ok {
 			if !skipped[top] && blocks[top] != "macro" {
-				conf.stmts = append(conf.stmts, ConfStmt{branch: top, name: name, value: value, op: op})
+				conf.stmts = append(conf.stmts, ConfStmt{branch: top, name: internEnv(name), scalar: confStringValue(value), value: value, op: op})
 			}
 
 			continue
@@ -121,7 +132,7 @@ func readConfFile(rel, text string) *ConfFile {
 					conf.calls = map[string][]string{}
 				}
 
-				conf.calls[guards[top]] = append(conf.calls[guards[top]], "env"+strings.TrimSpace(name))
+				conf.calls[guards[top]] = append(conf.calls[guards[top]], internV("env", strings.TrimSpace(name)).string())
 			}
 
 			continue
@@ -159,15 +170,15 @@ func readConfFile(rel, text string) *ConfFile {
 			}
 
 			conf.modules[name] = parent
-			branch.expr = `($env` + name + ` == "yes")`
+			branch.expr = internV(`($env`, name, ` == "yes")`).string()
 			block = "module"
-			guard = "env" + name
+			guard = internV("env", name).string()
 		case strings.HasPrefix(header, "macro "):
 			name, _, _ := strings.Cut(strings.TrimPrefix(header, "macro "), "(")
 
-			branch.expr = `($env` + name + ` == "yes")`
+			branch.expr = internV(`($env`, name, ` == "yes")`).string()
 			block = "macro"
-			guard = "env" + strings.TrimSpace(name)
+			guard = internV("env", strings.TrimSpace(name)).string()
 		case strings.HasPrefix(header, "when "), strings.HasPrefix(header, "when("):
 			branch.expr = strings.TrimSpace(strings.TrimPrefix(header, "when"))
 		case strings.HasPrefix(header, "elsewhen "), strings.HasPrefix(header, "elsewhen("):
@@ -209,7 +220,7 @@ func readConfFile(rel, text string) *ConfFile {
 		previous = 0
 	}
 
-	if len(stack) != 1 || pending != "" {
+	if len(stack) != 1 || len(pending) != 0 {
 		throwFmt("conf: unfinished block or assignment in %s", rel)
 	}
 
@@ -267,9 +278,15 @@ func confStmtAssignment(line string) (name, value string, op ConfOp, ok bool) {
 
 func parseConfCondition(rel, expr string) []CondNode {
 	expr = confInCondition(rel, expr)
-	expr = strings.NewReplacer("&&", " AND ", "||", " OR ", "!=", "!=", "!", " NOT ").Replace(expr)
+	expr = confCondReplacer.Replace(expr)
 
-	p := &Parser{lex: &Lexer{name: rel, src: []byte(expr), line: 1, col: 1}}
+	confCondLexer = Lexer{name: rel, src: append(confCondLexer.src[:0], expr...), line: 1, col: 1}
+
+	p := &confCondParser
+
+	p.lex = &confCondLexer
+	p.condScratch = p.condScratch[:0]
+
 	tok := Token{line: 1, col: 1}
 	tokens := p.readCondTokens(tok)
 
@@ -314,7 +331,12 @@ func parseConfCondition(rel, expr string) []CondNode {
 		}
 	}
 
-	return p.condScratch
+	block := confCondNodes.alloc(len(p.condScratch))
+
+	copy(block, p.condScratch)
+	confCondNodes.commit(len(p.condScratch))
+
+	return block[:len(p.condScratch):len(p.condScratch)]
 }
 
 func confInCondition(rel, expr string) string {
@@ -436,12 +458,12 @@ func (c *ConfFile) holds(b int, env Environment) bool {
 	return true
 }
 
-func (c *ConfFile) condVars(b int, add func(string)) {
+func (c *ConfFile) condVars(b int, add func(ENV)) {
 	for b != 0 {
 		for p := b; p != 0; p = c.branches[p].previous {
 			for _, n := range c.cond(p) {
 				if n.Kind == ckConfIdent {
-					add(n.Name)
+					add(n.Env)
 				}
 			}
 		}
@@ -465,21 +487,21 @@ func confValueVars(value string, add func(string)) {
 }
 
 func applyConfStmt(env Environment, s ConfStmt, conditional bool) {
-	key := internEnv(s.name)
+	key := s.name
 	bound := env.hasBindingID(key)
 
 	switch s.op {
 	case confSet:
-		env.setString(key, s.value)
+		s.scalar.apply(env, key)
 	case confAppend:
 		if cur := env.string(key); bound && cur != "" {
-			env.setString(key, cur+" "+s.value)
+			confStringValueID(internV(cur, " ", s.value)).apply(env, key)
 		} else {
-			env.setString(key, s.value)
+			s.scalar.apply(env, key)
 		}
 	case confDefine:
 		if !bound {
-			env.setString(key, s.value)
+			s.scalar.apply(env, key)
 		}
 	case confExclude:
 		if conditional {

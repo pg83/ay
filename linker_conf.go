@@ -58,7 +58,7 @@ func (c *LinkerConf) flags(p *Platform) LinkerFlags {
 	active := make([]bool, len(c.stmts))
 
 	for i, a := range c.stmts {
-		active[i] = linkerConfNameSet[a.name] && c.holds(a.branch, env)
+		active[i] = linkerConfNameSet[a.name.string()] && c.holds(a.branch, env)
 	}
 
 	for i, a := range c.stmts {
@@ -66,7 +66,7 @@ func (c *LinkerConf) flags(p *Platform) LinkerFlags {
 			continue
 		}
 
-		key := internEnv(a.name)
+		key := a.name
 		value := a.value
 
 		if a.op == confAppend {

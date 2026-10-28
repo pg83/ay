@@ -90,7 +90,7 @@ func sysinclFiles(pm *IncludeParserManager, root *ConfFile, platformEnv Environm
 		}
 
 		for _, s := range f.stmts {
-			if s.name != "" {
+			if s.name != 0 {
 				stmts = append(stmts, ConfStmtRef{file: f, stmt: s})
 
 				continue
@@ -121,13 +121,13 @@ func sysinclFiles(pm *IncludeParserManager, root *ConfFile, platformEnv Environm
 		grown = false
 
 		for i, r := range stmts {
-			if used[i] || !needed[r.stmt.name] {
+			if used[i] || !needed[r.stmt.name.string()] {
 				continue
 			}
 
 			used[i], grown = true, true
 			confValueVars(r.stmt.value, need)
-			r.file.condVars(r.stmt.branch, need)
+			r.file.condVars(r.stmt.branch, func(key ENV) { need(key.string()) })
 		}
 	}
 
@@ -152,7 +152,7 @@ func sysinclFiles(pm *IncludeParserManager, root *ConfFile, platformEnv Environm
 	all := confVariables(stmts, platformEnv)
 
 	for _, r := range stmts {
-		if key := internEnv(r.stmt.name); r.stmt.name != "" && !platformEnv.hasBindingID(key) && all.hasBindingID(key) {
+		if key := r.stmt.name; r.stmt.name != 0 && !platformEnv.hasBindingID(key) && all.hasBindingID(key) {
 			platformEnv.setString(key, all.string(key))
 		}
 	}
@@ -167,7 +167,7 @@ func sysinclFiles(pm *IncludeParserManager, root *ConfFile, platformEnv Environm
 		bindConfCommandVariable(name, env, platformEnv, map[string]bool{})
 	}
 
-	return strings.Fields(expandConfScalar(env.string(envSYSINCL), env)), macros, newConfConditions(stmts)
+	return strings.Fields(expandConfScalar(env.string(envSYSINCL), env)), macros, newConfConditions(stmts, platformEnv)
 }
 
 func bindConfCommandVariable(name string, values, target Environment, seen map[string]bool) {
