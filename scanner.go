@@ -92,8 +92,23 @@ type searchTierHotEntry struct {
 }
 
 type IncludeDiagnostic struct {
-	Warning   Warn
-	Directive IncludeDirective
+	Directive  IncludeDirective
+	Includer   VFS
+	Unresolved bool
+}
+
+func (d IncludeDiagnostic) warn() Warn {
+	open, close := `<`, `>`
+
+	if d.Directive.kind == includeQuoted || d.Directive.kind == includeMacro {
+		open, close = `"`, `"`
+	}
+
+	return Warn{
+		Kind: WarnMissingInclude,
+		Message: fmt.Sprintf("%s: unresolved include %s%s%s — not found in source, build, search path, or sysincl",
+			d.Includer.string(), open, d.Directive.target.string(), close),
+	}
 }
 
 type IncludeDiagnostics struct {
@@ -230,8 +245,8 @@ func (s *IncludeScanner) hasOwnDiagnostics(v VFS) bool {
 func (s *IncludeScanner) reportDiagnostics(diagnostics *IncludeDiagnostics) {
 	if diagnostics != nil {
 		for _, diagnostic := range diagnostics.Entries {
-			if diagnostic.Warning.Message != "" {
-				s.onWarn(diagnostic.Warning)
+			if diagnostic.Unresolved {
+				s.onWarn(diagnostic.warn())
 			}
 		}
 	}
@@ -252,11 +267,11 @@ func (s *IncludeScanner) reportClosureDiagnostics(input VFS, cl Closure) {
 		}
 
 		for _, diagnostic := range entry.Diagnostics.Entries {
-			if diagnostic.Warning.Message == "" || info.providesSourceInclude(v, diagnostic.Directive) {
+			if !diagnostic.Unresolved || info.providesSourceInclude(v, diagnostic.Directive) {
 				continue
 			}
 
-			s.onWarn(diagnostic.Warning)
+			s.onWarn(diagnostic.warn())
 		}
 	})
 }
@@ -1038,19 +1053,7 @@ func (sc *ScanCtx) warnUnresolved(includerAbs VFS, d IncludeDirective, sysinclCl
 		return
 	}
 
-	open, close := `<`, `>`
-
-	if d.kind == includeQuoted || d.kind == includeMacro {
-		open, close = `"`, `"`
-	}
-
-	warning := Warn{
-		Kind: WarnMissingInclude,
-		Message: fmt.Sprintf("%s: unresolved include %s%s%s — not found in source, build, search path, or sysincl",
-			includerAbs.string(), open, d.target.string(), close),
-	}
-
-	sc.diagnostics = append(sc.diagnostics, IncludeDiagnostic{Warning: warning, Directive: d})
+	sc.diagnostics = append(sc.diagnostics, IncludeDiagnostic{Directive: d, Includer: includerAbs, Unresolved: true})
 }
 
 type CfgResolveIndex struct {

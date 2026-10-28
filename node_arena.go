@@ -286,6 +286,25 @@ func (na *NodeArenas) dedupClosureChunks(closures ...Closure) InputChunks {
 
 	var result InputChunks
 
+	if len(closures) == 1 {
+		cl := closures[0]
+		chunks := na.inputs.alloc(bound)[:0]
+
+		if cl.self != 0 {
+			chunks = append(chunks, na.vfsList(cl.self))
+		}
+
+		for _, bucket := range cl.bucketList() {
+			if len(bucket) > 0 {
+				chunks = append(chunks, bucket)
+			}
+		}
+
+		na.inputs.commit(len(chunks))
+
+		return InputChunks(chunks[:len(chunks):len(chunks)])
+	}
+
 	dedupers.with(func(deduper *DeDuper) {
 		chunks := na.inputs.alloc(bound)[:0]
 
