@@ -259,6 +259,8 @@ func runCommand(argv []string, g GlobalFlags) int {
 func init() {
 	if r := os.Getenv("YATOOL_MEMPROFRATE"); r != "" {
 		runtime.MemProfileRate = throw2(strconv.Atoi(r))
+	} else if os.Getenv("YATOOL_MEMPROFILE") == "" {
+		runtime.MemProfileRate = 0
 	}
 
 	if path := os.Getenv("YATOOL_CPUPROFILE"); path != "" {
