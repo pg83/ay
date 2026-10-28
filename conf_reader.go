@@ -17,6 +17,11 @@ var (
 	confInItemRe     = regexp.MustCompile(`^\s*("[^"]*")\s*(?:,|$)`)
 )
 
+var confReadScratch struct {
+	frames  []confParseFrame
+	pending []byte
+}
+
 const (
 	confRootRel    = "build/"
 	confRootImport = `@import "${CONF_ROOT}/`
@@ -47,6 +52,7 @@ type ConfStmt struct {
 }
 
 type ConfFile struct {
+	program  *ConfProgram
 	rel      string
 	branches []ConfBranch
 	stmts    []ConfStmt
@@ -56,22 +62,30 @@ type ConfFile struct {
 	calls    map[string][]string
 }
 
+type confParseFrame struct {
+	branch    int
+	selectVar string
+	skipped   bool
+	block     string
+	owner     string
+	guard     string
+	macro     bool
+	body      confMacroBody
+}
+
 func readConfFile(rel, text string) *ConfFile {
 	conf := &ConfFile{rel: rel, branches: []ConfBranch{{}}}
-	stack := []int{0}
-	selects := []string{""}
-	skipped := []bool{false}
-	blocks := []string{""}
-	owners := []string{""}
-	guards := []string{""}
+	stack := append(confReadScratch.frames[:0], confParseFrame{})
+	pending := confReadScratch.pending[:0]
 	previous := 0
 
-	var pending []byte
+	defer func() {
+		clear(stack)
+		confReadScratch.frames = stack[:0]
+		confReadScratch.pending = pending[:0]
+	}()
 
-	lines := strings.Split(text, "\n")
-	macroBodies := map[int]*confMacroBody{}
-
-	for _, raw := range lines {
+	for raw := range strings.SplitSeq(text, "\n") {
 		line := strings.TrimSpace(raw)
 
 		if len(pending) == 0 && (line == "" || strings.HasPrefix(line, "#")) {
@@ -91,8 +105,8 @@ func readConfFile(rel, text string) *ConfFile {
 			pending = pending[:0]
 		}
 
-		if body := macroBodies[stack[len(stack)-1]]; body != nil && !strings.HasPrefix(line, "}") {
-			body.addLine(line)
+		if frame := &stack[len(stack)-1]; frame.macro && !strings.HasPrefix(line, "}") {
+			frame.body.addLine(line)
 		}
 
 		for strings.HasPrefix(line, "}") {
@@ -100,12 +114,15 @@ func readConfFile(rel, text string) *ConfFile {
 				throwFmt("conf: unmatched } in %s", rel)
 			}
 
-			previous = stack[len(stack)-1]
+			frame := &stack[len(stack)-1]
 
-			if body := macroBodies[previous]; body != nil {
-				conf.addMacro(body.header, body.calls)
+			previous = frame.branch
+
+			if frame.macro {
+				conf.addMacro(frame.body.header, frame.body.calls)
 			}
 
+			*frame = confParseFrame{}
 			stack = stack[:len(stack)-1]
 			line = strings.TrimSpace(line[1:])
 		}
@@ -116,34 +133,34 @@ func readConfFile(rel, text string) *ConfFile {
 			continue
 		}
 
-		top := stack[len(stack)-1]
+		top := &stack[len(stack)-1]
 
 		if name, value, op, ok := confStmtAssignment(line); ok {
-			if !skipped[top] && blocks[top] != "macro" {
-				conf.stmts = append(conf.stmts, ConfStmt{branch: top, name: internEnv(name), scalar: confStringValue(value), value: value, op: op})
+			if !top.skipped && top.block != "macro" {
+				conf.stmts = append(conf.stmts, ConfStmt{branch: top.branch, name: internEnv(name), scalar: confStringValue(value), value: value, op: op})
 			}
 
 			continue
 		}
 
 		if !strings.HasSuffix(line, "{") {
-			if name, _, ok := strings.Cut(line, "("); ok && guards[top] != "" && !skipped[top] && isIdentShapedName(strings.TrimSpace(name)) {
+			if name, _, ok := strings.Cut(line, "("); ok && top.guard != "" && !top.skipped && isIdentShapedName(strings.TrimSpace(name)) {
 				if conf.calls == nil {
 					conf.calls = map[string][]string{}
 				}
 
-				conf.calls[guards[top]] = append(conf.calls[guards[top]], internV("env", strings.TrimSpace(name)).string())
+				conf.calls[top.guard] = append(conf.calls[top.guard], internV("env", strings.TrimSpace(name)).string())
 			}
 
 			continue
 		}
 
 		header := strings.TrimSpace(strings.TrimSuffix(line, "{"))
-		branch := ConfBranch{parent: top, cond: condFalse}
+		branch := ConfBranch{parent: top.branch, cond: condFalse}
 		selectVar := ""
 		block := ""
 		guard := ""
-		owner := owners[top]
+		owner := top.owner
 
 		switch {
 		case strings.HasPrefix(header, "multimodule "):
@@ -190,33 +207,31 @@ func readConfFile(rel, text string) *ConfFile {
 		case strings.HasPrefix(header, "select "), strings.HasPrefix(header, "select("):
 			selectVar = strings.Trim(strings.TrimSpace(strings.TrimPrefix(header, "select")), "()$ ")
 			branch.cond = nil
-		case selects[top] != "" && strings.HasSuffix(header, "?"):
+		case top.selectVar != "" && strings.HasSuffix(header, "?"):
 			branch.previous = previous
 			branch.cond = nil
 
 			if alternatives := strings.TrimSpace(strings.TrimSuffix(header, "?")); alternatives != "default" {
-				branch.expr = confSelectCondition(selects[top], alternatives)
+				branch.expr = confSelectCondition(top.selectVar, alternatives)
 			}
 		}
 
-		skip := skipped[branch.parent] || branch.expr == "" && branch.cond != nil
+		skip := top.skipped || branch.expr == "" && branch.cond != nil
 
 		if branch.expr != "" {
 			branch.cond = nil
 		}
 
 		conf.branches = append(conf.branches, branch)
-		blocks = append(blocks, block)
-		owners = append(owners, owner)
-		guards = append(guards, guard)
-		skipped = append(skipped, skip)
-		selects = append(selects, selectVar)
-		stack = append(stack, len(conf.branches)-1)
+
+		frame := confParseFrame{branch: len(conf.branches) - 1, selectVar: selectVar, skipped: skip, block: block, owner: owner, guard: guard}
 
 		if strings.HasPrefix(header, "macro ") {
-			macroBodies[len(conf.branches)-1] = &confMacroBody{header: header}
+			frame.macro = true
+			frame.body.header = header
 		}
 
+		stack = append(stack, frame)
 		previous = 0
 	}
 

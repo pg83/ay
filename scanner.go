@@ -261,9 +261,9 @@ func (s *IncludeScanner) reportClosureDiagnostics(input VFS, cl Closure) {
 	})
 }
 
-func newIncludeScannerWith(parsers *IncludeParserManager, sysincl SysInclSet, onWarn func(Warn), buckets *BucketCache) *IncludeScanner {
+func newIncludeScannerWith(parsers *IncludeParserManager, sysincl *SysinclCtx, onWarn func(Warn), buckets *BucketCache) *IncludeScanner {
 	s := &IncludeScanner{
-		sysincl: newSysinclCtx(sysincl),
+		sysincl: sysincl,
 		parsers: parsers,
 		onWarn:  onWarn,
 

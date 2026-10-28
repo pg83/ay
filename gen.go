@@ -382,12 +382,19 @@ func newGenCtx(fs FS, parsers *IncludeParserManager, hostP, targetP *Platform, e
 		}
 	}
 
-	targetScanner := newIncludeScannerWith(parsers, loadSysInclSet(parsers, targetP, onWarn), ctx.onWarn, ctx.buckets)
+	targetSysincl := newSysinclCtx(loadSysInclSet(parsers, targetP, onWarn))
+	targetScanner := newIncludeScannerWith(parsers, targetSysincl, ctx.onWarn, ctx.buckets)
 
 	targetScanner.codegen = targetReg
 	targetScanner.moduleByRef = &ctx.moduleByRef
 
-	hostScanner := newIncludeScannerWith(parsers, loadSysInclSet(parsers, hostP, onWarn), ctx.onWarn, ctx.buckets)
+	hostSysincl := targetSysincl
+
+	if !slices.Equal(hostP.Sysincl, targetP.Sysincl) {
+		hostSysincl = newSysinclCtx(loadSysInclSet(parsers, hostP, onWarn))
+	}
+
+	hostScanner := newIncludeScannerWith(parsers, hostSysincl, ctx.onWarn, ctx.buckets)
 
 	hostScanner.codegen = hostReg
 	hostScanner.moduleByRef = &ctx.moduleByRef

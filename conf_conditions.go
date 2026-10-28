@@ -6,6 +6,12 @@ import (
 	"strings"
 )
 
+var (
+	confTargetArena        = newBumpAllocator[ConfTarget]()
+	confModuleArena        = newBumpAllocator[ConfModule]()
+	confModulePointerArena = newBumpAllocator[*ConfModule]()
+)
+
 type ConfValue struct {
 	value STR
 	kind  EnvKind
@@ -37,6 +43,16 @@ func confEnvValue(env Environment, key ENV) ConfValue {
 	return ConfValue{value: value, kind: kind}
 }
 
+func confStringBinding(env Environment, key ENV) ConfValue {
+	v := confEnvValue(env, key)
+
+	if v.kind != envAbsent && v.kind != envVFS {
+		v = confStringValueID(v.value)
+	}
+
+	return v
+}
+
 func (v ConfValue) apply(env Environment, key ENV) {
 	switch v.kind {
 	case envAbsent:
@@ -50,6 +66,7 @@ func (v ConfValue) apply(env Environment, key ENV) {
 }
 
 type ConfConditions struct {
+	source      []ConfStmtRef
 	byVariable  DenseMap[ENV, []ENV]
 	byTarget    DenseMap[ENV, ConfTarget]
 	modules     DenseMap[STR, *ConfModule]
@@ -77,8 +94,37 @@ type ConfModule struct {
 
 type confDependency struct{ variable, target ENV }
 
-func newConfConditions(stmts []ConfStmtRef, platformEnv Environment) *ConfConditions {
-	c := &ConfConditions{values: newBumpAllocator[ConfValue](), assignments: newBumpAllocator[ConfAssignment]()}
+func confConditionInput(r ConfStmtRef) bool {
+	return r.stmt.branch != 0 || len(r.file.modules) != 0 || len(r.file.variants) != 0 || len(r.file.calls) != 0
+}
+
+func (c *ConfConditions) matches(stmts []ConfStmtRef) bool {
+	i := 0
+
+	for _, r := range stmts {
+		if confConditionInput(r) {
+			if i == len(c.source) || c.source[i] != r {
+				return false
+			}
+
+			i++
+		}
+	}
+
+	return i == len(c.source)
+}
+
+func newConfConditions(stmts []ConfStmtRef) *ConfConditions {
+	c := &ConfConditions{}
+
+	for _, r := range stmts {
+		if confConditionInput(r) {
+			c.source = append(c.source, r)
+		}
+	}
+
+	stmts = c.source
+
 	seen := map[*ConfFile]bool{}
 	calls := map[string][]string{}
 
@@ -155,13 +201,7 @@ func newConfConditions(stmts []ConfStmtRef, platformEnv Environment) *ConfCondit
 
 		n := counts.vals.s[slot]
 
-		var inherited ConfValue
-
-		if platformEnv.hasBindingID(ENV(key)) {
-			inherited = confStringValue(platformEnv.string(ENV(key)))
-		}
-
-		c.byTarget.put(ENV(key), ConfTarget{stmts: refs[:0:n], inherited: inherited})
+		c.byTarget.put(ENV(key), ConfTarget{stmts: refs[:0:n]})
 		refs = refs[n:]
 	}
 
@@ -183,6 +223,43 @@ func newConfConditions(stmts []ConfStmtRef, platformEnv Environment) *ConfCondit
 	}
 
 	return c
+}
+
+func (c *ConfConditions) bind(env Environment) *ConfConditions {
+	b := *c
+
+	b.values = newBumpAllocator[ConfValue]()
+	b.assignments = newBumpAllocator[ConfAssignment]()
+
+	targets := confTargetArena.alloc(len(c.byTarget.vals.s))
+
+	copy(targets, c.byTarget.vals.s)
+
+	for key, slot := range c.byTarget.idx.s {
+		if slot != 0 {
+			targets[slot].inherited = confStringBinding(env, ENV(key))
+		}
+	}
+
+	confTargetArena.commit(len(c.byTarget.vals.s))
+	b.byTarget.vals.s = targets[:len(c.byTarget.vals.s):len(c.byTarget.vals.s)]
+
+	n := len(c.modules.vals.s)
+	modules := confModuleArena.alloc(n)
+	pointers := confModulePointerArena.alloc(n)
+
+	for i, module := range c.modules.vals.s {
+		if module != nil {
+			modules[i] = *module
+			pointers[i] = &modules[i]
+		}
+	}
+
+	confModuleArena.commit(n)
+	confModulePointerArena.commit(n)
+	b.modules.vals.s = pointers[:n:n]
+
+	return &b
 }
 
 func (c *ConfConditions) builderMacros(calls map[string][]string, guard string, seen map[string]bool, out []ENV) []ENV {
@@ -233,7 +310,7 @@ func (p *Platform) recalcConfInto(env Environment, variable ENV, originals map[S
 
 		for _, r := range definition.stmts {
 			if r.file.holds(r.stmt.branch, env) {
-				applyConfStmt(env, r.stmt, true)
+				applyConfStmt(env, *r.stmt, true)
 			}
 		}
 

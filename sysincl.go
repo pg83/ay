@@ -10,6 +10,21 @@ import (
 
 var envSYSINCL = internEnv(sysinclVar)
 
+var confBindingScratch struct {
+	selected EnvStore
+	all      EnvStore
+	needed   BitSet
+	seen     BitSet
+	keys     []ENV
+	used     []bool
+}
+
+var confCommandVariables = []ENV{
+	internEnv("__COMMA__"), internEnv(importMaskVariable), internEnv("DEFAULT_ALLOCATOR"),
+	internEnv("C_AS_CXX_FLAGS"), envYqlPythonDir, envPmScript,
+	envSetTsInputsBaseExcludes, envNotsTool, envPeerdirsRulesPath,
+}
+
 const (
 	sysinclVar             = "SYSINCL"
 	maxLiteralAltExpansion = 64
@@ -52,7 +67,7 @@ func (rec *SysIncl) setMapping(k []byte, paths []VFS) {
 
 type ConfStmtRef struct {
 	file *ConfFile
-	stmt ConfStmt
+	stmt *ConfStmt
 }
 
 func (pm *IncludeParserManager) confFile(rel string) *ConfFile {
@@ -74,78 +89,65 @@ func (pm *IncludeParserManager) confFile(rel string) *ConfFile {
 }
 
 func sysinclFiles(pm *IncludeParserManager, root *ConfFile, platformEnv Environment) ([]string, map[STR]*ConfMacro, *ConfConditions) {
-	macros := map[STR]*ConfMacro{}
+	program := pm.confProgram(root, nil)
+	stmts := program.stmts
+	scratch := &confBindingScratch
+	needed := &scratch.needed
 
-	var (
-		stmts   []ConfStmtRef
-		walking []string
-		walk    func(f *ConfFile)
-	)
+	clear(needed.words.s)
 
-	walk = func(f *ConfFile) {
-		for name, macro := range f.macros {
-			if previous, ok := macros[name]; !ok || previous != nil {
-				macros[name] = macro
-			}
-		}
+	neededKeys := append(scratch.keys[:0], envSYSINCL)
 
-		for _, s := range f.stmts {
-			if s.name != 0 {
-				stmts = append(stmts, ConfStmtRef{file: f, stmt: s})
+	neededKeys = append(neededKeys, confCommandVariables...)
 
-				continue
-			}
-
-			if slices.Contains(walking, s.value) {
-				throwFmt("conf: @import loop: %s -> %s", strings.Join(walking, " -> "), s.value)
-			}
-
-			walking = append(walking, s.value)
-			walk(pm.confFile(s.value))
-			walking = walking[:len(walking)-1]
-		}
+	for _, key := range neededKeys {
+		needed.add(uint32(key))
 	}
 
-	walk(root)
+	scratch.used = slices.Grow(scratch.used[:0], len(stmts))[:len(stmts)]
 
-	needed := map[string]bool{sysinclVar: true, "__COMMA__": true, importMaskVariable: true, "DEFAULT_ALLOCATOR": true, "C_AS_CXX_FLAGS": true, "YQL_PYTHON_DIR": true}
+	used := scratch.used
 
-	for _, name := range []string{"PM_SCRIPT", "_SET_TS_INPUTS_BASE_EXCLUDES", "NOTS_TOOL", "PEERDIRS_RULES_PATH"} {
-		needed[name] = true
+	clear(used)
+
+	need := func(key ENV) {
+		if !needed.has(uint32(key)) {
+			needed.add(uint32(key))
+			neededKeys = append(neededKeys, key)
+		}
 	}
-
-	used := make([]bool, len(stmts))
-	need := func(name string) { needed[name] = true }
 
 	for grown := true; grown; {
 		grown = false
 
 		for i, r := range stmts {
-			if used[i] || !needed[r.stmt.name.string()] {
+			if used[i] || !needed.has(uint32(r.stmt.name)) {
 				continue
 			}
 
 			used[i], grown = true, true
-			confValueVars(r.stmt.value, need)
-			r.file.condVars(r.stmt.branch, func(key ENV) { need(key.string()) })
+			confValueVars(r.stmt.value, func(name string) { need(internEnv(name)) })
+			r.file.condVars(r.stmt.branch, need)
 		}
 	}
 
-	env := platformEnv.clone()
+	scratch.keys = neededKeys
 
-	for name := range needed {
-		env.unbind(internEnv(name))
+	env := platformEnv.cloneInto(&scratch.selected)
+
+	for _, key := range neededKeys {
+		env.unbind(key)
 	}
 
 	for i, r := range stmts {
 		if used[i] && r.stmt.branch == 0 {
-			applyConfStmt(env, r.stmt, false)
+			applyConfStmt(env, *r.stmt, false)
 		}
 	}
 
 	for i, r := range stmts {
 		if used[i] && r.stmt.branch != 0 && r.file.holds(r.stmt.branch, env) {
-			applyConfStmt(env, r.stmt, true)
+			applyConfStmt(env, *r.stmt, true)
 		}
 	}
 
@@ -153,37 +155,28 @@ func sysinclFiles(pm *IncludeParserManager, root *ConfFile, platformEnv Environm
 
 	for _, r := range stmts {
 		if key := r.stmt.name; r.stmt.name != 0 && !platformEnv.hasBindingID(key) && all.hasBindingID(key) {
-			platformEnv.setString(key, all.string(key))
+			confStringBinding(all, key).apply(platformEnv, key)
 		}
 	}
 
-	bindConfCommandVariable("__COMMA__", env, platformEnv, map[string]bool{})
-	bindConfCommandVariable(importMaskVariable, env, platformEnv, map[string]bool{})
-	bindConfCommandVariable("DEFAULT_ALLOCATOR", env, platformEnv, map[string]bool{})
-	bindConfCommandVariable("C_AS_CXX_FLAGS", env, platformEnv, map[string]bool{})
-	bindConfCommandVariable("YQL_PYTHON_DIR", env, platformEnv, map[string]bool{})
-
-	for _, name := range []string{"PM_SCRIPT", "_SET_TS_INPUTS_BASE_EXCLUDES", "NOTS_TOOL", "PEERDIRS_RULES_PATH"} {
-		bindConfCommandVariable(name, env, platformEnv, map[string]bool{})
+	for _, key := range confCommandVariables {
+		clear(scratch.seen.words.s)
+		bindConfCommandVariable(key, env, platformEnv, &scratch.seen)
 	}
 
-	return strings.Fields(expandConfScalar(env.string(envSYSINCL), env)), macros, newConfConditions(stmts, platformEnv)
+	return strings.Fields(expandConfScalar(env.string(envSYSINCL), env)), program.macros, program.conditionsFor(pm).bind(platformEnv)
 }
 
-func bindConfCommandVariable(name string, values, target Environment, seen map[string]bool) {
-	if seen[name] {
+func bindConfCommandVariable(key ENV, values, target Environment, seen *BitSet) {
+	if seen.has(uint32(key)) {
 		return
 	}
 
-	seen[name] = true
-
-	key := internEnv(name)
+	seen.add(uint32(key))
 
 	if values.hasBindingID(key) {
-		value := values.string(key)
-
-		target.setString(key, value)
-		confValueVars(value, func(dependency string) { bindConfCommandVariable(dependency, values, target, seen) })
+		confStringBinding(values, key).apply(target, key)
+		confValueVars(values.string(key), func(dependency string) { bindConfCommandVariable(internEnv(dependency), values, target, seen) })
 	}
 }
 
@@ -615,11 +608,11 @@ func extractLiteralAnchoredPrefix(pat string) string {
 }
 
 func confVariables(stmts []ConfStmtRef, platformEnv Environment) Environment {
-	all := platformEnv.clone()
+	all := platformEnv.cloneInto(&confBindingScratch.all)
 
 	for _, r := range stmts {
 		if r.stmt.branch == 0 {
-			applyConfStmt(all, r.stmt, false)
+			applyConfStmt(all, *r.stmt, false)
 		}
 	}
 
@@ -629,7 +622,7 @@ func confVariables(stmts []ConfStmtRef, platformEnv Environment) Environment {
 		}
 
 		if r.file.holds(r.stmt.branch, all) {
-			applyConfStmt(all, r.stmt, true)
+			applyConfStmt(all, *r.stmt, true)
 		}
 	}
 
