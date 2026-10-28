@@ -22,7 +22,7 @@ func (e *EmitContext) emitBundle(b BundleEntry) {
 		script := buildScriptsBundleOutputPy
 		args := ctx.na.anyList(d.tc.Python3.any(), script.any(), argResult.any(), src.any(), argName.any(), internStr(b.Output).any(), strOutput.any(), dst.any())
 
-		e.emitReservedNode(Node{Platform: instance.Platform, Cmds: ctx.na.cmdList(Cmd{CmdArgs: ctx.na.chunkList(args), Env: envVarsVCS}), Env: envVarsVCS, Inputs: NodeInputs{files: ctx.na.inputList(ctx.na.vfsList(src, script)), roots: ctx.na.inputList(ctx.na.vfsList(script))}, Outputs: ctx.na.vfsList(dst), DepRefs: ctx.na.refList(srcRef), KV: &bundleKV, Resources: usesPython3}, ref)
+		e.emitReservedNode(Node{Platform: instance.Platform, Cmds: ctx.na.cmdList(Cmd{CmdArgs: ctx.na.chunkList(args), Env: envVarsVCS}), Env: envVarsVCS, Inputs: NodeInputs{files: ctx.na.rootInputList(ctx.na.vfsList(src, script)), roots: ctx.na.inputList(ctx.na.vfsList(script))}, Outputs: ctx.na.vfsList(dst), DepRefs: ctx.na.refList(srcRef), KV: &bundleKV, Resources: usesPython3}, ref)
 	} else {
 		e.emitBundleNode(d.tc.Python3, src, dst, b.Suffix, srcRef, resolved, ref)
 	}
@@ -93,7 +93,7 @@ func (e *EmitContext) emitBundleNode(python3 VFS, src, dst VFS, suffix string, s
 		Platform:  instance.Platform,
 		Cmds:      na.cmdList(Cmd{CmdArgs: na.chunkList(cmdArgs), Env: env}),
 		Env:       env,
-		Inputs:    NodeInputs{files: na.inputList(inputHead, ctx.scripts[fsTools.rel()]), roots: na.inputList(ctx.scripts[fsTools.rel()])},
+		Inputs:    NodeInputs{files: na.rootInputList(inputHead, ctx.scripts[fsTools.rel()]), roots: na.inputList(ctx.scripts[fsTools.rel()])},
 		KV:        &bundleKV,
 		Outputs:   na.vfsList(dst),
 		DepRefs:   depRefs,

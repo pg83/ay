@@ -146,7 +146,7 @@ func (e *EmitContext) emitAliceEnumSrcStmt(stmt *GenerateEnumSerializationStmt) 
 	pending := e.pendingEmit(func() {
 		toolRef, toolBin := ctx.tool(argYandexIoToolsEnumSerializerGenerator)
 		closure := e.scanner.walkClosure(header, e.d.scanCtx, scanDomainCC)
-		inputs := appendInputChunks(na, na.inputList(na.vfsList(toolBin, header)), closure.bucketList())
+		inputs := appendInputChunks(na, na.inputList(na.vfsList(toolBin), na.vfsList(header)), closure.bucketList())
 
 		args := na.anyList(toolBin.any(), strInputPath.any(), header.any(),
 			strIncludePath.any(), header.rel().any(), strOutputPath.any(), output.any())

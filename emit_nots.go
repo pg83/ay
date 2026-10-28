@@ -636,7 +636,7 @@ func (e *EmitContext) emitNotsPrepare() *ModuleEmitResult {
 		prepOutputs = append(prepOutputs, build(dir, "/__tarballs__/", tarball))
 	}
 
-	prep := Node{Platform: e.instance.Platform, Cmds: na.cmdList(Cmd{CmdArgs: na.chunkList(na.anyList(appendInternAnys(nil, prepArgs)...)), Env: envVarsVCS}), Env: envVarsVCS, Inputs: NodeInputs{files: na.inputList(na.vfsList(prepInputs...)), roots: na.inputList(prepInputs[:prepToolIndex], prepInputs[prepToolIndex+1:])}, Outputs: na.vfsList(prepOutputs...), KV: &KV{P: pkTSDep, PC: pcMagenta}, KVExts: []KVExt{{Key: "text", Val: dir}}, ForeignDepRefs: na.refList(toolRef), Requirements: e.notsRequirements(), Resources: resourceNames, ResourceURIs: make([]STR, len(uris))}
+	prep := Node{Platform: e.instance.Platform, Cmds: na.cmdList(Cmd{CmdArgs: na.chunkList(na.anyList(appendInternAnys(nil, prepArgs)...)), Env: envVarsVCS}), Env: envVarsVCS, Inputs: NodeInputs{files: na.rootInputList(na.vfsList(prepInputs...)), roots: na.inputList(prepInputs[:prepToolIndex], prepInputs[prepToolIndex+1:])}, Outputs: na.vfsList(prepOutputs...), KV: &KV{P: pkTSDep, PC: pcMagenta}, KVExts: []KVExt{{Key: "text", Val: dir}}, ForeignDepRefs: na.refList(toolRef), Requirements: e.notsRequirements(), Resources: resourceNames, ResourceURIs: make([]STR, len(uris))}
 
 	for i, uri := range uris {
 		prep.ResourceURIs[i] = internStr(uri)
@@ -806,7 +806,7 @@ func (e *EmitContext) emitNotsBuild() *ModuleEmitResult {
 		refs = append(refs, ctx.vcsRef)
 	}
 
-	n := Node{Platform: e.instance.Platform, Cmds: na.cmdList(cmds...), Env: envVarsVCS, Inputs: NodeInputs{files: na.inputList(na.vfsList(inputs...)), roots: na.inputList(na.vfsList(dedup(buildFrom)...)), text: na.vfsList(sourceFiles...)}, Outputs: na.vfsList(outputs...), KV: &KV{P: kind, PC: pcMagenta}, ForeignDepRefs: na.refList(foreignRefs...), DepRefs: na.refList(dedupRefs(refs)...), Requirements: e.notsRequirements(), Resources: append(resourceNames, usesPython3...)}
+	n := Node{Platform: e.instance.Platform, Cmds: na.cmdList(cmds...), Env: envVarsVCS, Inputs: NodeInputs{files: na.rootInputList(na.vfsList(inputs...)), roots: na.inputList(na.vfsList(dedup(buildFrom)...)), text: na.vfsList(sourceFiles...)}, Outputs: na.vfsList(outputs...), KV: &KV{P: kind, PC: pcMagenta}, ForeignDepRefs: na.refList(foreignRefs...), DepRefs: na.refList(dedupRefs(refs)...), Requirements: e.notsRequirements(), Resources: append(resourceNames, usesPython3...)}
 	ref := e.emitNotsNode(n)
 	info := e.codegen.lookup(output)
 
@@ -959,7 +959,7 @@ func (e *EmitContext) emitNotsTouch(output VFS, refs []NodeRef, inputs []VFS, kv
 	return e.emitNotsNode(Node{
 		Platform: e.instance.Platform,
 		Cmds:     na.cmdList(Cmd{CmdArgs: na.chunkList(na.anyList(wrapccPython3STR.any(), script.any(), output.any())), Env: envVarsVCS}),
-		Env:      envVarsVCS, Inputs: NodeInputs{files: na.inputList(na.vfsList(script), na.vfsList(dedup(inputs)...))}, Outputs: na.vfsList(output), KV: kv,
+		Env:      envVarsVCS, Inputs: NodeInputs{files: na.rootInputList(na.vfsList(dedup(inputs)...), na.vfsList(script))}, Outputs: na.vfsList(output), KV: kv,
 		DepRefs: na.refList(dedupRefs(refs)...), Resources: usesPython3,
 		Requirements: &Requirements{CPU: 1, RAM: 32, Network: nwRestricted},
 	})

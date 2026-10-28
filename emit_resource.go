@@ -729,7 +729,7 @@ func (e *EmitContext) packRawResourceChunk(chunk []ResourceItem, p ResourcePack)
 		Platform: instance.Platform,
 		Cmds:     na.cmdList(Cmd{CmdArgs: na.chunkList(nodeCmd), Resources: resourceUses, Env: env}),
 		Env:      env,
-		Inputs:   NodeInputs{files: na.inputList(payloadBuilds, tail), roots: na.inputList(payloadBuilds), text: e.resourceTextInputs(chunk)},
+		Inputs:   NodeInputs{files: na.rootInputList(payloadBuilds, tail), roots: na.inputList(payloadBuilds), text: e.resourceTextInputs(chunk)},
 
 		Outputs: na.vfsList(aux),
 		KV:      &rawAuxKV,

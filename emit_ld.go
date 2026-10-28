@@ -211,14 +211,14 @@ func (e *EmitContext) emitLD(
 
 	inputTail = inputTail[:len(inputTail):len(inputTail)]
 
-	extraChunks := [6][]VFS{inputTail}
-	nExtra := 1
+	extraChunks := [6][]VFS{}
+	nExtra := 0
 
 	if len(sbomPaths) > 0 {
-		extraChunks[1] = na.vfsList(sbomPaths...)
-		extraChunks[2] = na.srcChunk(linkSbomScriptVFS)
+		extraChunks[0] = na.vfsList(sbomPaths...)
+		extraChunks[1] = na.srcChunk(linkSbomScriptVFS)
 
-		nExtra = 3
+		nExtra = 2
 	}
 
 	if dyn != nil {
@@ -236,7 +236,7 @@ func (e *EmitContext) emitLD(
 		}
 	}
 
-	inputs := composeLDInputs(na, ccPaths, peerLibPaths, pluginPaths, globalPaths, wholeArchivePaths, dynamicPaths, objcopyPaths, scripts, emitCopy, extraChunks[:nExtra]...)
+	inputs := composeLDInputs(na, ccPaths, peerLibPaths, pluginPaths, globalPaths, wholeArchivePaths, dynamicPaths, objcopyPaths, scripts, emitCopy, na.rootInputList(inputTail, extraChunks[:nExtra]...)...)
 	ccBuildRefs := na.objectBuildRefs(ccRefs, ccPaths)
 	objcopyBuildRefs := na.objectBuildRefs(objcopyRefs, objcopyPaths)
 	deps := na.noderefs.alloc(len(ccBuildRefs) + len(globalRefs) + len(peerLDRefs) + len(dynamicRefs) + len(objcopyBuildRefs) + len(sbomRefs) + 1)[:0]

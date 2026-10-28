@@ -377,7 +377,7 @@ func (e *EmitContext) composeCCNodeAt(srcVFS VFS, in ModuleCCInputs, hostP *Plat
 		analysisCmd := e.staticAnalyzerCmd(analyzer, in, inChunk, tok[1:4])
 
 		cmds = na.cmdList(analysisCmd, compilerCmd)
-		allInputs = appendInputChunks(na, allInputs, na.inputList(analyzer.inputs))
+		allInputs = appendInputChunks(na, allInputs, na.rootInputList(analyzer.inputs))
 		resources = analyzer.resources
 	} else {
 		cmds = na.cmdList(compilerCmd)

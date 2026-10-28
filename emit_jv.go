@@ -106,7 +106,7 @@ func (e *EmitContext) emitJVGeneralReserved(
 
 	cmdArgs = appendInternAnys(cmdArgs, args)
 
-	jvInputs := na.inputList(inputSources, inputBuilds, na.vfsList(stdout2stderrVFS, jarVFS), hiddenInputs)
+	jvInputs := na.rootInputList(hiddenInputs, inputSources, inputBuilds, na.vfsList(stdout2stderrVFS), na.vfsList(jarVFS))
 
 	e.emitJVNodeReserved(cmdArgs, jvInputs, outputs, cwd, id)
 }

@@ -26,7 +26,7 @@ func (e *EmitContext) emitProto2Fbs(stmt Proto2FbsStmt, output VFS) {
 			Cmd{CmdArgs: na.chunkList(na.anyList(tool.any(), argI.any(), str4.any(), argI.any(), srcRootDirVFS.any(), strProto.any(), input.any())), Cwd: bindir, Env: envVarsVCS},
 			Cmd{CmdArgs: na.chunkList(na.anyList(d.tc.Python3.any(), fsTools.any(), argRename.any(), temporary.any(), output.any())), Env: envVarsVCS},
 		),
-		Inputs:  NodeInputs{files: na.inputList(na.vfsList(tool, input), ctx.scripts[fsTools.rel()])},
+		Inputs:  NodeInputs{files: na.rootInputList(na.vfsList(tool, input), ctx.scripts[fsTools.rel()])},
 		Outputs: na.vfsList(output), ForeignDepRefs: na.refList(toolRef), Resources: usesPython3,
 	}
 

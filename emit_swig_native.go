@@ -49,15 +49,14 @@ func (e *EmitContext) emitNativeSwigSource(meta SrcMeta, python bool) {
 		args = append(args, swigJNIIncludeArgs(d.cc.SwigInclude)[1:]...)
 		args = append(args, src.any())
 
-		inputs := InputChunks{na.vfsList(swigBin, src)}
-
-		inputs = append(inputs, buckets...)
+		roots := na.inputList(na.vfsList(src), buckets...)
+		inputs := na.inputList(na.vfsList(swigBin), roots...)
 
 		e.emitReservedNode(Node{
 			Platform: instance.Platform,
 			Cmds:     na.cmdList(Cmd{CmdArgs: na.chunkList(na.anyList(args...)), Env: envVarsVCS}),
 			Env:      envVarsVCS,
-			Inputs:   NodeInputs{files: inputs, roots: na.inputList(inputs[0][1:], inputs[1:]...)},
+			Inputs:   NodeInputs{files: inputs, roots: roots},
 
 			Outputs:        na.vfsList(cpp, moduleOutput),
 			KV:             &swigJNIKV,

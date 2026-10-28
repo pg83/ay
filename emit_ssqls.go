@@ -32,7 +32,7 @@ func (e *EmitContext) emitSsqlsSource(meta SrcMeta) {
 
 		e.emitReservedNode(Node{Platform: e.instance.Platform, Env: envVarsVCS,
 			Cmds:   na.cmdList(Cmd{CmdArgs: na.chunkList(na.anyList(tool.any(), src.any(), strS3.any(), srcRootDirVFS.any(), strB3.any(), bldRootDirVFS.any()), meta.Compile.CFlags), Env: envVarsVCS}),
-			Inputs: NodeInputs{files: na.inputList(na.vfsList(tool, src), closure.bucketList()...), roots: na.inputList(na.vfsList(src), closure.bucketList()...)}, Outputs: na.vfsList(cpp, header),
+			Inputs: NodeInputs{files: na.rootInputList(na.vfsList(tool, src), closure.bucketList()...), roots: na.inputList(na.vfsList(src), closure.bucketList()...)}, Outputs: na.vfsList(cpp, header),
 			ForeignDepRefs: na.refList(toolRef), KV: &ssqlsKV}, ref)
 	})
 

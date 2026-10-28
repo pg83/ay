@@ -538,7 +538,7 @@ func (e *EmitContext) flushGoSrcs() {
 		Platform:  instance.Platform,
 		Cmds:      na.cmdList(Cmd{CmdArgs: na.chunkList(e.goSymabisHeadFor(), e.goInclSplitArgs(), goSymabisDefs, tail[:nt:nt]), Env: goVcsEnv}),
 		Env:       goVcsEnv,
-		Inputs:    NodeInputs{files: na.inputList(na.vfsList(e.goRes.AsmFiles...), e.goRes.AsmInclSrcs)},
+		Inputs:    NodeInputs{files: na.rootInputList(na.vfsList(e.goRes.AsmFiles...), e.goRes.AsmInclSrcs)},
 		KV:        &goToolKV,
 		Outputs:   na.vfsList(out),
 		Resources: goToolResources(na, e.peers.ResourceGlobals),
@@ -1280,11 +1280,10 @@ func (e *EmitContext) emitGoExe(resolved []ResolvedPeer, objRefs []NodeRef, objO
 	na.anys.commit(len(pluginArgs))
 	pluginArgs = pluginArgs[:len(pluginArgs):len(pluginArgs)]
 
-	inputs := na.inputList(
+	inputs := na.rootInputList(
 		ownInputs,
 		e.goIncludedSrcs(goRes),
 		cgoBuilds,
-		testInputs,
 		embedInputs,
 		goToolScriptInputsChunk,
 		dllInputs,
@@ -1295,6 +1294,8 @@ func (e *EmitContext) emitGoExe(resolved []ResolvedPeer, objRefs []NodeRef, objO
 		extraBuilds,
 		extraTailSources,
 	)
+
+	inputs = appendInputChunks(na, inputs, na.rootInputList(testInputs))
 
 	objBuildRefs := na.objectBuildRefs(objRefs, objOuts)
 	deps := na.noderefs.alloc(len(objBuildRefs) + len(peerArchiveRefs) + len(peerGlobalRefs) + len(peerSbomRefs) + 2)
@@ -1322,7 +1323,7 @@ func (e *EmitContext) emitGoExe(resolved []ResolvedPeer, objRefs []NodeRef, objO
 	localLD := e.localLinkerFlagValue(nil)
 
 	if len(localLD.Inputs) > 0 {
-		inputs = appendInputChunks(na, inputs, na.inputList(localLD.Inputs))
+		inputs = appendInputChunks(na, inputs, na.rootInputList(localLD.Inputs))
 	}
 
 	goCmd := Cmd{CmdArgs: na.chunkList(

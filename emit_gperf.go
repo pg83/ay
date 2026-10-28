@@ -40,7 +40,7 @@ func (e *EmitContext) emitGP(srcRel string, srcVFS, genVFS, gperfBin VFS, gperfL
 		Platform: e.instance.Platform,
 		Cmds:     na.cmdList(Cmd{CmdArgs: na.chunkList(head), Env: env, Stdout: genVFS}),
 		Env:      env,
-		Inputs:   NodeInputs{files: na.inputList(na.vfsList(gperfBin), srcInputs), roots: na.inputList(srcInputs)},
+		Inputs:   NodeInputs{files: na.rootInputList(srcInputs, na.vfsList(gperfBin)), roots: na.inputList(srcInputs)},
 
 		Outputs:        na.vfsList(genVFS),
 		KV:             &gperfKV,

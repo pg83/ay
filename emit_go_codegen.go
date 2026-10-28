@@ -339,7 +339,7 @@ func (e *EmitContext) emitGoCodegenStmt(st GoCodegenStmt) {
 		Platform: instance.Platform,
 		Cmds:     na.cmdList(cmds...),
 		Env:      env,
-		Inputs:   NodeInputs{files: na.inputList(inputs), roots: na.inputList(inputs[toolEnd:])},
+		Inputs:   NodeInputs{files: na.rootInputList(inputs), roots: na.inputList(inputs[toolEnd:])},
 
 		KV:             &goCodegenKVs[st.kind],
 		Outputs:        na.vfsList(out),

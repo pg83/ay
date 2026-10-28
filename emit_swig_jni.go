@@ -102,16 +102,17 @@ func (e *EmitContext) emitLibrarySwigSource(meta SrcMeta) {
 		args = append(args, swigJNIIncludeArgs(include)...)
 		args = append(args, argDashO.any(), cpp.any())
 
-		inputs := make(InputChunks, 0, 1+len(cvBuckets))
+		roots := na.inputList(na.vfsList(swigJNIScriptVFS), na.vfsList(srcVFS))
 
-		inputs = append(inputs, na.vfsList(swigBin, swigJNIScriptVFS, srcVFS))
-		inputs = append(inputs, cvBuckets...)
+		roots = appendInputChunks(na, roots, cvBuckets)
+
+		inputs := na.inputList(na.vfsList(swigBin), roots...)
 
 		e.emitReservedNode(Node{
 			Platform: instance.Platform,
 			Cmds:     na.cmdList(Cmd{CmdArgs: na.chunkList(na.anyList(args...)), Env: envVarsVCS}),
 			Env:      envVarsVCS,
-			Inputs:   NodeInputs{files: inputs, roots: na.inputList(inputs[0][1:], inputs[1:]...)},
+			Inputs:   NodeInputs{files: inputs, roots: roots},
 
 			Outputs:        na.vfsList(hdr, cpp),
 			KV:             &swigJNIKV,

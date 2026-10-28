@@ -75,7 +75,7 @@ func (e *EmitContext) emitYtOrmProtoYson(st GoCodegenStmt) {
 		Platform: e.instance.Platform,
 		Cmds: na.cmdList(Cmd{CmdArgs: na.chunkList(na.anyList(args...)),
 			Cwd: build(e.instance.Path.relString()), Env: envVarsVCS}),
-		Env: envVarsVCS, Inputs: NodeInputs{files: na.inputList(inputs[0], inputs[1:]...), roots: InputChunks(inputs[1:])}, Outputs: na.vfsList(outs...),
+		Env: envVarsVCS, Inputs: NodeInputs{files: na.rootInputList(inputs[0], inputs[1:]...), roots: InputChunks(inputs[1:])}, Outputs: na.vfsList(outs...),
 		KV: &pbKV, ForeignDepRefs: na.refList(protocRef, pluginRef),
 	})
 

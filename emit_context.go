@@ -209,11 +209,19 @@ func (e *EmitContext) emitReservedNode(node Node, ref NodeRef) {
 }
 
 func (e *EmitContext) resolveNodeCodegenDeps(node *Node) {
+	if ownershipOn {
+		node.Inputs.checkRoots()
+	}
+
 	e.includeNodeInputs(node)
 	e.resolveNodeCodegenRefs(node)
 }
 
 func (e *EmitContext) resolveNodeCodegenRefs(node *Node) {
+	if ownershipOn {
+		node.Inputs.checkRoots()
+	}
+
 	defer e.prepareNodeInputs(node)
 
 	if len(node.Resources) > 0 && e.peers != nil {
@@ -224,11 +232,11 @@ func (e *EmitContext) resolveNodeCodegenRefs(node *Node) {
 	var mains []VFS
 
 	for _, chunk := range node.Inputs.files {
-		for _, input := range chunk {
-			if input.isSource() {
-				continue
-			}
+		if len(chunk) == 0 || chunk[0].isSource() {
+			continue
+		}
 
+		for _, input := range chunk {
 			info := e.codegen.lookupSTR(input.rel())
 
 			if info == nil {
@@ -258,6 +266,10 @@ func (e *EmitContext) resolveNodeCodegenRefs(node *Node) {
 	if len(mains) > 0 {
 		dedupers.with(func(deduper *DeDuper) {
 			for _, chunk := range node.Inputs.files {
+				if len(chunk) == 0 || chunk[0].isSource() {
+					continue
+				}
+
 				for _, input := range chunk {
 					deduper.addStable(input.strID())
 				}
@@ -356,6 +368,10 @@ func (e *EmitContext) includeNodeInputs(node *Node) {
 	var templates, textTemplates []VFS
 
 	for _, chunk := range node.Inputs.files {
+		if len(chunk) == 0 || chunk[0].isSource() {
+			continue
+		}
+
 		for _, input := range chunk {
 			if info := e.codegen.lookup(input); info != nil && len(info.IncludedBuildInputs) > 0 {
 				included = append(included, info.IncludedBuildInputs)
@@ -383,6 +399,10 @@ func (e *EmitContext) includeNodeInputs(node *Node) {
 
 			if input.isBuild() && e.codegen.lookup(input) != nil || input.isSource() && !text {
 				if cl := e.inputClosure(input); cl.buckets != nil {
+					if extra == nil {
+						extra = closureScratches.get()
+					}
+
 					extra = append(extra, cl)
 				}
 			}
@@ -431,6 +451,11 @@ func (e *EmitContext) includeNodeInputs(node *Node) {
 		e.ctx.na.inputs.commit(len(chunks))
 		node.Inputs.files = chunks[:len(chunks):len(chunks)]
 	})
+
+	if extra != nil {
+		clear(extra)
+		closureScratches.put(extra)
+	}
 }
 
 func (e *EmitContext) textInputSources(inputs []VFS, parsedCount int) []VFS {

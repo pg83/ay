@@ -35,7 +35,7 @@ func (e *EmitContext) emitCheckConfigHStmt(conf ANY) {
 				generatedVFS.any())),
 				Env: env}),
 			Env:       env,
-			Inputs:    NodeInputs{files: na.inputList(na.vfsList(buildScriptsCheckConfigHPy, cv.self), cv.bucketList()...)},
+			Inputs:    NodeInputs{files: na.rootInputList(na.vfsList(buildScriptsCheckConfigHPy, cv.self), cv.bucketList()...)},
 			Outputs:   na.vfsList(generatedVFS),
 			KV:        &checkConfigHKV,
 			Resources: usesPython3,

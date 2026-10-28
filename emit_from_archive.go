@@ -47,7 +47,7 @@ func (e *EmitContext) emitFromArchive(stmt FromArchiveEntry) {
 	node := Node{
 		Platform: e.instance.Platform, KV: &fromArchiveKV, Env: envVarsVCS,
 		Cmds:   na.cmdList(Cmd{CmdArgs: na.chunkList(na.anyList(args...)), Cwd: e.instance.Path.rel().build(), Env: envVarsVCS}),
-		Inputs: NodeInputs{files: na.inputList(na.vfsList(inputs...))}, Outputs: na.vfsList(outputs...),
+		Inputs: NodeInputs{files: na.rootInputList(na.vfsList(inputs...))}, Outputs: na.vfsList(outputs...),
 		DepRefs: na.refList(refs...), Resources: usesPython3,
 	}
 

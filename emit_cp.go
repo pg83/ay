@@ -34,7 +34,7 @@ func composeCPNode(instance ModuleInstance, src VFS, dst VFS, extraInputs []VFS,
 
 	ownInputs = ownInputs[:len(ownInputs):len(ownInputs)]
 
-	inputs := na.inputList(scripts[fsTools.rel()], na.vfsList(src), ownInputs)
+	inputs := na.rootInputList(ownInputs, scripts[fsTools.rel()], na.vfsList(src))
 
 	return Node{
 		Platform: instance.Platform,

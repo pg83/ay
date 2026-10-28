@@ -102,7 +102,7 @@ func (e *EmitContext) emitArchiveAsmNode(
 		Cmds: na.cmdList(Cmd{CmdArgs: na.chunkList(cmdArgs),
 			Env: env}),
 		Env:    env,
-		Inputs: NodeInputs{files: na.inputList(inputs, na.srcChunk(toolBinPath)), roots: na.inputList(inputs)},
+		Inputs: NodeInputs{files: na.rootInputList(inputs, na.srcChunk(toolBinPath)), roots: na.inputList(inputs)},
 
 		KV:        &archiveAsmKV,
 		Outputs:   na.vfsList(rodataVFS),

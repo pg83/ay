@@ -83,7 +83,7 @@ func (e *EmitContext) emitYmapsSprotoHeaderSnap(scanner *IncludeScanner, p Ymaps
 			Cwd: srcRootDirVFS,
 			Env: env}),
 		Env:    env,
-		Inputs: NodeInputs{files: na.inputList(na.vfsList(sprotocBinary), closure), roots: na.inputList(closure)},
+		Inputs: NodeInputs{files: na.rootInputList(closure, na.vfsList(sprotocBinary)), roots: na.inputList(closure)},
 
 		Outputs:        na.vfsList(p.sprotoH),
 		KV:             &ymapsSprotoKV,

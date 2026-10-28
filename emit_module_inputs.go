@@ -105,7 +105,7 @@ func (e *EmitContext) appendModuleInputs(inputs InputChunks, modules []VFS, useG
 	count := len(inputs) + len(peers)
 
 	if useGlobals && len(e.moduleGlobalInputs) > 0 {
-		count++
+		count += len(e.moduleGlobalInputs)
 	}
 
 	if count == len(inputs) {
@@ -133,8 +133,7 @@ func (e *EmitContext) appendModuleInputs(inputs InputChunks, modules []VFS, useG
 
 		if useGlobals {
 			if unseen := e.ctx.na.filterSeen(dd, e.moduleGlobalInputs); len(unseen) > 0 {
-				out[k] = unseen
-				k++
+				k = len(appendRootInputRuns(out[:k], unseen))
 			}
 		}
 

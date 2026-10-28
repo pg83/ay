@@ -212,7 +212,7 @@ func (e *EmitContext) emitRustModule(result *ModuleEmitResult, peers []ResolvedP
 		Module: true, Platform: instance.Platform,
 		Cmds: na.cmdList(Cmd{CmdArgs: na.chunkList(na.anyList(command.Args...)), Env: envVarsVCS}),
 		Env:  envVarsVCS, Inputs: NodeInputs{
-			files: na.inputList(na.vfsList(dedup(inputs)...)),
+			files: na.rootInputList(na.vfsList(dedup(inputs)...)),
 			roots: na.inputList(na.vfsList(script), na.vfsList(textInputs...)), text: na.vfsList(textInputs...),
 		},
 		Outputs: na.vfsList(outputs...), KV: &rustKV,

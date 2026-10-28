@@ -291,7 +291,7 @@ func (e *EmitContext) emitCudaDeviceLink(archiveName string, local CollectedObjs
 	node.Cmds = na.cmdList(Cmd{CmdArgs: na.chunkList(na.anyList(args...)), Env: env, Resources: resourceKeyUnion(c.Resources, c.TargetResources)}, arCmd)
 	node.Env = na.envList(append(append(EnvVars(nil), node.Env...), env[1])...)
 	node.Outputs = na.vfsList(archive, devlink)
-	node.Inputs.files = appendInputChunks(na, node.Inputs.files, na.inputList(na.vfsList(inputs...)))
+	node.Inputs.files = appendInputChunks(na, node.Inputs.files, na.rootInputList(na.vfsList(inputs...)))
 
 	return e.emitNode(node)
 }

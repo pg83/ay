@@ -151,9 +151,9 @@ func (e *EmitContext) emitGoProtoCmd(protoRel string, goOpts *string, plugins []
 
 	view := e.scanner.walkClosure(protoSrc, d.scanCtx, scanDomainProto)
 	closure := view.bucketList()
-	inputs := na.inputs.alloc(2 + len(closure))[:0]
+	inputs := na.inputs.alloc(3 + len(closure))[:0]
 
-	inputs = append(inputs, na.vfsList(toolPaths...), na.vfsList(goProtoWrapperVFS, protoSrc))
+	inputs = append(inputs, na.vfsList(toolPaths...), na.vfsList(goProtoWrapperVFS), na.vfsList(protoSrc))
 	inputs = append(inputs, closure...)
 	na.inputs.commit(len(inputs))
 

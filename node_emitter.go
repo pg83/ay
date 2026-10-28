@@ -252,12 +252,6 @@ func (e *StreamingEmitter) finish() []NodeRef {
 		pending = next
 	}
 
-	if e.stripPackagesFromResults {
-		e.stripPackageResults()
-	}
-
-	e.exportEligible = e.reachableNodes(e.publicationFrontier())
-
 	if e.addModulesToResults {
 		for _, n := range e.nodes.s {
 			if n != nil && e.exportEligible.has(uint32(n.Ref)) && (n.Module || e.modules.has(uint32(n.Ref))) {

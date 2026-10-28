@@ -373,7 +373,7 @@ func (e *EmitContext) emitCythonCppPlanned(plans []CythonStmtPlan) {
 				Cmds: na.cmdList(Cmd{CmdArgs: na.chunkList(cmdArgs),
 					Env: env}),
 				Env:    env,
-				Inputs: NodeInputs{files: na.inputList(buildInputs), text: textInputs},
+				Inputs: NodeInputs{files: na.rootInputList(buildInputs), text: textInputs},
 
 				Outputs:   outputs,
 				KV:        &cythonCppKV,

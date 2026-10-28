@@ -32,7 +32,7 @@ func (e *EmitContext) emitJSReserved(allName string, sources []string, srcVFSs [
 	cmdArgs = cmdArgs[:len(cmdArgs):len(cmdArgs)]
 
 	env := envVarsVCS
-	inputs := na.inputList(scripts[joinSrcs.rel()], srcVFSs, closure)
+	inputs := appendInputChunks(na, na.rootInputList(srcVFSs, scripts[joinSrcs.rel()]), na.rootInputList(closure))
 
 	node := Node{
 		Platform: statsPlatform,

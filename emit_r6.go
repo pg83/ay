@@ -74,7 +74,7 @@ func (e *EmitContext) emitR6(srcRel string, inVFS VFS, ragel6LD NodeRef, ragel6B
 		Cmds: na.cmdList(Cmd{CmdArgs: cmdArgs,
 			Env: env}),
 		Env:    env,
-		Inputs: NodeInputs{files: na.inputList(head2, na.vfsList(closure...)), roots: na.inputList(head2[1:], na.vfsList(closure...))},
+		Inputs: NodeInputs{files: na.rootInputList(na.vfsList(closure...), head2), roots: na.inputList(head2[1:], na.vfsList(closure...))},
 
 		Outputs:        na.vfsList(outVFS),
 		KV:             &r6KV,
