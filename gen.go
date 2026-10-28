@@ -187,6 +187,8 @@ func protoResultWholeArchiveCmdPaths(res *ProtoSrcsResult) []VFS {
 }
 
 type GenCtx struct {
+	scanData         ModuleData
+	scanDataBusy     bool
 	configuration    ConfigurationDependencies
 	fbsBindings      fbsContextBindings
 	foreignTools     foreignToolBindings
@@ -551,10 +553,19 @@ func (ctx *GenCtx) moduleDeclaration(instance ModuleInstance) *ModuleStmt {
 func (ctx *GenCtx) scanModuleConfiguration(instance ModuleInstance, recurses bool) (*ModuleStmt, []string) {
 	dir := instance.Path.relString()
 	env := buildIfEnvInto(&ctx.ifEnvScratch, instance)
-	d := ModuleData{}
+	d := &ctx.scanData
+
+	if ctx.scanDataBusy {
+		d = &ModuleData{}
+	} else {
+		d.reset()
+		ctx.scanDataBusy = true
+
+		defer func() { ctx.scanDataBusy = false }()
+	}
 
 	apply := func(stmt Stmt) {
-		collectStmts(ctx, dir, instance.Kind, instance.Language, []Stmt{stmt}, env, &d, ctx.onWarn, instance.Platform)
+		collectStmts(ctx, dir, instance.Kind, instance.Language, []Stmt{stmt}, env, d, ctx.onWarn, instance.Platform)
 	}
 
 	var module *ModuleStmt

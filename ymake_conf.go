@@ -131,6 +131,17 @@ func toolchainPlatform(name string, spec any, fallback map[string]any) map[strin
 	return map[string]any{"os": m["os"], "arch": arch, "toolchain": name, "visible_name": name}
 }
 
+func toolchainSpecName(toolchain string, spec map[string]any) string {
+	os, _ := spec["os"].(string)
+	arch, _ := spec["arch"].(string)
+
+	if arch == "" {
+		arch = toolchainArchDflt
+	}
+
+	return strings.ToUpper(toolchain + "-" + os + "-" + arch)
+}
+
 func stringizeToolchainPlatform(p map[string]any, sep string) string {
 	os, _ := p["os"].(string)
 	arch, _ := p["arch"].(string)
@@ -159,23 +170,38 @@ func resolveCxxToolchain(fs FS, cfg *YaConfToolchains, host, target string) *Too
 
 		for _, raw := range platforms {
 			spec, _ := raw.(map[string]any)
+			hostSpec, _ := spec["host"].(map[string]any)
+			targetSpec, _ := spec["target"].(map[string]any)
+
+			if hostSpec == nil {
+				throwFmt("ya.conf.json: tool chain %s lacks a host platform", name)
+			}
+
+			if targetSpec == nil {
+				targetSpec = hostSpec
+			}
+
+			matches := func(toolchain string) bool {
+				return toolchainSpecName(toolchain, hostSpec) == host && toolchainSpecName(toolchain, targetSpec) == target
+			}
+
+			toolchain := name
+
+			if !matches(toolchain) {
+				if isDefault, _ := spec["default"].(bool); !isDefault || !matches(toolchainNameDflt) {
+					continue
+				}
+
+				toolchain = toolchainNameDflt
+			}
+
 			h := toolchainPlatform(name, spec["host"], nil)
 			t := toolchainPlatform(name, spec["target"], h)
-			candidates := [][2]map[string]any{{h, t}}
 
-			if isDefault, _ := spec["default"].(bool); isDefault {
-				hd, td := maps.Clone(h), maps.Clone(t)
+			h["toolchain"] = toolchain
+			t["toolchain"] = toolchain
 
-				hd["toolchain"] = toolchainNameDflt
-				td["toolchain"] = toolchainNameDflt
-				candidates = append(candidates, [2]map[string]any{hd, td})
-			}
-
-			for _, c := range candidates {
-				if stringizeToolchainPlatform(c[0], "-") == host && stringizeToolchainPlatform(c[1], "-") == target {
-					return newToolchain(fs, cfg, key, descr, tool, c[0], c[1])
-				}
-			}
+			return newToolchain(fs, cfg, key, descr, tool, h, t)
 		}
 	}
 
