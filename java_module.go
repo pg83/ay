@@ -397,7 +397,7 @@ type JavaModule struct {
 	closure          javaClosure
 	closureReady     bool
 	rules            *javaDMRules
-	managed          []JavaClosureEntry
+	managed          javaManaged
 	managedDone      bool
 	unmanageableDart []javaForeignPeer
 	unmanageableDone bool

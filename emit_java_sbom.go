@@ -20,7 +20,7 @@ func (b *javaNodeBuilder) emitModule(jm *JavaModule) {
 			add(peer.res)
 		}
 
-		for _, entry := range b.ctx.javaManagedPeersClosure(jm) {
+		for entry := range b.ctx.javaManagedPeersClosure(jm) {
 			if entry.java != nil {
 				entry.java.eachUnmanageable(func(peer javaForeignPeer) {
 					if output := moduleOutputPath(peer.res); output != 0 {
@@ -38,7 +38,7 @@ func (b *javaNodeBuilder) emitModule(jm *JavaModule) {
 	b.emitTo(jm.outRef)
 }
 
-func (b *javaNodeBuilder) javaSbom(jm *JavaModule, closure []JavaClosureEntry) {
+func (b *javaNodeBuilder) javaSbom(jm *JavaModule, closure javaClosureSeq) {
 	d := jm.data
 
 	if !d.embedSbom {
@@ -69,7 +69,7 @@ func (b *javaNodeBuilder) javaSbom(jm *JavaModule, closure []JavaClosureEntry) {
 	args = append(args, strModPath.any(), internStr(jm.dir).any(), strO.any(),
 		build(jm.dir, "/cls/META-INF/SBOM.json").any(), strVcsInfo.any(), bldVcsJson.any())
 
-	for _, entry := range closure {
+	for entry := range closure {
 		args = append(args, entry.path.any())
 	}
 

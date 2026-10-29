@@ -9,10 +9,10 @@ import (
 	"strings"
 )
 
-func javaClosureJars(closure []JavaClosureEntry, ext string) []VFS {
+func javaClosureJars(closure javaClosureSeq, ext string) []VFS {
 	var out []VFS
 
-	for _, e := range closure {
+	for e := range closure {
 		if strings.HasSuffix(e.path.relString(), ext) {
 			out = append(out, e.path)
 		}
@@ -130,7 +130,7 @@ func parseJavaGenerateScript(args []string) []javaGenScript {
 	return out
 }
 
-func (b *javaNodeBuilder) javaScriptgenScripts(jm *JavaModule, globals map[string]VFS, closure []JavaClosureEntry, jdk string) {
+func (b *javaNodeBuilder) javaScriptgenScripts(jm *JavaModule, globals map[string]VFS, closure javaClosureSeq, jdk string) {
 	d := jm.data
 	flag := "IS_UBERJAR=no"
 
@@ -288,7 +288,7 @@ func (ctx *GenCtx) javaEmitRunnable(jm *JavaModule) {
 	b.emitModule(jm)
 }
 
-func javaLinkToDir(lc []ANY, closure []JavaClosureEntry, cpDir VFS, exts ...string) ([]ANY, []VFS) {
+func javaLinkToDir(lc []ANY, closure javaClosureSeq, cpDir VFS, exts ...string) ([]ANY, []VFS) {
 	var lateOuts []VFS
 
 	for _, ext := range exts {
@@ -301,10 +301,10 @@ func javaLinkToDir(lc []ANY, closure []JavaClosureEntry, cpDir VFS, exts ...stri
 	return lc, lateOuts
 }
 
-func javaEntryPaths(closure []JavaClosureEntry) []VFS {
-	out := make([]VFS, 0, len(closure))
+func javaEntryPaths(closure javaClosureSeq) []VFS {
+	var out []VFS
 
-	for _, e := range closure {
+	for e := range closure {
 		out = append(out, e.path)
 	}
 

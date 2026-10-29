@@ -164,7 +164,7 @@ func (d *JavaData) expandJavaProtobufPeers() {
 }
 
 func collectJavaData(ctx *GenCtx, jm *JavaModule, stmts []Stmt, env Environment) *JavaData {
-	d := &JavaData{jdkReal: ctx.javaDefaultJDK(), env: env, lintLevel: "extended", abiJar: true, srcDirs: []VFS{jm.path}, dm: ctx.javaDMBuf[:0], excludes: ctx.javaExclBuf[:0]}
+	d := &JavaData{jdkReal: ctx.javaDefaultJDK(), env: env, lintLevel: "extended", abiJar: true, srcDirs: []VFS{jm.path}, dm: ctx.javaDMBuf[:0], excludes: ctx.javaExclBuf[:0], rawVars: ctx.javaRawVars}
 	sourcesJar := env.string(envBUILD_TYPE) == "DEBUG" && env.string(envNO_DEBUGINFO) != "yes"
 	sbom := sbomActive(ctx, jm.instance)
 
@@ -198,7 +198,10 @@ func collectJavaData(ctx *GenCtx, jm *JavaModule, stmts []Stmt, env Environment)
 		env.setBool(envJavaFbs, true)
 	}
 
+	clear(d.rawVars)
 	collectJavaStmts(ctx, jm, d, stmts, env)
+
+	d.rawVars = nil
 
 	if !d.autoincluded {
 		throwFmt("%s: module declaration has no END()", jm.dir)
@@ -343,10 +346,6 @@ func collectJavaStmts(ctx *GenCtx, jm *JavaModule, d *JavaData, stmts []Stmt, en
 		case *SetStmt:
 			env.setFromString(v.NameEnv, expandSourceScalarVarRef(v.Value, env))
 
-			if d.rawVars == nil {
-				d.rawVars = map[string]string{}
-			}
-
 			d.rawVars[v.Name] = d.rawExpand(v.Value)
 		case *DefaultVarStmt:
 			bound := env.hasBindingID(v.NameEnv)
@@ -354,10 +353,6 @@ func collectJavaStmts(ctx *GenCtx, jm *JavaModule, d *JavaData, stmts []Stmt, en
 			env.setDefaultString(v.NameEnv, expandSourceScalarVarRef(v.Value, env))
 
 			if !bound {
-				if d.rawVars == nil {
-					d.rawVars = map[string]string{}
-				}
-
 				d.rawVars[v.VarName] = d.rawExpand(v.Value)
 			}
 		case *IfStmt:
@@ -632,10 +627,6 @@ func applyJavaMacro(ctx *GenCtx, jm *JavaModule, d *JavaData, name string, args,
 		}
 
 		env.setString(internEnv(args[0]), value)
-
-		if d.rawVars == nil {
-			d.rawVars = map[string]string{}
-		}
 
 		rawValue := d.rawExpand(strings.Join(raw[1:], " "))
 

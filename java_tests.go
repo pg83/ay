@@ -390,7 +390,7 @@ func (ctx *GenCtx) javaJunitSuite(jm *JavaModule) *TestSuite {
 	var classpath []string
 	var testDeps []JavaClosureEntry
 
-	for _, e := range closure {
+	for e := range closure {
 		if rel := e.path.relString(); strings.HasSuffix(rel, ".jar") {
 			classpath = append(classpath, rel)
 			testDeps = append(testDeps, e)
@@ -414,7 +414,7 @@ func (ctx *GenCtx) javaJunitSuite(jm *JavaModule) *TestSuite {
 
 	deps := ctx.javaBuilder(jm)
 
-	deps.closure(testDeps)
+	deps.closure(slices.Values(testDeps))
 
 	s.projectBuildDeps = true
 	s.deps = deps.deps
@@ -535,7 +535,7 @@ func (ctx *GenCtx) javaUnmanageablePeersClosure(jm *JavaModule) []javaForeignPee
 		}
 	}
 
-	for _, e := range ctx.javaManagedPeersClosure(jm) {
+	for e := range ctx.javaManagedPeersClosure(jm) {
 		if e.java != nil && !e.java.consumesUnmanageable() {
 			add(ctx.javaUnmanageablePeersClosure(e.java))
 		}
@@ -577,7 +577,7 @@ func (ctx *GenCtx) javaClasspathClashSuite(jm *JavaModule) *TestSuite {
 
 	paths := []string{jm.dir + "/" + jm.name + ".jar"}
 
-	for _, e := range ctx.javaManagedPeersClosure(jm) {
+	for e := range ctx.javaManagedPeersClosure(jm) {
 		if e.java != nil {
 			paths = append(paths, e.path.relString())
 		}

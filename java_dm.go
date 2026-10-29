@@ -1,6 +1,7 @@
 package main
 
 import (
+	"iter"
 	"slices"
 	"strings"
 )
@@ -745,7 +746,35 @@ func (lv *javaResolveLevel) preorder(byID []*JavaModule, direct []javaResolvedPe
 	return res
 }
 
-func (ctx *GenCtx) javaManagedPeersClosure(jm *JavaModule) []JavaClosureEntry {
+type javaClosureSeq = iter.Seq[JavaClosureEntry]
+
+type javaManaged struct {
+	mods    []uint32
+	foreign []JavaClosureEntry
+}
+
+func (ctx *GenCtx) javaManagedPeersClosure(jm *JavaModule) javaClosureSeq {
+	managed := ctx.javaManagedOf(jm)
+	byID := ctx.jc.byID
+
+	return func(yield func(JavaClosureEntry) bool) {
+		for _, id := range managed.mods {
+			m := byID[id]
+
+			if !yield(JavaClosureEntry{path: m.target, java: m}) {
+				return
+			}
+		}
+
+		for _, e := range managed.foreign {
+			if !yield(e) {
+				return
+			}
+		}
+	}
+}
+
+func (ctx *GenCtx) javaManagedOf(jm *JavaModule) javaManaged {
 	if jm.managedDone {
 		return jm.managed
 	}
@@ -758,22 +787,31 @@ func (ctx *GenCtx) javaManagedPeersClosure(jm *JavaModule) []JavaClosureEntry {
 
 	ctx.javaResolveConflicts(jm, lv)
 
-	sorted := lv.preorder(ctx.jc.byID, jm.direct, jm.unit.compileView)
+	byID := ctx.jc.byID
+	sorted := lv.preorder(byID, jm.direct, jm.unit.compileView)
 	excludedTags := jm.unit.dmTagsExclude
 
 	if jm.data.uberjar {
 		excludedTags = javaTagsIJar
 	}
 
-	out := make([]JavaClosureEntry, 0, len(sorted))
+	n := 0
 
 	for _, m := range sorted {
-		if javaTagIn(m.unit.tag, excludedTags) {
-			continue
+		if !javaTagIn(m.unit.tag, excludedTags) {
+			n++
 		}
-
-		out = append(out, JavaClosureEntry{path: m.target, java: m})
 	}
+
+	mods := make([]uint32, 0, n)
+
+	for _, m := range sorted {
+		if !javaTagIn(m.unit.tag, excludedTags) {
+			mods = append(mods, m.id)
+		}
+	}
+
+	var foreign []JavaClosureEntry
 
 	if jm.consumesUnmanageable() {
 		seen := map[*ModuleEmitResult]bool{}
@@ -786,7 +824,7 @@ func (ctx *GenCtx) javaManagedPeersClosure(jm *JavaModule) []JavaClosureEntry {
 			seen[p.res] = true
 
 			if path := javaForeignFileName(p); path != 0 {
-				out = append(out, JavaClosureEntry{path: path, foreign: p.res})
+				foreign = append(foreign, JavaClosureEntry{path: path, foreign: p.res})
 			}
 		}
 
@@ -794,16 +832,14 @@ func (ctx *GenCtx) javaManagedPeersClosure(jm *JavaModule) []JavaClosureEntry {
 			appendUnmanageable(p)
 		}
 
-		for _, e := range out {
-			if e.java != nil {
-				e.java.eachUnmanageable(appendUnmanageable)
-			}
+		for _, id := range mods {
+			byID[id].eachUnmanageable(appendUnmanageable)
 		}
 	}
 
-	jm.managed = out
+	jm.managed = javaManaged{mods: mods, foreign: foreign}
 
-	return out
+	return jm.managed
 }
 
 type javaIncludedState uint8
@@ -878,7 +914,7 @@ func (ctx *GenCtx) javaRecordIncluded(jm *JavaModule) {
 	inputs := len(r.paths) > 0 || slices.ContainsFunc(r.chunks, func(c []VFS) bool { return len(c) > 0 })
 	refs := len(r.own) > 0 || slices.ContainsFunc(r.refs, func(c []NodeRef) bool { return len(c) > 0 })
 
-	for _, e := range ctx.javaManagedPeersClosure(jm) {
+	for e := range ctx.javaManagedPeersClosure(jm) {
 		p := e.java
 
 		if p == nil || !slices.Contains(jm.managedPeers, p) && !jm.rules.pins(p) {

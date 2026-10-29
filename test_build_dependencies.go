@@ -272,7 +272,7 @@ func (ctx *GenCtx) testDependencyClosure(dependency TestBuildDependency, seen ma
 	seen[result] = true
 
 	if jm := result.java; jm != nil {
-		for _, peer := range ctx.javaManagedPeersClosure(jm) {
+		for peer := range ctx.javaManagedPeersClosure(jm) {
 			if peer.java != nil {
 				dependency := TestBuildDependency{peer.java.instance, peer.java.result}
 

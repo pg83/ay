@@ -103,7 +103,7 @@ func (e *EmitContext) appendPackagePeer(out []VFS, res *ModuleEmitResult, seen m
 	out = append(out, res.JavaClosure...)
 
 	if jm := res.java; jm != nil {
-		for _, peer := range e.ctx.javaManagedPeersClosure(jm) {
+		for peer := range e.ctx.javaManagedPeersClosure(jm) {
 			if peer.java != nil {
 				out = e.appendPackagePeer(out, peer.java.result, seen, globalOuts)
 			} else if peer.foreign != nil {

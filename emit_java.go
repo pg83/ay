@@ -478,7 +478,7 @@ func (ctx *GenCtx) javaResourceGlobals(jm *JavaModule) []ResourceDecl {
 
 	add(jm.globals)
 
-	for _, e := range ctx.javaManagedPeersClosure(jm) {
+	for e := range ctx.javaManagedPeersClosure(jm) {
 		if e.java != nil {
 			add(e.java.globals)
 		} else {
@@ -657,7 +657,7 @@ func (ctx *GenCtx) javaEmitExternal(jm *JavaModule) {
 	args = append(args, internAnys(d.javacOpts.cur)...)
 	args = append(args, strSource.any(), str11.any(), strTarget.any(), str11.any(), strDelim.any())
 
-	for _, e := range closure {
+	for e := range closure {
 		args = append(args, e.path.any())
 	}
 
@@ -694,8 +694,8 @@ func javaKotlinJVMTarget(jdk string) string {
 	return jdk
 }
 
-func (b *javaNodeBuilder) closure(closure []JavaClosureEntry) {
-	for _, e := range closure {
+func (b *javaNodeBuilder) closure(closure javaClosureSeq) {
+	for e := range closure {
 		ref := NodeRef(0)
 
 		switch {

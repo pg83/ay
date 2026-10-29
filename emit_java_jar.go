@@ -250,7 +250,7 @@ func (ctx *GenCtx) javaEmitJar(jm *JavaModule) {
 
 		w = append(w, strFile.any(), ktBfg.any(), strM.any(), strYaStartCommandFile.any())
 
-		for _, e := range closure {
+		for e := range closure {
 			if strings.HasSuffix(e.path.relString(), ".jar") {
 				w = append(w, e.path.any())
 			}
@@ -304,7 +304,7 @@ func (ctx *GenCtx) javaEmitJar(jm *JavaModule) {
 
 	w = append(w, strFile.any(), bfg.any(), strM.any(), strYaStartCommandFile.any())
 
-	for _, e := range closure {
+	for e := range closure {
 		w = append(w, e.path.rel().any())
 	}
 
@@ -514,7 +514,7 @@ func (ctx *GenCtx) javaToolJar(jm *JavaModule, b *javaNodeBuilder, dir string) V
 	return res.java.target
 }
 
-func (ctx *GenCtx) javaLinkUberjar(jm *JavaModule, b *javaNodeBuilder, globals map[string]VFS, closure []JavaClosureEntry, libJar VFS, hasSources bool) {
+func (ctx *GenCtx) javaLinkUberjar(jm *JavaModule, b *javaNodeBuilder, globals map[string]VFS, closure javaClosureSeq, libJar VFS, hasSources bool) {
 	d := jm.data
 	jdk := javaJDKResource(d.jdkReal)
 	bindir := jm.path.rel().build().string()

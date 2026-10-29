@@ -222,6 +222,7 @@ type GenCtx struct {
 	jc                  javaClosureScratch
 	javaDMBuf           []ANY
 	javaExclBuf         []ANY
+	javaRawVars         map[string]string
 	dllForStack         []string
 	includeStack        []string
 	ifEnvScratch        EnvStore
@@ -359,16 +360,17 @@ func newGenCtx(fs FS, parsers *IncludeParserManager, hostP, targetP *Platform, e
 		na:        plainEmit.nodeArenas(),
 		memo:      newModuleMemo(),
 
-		refSlices:  newSliceCache[NodeRef](1 << 12),
-		vfsSlices:  newSliceCache[VFS](1 << 12),
-		argSlices:  newSliceCache[ANY](1 << 8),
-		declSlices: newSliceCache[ResourceDecl](1 << 3),
-		results:    newBumpAllocator[ModuleEmitResult](),
-		dirSlices:  newSliceCache[IncludeDirective](1 << 6),
-		descSlices: newSliceCache[DescProtoPeer](1 << 3),
-		tcMemo:     map[ToolchainKey]ModuleToolchain{},
-		javaRules:  newIntMap[[]*javaDMRules](0),
-		jc:         newJavaClosureScratch(),
+		refSlices:   newSliceCache[NodeRef](1 << 12),
+		vfsSlices:   newSliceCache[VFS](1 << 12),
+		argSlices:   newSliceCache[ANY](1 << 8),
+		declSlices:  newSliceCache[ResourceDecl](1 << 3),
+		results:     newBumpAllocator[ModuleEmitResult](),
+		dirSlices:   newSliceCache[IncludeDirective](1 << 6),
+		descSlices:  newSliceCache[DescProtoPeer](1 << 3),
+		tcMemo:      map[ToolchainKey]ModuleToolchain{},
+		javaRules:   newIntMap[[]*javaDMRules](0),
+		jc:          newJavaClosureScratch(),
+		javaRawVars: map[string]string{},
 
 		walking:   make(map[ModuleInstance]bool),
 		host:      hostP,
