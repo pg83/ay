@@ -53,31 +53,45 @@ func (ctx *GenCtx) publishModuleOutputs(instance ModuleInstance, result *ModuleE
 
 func (ctx *GenCtx) projectModuleIndex(suites []*TestSuite) (map[VFS][]NodeRef, map[VFS][]NodeRef) {
 	emit := ctx.emit
-	stack := append([]NodeRef(nil), emit.results...)
 
-	for _, suite := range suites {
-		if ctx.testSuiteSelected(suite) {
-			stack = append(stack, suite.deps...)
+	var live BitSet
+	var stack []NodeRef
+
+	mark := func(root NodeRef) {
+		if live.has(uint32(root)) {
+			return
+		}
+
+		stack = append(stack[:0], root)
+
+		for len(stack) > 0 {
+			ref := stack[len(stack)-1]
+
+			stack = stack[:len(stack)-1]
+
+			node := emit.nodes.s[ref]
+
+			if live.has(uint32(ref)) || node == nil {
+				continue
+			}
+
+			live.add(uint32(ref))
+
+			for dependency := range node.buildDeps(emit.fetchRefs) {
+				stack = append(stack, dependency)
+			}
 		}
 	}
 
-	var live BitSet
+	for _, ref := range emit.results {
+		mark(ref)
+	}
 
-	for len(stack) > 0 {
-		ref := stack[len(stack)-1]
-
-		stack = stack[:len(stack)-1]
-
-		node := emit.nodes.s[ref]
-
-		if live.has(uint32(ref)) || node == nil {
-			continue
-		}
-
-		live.add(uint32(ref))
-
-		for dependency := range node.buildDeps(emit.fetchRefs) {
-			stack = append(stack, dependency)
+	for _, suite := range suites {
+		if ctx.testSuiteSelected(suite) {
+			for _, ref := range suite.deps {
+				mark(ref)
+			}
 		}
 	}
 
