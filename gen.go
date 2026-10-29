@@ -1416,10 +1416,11 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 		}
 	}
 
-	if moduleName == tokProtoLibrary && instance.Language == LangGo {
+	if moduleName == tokProtoLibrary && (instance.Language == LangGo || instance.Language == LangJava) {
 		cpp := instance
 
 		cpp.Language = LangCPP
+		cpp.Kind = KindLib
 		genSiblingModule(ctx, cpp)
 	}
 
