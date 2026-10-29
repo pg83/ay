@@ -5203,13 +5203,17 @@ func expandTokenTracked(s string, env Environment, phase TokenExpansion, track *
 }
 
 func expandBracedVars(s string, env Environment, phase TokenExpansion, track *SourceTextTracker) string {
-	searchFrom := 0
+	var stack [256]byte
+
+	out := stack[:0]
+	copied, searchFrom := 0, 0
+	changed := false
 
 	for {
 		start := strings.Index(s[searchFrom:], "${")
 
 		if start < 0 {
-			return s
+			break
 		}
 
 		start += searchFrom
@@ -5217,7 +5221,7 @@ func expandBracedVars(s string, env Environment, phase TokenExpansion, track *So
 		end := strings.IndexByte(s[start+2:], '}')
 
 		if end < 0 {
-			return s
+			break
 		}
 
 		end += start + 2
@@ -5236,12 +5240,21 @@ func expandBracedVars(s string, env Environment, phase TokenExpansion, track *So
 		}
 
 		if track != nil {
-			track.replace(start, end+1, len(val), env.s.textInputs[internedEnv(name)])
+			at := len(out) + start - copied
+
+			track.replace(at, at+end+1-start, len(val), env.s.textInputs[internedEnv(name)])
 		}
 
-		s = s[:start] + val + s[end+1:]
-		searchFrom = start + len(val)
+		out = append(append(out, s[copied:start]...), val...)
+		copied, searchFrom = end+1, end+1
+		changed = true
 	}
+
+	if !changed {
+		return s
+	}
+
+	return string(append(out, s[copied:]...))
 }
 
 func expandEmbeddedDollarVars(s string, env Environment, phase TokenExpansion, track *SourceTextTracker) string {
