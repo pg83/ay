@@ -88,14 +88,15 @@ func (ctx *GenCtx) prepareDiscoveredModuleTests(discovered []DiscoveredTargets) 
 		visitRoot(result)
 	}
 
-	var suites []*TestSuite
 	var javaSuites []*TestSuite
+
+	own := newSuiteIndex()
 
 	for _, project := range projects {
 		javaStart := len(javaSuites)
 
 		for _, result := range groups[project] {
-			var own []*TestSuite
+			var suites []*TestSuite
 
 			if result.java != nil {
 				result.testsEmitted = true
@@ -106,20 +107,18 @@ func (ctx *GenCtx) prepareDiscoveredModuleTests(discovered []DiscoveredTargets) 
 					}
 				}
 
-				own = ctx.javaCPPStyleSuites(result.java)
+				suites = ctx.javaCPPStyleSuites(result.java)
 			} else {
-				own = ctx.moduleTestSuites(result)
+				suites = ctx.moduleTestSuites(result)
 			}
 
-			for _, suite := range own {
-				if !mergeCheckSuite(suites, suite) {
-					suites = append(suites, suite)
-				}
+			for _, suite := range suites {
+				own.add(suite)
 			}
 		}
 	}
 
-	suites = append(javaSuites, suites...)
+	suites := append(javaSuites, own.suites...)
 
 	if len(suites) == 0 {
 		return nil

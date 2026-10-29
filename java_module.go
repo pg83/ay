@@ -3,7 +3,10 @@ package main
 import (
 	"fmt"
 	"path"
+	"slices"
 	"strings"
+
+	"github.com/zeebo/xxh3"
 )
 
 var (
@@ -516,7 +519,7 @@ func genJavaModule(ctx *GenCtx, instance ModuleInstance, moduleName TOK, stmts [
 	ctx.memoPut(instance, result)
 	ctx.javaResolvePeers(jm)
 
-	jm.rules = jm.dmRules()
+	jm.rules = ctx.javaDMRulesFor(jm)
 
 	if unit.transparent {
 		jm.direct = make([]javaResolvedPeer, 0, len(jm.managedPeers))
@@ -554,18 +557,46 @@ func genJavaModule(ctx *GenCtx, instance ModuleInstance, moduleName TOK, stmts [
 	return result
 }
 
-func (jm *JavaModule) dmRules() *javaDMRules {
-	r := &javaDMRules{lib2Ver: map[string]string{}}
+func (ctx *GenCtx) javaDMRulesFor(jm *JavaModule) *javaDMRules {
+	var dm, excludes []string
 
-	if jm.unit.transparent {
-		return r
+	if !jm.unit.transparent {
+		dm, excludes = jm.data.dm, jm.data.excludes
 	}
 
-	for _, item := range jm.data.dm {
+	h := xxh3.New()
+
+	for _, item := range dm {
+		throw2(h.WriteString(item))
+		throw2(h.WriteString("\x00"))
+	}
+
+	throw2(h.WriteString("\x01"))
+
+	for _, item := range excludes {
+		throw2(h.WriteString(item))
+		throw2(h.WriteString("\x00"))
+	}
+
+	same, _ := ctx.javaRules.cell(h.Sum64())
+
+	for _, r := range *same {
+		if slices.Equal(r.dm, dm) && slices.Equal(r.excludes, excludes) {
+			return r
+		}
+	}
+
+	r := &javaDMRules{lib2Ver: map[string]string{}, dm: dm, excludes: excludes, excluded: map[string]struct{}{}}
+
+	for _, item := range dm {
 		r.addDependencyManagement(item)
 	}
 
-	r.excludes = append(r.excludes, jm.data.excludes...)
+	for _, e := range excludes {
+		r.addExclude(e)
+	}
+
+	*same = append(*same, r)
 
 	return r
 }

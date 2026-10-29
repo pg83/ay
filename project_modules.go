@@ -19,6 +19,7 @@ func (ctx *GenCtx) setModuleOutput(reg *CodegenRegistry, owner, output VFS, ref 
 
 	info.OwnerModule = owner
 	info.ProducerRef = ref
+	reg.noteOwner(info)
 	ctx.emit.modules.add(uint32(ref))
 }
 

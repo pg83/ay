@@ -218,6 +218,7 @@ type GenCtx struct {
 	dirSlices           *SliceCache[IncludeDirective]
 	descSlices          *SliceCache[DescProtoPeer]
 	tcMemo              map[ToolchainKey]ModuleToolchain
+	javaRules           *IntMap[[]*javaDMRules]
 	dllForStack         []string
 	includeStack        []string
 	ifEnvScratch        EnvStore
@@ -363,6 +364,7 @@ func newGenCtx(fs FS, parsers *IncludeParserManager, hostP, targetP *Platform, e
 		dirSlices:  newSliceCache[IncludeDirective](1 << 6),
 		descSlices: newSliceCache[DescProtoPeer](1 << 3),
 		tcMemo:     map[ToolchainKey]ModuleToolchain{},
+		javaRules:  newIntMap[[]*javaDMRules](0),
 
 		walking:   make(map[ModuleInstance]bool),
 		host:      hostP,
@@ -778,6 +780,24 @@ func (ctx *GenCtx) moduleTestSuites(results ...*ModuleEmitResult) []*TestSuite {
 	}
 
 	return suites
+}
+
+type SuiteIndex struct {
+	suites []*TestSuite
+	byKey  *IntMap[[]*TestSuite]
+}
+
+func newSuiteIndex() *SuiteIndex {
+	return &SuiteIndex{byKey: newIntMap[[]*TestSuite](0)}
+}
+
+func (x *SuiteIndex) add(s *TestSuite) {
+	same, _ := x.byKey.cell(mix64(splitMix64(uint32(internStr(s.testType)), uint32(internStr(s.projectPath))) ^ uint64(internStr(s.name))))
+
+	if !mergeCheckSuite(*same, s) {
+		*same = append(*same, s)
+		x.suites = append(x.suites, s)
+	}
 }
 
 func mergeCheckSuite(suites []*TestSuite, s *TestSuite) bool {

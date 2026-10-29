@@ -133,6 +133,7 @@ type CodegenRegistry struct {
 	files           ScannedFileCache
 	moduleBuildDeps DenseMap[NodeRef, []NodeRef]
 	byRel           DenseMap[STR, *GeneratedFileInfo]
+	byOwner         DenseMap[VFS, []uint32]
 	bySplit         *IntMap[splitLookup]
 	textTemplates   DenseMap[VFS, []VFS]
 	splitGeneration uint32
@@ -171,6 +172,7 @@ func (r *CodegenRegistry) register(info GeneratedFileSpec) *GeneratedFileInfo {
 		if existing.InputsOnly {
 			info.ClosureLeaves = r.na.dedupClosure(info.ClosureLeaves, [][]VFS{existing.ClosureLeaves})
 			r.store(existing, info)
+			r.noteOwner(existing)
 			r.splitGeneration++
 
 			return existing
@@ -193,9 +195,30 @@ func (r *CodegenRegistry) register(info GeneratedFileSpec) *GeneratedFileInfo {
 	r.store(stored, info)
 
 	r.byRel.put(stored.OutputPath.rel(), stored)
+	r.noteOwner(stored)
 	r.splitGeneration++
 
 	return stored
+}
+
+func (r *CodegenRegistry) noteOwner(info *GeneratedFileInfo) {
+	if info.OwnerModule == 0 {
+		return
+	}
+
+	slot := r.byRel.idx.get(uint32(info.OutputPath.rel()))
+
+	if slot == 0 {
+		return
+	}
+
+	slots, _ := r.byOwner.get(info.OwnerModule)
+
+	if n := len(slots); n > 0 && slots[n-1] == slot {
+		return
+	}
+
+	r.byOwner.put(info.OwnerModule, append(slots, slot))
 }
 
 func (r *CodegenRegistry) forwardTemplateInputs(output VFS, templates, textTemplates []VFS) {
@@ -490,7 +513,17 @@ func (r *CodegenRegistry) buildParsedFor(out VFS) ParsedIncludeSet {
 func (r *CodegenRegistry) moduleSourceInputs(owner VFS, suffix string) []VFS {
 	var inputs []VFS
 
-	for _, info := range r.byRel.vals.s {
+	slots, _ := r.byOwner.get(owner)
+
+	if !slices.IsSorted(slots) {
+		slices.Sort(slots)
+		slots = slices.Compact(slots)
+		r.byOwner.put(owner, slots)
+	}
+
+	for _, slot := range slots {
+		info := r.byRel.vals.s[slot]
+
 		if info == nil || info.OwnerModule != owner || info.PrimaryInput == 0 {
 			continue
 		}

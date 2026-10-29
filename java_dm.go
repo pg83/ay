@@ -125,7 +125,10 @@ func (c *javaPeersClosure) contains(id *JavaModule) bool {
 
 type javaDMRules struct {
 	lib2Ver  map[string]string
+	dm       []string
 	excludes []string
+	excluded map[string]struct{}
+	loose    []string
 }
 
 func javaPathIsPrefixOf(prefix, path string) bool {
@@ -146,8 +149,36 @@ func javaPathBasename(p string) string {
 	return p[strings.LastIndexByte(p, '/')+1:]
 }
 
+func (r *javaDMRules) addExclude(e string) {
+	prefix := strings.TrimSuffix(e, "/")
+
+	if strings.HasSuffix(prefix, "/") {
+		r.loose = append(r.loose, e)
+
+		return
+	}
+
+	r.excluded[prefix] = struct{}{}
+}
+
 func (r *javaDMRules) isExcluded(path string) bool {
-	for _, e := range r.excludes {
+	if len(r.excluded) > 0 {
+		for p := path; ; {
+			if _, ok := r.excluded[p]; ok {
+				return true
+			}
+
+			i := strings.LastIndexByte(p, '/')
+
+			if i < 0 {
+				break
+			}
+
+			p = p[:i]
+		}
+	}
+
+	for _, e := range r.loose {
 		if javaPathIsPrefixOf(e, path) {
 			return true
 		}
