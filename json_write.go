@@ -7,7 +7,7 @@ import (
 	"unicode/utf8"
 )
 
-var vfsEscapedJSON [][]byte
+var vfsEscapedJSON vfsEscapeCache
 
 var htmlSafeNoEscape = func() [128]bool {
 	var t [128]bool
@@ -26,7 +26,49 @@ var htmlSafeNoEscape = func() [128]bool {
 	return t
 }()
 
-const hex = "0123456789abcdef"
+const (
+	vfsEscapeBlockShift = 20
+	hex                 = "0123456789abcdef"
+)
+
+type vfsEscapeCache struct {
+	pos    []uint32
+	blocks [][]byte
+}
+
+func (c *vfsEscapeCache) get(id uint32) []byte {
+	if int(id) >= len(c.pos) || c.pos[id] == 0 {
+		return nil
+	}
+
+	p := c.pos[id] - 1
+	b := c.blocks[p>>vfsEscapeBlockShift][p&(1<<vfsEscapeBlockShift-1):]
+	n, k := binary.Uvarint(b)
+
+	return b[k : k+int(n)]
+}
+
+func (c *vfsEscapeCache) put(id uint32, entry []byte) {
+	if int(id) >= len(c.pos) {
+		grown := make([]uint32, vfsBound())
+
+		copy(grown, c.pos)
+		c.pos = grown
+	}
+
+	need := binary.MaxVarintLen32 + len(entry)
+
+	if len(c.blocks) == 0 || cap(c.blocks[len(c.blocks)-1])-len(c.blocks[len(c.blocks)-1]) < need {
+		c.blocks = append(c.blocks, make([]byte, 0, max(1<<vfsEscapeBlockShift, need)))
+	}
+
+	last := len(c.blocks) - 1
+	block := c.blocks[last]
+
+	c.pos[id] = uint32(last)<<vfsEscapeBlockShift | uint32(len(block)) + 1
+	block = binary.AppendUvarint(block, uint64(len(entry)))
+	c.blocks[last] = append(block, entry...)
+}
 
 func appendRefNum(buf []byte, r NodeRef) []byte {
 	return strconv.AppendUint(buf, uint64(r), 10)
@@ -278,39 +320,30 @@ func appendVFS(buf []byte, v VFS) []byte {
 func appendVFSComma(buf []byte, v VFS) []byte {
 	id := v.strID()
 
-	if int(id) < len(vfsEscapedJSON) {
-		if cached := vfsEscapedJSON[id]; cached != nil {
-			return append(buf, cached...)
-		}
+	if cached := vfsEscapedJSON.get(id); cached != nil {
+		return append(buf, cached...)
 	}
 
 	return appendVFSUncached(buf, v, id)
 }
 
 func appendVFSUncached(buf []byte, v VFS, id uint32) []byte {
-	if int(id) >= len(vfsEscapedJSON) {
-		nc := make([][]byte, vfsBound())
-
-		copy(nc, vfsEscapedJSON)
-		vfsEscapedJSON = nc
-	}
-
 	s := v.relString()
-	out := make([]byte, 0, len(s)+8)
+	start := len(buf)
 
-	out = append(out, '"')
+	buf = append(buf, '"')
 
 	if s == "" {
-		out = append(out, v.prefix()[:vfsPrefixLen-1]...)
+		buf = append(buf, v.prefix()[:vfsPrefixLen-1]...)
 	} else {
-		out = append(out, v.prefix()...)
-		out = appendStringEscapedBody(out, s)
+		buf = append(buf, v.prefix()...)
+		buf = appendStringEscapedBody(buf, s)
 	}
 
-	out = append(out, '"', ',')
-	vfsEscapedJSON[id] = out
+	buf = append(buf, '"', ',')
+	vfsEscapedJSON.put(id, buf[start:])
 
-	return append(buf, out...)
+	return buf
 }
 
 func appendString(buf []byte, s string) []byte {
