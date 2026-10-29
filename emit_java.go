@@ -463,6 +463,10 @@ func (ctx *GenCtx) javaEmitTest(jm *JavaModule) {
 }
 
 func (ctx *GenCtx) javaResourceGlobals(jm *JavaModule) []ResourceDecl {
+	if jm.resourceGlobalsDone {
+		return jm.resourceGlobals
+	}
+
 	var out []ResourceDecl
 
 	seen := map[STR]bool{}
@@ -486,15 +490,23 @@ func (ctx *GenCtx) javaResourceGlobals(jm *JavaModule) []ResourceDecl {
 		}
 	}
 
-	return out
+	jm.resourceGlobals, jm.resourceGlobalsDone = out[:len(out):len(out)], true
+
+	return jm.resourceGlobals
 }
 
 func (ctx *GenCtx) javaGlobals(jm *JavaModule) map[string]VFS {
+	if jm.globalsByName != nil {
+		return jm.globalsByName
+	}
+
 	out := map[string]VFS{}
 
 	for _, decl := range ctx.javaResourceGlobals(jm) {
 		out[strings.TrimSuffix(decl.GlobalVar.string(), resourceGlobalSuffix)] = decl.Value
 	}
+
+	jm.globalsByName = out
 
 	return out
 }

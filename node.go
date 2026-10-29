@@ -95,21 +95,13 @@ func depRefs(refs ...NodeRef) []NodeRef {
 func dedupRefs(refs []NodeRef) []NodeRef {
 	out := refs[:0]
 
-	for _, r := range refs {
-		dup := false
-
-		for _, seen := range out {
-			if seen == r {
-				dup = true
-
-				break
+	dedupers.with(func(deduper *DeDuper) {
+		for _, r := range refs {
+			if deduper.add(r.strID()) {
+				out = append(out, r)
 			}
 		}
-
-		if !dup {
-			out = append(out, r)
-		}
-	}
+	})
 
 	return out
 }
