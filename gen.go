@@ -225,6 +225,8 @@ type GenCtx struct {
 	javaRawVars         map[string]string
 	javaPrologue        []ANY
 	javaScratch         []byte
+	javaRuleTokens      map[ANY]javaRuleToken
+	javaRuleExpansions  map[javaRuleExpansion][]ANY
 	dllForStack         []string
 	includeStack        []string
 	ifEnvScratch        EnvStore
@@ -374,6 +376,9 @@ func newGenCtx(fs FS, parsers *IncludeParserManager, hostP, targetP *Platform, e
 		javaRules:   newIntMap[[]*javaDMRules](0),
 		jc:          newJavaClosureScratch(),
 		javaRawVars: map[string]string{},
+
+		javaRuleTokens:     map[ANY]javaRuleToken{},
+		javaRuleExpansions: map[javaRuleExpansion][]ANY{},
 
 		walking:   make(map[ModuleInstance]bool),
 		host:      hostP,

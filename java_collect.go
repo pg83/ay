@@ -2,6 +2,7 @@ package main
 
 import (
 	"path"
+	"slices"
 	"strings"
 )
 
@@ -458,7 +459,7 @@ func collectJavaStmts(ctx *GenCtx, jm *JavaModule, d *JavaData, stmts []Stmt, en
 
 			if list, ok := d.ruleList(jm, v.Raw.string()); ok {
 				if list != nil {
-					*list = javaAppendResolved(*list, v.Args, expandStmtTokens(v.Args, env))
+					*list = javaAppendResolved(*list, v.Args, ctx.javaExpandRuleArgs(v.Args, env))
 				}
 
 				continue
@@ -1359,6 +1360,92 @@ func (d *JavaData) ruleList(jm *JavaModule, name string) (*[]ANY, bool) {
 	}
 
 	return nil, false
+}
+
+type javaRuleToken struct {
+	name   string
+	id     ENV
+	simple bool
+}
+
+type javaRuleExpansion struct {
+	tok  ANY
+	kind EnvKind
+	val  STR
+}
+
+func javaRuleTokenOf(tok ANY) javaRuleToken {
+	s := tok.string()
+	at := strings.IndexByte(s, '$')
+
+	if at < 0 || strings.Count(s, "$") != 1 || at+1 >= len(s) || s[at+1] != '{' || at > 0 && s[at-1] == '\\' {
+		return javaRuleToken{}
+	}
+
+	end := strings.IndexByte(s[at+2:], '}')
+
+	if end <= 0 {
+		return javaRuleToken{}
+	}
+
+	name := s[at+2 : at+2+end]
+
+	return javaRuleToken{name: name, id: internedEnv(name), simple: true}
+}
+
+func (ctx *GenCtx) javaExpandRuleArgs(items []ANY, env Environment) []ANY {
+	if !slices.ContainsFunc(items, func(a ANY) bool { return strHasDollar(a.str().any()) }) {
+		return items
+	}
+
+	out := make([]ANY, 0, len(items))
+
+	for _, item := range items {
+		if !strHasDollar(item.str().any()) {
+			out = append(out, item)
+
+			continue
+		}
+
+		out = append(out, ctx.javaExpandRuleToken(item, env)...)
+	}
+
+	return out
+}
+
+func (ctx *GenCtx) javaExpandRuleToken(tok ANY, env Environment) []ANY {
+	shape, ok := ctx.javaRuleTokens[tok]
+
+	if !ok || shape.simple && shape.id == 0 {
+		shape = javaRuleTokenOf(tok)
+		ctx.javaRuleTokens[tok] = shape
+	}
+
+	if !shape.simple {
+		return expandStmtTokens([]ANY{tok}, env)
+	}
+
+	key := javaRuleExpansion{tok: tok}
+
+	if shape.id != 0 {
+		key.kind, key.val = env.s.lookup(shape.id)
+	}
+
+	if words, ok := ctx.javaRuleExpansions[key]; ok {
+		if key.kind != envAbsent {
+			env.recordResourceUse(shape.id)
+		}
+
+		return words
+	}
+
+	words := expandStmtTokens([]ANY{tok}, env)
+
+	if key.kind == envVFS || !strHasDollar(key.val.any()) {
+		ctx.javaRuleExpansions[key] = slices.Clip(words)
+	}
+
+	return words
 }
 
 func javaAppendResolved(dst, src, expanded []ANY) []ANY {
