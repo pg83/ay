@@ -21,7 +21,7 @@ const (
 
 func normCmdNormalize(args []string) int {
 	var inPath, outPath string
-	var streaming, autoStreaming bool
+	var streaming, autoStreaming, refGraph bool
 
 	for i := 0; i < len(args); i++ {
 		switch args[i] {
@@ -32,7 +32,7 @@ func normCmdNormalize(args []string) int {
 			i++
 			outPath = arg(args, i)
 		case "--ref-graph":
-
+			refGraph = true
 		case "--streaming":
 
 			streaming = true
@@ -63,12 +63,16 @@ func normCmdNormalize(args []string) int {
 	contentHash := map[string][32]byte{}
 	deps := map[string][]string{}
 	fetch := map[string]bool{}
+	outputs := map[string][]string{}
+	pruned := map[string]refLinkInputs{}
 
 	type p1Result struct {
 		uid     string
 		deps    []string
+		outputs []string
 		content [32]byte
 		isFetch bool
+		link    refLinkInputs
 	}
 
 	result := fanoutNodes(src, workers,
@@ -83,9 +87,14 @@ func normCmdNormalize(args []string) int {
 				isFetch: p == "FT",
 			}
 
-			canon := canonContent(node)
+			canon, link := canonContent(node, refGraph)
 
 			r.content = sha256.Sum256(marshalCompact(canon))
+
+			if refGraph {
+				r.outputs = normStringsKeepOrder(node.Outputs)
+				r.link = link
+			}
 
 			outs := node.Outputs
 			out0 := ""
@@ -107,7 +116,22 @@ func normCmdNormalize(args []string) int {
 			if r.isFetch {
 				fetch[r.uid] = true
 			}
+
+			if r.outputs != nil {
+				outputs[r.uid] = r.outputs
+			}
+
+			if len(r.link.pruned) > 0 {
+				pruned[r.uid] = r.link
+			}
 		})
+
+	rawDeps := make(map[string][]string, len(pruned))
+
+	for uid, link := range pruned {
+		rawDeps[uid] = deps[uid]
+		deps[uid] = pruneRefLinkDeps(slices.Clone(deps[uid]), link, outputs)
+	}
 
 	if len(result) == 0 {
 		throwFmt("normalize: graph has no result roots")
@@ -136,6 +160,10 @@ func normCmdNormalize(args []string) int {
 
 		return false
 	})
+
+	if len(rawDeps) > 0 {
+		roots = dropOrphanedRoots(roots, deps, rawDeps)
+	}
 
 	closure := map[string]bool{}
 	queue := append([]string(nil), roots...)
@@ -193,7 +221,7 @@ func normCmdNormalize(args []string) int {
 				return emitLine{}
 			}
 
-			canon := canonContent(node)
+			canon, _ := canonContent(node, refGraph)
 
 			canon["deps"] = rewriteDeps(deps[uid], closure, fetch, newUID)
 
@@ -217,6 +245,60 @@ func normCmdNormalize(args []string) int {
 	throw(bw.Flush())
 
 	return 0
+}
+
+func dropOrphanedRoots(roots []string, deps, rawDeps map[string][]string) []string {
+	inner := map[string]bool{}
+	queue := []string{}
+
+	for _, root := range roots {
+		if raw, ok := rawDeps[root]; ok {
+			queue = append(queue, raw...)
+		} else {
+			queue = append(queue, deps[root]...)
+		}
+	}
+
+	for len(queue) > 0 {
+		uid := queue[len(queue)-1]
+
+		queue = queue[:len(queue)-1]
+
+		if inner[uid] {
+			continue
+		}
+
+		inner[uid] = true
+
+		if raw, ok := rawDeps[uid]; ok {
+			queue = append(queue, raw...)
+		} else {
+			queue = append(queue, deps[uid]...)
+		}
+	}
+
+	reached := map[string]bool{}
+
+	for _, root := range roots {
+		if !inner[root] {
+			queue = append(queue, root)
+		}
+	}
+
+	for len(queue) > 0 {
+		uid := queue[len(queue)-1]
+
+		queue = queue[:len(queue)-1]
+
+		if reached[uid] {
+			continue
+		}
+
+		reached[uid] = true
+		queue = append(queue, deps[uid]...)
+	}
+
+	return slices.DeleteFunc(roots, func(root string) bool { return !reached[root] })
 }
 
 func rewriteDeps(raw []string, closure, fetch map[string]bool, newUID map[string]string) []string {

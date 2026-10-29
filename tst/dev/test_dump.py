@@ -125,11 +125,11 @@ class DumpTest(unittest.TestCase):
         else:
             root = raw_node(
                 "root",
-                "LD",
-                "$(B)/pkg/app/app",
+                "RG",
+                "$(B)/pkg/app/app.tar",
                 deps=[node["uid"]],
                 inputs=node["outputs"],
-                cmds=[{"cmd_args": ["ld", *node["outputs"]]}],
+                cmds=[{"cmd_args": ["tar", *node["outputs"]]}],
             )
             text = self.normalize([root, node], ["root"], reference=reference)
         nodes = [json.loads(line) for line in text.splitlines()]
@@ -518,6 +518,73 @@ class DumpTest(unittest.TestCase):
         normalized = self.normalized_special_node(node)
         self.assertEqual(normalized["inputs"], sorted(node["inputs"]))
 
+    def test_ref_graph_prunes_link_peer_include_closure(self):
+        nodes = [
+            raw_node(
+                "ld", "LD", "$(B)/pkg/app/app",
+                deps=["ar", "proto", "gen"],
+                inputs=[
+                    "$(B)/pkg/lib/liblib.a",
+                    "$(B)/api/msg.pb.h",
+                    "$(B)/api/msg.pb.cc",
+                    "$(B)/pkg/gen/table.inc",
+                    "$(B)/pkg/gen/table.a",
+                    "$(S)/pkg/app/app.ld",
+                    "$(B)/pkg/app/wrap.swg.cpp",
+                    "$(B)/pkg/app/wrap.swg.cpp.pic.o",
+                ],
+                cmds=[{"cmd_args": ["ld", "$(B)/pkg/lib/liblib.a"]}],
+            ),
+            raw_node("ar", "AR", "$(B)/pkg/lib/liblib.a", deps=["cc"], inputs=["$(B)/pkg/lib/lib.o"]),
+            raw_node(
+                "cc", "CC", "$(B)/pkg/lib/lib.o",
+                deps=["proto"], inputs=["$(S)/pkg/lib/lib.cpp", "$(B)/api/msg.pb.h"],
+            ),
+            raw_node("proto", "PB", ["$(B)/api/msg.pb.h", "$(B)/api/msg.pb.cc"], inputs=["$(S)/api/msg.proto"]),
+            raw_node("gen", "RG", ["$(B)/pkg/gen/table.inc", "$(B)/pkg/gen/table.a"], inputs=["$(S)/pkg/gen/table.py"]),
+        ]
+
+        def by_kind(text):
+            items = [json.loads(line) for line in text.splitlines()]
+            return {item["kv"]["p"]: item for item in items}
+
+        ours = by_kind(self.normalize(nodes, ["ld"]))
+        self.assertEqual(ours["LD"]["inputs"], sorted(nodes[0]["inputs"]))
+        self.assertEqual(len(ours["LD"]["deps"]), 3)
+
+        ref = by_kind(self.normalize(nodes, ["ld"], reference=True))
+        self.assertEqual(
+            ref["LD"]["inputs"],
+            [
+                "$(B)/pkg/app/wrap.swg.cpp.pic.o", "$(B)/pkg/gen/table.a",
+                "$(B)/pkg/lib/liblib.a", "$(S)/pkg/app/app.ld",
+            ],
+        )
+        self.assertEqual(sorted(ref["LD"]["deps"]), sorted([ref["AR"]["uid"], ref["RG"]["uid"]]))
+        self.assertEqual(ref["CC"]["inputs"], ["$(B)/api/msg.pb.h", "$(S)/pkg/lib/lib.cpp"])
+        self.assertEqual(ref["CC"]["deps"], [ref["PB"]["uid"]])
+
+    def test_ref_graph_drops_results_reached_only_through_link_closure(self):
+        nodes = [
+            raw_node(
+                "ld", "LD", "$(B)/pkg/app/app",
+                deps=["ar", "gen"],
+                inputs=["$(B)/pkg/lib/liblib.a", "$(B)/pkg/gen/table.h"],
+                cmds=[{"cmd_args": ["ld", "$(B)/pkg/lib/liblib.a"]}],
+            ),
+            raw_node("ar", "AR", "$(B)/pkg/lib/liblib.a", inputs=["$(B)/pkg/lib/lib.o"]),
+            raw_node("gen", "RG", "$(B)/pkg/gen/table.h", deps=["tool"], inputs=["$(B)/tools/gen/gen"]),
+            raw_node("tool", "LD", "$(B)/tools/gen/gen", deps=["toollib"], inputs=["$(B)/tools/lib/libtool.a"]),
+            raw_node("toollib", "AR", "$(B)/tools/lib/libtool.a", inputs=["$(B)/tools/lib/tool.o"]),
+        ]
+        results = ["ld", "ar", "tool", "toollib"]
+
+        ours = [json.loads(line) for line in self.normalize(nodes, results).splitlines()]
+        self.assertEqual(len(ours), 5)
+
+        ref = [json.loads(line) for line in self.normalize(nodes, results, reference=True).splitlines()]
+        self.assertEqual(sorted(node["outputs"][0] for node in ref), ["$(B)/pkg/app/app", "$(B)/pkg/lib/liblib.a"])
+
     def test_canon_inputs_cython_preserves_declared_inputs(self):
         node = raw_node(
             "cython",
@@ -578,7 +645,7 @@ class DumpTest(unittest.TestCase):
                 "$(S)/pkg/prebuilt.a", "$(B)/pkg/data.rodata.asm", "$(B)/pkg/lib.component.sbom",
             ]),
             ("LD", "app", ["ld", "$(B)/pkg/main.o"], [
-                "$(B)/pkg/main.o", "$(B)/pkg/generated.pb.h", "$(S)/pkg/preamble.h",
+                "$(B)/pkg/main.o", "$(B)/pkg/lib/liblib.a", "$(S)/pkg/preamble.h",
             ]),
             ("CY", "mod.pyx.cpp", ["cython", "$(S)/pkg/mod.pyx"], [
                 "$(S)/pkg/mod.pyx", "$(S)/pkg/extern.h", "$(B)/pkg/generated.pxi",
@@ -596,7 +663,7 @@ class DumpTest(unittest.TestCase):
             with self.subTest(kind=kind):
                 action = raw_node("action", kind, "$(B)/action/" + output,
                     inputs=inputs, cmds=[{"cmd_args": args}])
-                root = raw_node("root", "LD", "$(B)/pkg/app/app",
+                root = raw_node("root", "RG", "$(B)/pkg/app/app.tar",
                     deps=["action"], inputs=action["outputs"])
                 nodes = [root, action]
                 self.assertEqual(

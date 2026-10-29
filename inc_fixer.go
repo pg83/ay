@@ -4,10 +4,8 @@ import "slices"
 
 const (
 	fixIncludes includeFixKind = iota
-	fixPeerIncludes
 	fixIncludedSources
 	fixInputLoop
-	fixModuleRoots
 	fixProducer
 )
 
@@ -112,14 +110,6 @@ func (f *IncludeFixer) activate(id FixID, selectProducer func(NodeRef)) {
 	switch entry.kind {
 	case fixIncludedSources, fixInputLoop:
 
-	case fixModuleRoots:
-		roots := s.codegen.includeRoots(entry.file, vfsScratches.get())
-
-		for _, root := range roots {
-			s.activateInclude(root, selectProducer)
-		}
-
-		vfsScratches.put(roots)
 	default:
 		s.activateInclude(entry.file, selectProducer)
 	}
@@ -140,27 +130,19 @@ func (f *IncludeFixer) resolve(entry *includeFix, na *NodeArenas) {
 		}
 	}
 
-	closure := func(root VFS, buildsOnly bool) {
-		cl := s.establishedClosure(root)
-
-		if !buildsOnly && root.isBuild() {
-			if info := s.codegen.lookup(root); info != nil {
+	switch entry.kind {
+	case fixIncludes:
+		if entry.file.isBuild() {
+			if info := s.codegen.lookup(entry.file); info != nil {
 				refs = append(refs, info.ProducerRef)
 			}
 		}
 
-		for _, bucket := range cl.bucketList() {
-			if len(bucket) > 0 && (!buildsOnly || bucket[0].isBuild()) {
-				for _, file := range bucket {
-					add(file)
-				}
+		for _, bucket := range s.establishedClosure(entry.file).bucketList() {
+			for _, file := range bucket {
+				add(file)
 			}
 		}
-	}
-
-	switch entry.kind {
-	case fixIncludes, fixPeerIncludes:
-		closure(entry.file, entry.kind == fixPeerIncludes)
 	case fixIncludedSources, fixInputLoop:
 		if info := s.codegen.lookup(entry.file); info != nil {
 			if entry.kind == fixInputLoop {
@@ -177,14 +159,6 @@ func (f *IncludeFixer) resolve(entry *includeFix, na *NodeArenas) {
 				}
 			}
 		}
-	case fixModuleRoots:
-		roots := s.codegen.includeRoots(entry.file, vfsScratches.get())
-
-		for _, root := range roots {
-			closure(root, true)
-		}
-
-		vfsScratches.put(roots)
 	}
 
 	entry.inputs = na.vfsList(inputs...)

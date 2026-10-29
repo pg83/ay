@@ -33,7 +33,6 @@ class PackagingTest(MakeTest):
         self.write("dll/dll.cpp", 'extern "C" int dll() { return 42; }\n')
         node = self.node(self.graph(), f"{PROJECT}.final.pkg.fake")
         self.assertIn(f"$(B)/{PROJECT}/plugin/plugin.py.pyplugin", node["inputs"])
-        self.assertIn(f"$(B)/{PROJECT}/proto/a.pb.h", node["inputs"])
         self.assertNotIn(f"$(B)/{PROJECT}/proto/b.pb.h", node["inputs"])
 
     def test_package_tar(self):

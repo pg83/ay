@@ -27,7 +27,7 @@ func (e *EmitContext) appendModulePeer(paths []VFS, result *ModuleEmitResult, ca
 
 	info := e.codegen.moduleInputs(output)
 
-	if info == nil || len(info.Includes) == 0 && !info.AnyRoots && len(info.Globals) == 0 && len(info.CythonGlobalIncludes) == 0 {
+	if info == nil || len(info.Includes) == 0 && len(info.Globals) == 0 && len(info.CythonGlobalIncludes) == 0 {
 		return paths
 	}
 
@@ -78,7 +78,6 @@ func (e *EmitContext) emitModuleNode(node NodeSpec, useGlobals bool) NodeRef {
 	}
 
 	e.includeNodeInputs(&node)
-	e.setModulePeerRoots(&node, peers)
 	node.Inputs = e.appendModuleInputs(node.Inputs, peers, useGlobals)
 	e.appendModuleOutputs(&node)
 	e.resolveNodeCodegenRefs(&node)
@@ -88,61 +87,6 @@ func (e *EmitContext) emitModuleNode(node NodeSpec, useGlobals bool) NodeRef {
 	e.codegen.moduleBuildDeps.put(ref, buildDeps)
 
 	return ref
-}
-
-func (e *EmitContext) setModulePeerRoots(node *NodeSpec, peers []VFS) {
-	e.scanner.materializePeerInputs(&node.Node, peers, e.ctx.na)
-}
-
-func (s *IncludeScanner) materializePeerInputs(node *Node, peers []VFS, na *NodeArenas) InputChunks {
-	var extra InputChunks
-
-	defer func() {
-		if extra != nil {
-			clear(extra)
-			inputChunkScratches.put(extra)
-		}
-	}()
-
-	roots := vfsScratches.get()
-
-	defer func() { vfsScratches.put(roots) }()
-
-	for _, peer := range peers {
-		if s.codegen.moduleInputs(peer) == nil {
-			s.addInputFix(node, peer, fixModuleRoots)
-
-			continue
-		}
-
-		roots = s.codegen.includeRoots(peer, roots[:0])
-
-		for _, root := range roots {
-			cl, _ := s.closure(root)
-
-			s.deferClosure(node, cl, fixPeerIncludes)
-
-			for _, bucket := range cl.bucketList() {
-				if len(bucket) > 0 && bucket[0].isBuild() {
-					if extra == nil {
-						extra = inputChunkScratches.get()
-					}
-
-					extra = append(extra, bucket)
-				}
-			}
-		}
-	}
-
-	if len(extra) > 0 {
-		n := len(node.Inputs)
-
-		node.Inputs = appendInputChunks(na, node.Inputs, extra)
-
-		return node.Inputs[n:]
-	}
-
-	return nil
 }
 
 func (e *EmitContext) appendModuleInputs(inputs InputChunks, modules []VFS, useGlobals bool) InputChunks {
@@ -266,9 +210,7 @@ func (e *EmitContext) publishModuleIncludes(result *ModuleEmitResult) {
 	}
 
 	var peerInputs InputChunks
-	var rootPeers []VFS
 
-	anyRoots := false
 	passPeers := !isProgramModuleType(e.d.unit.Type) && !isDllModuleType(e.d.unit.Type) && e.d.unit.Type != tokDynamicLibrary
 
 	if value, ok := e.d.setVars.get(strPassPeers), e.d.setVars.has(strPassPeers); ok {
@@ -279,21 +221,16 @@ func (e *EmitContext) publishModuleIncludes(result *ModuleEmitResult) {
 		count := len(e.peers.Modules)
 
 		peerInputs = e.ctx.na.inputs.alloc(count)[:0]
-		rootPeers = e.ctx.na.vfs.alloc(count)[:0]
 
 		for _, peer := range e.peers.Modules {
 			if info := e.codegen.moduleInputs(peer); info != nil {
 				peerInputs = append(peerInputs, info.Includes)
-				rootPeers = append(rootPeers, peer)
-				anyRoots = anyRoots || info.AnyRoots
 			}
 		}
 
 		e.ctx.na.inputs.commit(len(peerInputs))
-		e.ctx.na.vfs.commit(len(rootPeers))
 
 		peerInputs = peerInputs[:len(peerInputs):len(peerInputs)]
-		rootPeers = rootPeers[:len(rootPeers):len(rootPeers)]
 	}
 
 	globals := e.ctx.na.dedupClosure(e.moduleGlobals, [][]VFS{e.globalSources})
@@ -306,11 +243,10 @@ func (e *EmitContext) publishModuleIncludes(result *ModuleEmitResult) {
 
 	cythonIncludes := e.ctx.na.dedupClosure(e.d.cythonAddInclGlobal, cythonPeers)
 
-	if len(e.moduleIncludeRoots) == 0 && len(rootPeers) == 0 && len(globals) == 0 && len(cythonIncludes) == 0 {
+	if len(e.moduleIncludeRoots) == 0 && len(peerInputs) == 0 && len(globals) == 0 && len(cythonIncludes) == 0 {
 		return
 	}
 
-	fake := e.moduleIsFake(result) && e.instance.Kind != KindForeignDescent
 	ownIncludes := e.ctx.na.vfs.alloc(len(e.moduleIncludeRoots))[:0]
 
 	for _, root := range e.moduleIncludeRoots {
@@ -323,25 +259,13 @@ func (e *EmitContext) publishModuleIncludes(result *ModuleEmitResult) {
 
 	ownIncludes = ownIncludes[:len(ownIncludes):len(ownIncludes)]
 
-	ownRoots := e.ctx.na.vfs.alloc(len(e.moduleIncludeRoots))[:0]
-
-	for _, root := range e.moduleIncludeRoots {
-		if !root.isBuild() && !fake {
-			ownRoots = append(ownRoots, root)
-		}
-	}
-
-	e.ctx.na.vfs.commit(len(ownRoots))
-
-	ownRoots = ownRoots[:len(ownRoots):len(ownRoots)]
-
-	if len(ownIncludes) == 0 && len(ownRoots) == 0 && len(rootPeers) == 0 && len(globals) == 0 && len(cythonIncludes) == 0 {
+	if len(ownIncludes) == 0 && len(peerInputs) == 0 && len(globals) == 0 && len(cythonIncludes) == 0 {
 		return
 	}
 
 	includes := e.ctx.na.dedupClosure(ownIncludes, peerInputs)
 
-	e.codegen.setModuleInputs(output, e.d.moduleStmt.Name, includes, ownRoots, rootPeers, globals, e.moduleGlobalInputs, cythonIncludes, passPeers, anyRoots || len(ownRoots) > 0)
+	e.codegen.setModuleInputs(output, e.d.moduleStmt.Name, includes, globals, e.moduleGlobalInputs, cythonIncludes, passPeers)
 }
 
 func (e *EmitContext) globalPlugins() []VFS {

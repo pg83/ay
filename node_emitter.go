@@ -150,16 +150,12 @@ func (ctx *GenCtx) activateSelectedInputs(selected BitSet, stack []NodeRef) BitS
 			continue
 		}
 
-		if ctx.hasPeerInputFixes(node) {
-			ctx.activateNodeInputs(node, selectProducer, true)
-		}
-
 		if selected.has(uint32(ref)) {
 			continue
 		}
 
 		selected.add(uint32(ref))
-		ctx.activateNodeInputs(node, selectProducer, false)
+		ctx.activateNodeInputs(node, selectProducer)
 		stack = append(stack, node.DepRefs...)
 
 		for _, dependency := range node.ForeignDepRefs {

@@ -12,9 +12,6 @@ class LateIncludeInputsTest(MakeTest):
         self.write('lib/ordinary.cpp', 'int ordinary;\n')
         graph = self.graph()
         linked = self.node(graph, 'answer')
-        generated = self.node(graph, 'lib/generated.h')
-        self.assertIn(f'$(B)/{PROJECT}/lib/generated.h', linked['inputs'])
-        self.assertIn(generated['uid'], linked['deps'])
         for name in ('public.h', 'template.h', 'leaf.h'):
             self.assertNotIn(f'$(S)/{PROJECT}/lib/{name}', linked['inputs'])
 
@@ -41,10 +38,6 @@ class LateIncludeInputsTest(MakeTest):
         self.write("deps/ya.make", "LIBRARY()\nSRCS(leaf.proto)\nEND()\n")
         self.write("deps/leaf.proto", 'syntax = "proto2";\nmessage Leaf {}\n')
         graph = self.graph()
-        linked = self.node(graph, "answer")
-        for header in ("lib/seed.pb.h", "deps/leaf.pb.h"):
-            self.assertIn(f"$(B)/{PROJECT}/{header}", linked["inputs"])
-            self.assertIn(self.node(graph, header)["uid"], linked["deps"])
         for output in ("main.cpp.o", "lib/ordinary.cpp.o"):
             self.assertFalse(any(p.endswith(".pb.h") for p in self.node(graph, output)["inputs"]))
 

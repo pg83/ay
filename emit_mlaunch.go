@@ -201,7 +201,6 @@ func (e *EmitContext) genPackageFinal() *ModuleEmitResult {
 
 	packagePeers := dedup(peers)
 
-	e.setModulePeerRoots(&node, packagePeers)
 	node.Inputs = e.appendModuleInputs(node.Inputs, packagePeers, false)
 
 	ref := e.emitLazyModuleNode(node, peers, outputs...)

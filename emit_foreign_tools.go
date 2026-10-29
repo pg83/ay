@@ -57,7 +57,7 @@ func (ctx *GenCtx) moduleBuildDeps(ref NodeRef) ([]NodeRef, bool) {
 	return nil, false
 }
 
-func (ctx *GenCtx) activateNodeInputs(node *Node, selectProducer func(NodeRef), modulePeers bool) {
+func (ctx *GenCtx) activateNodeInputs(node *Node, selectProducer func(NodeRef)) {
 	if len(node.InputFixes) == 0 {
 		return
 	}
@@ -72,15 +72,9 @@ func (ctx *GenCtx) activateNodeInputs(node *Node, selectProducer func(NodeRef), 
 
 	for _, id := range node.InputFixes {
 		entry := f.entries.s[id-1]
-		peer := entry.kind == fixPeerIncludes || entry.kind == fixModuleRoots
-
-		if peer != modulePeers {
-			continue
-		}
 
 		registry = entry.scanner.codegen
 		buildDeps, module = registry.moduleBuildDeps.get(node.Ref)
-		module = module && !modulePeers
 
 		f.activate(id, func(ref NodeRef) {
 			selectProducer(ref)
@@ -116,18 +110,6 @@ func (ctx *GenCtx) activateNodeInputs(node *Node, selectProducer func(NodeRef), 
 
 	nodeRefScratches.put(refs)
 	nodeRefScratches.put(added)
-}
-
-func (ctx *GenCtx) hasPeerInputFixes(node *Node) bool {
-	for _, id := range node.InputFixes {
-		kind := ctx.scannerTarget.fixer.entries.s[id-1].kind
-
-		if kind == fixPeerIncludes || kind == fixModuleRoots {
-			return true
-		}
-	}
-
-	return false
 }
 
 func (ctx *GenCtx) foreignToolOf(ref NodeRef) *ModuleEmitResult {
@@ -180,11 +162,7 @@ func (ctx *GenCtx) bindForeignTools() {
 			}
 
 			selected.add(uint32(ref))
-			ctx.activateNodeInputs(node, selectProducer, false)
-
-			if ctx.hasPeerInputFixes(node) {
-				weak = append(weak, ref)
-			}
+			ctx.activateNodeInputs(node, selectProducer)
 
 			var foreign map[NodeRef]NodeRef
 

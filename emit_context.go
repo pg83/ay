@@ -614,22 +614,12 @@ func (e *EmitContext) collectScriptOutput(output VFS) {
 }
 
 func (e *EmitContext) appendModuleOutputs(node *NodeSpec) {
-	added := false
-
 	for _, meta := range e.metas {
 		if src := meta.Source.vfs(); src != 0 && src.isBuild() {
 			if info := e.codegen.lookup(src); info != nil && info.OwnerModule == e.instance.Path && len(info.ModuleOutputs) > 0 {
 				node.Outputs = append(node.Outputs, info.ModuleOutputs...)
-				node.Inputs = appendInputChunks(e.ctx.na, node.Inputs, e.ctx.na.inputList(e.ctx.na.vfsList(src)))
-				node.DepRefs = append(node.DepRefs, info.ProducerRef)
-
-				added = true
 			}
 		}
-	}
-
-	if added {
-		node.DepRefs = e.ctx.na.uniqueRefs(node.DepRefs)
 	}
 }
 

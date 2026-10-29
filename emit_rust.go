@@ -216,7 +216,7 @@ func (e *EmitContext) emitRustModule(result *ModuleEmitResult, peers []ResolvedP
 	}, nil)
 
 	if len(textTemplates) > 0 {
-		e.codegen.setModuleInputs(out, d.moduleStmt.Name, na.vfsList(textTemplates...), nil, nil, nil, nil, nil, false, false)
+		e.codegen.setModuleInputs(out, d.moduleStmt.Name, na.vfsList(textTemplates...), nil, nil, nil, false)
 	}
 
 	result.ARRef, result.LDRef = ref, ref

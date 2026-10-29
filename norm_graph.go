@@ -5,10 +5,17 @@ package main
 import (
 	"bufio"
 	"os"
+	"slices"
 	"sort"
+	"strings"
 	"sync"
 
 	json "github.com/goccy/go-json"
+)
+
+var (
+	refLinkKinds      = map[string]bool{"LD": true, "UD": true, "PK": true, "GO": true, "JV": true}
+	refLinkPrunedExts = map[string]bool{"h": true, "hpp": true, "inc": true, "pch": true, "cc": true, "cpp": true}
 )
 
 func normRec(v any) any {
@@ -71,8 +78,80 @@ func orVal(v, def any) any {
 	return v
 }
 
-func canonContent(node *RawNode) map[string]any {
+type refLinkInputs struct {
+	kept   []string
+	pruned []string
+}
+
+func refLinkInputPruned(path string) bool {
+	if !strings.HasPrefix(path, "$(B)/") {
+		return false
+	}
+
+	base := path[strings.LastIndexByte(path, '/')+1:]
+	dot := strings.LastIndexByte(base, '.')
+
+	return dot > 0 && refLinkPrunedExts[base[dot+1:]]
+}
+
+func splitRefLinkInputs(node *RawNode, inputs []string) refLinkInputs {
+	kv, _ := node.Kv.(map[string]any)
+	p, _ := kv["p"].(string)
+
+	if !refLinkKinds[p] {
+		return refLinkInputs{kept: inputs}
+	}
+
+	link := refLinkInputs{kept: inputs[:0:0]}
+
+	for _, input := range inputs {
+		if refLinkInputPruned(input) {
+			link.pruned = append(link.pruned, input)
+		} else {
+			link.kept = append(link.kept, input)
+		}
+	}
+
+	return link
+}
+
+func pruneRefLinkDeps(deps []string, link refLinkInputs, outputs map[string][]string) []string {
+	kept := make(map[string]bool, len(link.kept))
+
+	for _, input := range link.kept {
+		kept[input] = true
+	}
+
+	pruned := make(map[string]bool, len(link.pruned))
+
+	for _, input := range link.pruned {
+		pruned[input] = true
+	}
+
+	return slices.DeleteFunc(deps, func(dep string) bool {
+		hit := false
+
+		for _, out := range outputs[dep] {
+			if kept[out] {
+				return false
+			}
+
+			hit = hit || pruned[out]
+		}
+
+		return hit
+	})
+}
+
+func canonContent(node *RawNode, refGraph bool) (map[string]any, refLinkInputs) {
 	inputs := normSortedStrings(node.Inputs)
+
+	var link refLinkInputs
+
+	if refGraph {
+		link = splitRefLinkInputs(node, inputs)
+		inputs = link.kept
+	}
 
 	canon := map[string]any{
 		"cmds":         normRec(orVal(node.Cmds, []any{})),
@@ -84,7 +163,7 @@ func canonContent(node *RawNode) map[string]any {
 		"requirements": normRec(orVal(node.Requirements, map[string]any{})),
 	}
 
-	return canon
+	return canon, link
 }
 
 type NodeID string

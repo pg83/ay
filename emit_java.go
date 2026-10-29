@@ -159,16 +159,6 @@ func (b *javaNodeBuilder) emitTo(ref NodeRef) {
 		node.Inputs = na.rootInputList(slices.DeleteFunc(dedupVFSKeepOrder(b.inputs), func(in VFS) bool { return own[in] }), node.Inputs...)
 	}
 
-	if len(b.modulePeers) > 0 {
-		scanner := b.ctx.scannerForPlatform(platform)
-
-		scanner.codegen.moduleBuildDeps.put(ref, node.DepRefs)
-
-		peerInputs := scanner.materializePeerInputs(&node.Node, b.modulePeers, na)
-
-		resolveCodegenInputRefs(&node.Node, peerInputs, scanner.codegen, na)
-	}
-
 	b.ctx.emit.emitReservedNodePtr(&node.Node, ref)
 }
 
