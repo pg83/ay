@@ -2,7 +2,6 @@ package main
 
 import (
 	"path"
-	"slices"
 	"strings"
 )
 
@@ -136,7 +135,7 @@ func (b *javaNodeBuilder) emitTo(ref NodeRef) {
 
 	node := NodeSpec{Node: Node{Platform: platform,
 		Cmds: na.cmdList(b.cmds...),
-		Env:  env, Inputs: na.rootInputList(dedupVFSKeepOrder(b.inputs)), KV: kv,
+		Env:  env, KV: kv,
 		KVExts:       b.exts,
 		Outputs:      na.vfsList(b.outputs...),
 		Requirements: b.req,
@@ -144,19 +143,35 @@ func (b *javaNodeBuilder) emitTo(ref NodeRef) {
 		Resources:    b.resources},
 	}
 
-	if b.inputContext != nil {
-		node.Inputs = na.rootInputList(dedupVFSKeepOrder(b.inputRoots))
+	if b.inputContext == nil {
+		node.Inputs = na.rootInputList(na.dedupClosure(b.inputs))
+	} else {
+		roots := na.dedupClosure(b.inputRoots)
+
+		node.Inputs = na.rootInputList(roots)
 		node.input.roots = node.Inputs
 		node.input.text = b.textInputs
 		b.inputContext.resolveNodeCodegenDeps(&node)
 
-		own := make(map[VFS]bool, len(b.inputRoots))
+		var inputs []VFS
 
-		for _, in := range b.inputRoots {
-			own[in] = true
-		}
+		dedupers.with(func(deduper *DeDuper) {
+			for _, in := range roots {
+				deduper.addStable(in.strID())
+			}
 
-		node.Inputs = na.rootInputList(slices.DeleteFunc(dedupVFSKeepOrder(b.inputs), func(in VFS) bool { return own[in] }), node.Inputs...)
+			inputs = na.vfs.alloc(len(b.inputs))[:0]
+
+			for _, in := range b.inputs {
+				if deduper.addStable(in.strID()) {
+					inputs = append(inputs, in)
+				}
+			}
+
+			na.vfs.commit(len(inputs))
+		})
+
+		node.Inputs = na.rootInputList(inputs[:len(inputs):len(inputs)], node.Inputs...)
 	}
 
 	b.ctx.emit.emitReservedNodePtr(&node.Node, ref)

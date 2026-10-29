@@ -87,6 +87,8 @@ type javaClosureScratch struct {
 	excl      Vec[uint64]
 	exclEpoch uint32
 	exBuf     []uint64
+	expBuf    []uint64
+	expEnd    []uint32
 	libIDs    map[string]uint32
 	levels    []*javaResolveLevel
 	depth     int
@@ -505,7 +507,7 @@ func javaClosureOf(m *JavaModule) javaClosure {
 	return m.closure
 }
 
-func (ctx *GenCtx) javaExpandTransparent(transparent *JavaModule, rules *javaDMRules) javaClosure {
+func (ctx *GenCtx) javaExpandTransparent(transparent *JavaModule, rules *javaDMRules) {
 	s := &ctx.jc
 	excludePred := javaClosureExcludePred(rules)
 
@@ -529,33 +531,32 @@ func (ctx *GenCtx) javaExpandTransparent(transparent *JavaModule, rules *javaDMR
 		s.merge(d.m, s.exclude(d.m.closure, pred, true))
 	}
 
-	return s.commit()
+	s.expBuf = append(s.expBuf, s.buf...)
+	s.expEnd = append(s.expEnd, uint32(len(s.expBuf)))
 }
 
 func (ctx *GenCtx) javaMergeClosure(jm *JavaModule) javaClosure {
 	s := &ctx.jc
 
-	var expanded []javaClosure
+	s.expBuf, s.expEnd = s.expBuf[:0], s.expEnd[:0]
 
-	for i, d := range jm.direct {
-		if !d.m.unit.transparent {
-			continue
+	for _, d := range jm.direct {
+		if d.m.unit.transparent {
+			ctx.javaExpandTransparent(d.m, jm.rules)
 		}
-
-		if expanded == nil {
-			expanded = make([]javaClosure, len(jm.direct))
-		}
-
-		expanded[i] = ctx.javaExpandTransparent(d.m, jm.rules)
 	}
 
 	excludePred := javaClosureExcludePred(jm.rules)
+	start, next := uint32(0), 0
 
 	s.begin()
 
-	for i, d := range jm.direct {
+	for _, d := range jm.direct {
 		if d.m.unit.transparent {
-			s.merge(d.m, expanded[i])
+			end := s.expEnd[next]
+
+			s.merge(d.m, s.expBuf[start:end])
+			start, next = end, next+1
 
 			continue
 		}
@@ -717,25 +718,25 @@ func (ctx *GenCtx) javaManagedPeersClosure(jm *JavaModule) []JavaClosureEntry {
 	if jm.consumesUnmanageable() {
 		seen := map[*ModuleEmitResult]bool{}
 
-		appendUnmanageable := func(peers []javaForeignPeer) {
-			for _, p := range peers {
-				if seen[p.res] {
-					continue
-				}
+		appendUnmanageable := func(p javaForeignPeer) {
+			if seen[p.res] {
+				return
+			}
 
-				seen[p.res] = true
+			seen[p.res] = true
 
-				if path := javaForeignFileName(p); path != 0 {
-					out = append(out, JavaClosureEntry{path: path, foreign: p.res})
-				}
+			if path := javaForeignFileName(p); path != 0 {
+				out = append(out, JavaClosureEntry{path: path, foreign: p.res})
 			}
 		}
 
-		appendUnmanageable(jm.unmanageable)
+		for _, p := range jm.unmanageable {
+			appendUnmanageable(p)
+		}
 
 		for _, e := range out {
 			if e.java != nil {
-				appendUnmanageable(e.java.unmanageableClosure())
+				e.java.eachUnmanageable(appendUnmanageable)
 			}
 		}
 	}
@@ -873,16 +874,14 @@ func (jm *JavaModule) consumesUnmanageable() bool {
 	return jm.unit.consumeNonManageable || jm.data.addDLLs
 }
 
-func (jm *JavaModule) unmanageableClosure() []javaForeignPeer {
-	if !jm.unit.transparent {
-		return jm.unmanageable
+func (jm *JavaModule) eachUnmanageable(f func(javaForeignPeer)) {
+	for _, p := range jm.unmanageable {
+		f(p)
 	}
 
-	out := jm.unmanageable
-
-	for _, d := range jm.direct {
-		out = append(out, d.m.unmanageableClosure()...)
+	if jm.unit.transparent {
+		for _, d := range jm.direct {
+			d.m.eachUnmanageable(f)
+		}
 	}
-
-	return out
 }
