@@ -93,7 +93,7 @@ func (e *EmitContext) pchCCBlocks(scope *CommandScope) *CcModuleArgBlocks {
 func (e *EmitContext) pchLLVMRoot() ANY {
 	name := strLlvmToolsRoot
 
-	if value, ok := e.d.setVars[name]; ok {
+	if value, ok := e.d.setVars.get(name), e.d.setVars.has(name); ok {
 		return internStr(resolveResourceGlobalRef(value.string(), e.peers.ResourceGlobals)).any()
 	}
 

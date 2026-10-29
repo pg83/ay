@@ -243,11 +243,11 @@ func (e *EmitContext) collectModuleGlobalSource(src ANY) bool {
 }
 
 func (e *EmitContext) moduleIsFake(result *ModuleEmitResult) bool {
-	if value, ok := e.d.setVars[strFakeModule]; ok && stringIsTruthy(value.string()) {
+	if value, ok := e.d.setVars.get(strFakeModule), e.d.setVars.has(strFakeModule); ok && stringIsTruthy(value.string()) {
 		return true
 	}
 
-	if value, ok := e.d.setVars[strNeedAddFakeSrc]; ok && !stringIsTruthy(value.string()) {
+	if value, ok := e.d.setVars.get(strNeedAddFakeSrc), e.d.setVars.has(strNeedAddFakeSrc); ok && !stringIsTruthy(value.string()) {
 		return false
 	}
 
@@ -271,7 +271,7 @@ func (e *EmitContext) publishModuleIncludes(result *ModuleEmitResult) {
 	anyRoots := false
 	passPeers := !isProgramModuleType(e.d.unit.Type) && !isDllModuleType(e.d.unit.Type) && e.d.unit.Type != tokDynamicLibrary
 
-	if value, ok := e.d.setVars[strPassPeers]; ok {
+	if value, ok := e.d.setVars.get(strPassPeers), e.d.setVars.has(strPassPeers); ok {
 		passPeers = stringIsTruthy(value.string())
 	}
 

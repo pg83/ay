@@ -37,7 +37,7 @@ func (e *EmitContext) goFmtSuites(globals []ResourceDecl) []*TestSuite {
 	var suites []*TestSuite
 	var fmtFiles []ANY
 
-	isTestFor := e.d.moduleStmt.Name == tokGoTest && e.d.setVars[strGO_TEST_IMPORT_PATH] != 0
+	isTestFor := e.d.moduleStmt.Name == tokGoTest && e.d.setVars.get(strGO_TEST_IMPORT_PATH) != 0
 
 	if !isTestFor {
 		for _, meta := range e.d.srcs {
@@ -113,7 +113,7 @@ func (e *EmitContext) goTestRunSuite(binRef NodeRef, globals []ResourceDecl) *Te
 	binary := build(project, "/", name)
 	s := e.goSuiteBase(name, "go_test", "test", globals)
 
-	s.applyTestMeta(d.test, d.setVars[strADD_SRCDIR_TO_TEST_DATA] != strNo)
+	s.applyTestMeta(d.test, d.setVars.get(strADD_SRCDIR_TO_TEST_DATA) != strNo)
 	s.skipped = Environment{s: &e.frame.ifEnv}.string(envSKIP_TEST_VALUE) != ""
 	s.deps = []NodeRef{binRef}
 	s.supportsCanonization = true

@@ -1318,11 +1318,11 @@ func (c *Conf) peerTags(env Environment, template string) STR {
 	return result
 }
 
-func (c *Conf) set(env Environment, variable ENV, originals map[STR]STR) {
+func (c *Conf) set(env Environment, variable ENV, originals *SetVars) {
 	c.recalcInto(env, variable, originals, nil)
 }
 
-func (c *Conf) recalcInto(env Environment, variable ENV, originals map[STR]STR, recording []ConfAssignment) {
+func (c *Conf) recalcInto(env Environment, variable ENV, originals *SetVars, recording []ConfAssignment) {
 	targets, _ := c.tables.byVariable.get(variable)
 
 	for _, target := range targets {
@@ -1331,7 +1331,7 @@ func (c *Conf) recalcInto(env Environment, variable ENV, originals map[STR]STR, 
 		stmts, _ := c.tables.byTarget.get(target)
 		base, _ := c.inherited.get(target)
 
-		if original, ok := originals[target.str()]; ok {
+		if original := originals.get(target.str()); original != 0 {
 			if inherited := c.platformEnv.string(target); base.kind != envAbsent && inherited != "" {
 				confStringValueID(internV(inherited, " ", original.string())).apply(env, target)
 			} else {
@@ -1353,7 +1353,7 @@ func (c *Conf) recalcInto(env Environment, variable ENV, originals map[STR]STR, 
 	}
 }
 
-func (c *Conf) initModule(env Environment, name STR, tag string, originals map[STR]STR) {
+func (c *Conf) initModule(env Environment, name STR, tag string, originals *SetVars) {
 	defer func() { env.s.confBase = nil }()
 
 	module := c.tables.module(name, tag)
@@ -1390,9 +1390,9 @@ func (c *Conf) initModule(env Environment, name STR, tag string, originals map[S
 		}
 	}
 
-	if clean && len(originals) != 0 {
+	if clean && originals.len() != 0 {
 		for _, key := range plan.originals {
-			if originals[key.str()] != 0 {
+			if originals.has(key.str()) {
 				clean = false
 
 				break
@@ -1432,7 +1432,7 @@ func (c *Conf) initModule(env Environment, name STR, tag string, originals map[S
 	c.bases[module.index] = recording
 }
 
-func (c *Conf) runInit(plan *confModule, env Environment, originals map[STR]STR, recording []ConfAssignment) {
+func (c *Conf) runInit(plan *confModule, env Environment, originals *SetVars, recording []ConfAssignment) {
 	for _, step := range plan.steps {
 		if step.source != 0 {
 			env.setString(step.variable, env.string(step.source))
@@ -1463,13 +1463,13 @@ func recordConfAssignment(recording []ConfAssignment, key ENV, env Environment) 
 	panic("conf initialization wrote an undeclared output")
 }
 
-func (c *Conf) finishModule(env Environment, name STR, tag string, originals map[STR]STR) {
+func (c *Conf) finishModule(env Environment, name STR, tag string, originals *SetVars) {
 	if module := c.tables.module(name, tag); module != nil {
 		c.finishModuleParent(env, module, originals)
 	}
 }
 
-func (c *Conf) finishModuleParent(env Environment, module *confModule, originals map[STR]STR) {
+func (c *Conf) finishModuleParent(env Environment, module *confModule, originals *SetVars) {
 	if parent := c.tables.module(module.parent, ""); parent != nil {
 		c.finishModuleParent(env, parent, originals)
 	}
@@ -1479,7 +1479,7 @@ func (c *Conf) finishModuleParent(env Environment, module *confModule, originals
 
 		targets, _ := c.tables.byVariable.get(variable)
 
-		if slices.ContainsFunc(targets, func(target ENV) bool { return originals[target.str()] != 0 }) {
+		if slices.ContainsFunc(targets, func(target ENV) bool { return originals.has(target.str()) }) {
 			c.set(env, variable, originals)
 		}
 	}

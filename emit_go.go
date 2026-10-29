@@ -416,7 +416,7 @@ func applyGoImplicitPeerdirs(ctx *GenCtx, instance ModuleInstance, d *ModuleData
 	}
 
 	if goModuleUsesCgoC(d) {
-		if forDir := d.setVars[strGO_TEST_IMPORT_PATH]; d.moduleStmt.Name == tokGoTest && forDir != 0 {
+		if forDir := d.setVars.get(strGO_TEST_IMPORT_PATH); d.moduleStmt.Name == tokGoTest && forDir != 0 {
 			d.addIncl = append(d.addIncl, source(forDir.string()))
 		}
 
@@ -1207,7 +1207,7 @@ func (e *EmitContext) emitGoExe(resolved []ResolvedPeer, objRefs []NodeRef, objO
 		minerRef, minerPath = ctx.tool(argToolsGoTestMiner)
 		testArgs = []ANY{strTestMiner.any(), minerPath.any(), strTestImportPath.any()}
 
-		if imp := d.setVars[strGO_TEST_IMPORT_PATH]; imp != 0 {
+		if imp := d.setVars.get(strGO_TEST_IMPORT_PATH); imp != 0 {
 			testArgs = append(testArgs, imp.any())
 		}
 

@@ -398,7 +398,7 @@ type ModuleData struct {
 	resourceDeclStmts       []*DeclareResourceStmt
 	primaryOutput           string
 	inducedDeps             ParsedIncludeSet
-	setVars                 map[STR]STR
+	setVars                 SetVars
 	tc                      ModuleToolchain
 	scanCtx                 *ScanContext
 	cc                      ModuleCompileEnv
@@ -890,7 +890,7 @@ func collectModuleInto(ctx *GenCtx, instance ModuleInstance, stmts []Stmt, env E
 		pythonHeaderEnv = d.pythonHeaderEnv
 	}
 
-	if _, specified := d.setVars[strPeerdirTags]; specified || d.python2Headers || d.python3NativeIncl {
+	if specified := d.setVars.has(strPeerdirTags); specified || d.python2Headers || d.python3NativeIncl {
 		d.peerTags = strings.Fields(pythonHeaderEnv.string(envPeerdirTags))
 	}
 
@@ -1436,7 +1436,7 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 
 			d.unit = resolveModuleUnit(v.Name, kind, language)
 
-			platform.conf.initModule(env, v.Name.str(), moduleConfTag(v.Name, kind, language, d.unit.Tag), d.setVars)
+			platform.conf.initModule(env, v.Name.str(), moduleConfTag(v.Name, kind, language, d.unit.Tag), &d.setVars)
 			env.setStringID(envPeerdirTags, platform.conf.peerTags(env, modulePeerTags(v, d.unit, language)))
 			env.setString(envREALPRJNAME, moduleRealPrjName(modulePath, v, d.unit))
 
@@ -1796,12 +1796,8 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 				setupPythonImportMask(env, d)
 			}
 
-			if d.setVars == nil {
-				d.setVars = map[STR]STR{}
-			}
-
-			d.setVars[internStr(v.Name)] = internStr(value)
-			platform.conf.set(env, v.NameEnv, d.setVars)
+			d.setVars.set(internStr(v.Name), internStr(value))
+			platform.conf.set(env, v.NameEnv, &d.setVars)
 
 			if v.Name == "SWIG_LANG" {
 				d.unit.SwigLang = internStr(value)
@@ -1828,7 +1824,7 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 			}
 
 			collectModuleAutoinclude(ctx, modulePath, kind, language, env, d, onWarn, platform)
-			platform.conf.finishModule(env, d.moduleStmt.Name.str(), moduleConfTag(d.moduleStmt.Name, kind, language, d.unit.Tag), d.setVars)
+			platform.conf.finishModule(env, d.moduleStmt.Name.str(), moduleConfTag(d.moduleStmt.Name, kind, language, d.unit.Tag), &d.setVars)
 			d.pythonLint.bind(env)
 			d.finishResourcePeerPolicy()
 
@@ -1942,12 +1938,8 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 			if !bound {
 				d.captureResourcePeerPolicy(v.VarName, env)
 
-				if d.setVars == nil {
-					d.setVars = map[STR]STR{}
-				}
-
-				d.setVars[internStr(v.VarName)] = internStr(value)
-				platform.conf.set(env, v.NameEnv, d.setVars)
+				d.setVars.set(internStr(v.VarName), internStr(value))
+				platform.conf.set(env, v.NameEnv, &d.setVars)
 			}
 
 		case *ConfigureFileStmt:
@@ -2220,7 +2212,7 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 							break
 						}
 
-						platform.conf.set(env, internEnv(arg.string()), d.setVars)
+						platform.conf.set(env, internEnv(arg.string()), &d.setVars)
 					}
 				}
 			}
@@ -3025,11 +3017,7 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 
 		env.setFromString(envModver, value)
 
-		if d.setVars == nil {
-			d.setVars = map[STR]STR{}
-		}
-
-		d.setVars[strModver] = internStr(value)
+		d.setVars.set(strModver, internStr(value))
 		d.modver = strings.Join(components, ".")
 	case tokToolchain:
 
@@ -3257,11 +3245,7 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 
 			env.setFromString(internEnv(result), value)
 
-			if d.setVars == nil {
-				d.setVars = map[STR]STR{}
-			}
-
-			d.setVars[internStr(result)] = internStr(value)
+			d.setVars.set(internStr(result), internStr(value))
 		}
 	case tokProtoNamespace:
 		if len(v.Args) == 0 {
@@ -3285,17 +3269,11 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 		env.setStringID(envDontResolveIncludes, strNo)
 		d.addProtoInclude(expandConfigVFSPaths(anysOf("$PROTOBUF_INCLUDE_PATH"), env), false)
 	case tokUseSdcMeta:
-		if d.setVars == nil {
-			d.setVars = map[STR]STR{}
-		}
 
-		d.setVars[strUSE_SDC_META] = strYes
+		d.setVars.set(strUSE_SDC_META, strYes)
 	case tokGoPackageName:
-		if d.setVars == nil {
-			d.setVars = map[STR]STR{}
-		}
 
-		d.setVars[str_GO_PACKAGE_VALUE] = v.Args[0].str()
+		d.setVars.set(str_GO_PACKAGE_VALUE, v.Args[0].str())
 		env.setStringID(envGoPackageOverride, v.Args[0].str())
 	case tokExportYmapsProto:
 		applyProtoNamespace(d, mapsDocProtoNS.any(), false)
@@ -3378,11 +3356,7 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 			env.setBool(internEnv(a), true)
 			d.captureResourcePeerPolicy(a, env)
 
-			if d.setVars == nil {
-				d.setVars = map[STR]STR{}
-			}
-
-			d.setVars[internStr(a)] = strYes
+			d.setVars.set(internStr(a), strYes)
 
 			switch a {
 			case "SANITIZER_TYPE":
@@ -3413,11 +3387,7 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 				setupPythonImportMask(env, d)
 			}
 
-			if d.setVars == nil {
-				d.setVars = map[STR]STR{}
-			}
-
-			d.setVars[internStr(a)] = strNo
+			d.setVars.set(internStr(a), strNo)
 
 			if a == "PYTHON_SQLITE3" {
 				d.pythonSQLite3 = false
@@ -3886,11 +3856,7 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 
 		env.setFromString(internEnv(name), value)
 
-		if d.setVars == nil {
-			d.setVars = map[STR]STR{}
-		}
-
-		d.setVars[internStr(name)] = internStr(value)
+		d.setVars.set(internStr(name), internStr(value))
 	case tokSetAppend, tokAsmPreinclude:
 		if v.Name == tokAsmPreinclude {
 			v.Args = append([]ANY{strYasmPreincludesValue.any()}, v.Args...)
@@ -3930,27 +3896,18 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 			original := value
 
 			if name == importMaskVariable {
-				value = appendPythonImportMask(value, env, d)
-			} else if prev, ok := env.lookup(name); ok && prev != "" {
-				value = prev + " " + value
+				env.setFromString(internEnv(name), appendPythonImportMask(value, env, d))
+			} else {
+				env.appendString(internEnv(name), value)
 			}
 
-			env.setFromString(internEnv(name), value)
 			d.captureResourcePeerPolicy(name, env)
 
 			if name == "SANITIZER_TYPE" {
 				setupPythonImportMask(env, d)
 			}
 
-			if d.setVars == nil {
-				d.setVars = map[STR]STR{}
-			}
-
-			if previous := d.setVars[internStr(name)]; previous != 0 {
-				original = previous.string() + " " + original
-			}
-
-			d.setVars[internStr(name)] = internStr(original)
+			d.setVars.append(internStr(name), original)
 		}
 	case tokInducedDeps:
 
@@ -5760,7 +5717,7 @@ func applyCompileNlg(modulePath string, v UnknownStmt, d *ModuleData) {
 	str := func(s string) ANY { return internStr(s).any() }
 	args := []ANY{str("compile-cpp")}
 
-	if d.setVars[strCOMPILE_NLG_EMPTY_CPP] == strYes {
+	if d.setVars.get(strCOMPILE_NLG_EMPTY_CPP) == strYes {
 		args = append(args, str("--empty-cpp"))
 	}
 
@@ -5967,4 +5924,75 @@ func compilerFlagRootValue(value string, env Environment) string {
 
 		return reference
 	})
+}
+
+type SetVars struct {
+	vals    map[STR]STR
+	appends map[STR][]string
+}
+
+func (v *SetVars) len() int {
+	if v == nil {
+		return 0
+	}
+
+	return len(v.vals)
+}
+
+func (v *SetVars) has(k STR) bool {
+	if v == nil {
+		return false
+	}
+
+	_, ok := v.vals[k]
+
+	return ok
+}
+
+func (v *SetVars) get(k STR) STR {
+	if v == nil {
+		return 0
+	}
+
+	if chunks := v.appends[k]; chunks != nil {
+		v.vals[k] = internStr(v.vals[k].string() + " " + strings.Join(chunks, " "))
+
+		delete(v.appends, k)
+	}
+
+	return v.vals[k]
+}
+
+func (v *SetVars) set(k, val STR) {
+	if v.vals == nil {
+		v.vals = map[STR]STR{}
+	}
+
+	if v.appends != nil {
+		delete(v.appends, k)
+	}
+
+	v.vals[k] = val
+}
+
+func (v *SetVars) append(k STR, chunk string) {
+	if v.vals[k] == 0 {
+		v.set(k, internStr(chunk))
+
+		return
+	}
+
+	if v.appends == nil {
+		v.appends = map[STR][]string{}
+	}
+
+	v.appends[k] = append(v.appends[k], chunk)
+}
+
+func (v *SetVars) settled() map[STR]STR {
+	for k := range v.appends {
+		v.get(k)
+	}
+
+	return v.vals
 }

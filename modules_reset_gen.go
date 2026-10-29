@@ -96,6 +96,6 @@ func (x *ModuleData) reset() {
 		ragel6Flags:          x.ragel6Flags[:0],
 		bisonFlags:           x.bisonFlags[:0],
 		resourceDeclStmts:    scrub(x.resourceDeclStmts),
-		setVars:              clearedMap(x.setVars),
+		setVars:              SetVars{vals: clearedMap(x.setVars.vals)},
 	}
 }

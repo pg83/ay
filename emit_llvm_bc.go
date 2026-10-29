@@ -24,7 +24,7 @@ func (e *EmitContext) llvmCompileNode(src string, out VFS, compiler string, cxx 
 	value := composeBCCompileCmd(d.tc.Python3.string(), wrapper.string(), compiler, e.instance.Platform, newModuleCCInputs(&d.cc), input, out, cxx)
 	args := value.Args
 	tail := len(args) - 5
-	llvmOpts := strings.Fields(d.setVars[strLlvmOpts].string())
+	llvmOpts := strings.Fields(d.setVars.get(strLlvmOpts).string())
 
 	if len(llvmOpts) > 0 {
 		args = append(append(append([]ANY(nil), args[:tail]...), internAnys(llvmOpts)...), args[tail:]...)

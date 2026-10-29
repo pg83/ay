@@ -94,7 +94,7 @@ func (e *EmitContext) emitSdcMetas() []VFS {
 }
 
 func (e *EmitContext) appendSdcMeta(node *NodeSpec, name string) bool {
-	if e.d.setVars[strUSE_SDC_META] != strYes {
+	if e.d.setVars.get(strUSE_SDC_META) != strYes {
 		return false
 	}
 

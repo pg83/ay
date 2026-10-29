@@ -115,7 +115,7 @@ func (e *EmitContext) defaultPeerdirsForWithState(instance ModuleInstance) []str
 	flags := d.flags
 	noPlatform := effectiveNoPlatform(flags)
 
-	addLinuxHeaders := d.setVars[strNeedPlatformPeerdirs] != strNo &&
+	addLinuxHeaders := d.setVars.get(strNeedPlatformPeerdirs) != strNo &&
 		instance.Path.relString() != "contrib/libs/linux-headers" &&
 		!strings.HasPrefix(instance.Path.relString(), "contrib/libs/linux-headers/")
 
@@ -305,7 +305,7 @@ func (e *EmitContext) appendPlatformPeerdirs(peers []string, instance ModuleInst
 		return peers
 	}
 
-	if d.setVars[strNeedPlatformPeerdirs] == strNo {
+	if d.setVars.get(strNeedPlatformPeerdirs) == strNo {
 		return append(peers, "build/platform/python/ymake_python3")
 	}
 
@@ -330,7 +330,7 @@ func (e *EmitContext) appendPlatformPeerdirs(peers []string, instance ModuleInst
 func (e *EmitContext) defaultCommonLinkPeerdirs() []string {
 	instance, d := e.instance, e.d
 
-	if d.setVars[strCommonLinkSettings] == strNo {
+	if d.setVars.get(strCommonLinkSettings) == strNo {
 		return nil
 	}
 

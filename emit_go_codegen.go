@@ -464,7 +464,7 @@ func initGoModuleName(modulePath string, env Environment, d *ModuleData, onWarn 
 
 	var tail []ANY
 
-	_, hasLocalName := d.setVars[envREALPRJNAME.str()]
+	hasLocalName := d.setVars.has(envREALPRJNAME.str())
 
 	for i := 0; i < len(args); i++ {
 		if args[i] == kwPREFIX.any() {
@@ -493,12 +493,8 @@ func initGoModuleName(modulePath string, env Environment, d *ModuleData, onWarn 
 		env.setString(envREALPRJNAME, path.Base(modulePath))
 	}
 
-	if d.setVars == nil {
-		d.setVars = map[STR]STR{}
-	}
-
-	d.setVars[envREALPRJNAME.str()] = internStr(env.string(envREALPRJNAME))
-	d.setVars[envGO_PACKAGE_VALUE.str()] = internStr(env.string(envGO_PACKAGE_VALUE))
+	d.setVars.set(envREALPRJNAME.str(), internStr(env.string(envREALPRJNAME)))
+	d.setVars.set(envGO_PACKAGE_VALUE.str(), internStr(env.string(envGO_PACKAGE_VALUE)))
 
 	stmt.Args = append([]ANY{internStr(env.string(envREALPRJNAME)).any()}, tail...)
 	stmt.Prefix = env.string(envMODULE_PREFIX)
@@ -507,17 +503,17 @@ func initGoModuleName(modulePath string, env Environment, d *ModuleData, onWarn 
 }
 
 func goPackageName(_ string, d *ModuleData) string {
-	if name := d.setVars[str_GO_PACKAGE_VALUE].string(); name != "" {
+	if name := d.setVars.get(str_GO_PACKAGE_VALUE).string(); name != "" {
 		return name
 	}
 
 	if d.moduleStmt.Name == tokGoTest {
-		if name := d.setVars[envGO_PACKAGE_VALUE.str()].string(); name != "" {
+		if name := d.setVars.get(envGO_PACKAGE_VALUE.str()).string(); name != "" {
 			return name
 		}
 	}
 
-	if imp := d.setVars[strGO_TEST_IMPORT_PATH].string(); imp != "" {
+	if imp := d.setVars.get(strGO_TEST_IMPORT_PATH).string(); imp != "" {
 		return path.Base(path.Clean(imp))
 	}
 
@@ -525,7 +521,7 @@ func goPackageName(_ string, d *ModuleData) string {
 		return "main"
 	}
 
-	return d.setVars[envREALPRJNAME.str()].string()
+	return d.setVars.get(envREALPRJNAME.str()).string()
 }
 
 func applyGoResource(fs FS, modulePath string, entries []ResourceEntry, d *ModuleData) {

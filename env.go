@@ -8,9 +8,16 @@ import (
 
 type EnvKind uint8
 
+type envAppend struct {
+	id  ENV
+	buf []byte
+}
+
 type EnvStore struct {
 	val              []STR
 	kind             []EnvKind
+	appends          []envAppend
+	pending          BitSet
 	textInputs       map[ENV][]SourceTextRange
 	resourceBindings []EnvResourceBinding
 	included         map[string]bool
@@ -60,11 +67,85 @@ func (s *EnvStore) ensure(e ENV) {
 }
 
 func (s *EnvStore) lookup(e ENV) (EnvKind, STR) {
+	if len(s.appends) != 0 && s.pending.has(uint32(e)) {
+		s.settle(e)
+	}
+
 	if int(e) < len(s.kind) {
 		return s.kind[e], s.val[e]
 	}
 
 	return envAbsent, 0
+}
+
+func (s *EnvStore) settle(e ENV) {
+	for i := range s.appends {
+		if s.appends[i].id == e {
+			value := string(s.appends[i].buf)
+
+			s.appends = slices.Delete(s.appends, i, i+1)
+			s.pending.remove(uint32(e))
+			Environment{s: s}.setString(e, value)
+
+			return
+		}
+	}
+}
+
+func (s *EnvStore) settleAll() {
+	for len(s.appends) != 0 {
+		s.settle(s.appends[0].id)
+	}
+}
+
+func (s *EnvStore) dropAppend(e ENV) {
+	if !s.pending.has(uint32(e)) {
+		return
+	}
+
+	for i := range s.appends {
+		if s.appends[i].id == e {
+			s.appends = slices.Delete(s.appends, i, i+1)
+			s.pending.remove(uint32(e))
+
+			return
+		}
+	}
+}
+
+func (e Environment) appendString(id ENV, v string) {
+	s := e.s
+
+	for i := range s.appends {
+		if s.appends[i].id == id {
+			s.appends[i].buf = append(append(s.appends[i].buf, ' '), v...)
+
+			return
+		}
+	}
+
+	prev := ""
+
+	if int(id) < len(s.kind) {
+		switch s.kind[id] {
+		case envVFS:
+			prev = VFS(uint32(s.val[id])).string()
+		case envStr, envInt:
+			prev = s.val[id].string()
+		}
+	}
+
+	if prev == "" {
+		e.setFromString(id, v)
+
+		return
+	}
+
+	buf := make([]byte, 0, 2*(len(prev)+len(v)+1))
+
+	buf = append(append(append(buf, prev...), ' '), v...)
+	s.appends = append(s.appends, envAppend{id: id, buf: buf})
+	s.pending.add(uint32(id))
 }
 
 func (e Environment) bool(id ENV) bool {
@@ -104,6 +185,8 @@ func (e Environment) string(id ENV) string {
 }
 
 func (e Environment) clone() Environment {
+	e.s.settleAll()
+
 	return Environment{s: &EnvStore{
 		val:              append([]STR(nil), e.s.val...),
 		kind:             append([]EnvKind(nil), e.s.kind...),
@@ -114,6 +197,9 @@ func (e Environment) clone() Environment {
 }
 
 func (e Environment) cloneInto(dst *EnvStore) Environment {
+	e.s.settleAll()
+	dst.appends = dst.appends[:0]
+
 	if len(e.s.kind) > 0 {
 		dst.ensure(ENV(len(e.s.kind) - 1))
 	}
@@ -142,6 +228,10 @@ func (s *EnvStore) confWrite(id ENV) {
 }
 
 func (e Environment) setVFS(id ENV, v VFS) {
+	if len(e.s.appends) != 0 {
+		e.s.dropAppend(id)
+	}
+
 	delete(e.s.textInputs, id)
 
 	e.s.clearResourceBinding(id)
@@ -153,6 +243,10 @@ func (e Environment) setVFS(id ENV, v VFS) {
 }
 
 func (e Environment) setStrID(id ENV, v STR) {
+	if len(e.s.appends) != 0 {
+		e.s.dropAppend(id)
+	}
+
 	delete(e.s.textInputs, id)
 
 	e.s.clearResourceBinding(id)
@@ -178,6 +272,10 @@ func (e Environment) setString(id ENV, v string) {
 }
 
 func (e Environment) setInt(id ENV, n int) {
+	if len(e.s.appends) != 0 {
+		e.s.dropAppend(id)
+	}
+
 	delete(e.s.textInputs, id)
 
 	e.s.clearResourceBinding(id)
@@ -212,6 +310,10 @@ func (e Environment) setFromStringID(id ENV, v STR) {
 }
 
 func (e Environment) unbind(id ENV) EnvKind {
+	if len(e.s.appends) != 0 {
+		e.s.dropAppend(id)
+	}
+
 	k, _ := e.s.lookup(id)
 
 	if k != envAbsent {

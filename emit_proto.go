@@ -140,10 +140,8 @@ func protoOutputRel(outputRoot, rel string) string {
 }
 
 func protoTransitiveHeadersEnabled(d *ModuleData) bool {
-	if d.setVars != nil {
-		if v, ok := d.setVars[strProtocTransitiveHeaders]; ok {
-			return v.string() != "no"
-		}
+	if d.setVars.has(strProtocTransitiveHeaders) {
+		return d.setVars.get(strProtocTransitiveHeaders).string() != "no"
 	}
 
 	if d.defaultVars != nil {
