@@ -891,8 +891,13 @@ func (ctx *GenCtx) javaRecordIncluded(jm *JavaModule) {
 			r.own = append(r.own, res.LDRef)
 
 			if res.IncludedDeps != nil {
-				r.chunks = append(r.chunks, res.IncludedDeps.Inputs)
-				r.refs = append(r.refs, res.IncludedDeps.Refs)
+				if len(res.IncludedDeps.Inputs) > 0 {
+					r.chunks = append(r.chunks, res.IncludedDeps.Inputs)
+				}
+
+				if len(res.IncludedDeps.Refs) > 0 {
+					r.refs = append(r.refs, res.IncludedDeps.Refs)
+				}
 			}
 
 			continue
@@ -913,12 +918,21 @@ func (ctx *GenCtx) javaRecordIncluded(jm *JavaModule) {
 			r.own = append(r.own, *res.SbomComponentRef)
 		}
 
-		r.chunks = append(r.chunks, res.PeerArchiveClosurePaths, res.PeerGlobalClosurePaths, res.PeerDynamicClosurePaths, res.PeerSbomClosurePaths)
-		r.refs = append(r.refs, res.PeerArchiveClosureRefs, res.PeerGlobalClosureRefs, res.PeerDynamicClosureRefs, res.PeerSbomClosureRefs)
+		for _, c := range [...][]VFS{res.PeerArchiveClosurePaths, res.PeerGlobalClosurePaths, res.PeerDynamicClosurePaths, res.PeerSbomClosurePaths} {
+			if len(c) > 0 {
+				r.chunks = append(r.chunks, c)
+			}
+		}
+
+		for _, c := range [...][]NodeRef{res.PeerArchiveClosureRefs, res.PeerGlobalClosureRefs, res.PeerDynamicClosureRefs, res.PeerSbomClosureRefs} {
+			if len(c) > 0 {
+				r.refs = append(r.refs, c)
+			}
+		}
 	}
 
-	inputs := len(r.paths) > 0 || slices.ContainsFunc(r.chunks, func(c []VFS) bool { return len(c) > 0 })
-	refs := len(r.own) > 0 || slices.ContainsFunc(r.refs, func(c []NodeRef) bool { return len(c) > 0 })
+	inputs := len(r.paths) > 0 || len(r.chunks) > 0
+	refs := len(r.own) > 0 || len(r.refs) > 0
 
 	for e := range ctx.javaManagedPeersClosure(jm) {
 		p := e.java
