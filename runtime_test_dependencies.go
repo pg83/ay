@@ -17,6 +17,8 @@ type TestDependencyModule struct {
 	multimodule  bool
 	fake         bool
 	peers        []TestBuildDependency
+
+	peerInstances []ModuleInstance
 }
 
 func (e *EmitContext) recordTestDependencyModule(result *ModuleEmitResult, declaration TOK, env Environment) {
@@ -44,6 +46,26 @@ func (e *EmitContext) recordTestDependencyModule(result *ModuleEmitResult, decla
 
 	result.testDependencyModule = TestDependencyModule{instance: e.instance, bundle: bundle, complete: complete, sharedObject: sharedObject, unrollBundle: unrollBundle, includePeers: includePeers, final: final, multimodule: multimodule,
 		fake: !complete && env.bool(envFakeModule)}
+
+	if unit := result.ModuleStmtName; isUnionModule(unit) || unit == tokPackageFinal || unit == tokCiGroup || unit == tokGenLibrary || unit == tokDocsLibrary {
+		peers := make([]ModuleInstance, 0, len(d.selfPeers)+len(d.peerdirs))
+
+		for _, language := range d.selfPeers {
+			peer := e.instance
+
+			peer.Language = language
+			peers = append(peers, peer)
+		}
+
+		for _, dir := range d.peerdirs {
+			peer := e.derivePeerInstance(dir.string())
+
+			peer.Demand = demandSelf
+			peers = append(peers, peer)
+		}
+
+		result.testDependencyModule.peerInstances = peers
+	}
 }
 
 func testDependencySharedObject(name TOK) bool {

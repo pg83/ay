@@ -187,69 +187,71 @@ func protoResultWholeArchiveCmdPaths(res *ProtoSrcsResult) []VFS {
 }
 
 type GenCtx struct {
-	scanData         ModuleData
-	scanDataBusy     bool
-	dirs             map[dirEvaluationKey]*DirEvaluation
-	configuration    ConfigurationDependencies
-	fbsBindings      fbsContextBindings
-	foreignTools     foreignToolBindings
-	fs               FS
-	parsers          *IncludeParserManager
-	emit             *StreamingEmitter
-	onWarn           func(Warn)
-	warningSink      *moduleWarnings
-	keepGoing        bool
-	na               *NodeArenas
-	inclArgValues    DenseMap[VFS, STR]
-	resHashScratch   []string
-	resHashBuf       []byte
-	resDashBuf       []byte
-	resB64Scratch    []byte
-	inclArgs         InclArgMemo
-	memo             *moduleMemo
-	refSlices        *SliceCache[NodeRef]
-	vfsSlices        *SliceCache[VFS]
-	argSlices        *SliceCache[ANY]
-	declSlices       *SliceCache[ResourceDecl]
-	results          *BumpAllocator[ModuleEmitResult]
-	dirSlices        *SliceCache[IncludeDirective]
-	descSlices       *SliceCache[DescProtoPeer]
-	tcMemo           map[ToolchainKey]ModuleToolchain
-	dllForStack      []string
-	includeStack     []string
-	ifEnvScratch     EnvStore
-	walking          map[ModuleInstance]bool
-	cyclesTolerated  int
-	traceStack       []string
-	scannerTarget    *IncludeScanner
-	scannerHost      *IncludeScanner
-	buckets          *BucketCache
-	moduleByRef      DenseMap[NodeRef, *ModuleEmitResult]
-	tools            DenseMap[ARG, *ModuleEmitResult]
-	frames           []*ModuleFrame
-	frameDepth       int
-	exportLog        Vec[ExportEntry]
-	exportRoots      [][2]int32
-	exportOrder      []*ModuleEmitResult
-	py3ccHeadChunk   []ANY
-	scripts          ScriptDeps
-	fetchRefs        *DenseMap[STR, NodeRef]
-	host             *Platform
-	target           *Platform
-	vcsRef           NodeRef
-	testMode         bool
-	peerTests        bool
-	testRoots        []*ModuleEmitResult
-	tests            *TestOpts
-	sbomEnabled      bool
-	autoincludeIdx   *AutoincludeIndex
-	parsedFiles      map[string]*MakeFile
-	goEnvMemo        map[[2]STR]EnvVars
-	frameSerial      uint32
-	scannerTargetPIC *IncludeScanner
-	roots            map[ModuleInstance]bool
-	targetDirs       map[string]bool
-	rootDemand       ModuleDemand
+	scanData            ModuleData
+	scanDataBusy        bool
+	dirs                map[dirEvaluationKey]*DirEvaluation
+	dependencyInstances map[string][]ModuleInstance
+	dependencyBuilds    map[string][]TestBuildDependency
+	configuration       ConfigurationDependencies
+	fbsBindings         fbsContextBindings
+	foreignTools        foreignToolBindings
+	fs                  FS
+	parsers             *IncludeParserManager
+	emit                *StreamingEmitter
+	onWarn              func(Warn)
+	warningSink         *moduleWarnings
+	keepGoing           bool
+	na                  *NodeArenas
+	inclArgValues       DenseMap[VFS, STR]
+	resHashScratch      []string
+	resHashBuf          []byte
+	resDashBuf          []byte
+	resB64Scratch       []byte
+	inclArgs            InclArgMemo
+	memo                *moduleMemo
+	refSlices           *SliceCache[NodeRef]
+	vfsSlices           *SliceCache[VFS]
+	argSlices           *SliceCache[ANY]
+	declSlices          *SliceCache[ResourceDecl]
+	results             *BumpAllocator[ModuleEmitResult]
+	dirSlices           *SliceCache[IncludeDirective]
+	descSlices          *SliceCache[DescProtoPeer]
+	tcMemo              map[ToolchainKey]ModuleToolchain
+	dllForStack         []string
+	includeStack        []string
+	ifEnvScratch        EnvStore
+	walking             map[ModuleInstance]bool
+	cyclesTolerated     int
+	traceStack          []string
+	scannerTarget       *IncludeScanner
+	scannerHost         *IncludeScanner
+	buckets             *BucketCache
+	moduleByRef         DenseMap[NodeRef, *ModuleEmitResult]
+	tools               DenseMap[ARG, *ModuleEmitResult]
+	frames              []*ModuleFrame
+	frameDepth          int
+	exportLog           Vec[ExportEntry]
+	exportRoots         [][2]int32
+	exportOrder         []*ModuleEmitResult
+	py3ccHeadChunk      []ANY
+	scripts             ScriptDeps
+	fetchRefs           *DenseMap[STR, NodeRef]
+	host                *Platform
+	target              *Platform
+	vcsRef              NodeRef
+	testMode            bool
+	peerTests           bool
+	testRoots           []*ModuleEmitResult
+	tests               *TestOpts
+	sbomEnabled         bool
+	autoincludeIdx      *AutoincludeIndex
+	parsedFiles         map[string]*MakeFile
+	goEnvMemo           map[[2]STR]EnvVars
+	frameSerial         uint32
+	scannerTargetPIC    *IncludeScanner
+	roots               map[ModuleInstance]bool
+	targetDirs          map[string]bool
+	rootDemand          ModuleDemand
 }
 
 type moduleMemoEntry struct {

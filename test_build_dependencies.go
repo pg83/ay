@@ -8,6 +8,22 @@ type TestBuildDependency struct {
 }
 
 func (ctx *GenCtx) testDependencyInstances(dir string) []ModuleInstance {
+	if instances, ok := ctx.dependencyInstances[dir]; ok {
+		return instances
+	}
+
+	instances := ctx.selectDependencyInstances(dir)
+
+	if ctx.dependencyInstances == nil {
+		ctx.dependencyInstances = map[string][]ModuleInstance{}
+	}
+
+	ctx.dependencyInstances[dir] = instances
+
+	return instances
+}
+
+func (ctx *GenCtx) selectDependencyInstances(dir string) []ModuleInstance {
 	declaration := ctx.evaluateDir(dir, ctx.target).declaration
 
 	if declaration == nil {
@@ -189,6 +205,22 @@ func (ctx *GenCtx) testDependencyInstances(dir string) []ModuleInstance {
 }
 
 func (ctx *GenCtx) testBuildDependencies(dir string) []TestBuildDependency {
+	if dependencies, ok := ctx.dependencyBuilds[dir]; ok {
+		return dependencies
+	}
+
+	dependencies := ctx.buildTestDependencies(dir)
+
+	if ctx.dependencyBuilds == nil {
+		ctx.dependencyBuilds = map[string][]TestBuildDependency{}
+	}
+
+	ctx.dependencyBuilds[dir] = dependencies
+
+	return dependencies
+}
+
+func (ctx *GenCtx) buildTestDependencies(dir string) []TestBuildDependency {
 	var dependencies []TestBuildDependency
 
 	final := false
@@ -260,36 +292,7 @@ func (ctx *GenCtx) testDependencyClosure(dependency TestBuildDependency, seen ma
 		return
 	}
 
-	name := result.ModuleStmtName
-
-	if !isUnionModule(name) && name != tokPackageFinal && name != tokCiGroup && name != tokGenLibrary && name != tokDocsLibrary {
-		return
-	}
-
-	frame := ctx.pushFrame()
-
-	defer ctx.popFrame()
-
-	env := buildIfEnvInto(&frame.ifEnv, instance)
-	d := collectModuleInto(ctx, instance, moduleStmts(ctx, instance.Path.relString()), env, ctx.onWarn, &frame.d)
-	e := &EmitContext{ctx: ctx, frame: frame, instance: instance, d: d}
-
-	for _, language := range d.selfPeers {
-		peer := instance
-
-		peer.Language = language
-
-		dependency := TestBuildDependency{peer, genModule(ctx, peer)}
-
-		result.testDependencyModule.peers = append(result.testDependencyModule.peers, dependency)
-		ctx.testDependencyClosure(dependency, seen, false, publish)
-	}
-
-	for _, dir := range d.peerdirs {
-		peer := e.derivePeerInstance(dir.string())
-
-		peer.Demand = demandSelf
-
+	for _, peer := range module.peerInstances {
 		dependency := TestBuildDependency{peer, genModule(ctx, peer)}
 
 		result.testDependencyModule.peers = append(result.testDependencyModule.peers, dependency)
