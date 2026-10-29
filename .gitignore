@@ -2,7 +2,7 @@
 /ay
 /ay_test
 /ay_gate
-/ay_norm
+/dev_*
 /coverage
 /cli_coverage
 /ay_e2e_*

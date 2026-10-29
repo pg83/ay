@@ -116,9 +116,9 @@ class DumpToolTest(unittest.TestCase):
             check=False,
         )
 
-    def norm(self, *args, input=None):
+    def norm(self, tool, *args, input=None):
         return subprocess.run(
-            [str(lib.NORM), *map(str, args)],
+            [str(lib.TOOLS[tool]), *map(str, args)],
             cwd=self.root,
             input=input,
             stdout=subprocess.PIPE,
@@ -136,7 +136,7 @@ class DumpToolTest(unittest.TestCase):
     def norm_fails(self, message, *args, input=None):
         result = self.norm(*args, input=input)
         self.assertEqual(result.returncode, 1, result.stdout)
-        self.assertEqual(result.stderr, "ay_norm: " + message + "\n")
+        self.assertEqual(result.stderr, message + "\n")
 
     def ok(self, *args, input=None):
         result = self.ay(*args, input=input)
@@ -183,9 +183,9 @@ class DumpSortTest(DumpToolTest):
 
     def test_sort_argument_errors(self):
         self.norm_fails('sort: unknown argument "--bogus"', "sort", "--bogus")
-        self.norm_fails('dump: missing value for flag "--in"', "sort", "--in")
+        self.norm_fails('sort: missing value for flag "--in"', "sort", "--in")
         self.norm_fails(
-            'strconv.Atoi: parsing "x": invalid syntax',
+            'sort: strconv.Atoi: parsing "x": invalid syntax',
             "sort", "--chunk-bytes", "x",
         )
 
@@ -247,7 +247,7 @@ class DumpGraphErrorsTest(DumpToolTest):
         for name, (content, message) in cases.items():
             path = self.write(name, content)
             self.norm_fails(
-                f"dump: {path}: {message}",
+                f"normalize: {path}: {message}",
                 "normalize", "--in", path,
             )
             self.fails(

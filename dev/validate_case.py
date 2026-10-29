@@ -61,9 +61,10 @@ def file_sha256(path: Path) -> str:
 
 
 class CaseRunner:
-    def __init__(self, ay: Path, norm: Path, spec: dict, output: Path, timeout: int):
+    def __init__(self, ay: Path, normalize: Path, sort: Path, spec: dict, output: Path, timeout: int):
         self.ay = ay
-        self.norm = norm
+        self.normalize = normalize
+        self.sort = sort
         self.spec = spec
         self.output = output
         self.timeout = timeout
@@ -144,8 +145,8 @@ class CaseRunner:
                     return self.phase_failure("generate", rc, generation_seconds=generation_seconds)
 
                 commands = (
-                    ("normalize-our", [str(self.norm), "normalize", "--auto-streaming", "--in", str(our_raw), "--out", str(our_unsorted)]),
-                    ("sort-our", [str(self.norm), "sort", "--in", str(our_unsorted), "--out", str(our_sorted)]),
+                    ("normalize-our", [str(self.normalize), "--auto-streaming", "--in", str(our_raw), "--out", str(our_unsorted)]),
+                    ("sort-our", [str(self.sort), "--in", str(our_unsorted), "--out", str(our_sorted)]),
                 )
                 for phase, command in commands:
                     rc, _ = self.run_command(command, cwd=work)
@@ -200,7 +201,8 @@ def decode_spec(encoded: str) -> dict:
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--ay", required=True)
-    parser.add_argument("--norm", required=True)
+    parser.add_argument("--normalize", required=True)
+    parser.add_argument("--sort", required=True)
     parser.add_argument("--spec-base64", required=True)
     parser.add_argument("--slice", required=True)
     parser.add_argument("--reference", required=True)
@@ -210,7 +212,10 @@ def main() -> int:
     output = Path(args.out)
     if output.exists():
         shutil.rmtree(output)
-    runner = CaseRunner(Path(args.ay), Path(args.norm), decode_spec(args.spec_base64), output, args.timeout)
+    runner = CaseRunner(
+        Path(args.ay), Path(args.normalize), Path(args.sort),
+        decode_spec(args.spec_base64), output, args.timeout,
+    )
     result = runner.execute(Path(args.slice), Path(args.reference))
     write_json_atomic(output / "result.json", result)
     for line in format_result_lines(result):

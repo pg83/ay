@@ -1,22 +1,30 @@
 import io
+import os
 import struct
+import subprocess
 import tarfile
 import tempfile
 import unittest
 from pathlib import Path
 
-import indexed
+INDEX = os.environ["AY_INDEX_BINARY"]
+MAGIC = b"AYIDX\x00\x00\x01"
+HEADER = 64
+ENTRY = struct.Struct("<IIIIQQ")
+KIND_FILE, KIND_DIR = 1, 2
+MODE_SYMLINK = 1 << 16
+ALIGN = 4096
 
 
 class IndexedReader:
     def __init__(self, path: Path):
         self.raw = path.read_bytes()
-        assert self.raw[:8] == indexed.MAGIC
+        assert self.raw[:8] == MAGIC
         count, names_offset, names_size, data_offset, data_size = struct.unpack_from("<QQQQQ", self.raw, 8)
-        self.entries = [indexed.ENTRY.unpack_from(self.raw, indexed.HEADER + i * indexed.ENTRY.size) for i in range(count)]
+        self.entries = [ENTRY.unpack_from(self.raw, HEADER + i * ENTRY.size) for i in range(count)]
         self.names = self.raw[names_offset:names_offset + names_size]
         self.data = self.raw[data_offset:data_offset + data_size]
-        assert data_offset % indexed.ALIGN == 0
+        assert data_offset % ALIGN == 0
 
     def name(self, i):
         offset, length = self.entries[i][:2]
@@ -24,7 +32,7 @@ class IndexedReader:
 
     def children(self, i):
         _, _, kind, _, first, count = self.entries[i]
-        assert kind == indexed.KIND_DIR
+        assert kind == KIND_DIR
         return {self.name(j): j for j in range(first, first + count)}
 
     def lookup(self, path):
@@ -35,14 +43,14 @@ class IndexedReader:
 
     def read(self, path):
         _, _, kind, _, offset, size = self.entries[self.lookup(path)]
-        assert kind == indexed.KIND_FILE
+        assert kind == KIND_FILE
         return self.data[offset:offset + size]
 
     def tree(self, i=0, prefix=""):
         out = {}
         for name, j in self.children(i).items():
             path = prefix + name
-            if self.entries[j][2] == indexed.KIND_DIR:
+            if self.entries[j][2] == KIND_DIR:
                 out[path + "/"] = None
                 out.update(self.tree(j, path + "/"))
             else:
@@ -54,8 +62,8 @@ class IndexedTest(unittest.TestCase):
     def pack(self, members, root_marker=None):
         directory = Path(tempfile.mkdtemp())
         self.addCleanup(lambda: __import__("shutil").rmtree(directory))
-        archive = directory / "in.tar.zst"
-        with tarfile.open(archive, "w:zst") as stream:
+        archive = io.BytesIO()
+        with tarfile.open(fileobj=archive, mode="w") as stream:
             for name, kind, value, *mode in members:
                 info = tarfile.TarInfo(name)
                 if mode:
@@ -68,16 +76,10 @@ class IndexedTest(unittest.TestCase):
                 info.linkname = value or ""
                 stream.addfile(info)
         output = directory / "out.indexed"
-        args = ["--in", str(archive), "--out", str(output)]
-        if root_marker:
-            args += ["--root-marker", root_marker]
-        import sys
-        saved = sys.argv
-        sys.argv = ["indexed.py", *args]
-        try:
-            indexed.main()
-        finally:
-            sys.argv = saved
+        args = [INDEX, *(["--root-marker", root_marker] if root_marker else [])]
+        with output.open("wb") as stdout:
+            subprocess.run(args, input=archive.getvalue(), stdout=stdout, stderr=subprocess.PIPE, check=True,
+                           env={**os.environ, "TMPDIR": str(directory)})
         return IndexedReader(output)
 
     def test_links_are_resolved_and_children_sorted(self):
@@ -106,32 +108,6 @@ class IndexedTest(unittest.TestCase):
         self.assertEqual(list(reader.children(0)), sorted(reader.children(0)))
         self.assertEqual(len(reader.data), len(b"aazzsecond"))
 
-    def test_zip_archives_with_symlinks(self):
-        import zipfile
-        directory = Path(tempfile.mkdtemp())
-        self.addCleanup(lambda: __import__("shutil").rmtree(directory))
-        archive = directory / "in.zip"
-        with zipfile.ZipFile(archive, "w") as stream:
-            stream.writestr("arcadia/.arcadia.root", b"")
-            stream.writestr("arcadia/a/file.txt", b"data")
-            link = zipfile.ZipInfo("arcadia/link")
-            link.external_attr = (0o120777 << 16)
-            stream.writestr(link, b"a/file.txt")
-        output = directory / "out.indexed"
-        import sys
-        saved = sys.argv
-        sys.argv = ["indexed.py", "--in", str(archive), "--out", str(output), "--root-marker", ".arcadia.root"]
-        try:
-            indexed.main()
-        finally:
-            sys.argv = saved
-        self.assertEqual(IndexedReader(output).tree(), {
-            ".arcadia.root": b"",
-            "a/": None,
-            "a/file.txt": b"data",
-            "link": b"data",
-        })
-
     def test_modes_follow_unpacking(self):
         reader = self.pack([
             ("d/secret", "file", b"x", 0o000),
@@ -140,8 +116,12 @@ class IndexedTest(unittest.TestCase):
         reader_entries = {reader.name(i): reader.entries[i] for i in range(len(reader.entries))}
         self.assertEqual(reader_entries["d"][3], 0o755)
         self.assertEqual(reader_entries["secret"][3], 0o000)
-        self.assertTrue(reader_entries["link"][3] & indexed.MODE_SYMLINK)
-        self.assertFalse(reader_entries["secret"][3] & indexed.MODE_SYMLINK)
+        self.assertTrue(reader_entries["link"][3] & MODE_SYMLINK)
+        self.assertFalse(reader_entries["secret"][3] & MODE_SYMLINK)
+
+    def test_missing_root_marker_fails(self):
+        with self.assertRaises(subprocess.CalledProcessError):
+            self.pack([("README", "file", b"x")], root_marker=".arcadia.root")
 
     def test_root_marker_reroots_the_tree(self):
         reader = self.pack([

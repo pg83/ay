@@ -25,21 +25,22 @@ import shutil
 import sys
 from pathlib import Path
 
+tool = Path(__file__).name
 args = sys.argv[1:]
 with (Path(__file__).parent / "calls.jsonl").open("a") as calls:
-    calls.write(json.dumps({"args": args, "env": dict(os.environ)}) + "\n")
-if args and args[0] == "make":
+    calls.write(json.dumps({"tool": tool, "args": args, "env": dict(os.environ)}) + "\n")
+if tool == "ay" and args and args[0] == "make":
     print('{"node":1}')
-elif args[:1] == ["normalize"]:
+elif tool == "normalize":
     source = Path(args[args.index("--in") + 1])
     destination = Path(args[args.index("--out") + 1])
     shutil.copyfile(source, destination)
-elif args[:1] == ["sort"]:
+elif tool == "sort":
     source = Path(args[args.index("--in") + 1])
     destination = Path(args[args.index("--out") + 1])
     destination.write_text("".join(sorted(source.read_text().splitlines(keepends=True))))
 else:
-    raise SystemExit("unexpected fake ay invocation: " + repr(args))
+    raise SystemExit("unexpected fake invocation: " + repr([tool, *args]))
 '''
 
 
@@ -48,9 +49,11 @@ class ValidationTest(unittest.TestCase):
         temporary = tempfile.TemporaryDirectory()
         self.addCleanup(temporary.cleanup)
         root = Path(temporary.name)
-        ay = root / "ay"
-        ay.write_text(FAKE_AY)
-        ay.chmod(0o755)
+        tools = {}
+        for name in ("ay", "normalize", "sort"):
+            tools[name] = root / name
+            tools[name].write_text(FAKE_AY)
+            tools[name].chmod(0o755)
         source = root / "slice.indexed"
         source.write_bytes(b"")
         graph = root / "reference.norm.jsonl"
@@ -65,14 +68,14 @@ class ValidationTest(unittest.TestCase):
             **extra,
         }
         output = root / "output"
-        result = CaseRunner(ay, ay, spec, output, 10).execute(source, graph)
+        result = CaseRunner(tools["ay"], tools["normalize"], tools["sort"], spec, output, 10).execute(source, graph)
         return result, output
 
     def fake_ay_calls(self, output: Path) -> dict[str, list[dict]]:
         calls: dict[str, list[dict]] = {}
         for line in (output.parent / "calls.jsonl").read_text().splitlines():
             call = json.loads(line)
-            calls.setdefault(call["args"][0], []).append(call)
+            calls.setdefault(call["args"][0] if call["tool"] == "ay" else call["tool"], []).append(call)
         return calls
 
     def test_token_guard_ignores_uids_with_the_token_prefix(self):

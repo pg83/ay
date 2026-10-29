@@ -13,7 +13,7 @@ class DumpEdgeContractsTest(unittest.TestCase):
         with tempfile.TemporaryDirectory(prefix='ay-dump-edge-') as directory:
             path = Path(directory) / 'graph.json'
             path.write_text(graph if isinstance(graph, str) else json.dumps(graph))
-            return subprocess.run([str(lib.NORM), 'normalize', '--in', str(path),
+            return subprocess.run([str(lib.NORMALIZE), '--in', str(path),
                                    '--ref-graph'],
                                   capture_output=True, text=True, timeout=10)
 

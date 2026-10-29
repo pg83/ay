@@ -4,7 +4,9 @@ from pathlib import Path
 
 
 AY = Path(os.environ["AY_TEST_BINARY"])
-NORM = Path(os.environ["AY_NORM_BINARY"])
+NORMALIZE = Path(os.environ["AY_NORMALIZE_BINARY"])
+SORT = Path(os.environ["AY_SORT_BINARY"])
+TOOLS = {"normalize": NORMALIZE, "sort": SORT}
 
 
 def run_process(*args, timeout=10, env=None, binary=AY):
@@ -30,5 +32,5 @@ def run(*args, timeout=10, env=None, binary=AY):
     return result
 
 
-def run_norm(*args, timeout=10):
-    return run(*args, timeout=timeout, binary=NORM)
+def run_norm(tool, *args, timeout=10):
+    return run(*args, timeout=timeout, binary=TOOLS[tool])

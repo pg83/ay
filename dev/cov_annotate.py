@@ -30,8 +30,7 @@ DEV = {
     "refac.go", "refac_case.go", "linters.go", "macro_audit.go",
     "macro_audit_known.go", "probe.go", "probe_callsite.go",
     "probe_mapinstr.go", "probe_strinstr.go", "perf.go", "perf_darts.go",
-    "cas_analyze.go", "dump.go", "dump_diff.go", "dump_normalize.go",
-    "dump_sort.go", "dump_grep.go", "merge_heap.go",
+    "cas_analyze.go", "dump.go", "dump_diff.go", "dump_grep.go",
 }
 EXEC = {"executor.go", "ssh_agent.go", "fetch.go"}
 MIXED = {"fs_os.go", "fs_linux.go", "fs_mem.go", "fs_other.go", "main.go"}

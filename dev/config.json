@@ -22,8 +22,8 @@
     ],
     "target": "devtools/ymake/bin",
     "xfail": false,
-    "slice_url": "https://proxy.sandbox.yandex-team.ru/14091056242",
-    "slice_sha256": "0b6b6bf45c729af9e5b277b58aaec49555e488362582fe8f09bce2b9a343b117",
+    "slice_url": "https://proxy.sandbox.yandex-team.ru/14158816489",
+    "slice_sha256": "3cfec2e42d3a133eccfd30bd5e5a578633aeaab971a73613c547777baf748768",
     "graph_url": "https://proxy.sandbox.yandex-team.ru/14091057998",
     "graph_sha256": "01f93fab892f1f2a1f4f9884c8d67b6d1829f3698e05a2e1fb6ff553d5672112"
   },
@@ -50,8 +50,8 @@
     ],
     "target": "devtools/ya/bin",
     "xfail": false,
-    "slice_url": "https://proxy.sandbox.yandex-team.ru/14091056242",
-    "slice_sha256": "0b6b6bf45c729af9e5b277b58aaec49555e488362582fe8f09bce2b9a343b117",
+    "slice_url": "https://proxy.sandbox.yandex-team.ru/14158816489",
+    "slice_sha256": "3cfec2e42d3a133eccfd30bd5e5a578633aeaab971a73613c547777baf748768",
     "graph_url": "https://proxy.sandbox.yandex-team.ru/14091061202",
     "graph_sha256": "49964545d261cb76cf6b0e81c74975e61bce3f1920bda9ce7f0a37834d93e896"
   },
@@ -76,8 +76,8 @@
     ],
     "target": "ydb/apps/ydbd",
     "xfail": false,
-    "slice_url": "https://proxy.sandbox.yandex-team.ru/14091073513",
-    "slice_sha256": "93d48d3ee1efe3235e33f04388c32f3fecf90d09bc5f35a8a24186ec5d6f3bff",
+    "slice_url": "https://proxy.sandbox.yandex-team.ru/14158817136",
+    "slice_sha256": "eb3e9c2e374cd6c93872666bc9bc659101a2434ea12eaac571846ff0ea0aa49f",
     "graph_url": "https://proxy.sandbox.yandex-team.ru/14091078396",
     "graph_sha256": "b5afc307d8dd50ce3e019e0ea38225e6bc2452371de4e2f9c85491e785c04a40"
   },

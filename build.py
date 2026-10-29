@@ -83,13 +83,7 @@ coverage_enabled = bool(build.flags.coverage)
 race_enabled = bool(build.flags.race)
 COVERAGE_MINIMUM = "95"
 
-# ay_norm (the graph normalizer the gate compares with) is its own program:
-# the aynorm-tagged files plus the two it shares with ay. Its cache key does
-# not move when the rest of ay changes, so normalized references stay cached.
-NORM_ONLY_SOURCES = [*build.glob("$(S)/norm_*.go"), "$(S)/merge_heap.go"]
-NORM_SOURCES = sorted([*NORM_ONLY_SOURCES, "$(S)/dump.go"])
-
-GO_SOURCES = [path for path in build.glob("$(S)/*.go") if path not in NORM_ONLY_SOURCES]
+GO_SOURCES = build.glob("$(S)/*.go")
 
 GENERATED_DENSE_MAPS = [
     "$(B)/generated/go/dense_map_2.go",
@@ -224,17 +218,33 @@ ay = go_binary("ay", "$(B)/bin/ay", go_overlay_build("$(B)/bin/ay", []))
 # The gate's ay reads the source tree from an .indexed resource (fs_indexed.go).
 ay_gate = go_binary("ay_gate", "$(B)/bin/ay-gate", go_overlay_build("$(B)/bin/ay-gate", ["aygate"]))
 
-NORM_STAGE = "$(B)/norm-src"
-ay_norm = command(
-    name="ay_norm",
-    inputs=[*NORM_SOURCES, "$(S)/go.mod", "$(S)/go.sum"],
-    outputs=["$(B)/bin/ay-norm"],
-    cmd=[
-        ["rm", "-rf", NORM_STAGE],
-        mkdir(NORM_STAGE),
-        ["cp", "--", *NORM_SOURCES, "$(S)/go.mod", "$(S)/go.sum", NORM_STAGE + "/"],
-        ["go", "build", "-C", NORM_STAGE, "-tags", "aynorm", "-trimpath", "-buildvcs=false", "-o", "$(B)/bin/ay-norm", "."],
-    ],
+# The acceptance stand's stages are standalone programs outside the ay
+# package: dev/<name>.go builds alone from one stdlib-only file, and a stage
+# with dependencies lives in its own module under dev/<name>/.
+def dev_binary(name):
+    output = f"$(B)/bin/ay-{name}"
+    return command(
+        name=f"dev_{name}",
+        inputs=[f"$(S)/dev/{name}.go", "$(S)/go.mod", "$(S)/go.sum"],
+        outputs=[output],
+        cmd=["go", "build", "-trimpath", "-buildvcs=false", "-o", output, f"dev/{name}.go"],
+        cwd="$(S)",
+        env=GO_ENV,
+        descr="GO",
+        color="cyan",
+    )
+
+
+ay_index = dev_binary("index")
+ay_graph = dev_binary("graph")
+ay_sort = dev_binary("sort")
+ay_graphmerge = dev_binary("graphmerge")
+ay_indexmerge = dev_binary("indexmerge")
+ay_normalize = command(
+    name="dev_normalize",
+    inputs=["$(S)/dev/norm/normalize.go", "$(S)/dev/norm/go.mod", "$(S)/dev/norm/go.sum"],
+    outputs=["$(B)/bin/ay-normalize"],
+    cmd=["go", "build", "-C", "dev/norm", "-trimpath", "-buildvcs=false", "-o", "$(B)/bin/ay-normalize", "."],
     cwd="$(S)",
     env=GO_ENV,
     descr="GO",
@@ -286,11 +296,18 @@ python_test = command(
         *build.glob("$(S)/dev/*.py"),
     ],
     outputs=[python_test_stamp],
+    deps=[ay_index, ay_graph, ay_graphmerge, ay_indexmerge],
     cmd=[
         ["python3", "-m", "unittest", "discover", "-s", "dev", "-p", "*_test.py"],
         touch(python_test_stamp),
     ],
     cwd="$(S)",
+    env={
+        "AY_INDEX_BINARY": ay_index.outputs[0],
+        "AY_GRAPH_BINARY": ay_graph.outputs[0],
+        "AY_GRAPHMERGE_BINARY": ay_graphmerge.outputs[0],
+        "AY_INDEXMERGE_BINARY": ay_indexmerge.outputs[0],
+    },
     descr="PY",
     color="green",
 )
@@ -342,7 +359,8 @@ for test_path in build.glob("$(S)/tst/**/test_*.py"):
     test_outputs = [test_stamp]
     test_env = {
         "AY_TEST_BINARY": ay_test.outputs[0],
-        "AY_NORM_BINARY": ay_norm.outputs[0],
+        "AY_NORMALIZE_BINARY": ay_normalize.outputs[0],
+        "AY_SORT_BINARY": ay_sort.outputs[0],
         "AY_TEST_SSH_OAUTH": "",
         "PYTHONDONTWRITEBYTECODE": "1",
     }
@@ -365,7 +383,7 @@ for test_path in build.glob("$(S)/tst/**/test_*.py"):
         name=f"unit_{test_slug}",
         inputs=test_inputs,
         outputs=test_outputs,
-        deps=[ay_test, ay_norm],
+        deps=[ay_test, ay_normalize, ay_sort],
         cmd=test_commands,
         cwd="$(S)",
         env=test_env,
@@ -551,21 +569,24 @@ indexed_targets = {}
 reference_targets = {}
 
 
+# Resource archives are tar.zst (older ones tar.gz, which zstd also reads);
+# the stage programs read the plain tar stream.
+UNPACK = 'zstd -dc < "$1" | "$2" "${@:4}" > "$3"'
+
+
 def validation_indexed(archive, resource, root_marker=None):
-    """The resource tarball as one .indexed file (dev/indexed.py)."""
+    """The resource tarball as one .indexed file (dev/index.go)."""
     if resource not in indexed_targets:
         output = f"$(B)/validation/indexed/{resource}.indexed"
         indexed_targets[resource] = command(
             name=f"validation_indexed_{slug(resource)}",
-            inputs=["$(S)/dev/indexed.py"],
             outputs=[output],
-            deps=[archive],
+            deps=[archive, ay_index],
             cmd=[
                 mkdir("$(B)/validation/indexed"),
                 [
-                    "python3", "$(S)/dev/indexed.py",
-                    "--in", archive.outputs[0],
-                    "--out", output,
+                    "bash", "-o", "pipefail", "-c", UNPACK, "index",
+                    archive.outputs[0], ay_index.outputs[0], output,
                     *(["--root-marker", root_marker] if root_marker else []),
                 ],
             ],
@@ -576,17 +597,16 @@ def validation_indexed(archive, resource, root_marker=None):
 
 
 def validation_reference(archive, resource):
-    """The reference graph normalized and sorted once by ay_norm."""
+    """The reference graph extracted (dev/graph.go), normalized and sorted once."""
     if resource not in reference_targets:
         graph = f"$(B)/validation/graphs/{resource}.json"
         extracted = command(
             name=f"validation_graph_{slug(resource)}",
-            inputs=["$(S)/dev/reference_graph.py"],
             outputs=[graph],
-            deps=[archive],
+            deps=[archive, ay_graph],
             cmd=[
                 mkdir("$(B)/validation/graphs"),
-                ["python3", "$(S)/dev/reference_graph.py", "--in", archive.outputs[0], "--out", graph],
+                ["bash", "-o", "pipefail", "-c", UNPACK, "graph", archive.outputs[0], ay_graph.outputs[0], graph],
             ],
             descr="RG",
             color="blue",
@@ -596,14 +616,14 @@ def validation_reference(archive, resource):
         reference_targets[resource] = command(
             name=f"validation_reference_{slug(resource)}",
             outputs=[output],
-            deps=[extracted, ay_norm],
+            deps=[extracted, ay_normalize, ay_sort],
             cmd=[
                 mkdir("$(B)/validation/reference"),
                 [
-                    ay_norm.outputs[0], "normalize", "--ref-graph", "--auto-streaming",
+                    ay_normalize.outputs[0], "--ref-graph", "--auto-streaming",
                     "--in", graph, "--out", unsorted,
                 ],
-                [ay_norm.outputs[0], "sort", "--in", unsorted, "--out", output],
+                [ay_sort.outputs[0], "--in", unsorted, "--out", output],
                 ["rm", "-f", unsorted],
             ],
             descr="RN",
@@ -639,12 +659,13 @@ for case in validation_config:
             "$(S)/dev/validation_lib.py",
         ],
         outputs=[result_directory],
-        deps=[ay_gate, ay_norm, slice_indexed, reference],
+        deps=[ay_gate, ay_normalize, ay_sort, slice_indexed, reference],
         cmd=[
             "python3",
             "$(S)/dev/validate_case.py",
             "--ay", ay_gate.outputs[0],
-            "--norm", ay_norm.outputs[0],
+            "--normalize", ay_normalize.outputs[0],
+            "--sort", ay_sort.outputs[0],
             "--spec-base64", encoded_spec,
             "--slice", slice_indexed.outputs[0],
             "--reference", reference.outputs[0],
