@@ -27,26 +27,25 @@ type Cmd struct {
 }
 
 type Node struct {
-	Extra               *NodeExtra     `json:"-"`
-	Cmds                []Cmd          `json:"cmds"`
-	Env                 EnvVars        `json:"env"`
-	Inputs              InputChunks    `json:"-"`
-	InputFixes          []FixID        `json:"-"`
-	KV                  *KV            `json:"kv"`
-	KVExts              []KVExt        `json:"-"`
-	Outputs             []VFS          `json:"outputs"`
-	Platform            *Platform      `json:"platform"`
-	Requirements        *Requirements  `json:"requirements"`
-	PresetUID           *UID           `json:"-"`
-	DepRefs             []NodeRef      `json:"-"`
-	ForeignDepRefs      []NodeRef      `json:"-"`
-	Resources           []STR          `json:"-"`
-	ResourceGlobals     []ResourceDecl `json:"-"`
-	Ref                 NodeRef        `json:"-"`
-	UIDSalt             STR            `json:"-"`
-	DisableCache        bool           `json:"-"`
-	Module              bool           `json:"-"`
-	foreignToolsPending bool
+	Extra           *NodeExtra     `json:"-"`
+	Cmds            []Cmd          `json:"cmds"`
+	Env             EnvVars        `json:"env"`
+	Inputs          InputChunks    `json:"-"`
+	InputFixes      []FixID        `json:"-"`
+	KV              *KV            `json:"kv"`
+	KVExts          []KVExt        `json:"-"`
+	Outputs         []VFS          `json:"outputs"`
+	Platform        *Platform      `json:"platform"`
+	Requirements    *Requirements  `json:"requirements"`
+	PresetUID       *UID           `json:"-"`
+	DepRefs         []NodeRef      `json:"-"`
+	ForeignDepRefs  []NodeRef      `json:"-"`
+	Resources       []STR          `json:"-"`
+	ResourceGlobals []ResourceDecl `json:"-"`
+	Ref             NodeRef        `json:"-"`
+	UIDSalt         STR            `json:"-"`
+	DisableCache    bool           `json:"-"`
+	Module          bool           `json:"-"`
 }
 
 func (n *Node) buildDeps(fetchRefs *DenseMap[STR, NodeRef]) func(func(NodeRef) bool) {

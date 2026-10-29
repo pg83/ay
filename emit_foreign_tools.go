@@ -5,72 +5,44 @@ import (
 	"slices"
 )
 
-type foreignToolCandidate struct {
+type ForeignTool struct {
 	path     ARG
-	instance ModuleInstance
-	target   *ModuleEmitResult
 	host     *ModuleEmitResult
 	boundRef NodeRef
 }
 
-type foreignToolBindings struct {
-	candidates map[ModuleInstance]*foreignToolCandidate
-	hosts      DenseMap[ARG, *ModuleEmitResult]
-	byRef      DenseMap[NodeRef, *foreignToolCandidate]
-	order      []*foreignToolCandidate
-	startRefs  []NodeRef
-	hostPaths  DenseMap[NodeRef, ARG]
-}
-
-func (e *EmitContext) foreignToolResult(path ARG) (*ModuleEmitResult, *foreignToolCandidate) {
+func (e *EmitContext) foreignToolResult(path ARG) *ModuleEmitResult {
 	ctx := e.ctx
 
 	if e.instance.Platform == ctx.host || e.instance.Platform == ctx.host.picVariant || isJavaModuleType(ctx.moduleName(path.string())) {
-		return ctx.toolResult(path), nil
+		return ctx.toolResult(path)
 	}
 
-	bindings := &ctx.foreignTools
 	instance := ctx.rootInstance(path.string(), demandLinked)
 
 	instance.Platform = e.instance.Platform
 
-	candidate := bindings.candidates[instance]
+	if result := ctx.memoGet(instance); result != nil && result.ForeignTool != nil {
+		ctx.consumeModuleWarnings(result)
 
-	if candidate != nil && candidate.target != nil {
-		ctx.consumeModuleWarnings(candidate.target)
-
-		return candidate.target, candidate
+		return result
 	}
-
-	if candidate == nil {
-		candidate = &foreignToolCandidate{path: path}
-	}
-
-	candidate.instance = instance
 
 	result := func() *ModuleEmitResult {
 		ctx.emit.deferPublication++
 
 		defer func() { ctx.emit.deferPublication-- }()
 
-		return genModule(ctx, candidate.instance)
+		return genModule(ctx, instance)
 	}()
 
 	ctx.consumeModuleWarnings(result)
 
 	ctx.moduleByRef.put(result.LDRef, result)
 
-	candidate.target = result
+	result.ForeignTool = &ForeignTool{path: path}
 
-	if bindings.candidates == nil {
-		bindings.candidates = make(map[ModuleInstance]*foreignToolCandidate)
-	}
-
-	bindings.candidates[instance] = candidate
-	bindings.byRef.put(result.LDRef, candidate)
-	bindings.order = append(bindings.order, candidate)
-
-	return result, candidate
+	return result
 }
 
 func (ctx *GenCtx) moduleBuildDeps(ref NodeRef) ([]NodeRef, bool) {
@@ -158,26 +130,38 @@ func (ctx *GenCtx) hasPeerInputFixes(node *Node) bool {
 	return false
 }
 
+func (ctx *GenCtx) foreignToolOf(ref NodeRef) *ModuleEmitResult {
+	if result, ok := ctx.moduleByRef.get(ref); ok && result.ForeignTool != nil {
+		return result
+	}
+
+	return nil
+}
+
+func (ctx *GenCtx) requireHostTool(path ARG) *ModuleEmitResult {
+	host := ctx.toolResult(path)
+
+	host.ToolRequired = true
+	ctx.scannerHost.codegen.use(*host.LDPath)
+
+	return host
+}
+
 func (ctx *GenCtx) bindForeignTools() {
-	bindings := &ctx.foreignTools
 	weak := nodeRefScratches.get()
 
 	defer func() { nodeRefScratches.put(weak) }()
 
 	var selected BitSet
+	var deferred []NodeRef
+
+	stack := append([]NodeRef(nil), ctx.emit.results...)
+
+	selectProducer := func(ref NodeRef) {
+		stack = append(stack, ref)
+	}
 
 	for {
-		possible := len(bindings.order)
-
-		selected = BitSet{}
-		weak = weak[:0]
-
-		stack := append([]NodeRef(nil), bindings.startRefs...)
-
-		selectProducer := func(ref NodeRef) {
-			stack = append(stack, ref)
-		}
-
 		for len(stack) > 0 {
 			ref := stack[len(stack)-1]
 
@@ -190,6 +174,8 @@ func (ctx *GenCtx) bindForeignTools() {
 			node := ctx.emit.nodes.s[ref]
 
 			if node == nil {
+				deferred = append(deferred, ref)
+
 				continue
 			}
 
@@ -203,24 +189,26 @@ func (ctx *GenCtx) bindForeignTools() {
 			var foreign map[NodeRef]NodeRef
 
 			for _, dep := range node.ForeignDepRefs {
-				if tool, ok := bindings.byRef.get(dep); ok {
+				result, ok := ctx.moduleByRef.get(dep)
+
+				if !ok {
+					continue
+				}
+
+				if tool := result.ForeignTool; tool != nil {
 					if tool.host == nil {
 						tool.host = ctx.toolResult(tool.path)
-						bindings.hosts.put(tool.path, tool.host)
 					}
 
-					ctx.scannerHost.codegen.use(*tool.host.LDPath)
+					ctx.requireHostTool(tool.path)
 
 					if foreign == nil {
 						foreign = make(map[NodeRef]NodeRef)
 					}
 
 					foreign[dep] = tool.host.LDRef
-				} else if path, ok := bindings.hostPaths.get(dep); ok {
-					host := ctx.toolResult(path)
-
-					bindings.hosts.put(path, host)
-					ctx.scannerHost.codegen.use(*host.LDPath)
+				} else if result.ToolPath != 0 {
+					ctx.requireHostTool(result.ToolPath)
 				}
 			}
 
@@ -259,7 +247,20 @@ func (ctx *GenCtx) bindForeignTools() {
 			}
 		}
 
-		if !ctx.flushFbsContextBindings() && possible == len(bindings.order) {
+		emitted := ctx.flushFbsFlatcRecipes()
+		rest := deferred[:0]
+
+		for _, ref := range deferred {
+			if ctx.emit.nodes.s[ref] != nil {
+				stack = append(stack, ref)
+			} else {
+				rest = append(rest, ref)
+			}
+		}
+
+		deferred = rest
+
+		if len(stack) == 0 && !emitted {
 			break
 		}
 	}
@@ -277,15 +278,16 @@ func (ctx *GenCtx) bindForeignTools() {
 		copied := false
 
 		for i, dep := range node.ForeignDepRefs {
-			tool, ok := bindings.byRef.get(dep)
+			target := ctx.foreignToolOf(dep)
 
-			if !ok {
+			if target == nil {
 				continue
 			}
 
-			tool.host, _ = bindings.hosts.get(tool.path)
+			tool := target.ForeignTool
+			host, _ := ctx.tools.get(tool.path)
 
-			if tool.host == nil {
+			if host == nil || !host.ToolRequired {
 				if ctx.emit.exportEligible.has(uint32(node.Ref)) {
 					ctx.onWarn(Warn{Kind: WarnToolConf, Message: fmt.Sprintf("%s: Tool is not found in a host graph", tool.path.string())})
 				}
@@ -293,17 +295,15 @@ func (ctx *GenCtx) bindForeignTools() {
 				continue
 			}
 
+			tool.host = host
+
 			if !copied {
 				node.ForeignDepRefs = ctx.na.refList(node.ForeignDepRefs...)
 				copied = true
 			}
 
-			selected := ctx.foreignToolRef(tool)
-
-			node.ForeignDepRefs[i] = selected
+			node.ForeignDepRefs[i] = ctx.foreignToolRef(target)
 		}
-
-		node.foreignToolsPending = false
 	}
 }
 
@@ -333,16 +333,18 @@ func (e *StreamingEmitter) reachableNodes(roots []NodeRef) BitSet {
 	return visited
 }
 
-func (ctx *GenCtx) foreignToolRef(tool *foreignToolCandidate) NodeRef {
+func (ctx *GenCtx) foreignToolRef(target *ModuleEmitResult) NodeRef {
+	tool := target.ForeignTool
+
 	if tool.boundRef != 0 {
 		return tool.boundRef
 	}
 
-	if *tool.target.LDPath == *tool.host.LDPath {
+	if *target.LDPath == *tool.host.LDPath {
 		return tool.host.LDRef
 	}
 
-	from, to := *tool.host.LDPath, *tool.target.LDPath
+	from, to := *tool.host.LDPath, *target.LDPath
 
 	tool.boundRef = ctx.emit.emitNode(NodeSpec{Node: Node{Platform: ctx.host,
 		Cmds: ctx.na.cmdList(Cmd{

@@ -16,18 +16,17 @@ type RunProgramAuxTool struct {
 }
 
 type RunProgramNodeSpec struct {
-	stmt                *RunProgramStmt
-	toolBinPath         VFS
-	toolLDRef           NodeRef
-	auxTools            []RunProgramAuxTool
-	foreignToolsPending bool
-	inVFSs              []VFS
-	inSources           []VFS
-	inBuilds            []VFS
-	outVFSByToken       map[ANY]VFS
-	stdoutVFS           *VFS
-	closureSource       []VFS
-	closureBuild        []VFS
+	stmt          *RunProgramStmt
+	toolBinPath   VFS
+	toolLDRef     NodeRef
+	auxTools      []RunProgramAuxTool
+	inVFSs        []VFS
+	inSources     []VFS
+	inBuilds      []VFS
+	outVFSByToken map[ANY]VFS
+	stdoutVFS     *VFS
+	closureSource []VFS
+	closureBuild  []VFS
 }
 
 func (spec *RunProgramNodeSpec) isOutput(v VFS) bool {
@@ -162,18 +161,13 @@ func (e *EmitContext) emitRunProgram(stmt *RunProgramStmt) {
 
 	e.dirScratch = protoImportPbH
 
-	res, mainTool := e.foreignToolResult(internArg(filepath.Clean(stmt.ToolPath.relOrSelf().string())))
+	res := e.foreignToolResult(internArg(filepath.Clean(stmt.ToolPath.relOrSelf().string())))
 
 	if res.LDPath == nil {
 		throwFmt("gen: tool %s has no linkable output", stmt.ToolPath.string())
 	}
 
-	auxTools, foreignTools := e.resolveRunProgramAuxTools(anyStrs(stmt.ToolPaths))
-
-	if mainTool != nil {
-		foreignTools = append(foreignTools, mainTool)
-	}
-
+	auxTools := e.resolveRunProgramAuxTools(anyStrs(stmt.ToolPaths))
 	generatorRefs := []NodeRef{res.LDRef}
 
 	for _, tool := range auxTools {
@@ -208,18 +202,17 @@ func (e *EmitContext) emitRunProgram(stmt *RunProgramStmt) {
 		}
 
 		e.emitPR(RunProgramNodeSpec{
-			stmt:                stmt,
-			toolBinPath:         *res.LDPath,
-			toolLDRef:           res.LDRef,
-			auxTools:            auxTools,
-			foreignToolsPending: len(foreignTools) > 0,
-			inVFSs:              snap.inVFSs,
-			inSources:           snap.inSources,
-			inBuilds:            snap.inBuilds,
-			outVFSByToken:       outVFSByToken,
-			stdoutVFS:           stdoutVFS,
-			closureSource:       inputClosure.sources,
-			closureBuild:        inputClosure.builds,
+			stmt:          stmt,
+			toolBinPath:   *res.LDPath,
+			toolLDRef:     res.LDRef,
+			auxTools:      auxTools,
+			inVFSs:        snap.inVFSs,
+			inSources:     snap.inSources,
+			inBuilds:      snap.inBuilds,
+			outVFSByToken: outVFSByToken,
+			stdoutVFS:     stdoutVFS,
+			closureSource: inputClosure.sources,
+			closureBuild:  inputClosure.builds,
 		}, prRef)
 	}
 
@@ -410,20 +403,8 @@ func resolveRunProgramAuxTools(ctx *GenCtx, toolPaths []string) []RunProgramAuxT
 	return collectRunProgramAuxTools(toolPaths, ctx.toolResult)
 }
 
-func (e *EmitContext) resolveRunProgramAuxTools(toolPaths []string) ([]RunProgramAuxTool, []*foreignToolCandidate) {
-	var candidates []*foreignToolCandidate
-
-	tools := collectRunProgramAuxTools(toolPaths, func(path ARG) *ModuleEmitResult {
-		result, candidate := e.foreignToolResult(path)
-
-		if candidate != nil {
-			candidates = append(candidates, candidate)
-		}
-
-		return result
-	})
-
-	return tools, candidates
+func (e *EmitContext) resolveRunProgramAuxTools(toolPaths []string) []RunProgramAuxTool {
+	return collectRunProgramAuxTools(toolPaths, e.foreignToolResult)
 }
 
 func collectRunProgramAuxTools(toolPaths []string, resolve func(ARG) *ModuleEmitResult) []RunProgramAuxTool {
@@ -728,9 +709,6 @@ func (e *EmitContext) emitPR(spec RunProgramNodeSpec, id NodeRef) {
 	}
 
 	e.resolveNodeCodegenRefs(&node)
-
-	node.foreignToolsPending = spec.foreignToolsPending
-
 	e.ctx.emit.emitReservedNodePtr(&node.Node, id)
 }
 

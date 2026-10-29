@@ -29,3 +29,11 @@ func (m *DenseMap[K, V]) put(k K, v V) {
 	m.vals.pushBack(v)
 	m.idx.put(uint32(k), uint32(len(m.vals.s)-1))
 }
+
+func (m *DenseMap[K, V]) values() []V {
+	if len(m.vals.s) == 0 {
+		return nil
+	}
+
+	return m.vals.s[1:]
+}

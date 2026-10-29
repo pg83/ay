@@ -14,7 +14,6 @@ func (e *EmitContext) emitProto2Fbs(stmt Proto2FbsStmt, output VFS) {
 	na := ctx.na
 	input := e.runProgramInputVFS(stmt.Source.string())
 	toolRef, tool := ctx.tool(argContribLibsFlatbuffersFlatc)
-	imports := e.scanner.walkClosure(input, d.scanCtx, scanDomainFlatc)
 	bindir := e.instance.Path.rel().build()
 	temporary := build(e.instance.Path.relString(), "/", path.Base(output.relString()))
 	fsTools := copyFsToolsVFS
@@ -27,7 +26,6 @@ func (e *EmitContext) emitProto2Fbs(stmt Proto2FbsStmt, output VFS) {
 		), Inputs: na.rootInputList(na.vfsList(tool, input), ctx.scripts[fsTools.rel()]), Outputs: na.vfsList(output), ForeignDepRefs: na.refList(toolRef), Resources: usesPython3},
 	}
 
-	node.Inputs = append(node.Inputs, imports.bucketList()...)
 	node.input.roots = na.inputList(node.Inputs[0][1:], node.Inputs[1:]...)
 
 	var parsed ParsedIncludeSet

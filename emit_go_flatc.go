@@ -54,7 +54,6 @@ func (e *EmitContext) emitGoFlatcSource(meta SrcMeta) {
 	na := ctx.na
 	src := e.sourceForEmission(meta)
 	toolRef, tool := ctx.tool(argContribLibsFlatbuffersFlatc)
-	imports := e.scanner.walkClosure(src, d.scanCtx, scanDomainFlatc)
 	module := instance.Path.relString()
 	out := build(module, "/", strings.TrimSuffix(e.moduleSourceName(meta.Source), ".fbs"), ".fbs.gosrc")
 	bindir := build(module)
@@ -75,7 +74,6 @@ func (e *EmitContext) emitGoFlatcSource(meta SrcMeta) {
 		ForeignDepRefs: na.refList(toolRef), Outputs: na.vfsList(out), Resources: usesPython3},
 	}
 
-	node.Inputs = append(node.Inputs, imports.bucketList()...)
 	node.input.roots = na.inputList(node.Inputs[0][1:], node.Inputs[1:]...)
 
 	ref := e.emitNode(node)

@@ -6,20 +6,19 @@ var archivesKV = KV{P: pkAR, PC: pcLightRed}
 
 func (e *EmitContext) emitArchiveStmt(a ArchiveEntry) {
 	ctx := e.ctx
-	tool, candidate := e.foreignToolResult(argToolsArchiver)
+	tool := e.foreignToolResult(argToolsArchiver)
 
 	if tool.LDPath == nil {
 		throwFmt("gen: tool %s has no linkable output", argToolsArchiver.string())
 	}
 
-	e.emitArchive(a, *tool.LDPath, tool.LDRef, candidate != nil, ctx.emit, e.codegen)
+	e.emitArchive(a, *tool.LDPath, tool.LDRef, ctx.emit, e.codegen)
 }
 
 func (e *EmitContext) emitArchive(
 	a ArchiveEntry,
 	toolBinPath VFS,
 	toolLDRef NodeRef,
-	foreignToolsPending bool,
 	emit *StreamingEmitter,
 	reg *CodegenRegistry,
 ) {
@@ -106,11 +105,10 @@ func (e *EmitContext) emitArchive(
 		Cmds: na.cmdList(Cmd{CmdArgs: na.chunkList(cmdArgs),
 			Env: env}),
 		Env: env, Inputs: na.rootInputList(inputs, na.srcChunk(toolBinPath)), KV: &archivesKV,
-		Outputs:             na.vfsList(archiveVFS),
-		DepRefs:             deps,
-		ForeignDepRefs:      na.refList(toolLDRef),
-		foreignToolsPending: foreignToolsPending,
-		Resources:           instance.Platform.UsesPython3Clang}, input: InputSpec{roots: na.inputList(inputs)},
+		Outputs:        na.vfsList(archiveVFS),
+		DepRefs:        deps,
+		ForeignDepRefs: na.refList(toolLDRef),
+		Resources:      instance.Platform.UsesPython3Clang}, input: InputSpec{roots: na.inputList(inputs)},
 	}
 
 	arRef := emit.reserve()

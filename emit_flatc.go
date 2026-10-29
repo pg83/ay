@@ -190,24 +190,27 @@ func (e *EmitContext) emitFlatcProducer(srcVFS VFS, v *FlatcVariant) {
 	bfbsVFS := build(strings.TrimSuffix(srcRel, v.srcExt), v.bfbsExt)
 	flatcFlags := ctx.na.anyList(d.flatcFlags...)
 
-	var binding *fbsFlatcBinding
-	var flRef NodeRef
+	var recipe *FbsFlatcRecipe
 
 	if v == &flatcVariantFL64 && d.multimodule == tokFbsLibrary {
-		binding = ctx.fbsFlatcBinding(e.instance.Platform, headerVFS)
-		binding.flags = flatcFlags
+		if info := e.codegen.lookup(headerVFS); info != nil {
+			if recipe := info.fbsFlatc(); recipe != nil {
+				recipe.flags = flatcFlags
+			}
 
-		flRef = binding.ref
-	} else {
-		flRef = ctx.emit.reserve()
+			return
+		}
+
+		recipe = &FbsFlatcRecipe{flags: flatcFlags}
 	}
 
+	flRef := ctx.emit.reserve()
 	ccTag := d.unit.CCTag
 	tc := d.tc
 
 	pe := func() {
-		if binding != nil {
-			flatcFlags = binding.flags
+		if recipe != nil {
+			flatcFlags = recipe.flags
 		}
 
 		e.emitFLReserved(srcRel, srcVFS, flatcLDRef, flatcBinary, flatcFlags, transitiveImports, ccTag, tc, v, flRef)
@@ -217,17 +220,9 @@ func (e *EmitContext) emitFlatcProducer(srcVFS VFS, v *FlatcVariant) {
 
 	var pending *PendingEmit
 
-	if binding != nil {
-		if binding.emit == nil {
-			binding.emit = ctx.javaPendingEmit(pe)
-			ctx.fbsBindings.pins = append(ctx.fbsBindings.pins, e.pendingEmit(func() {}))
-		}
-
-		pending = ctx.javaPendingEmit(func() { binding.used = true })
-
-		if e.codegen.lookup(headerVFS) != nil {
-			return
-		}
+	if recipe != nil {
+		recipe.emit = e.pendingEmit(pe)
+		pending = ctx.javaPendingEmit(func() { recipe.used = true })
 	} else {
 		pending = e.pendingEmit(pe)
 	}
@@ -235,6 +230,7 @@ func (e *EmitContext) emitFlatcProducer(srcVFS VFS, v *FlatcVariant) {
 	e.register(GeneratedFileSpec{
 		OutputPath:     headerVFS,
 		ProducerRef:    flRef,
+		FbsFlatc:       recipe,
 		GeneratorRefs:  e.ctx.na.refList(flatcLDRef),
 		ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: headerIncludes},
 		ClosureLeaves:  ctx.na.vfsList(v.runtimeVFS),

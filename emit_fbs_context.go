@@ -1,135 +1,118 @@
 package main
 
-type fbsNativeBinding struct {
-	ref     NodeRef
-	owner   *EmitContext
-	local   *EmitContext
-	localIn ModuleCCInputs
-	emit    *PendingEmit
-}
-
-type fbsFlatcBinding struct {
-	ref   NodeRef
+type FbsFlatcRecipe struct {
 	flags []ANY
 	emit  *PendingEmit
 	used  bool
 }
 
-type fbsFileKey struct {
-	path     VFS
-	platform *Platform
+type FbsNativeRecipe struct {
+	owned bool
+	local fbsNativeContext
 }
 
-type fbsContextBindings struct {
-	native      map[fbsFileKey]*fbsNativeBinding
-	nativeOrder []*fbsNativeBinding
-	flatc       map[fbsFileKey]*fbsFlatcBinding
-	flatcOrder  []*fbsFlatcBinding
-	pins        []*PendingEmit
+type fbsNativeContext struct {
+	serial             uint32
+	compilerEnv        Environment
+	cFlags             []ANY
+	cxxFlags           []ANY
+	cOnlyFlags         []ANY
+	clangWarnings      []ANY
+	moduleScopeCFlags  []ANY
+	perSourceCFlags    []ANY
+	noOptimize         bool
+	noCompilerWarnings bool
+	noWShadow          bool
+	noBaseUnit         bool
+}
+
+func (e *EmitContext) fbsNativeContext(in ModuleCCInputs) fbsNativeContext {
+	d := e.d
+
+	return fbsNativeContext{
+		serial:             e.frame.serial,
+		compilerEnv:        d.cc.CompilerEnv,
+		cFlags:             d.cFlags,
+		cxxFlags:           d.cxxFlags,
+		cOnlyFlags:         d.cOnlyFlags,
+		clangWarnings:      d.clangWarnings,
+		moduleScopeCFlags:  d.moduleScopeCFlags,
+		perSourceCFlags:    in.PerSourceCFlags,
+		noOptimize:         d.cc.NoOptimize,
+		noCompilerWarnings: d.flags.NoCompilerWarnings,
+		noWShadow:          d.flags.NoWShadow,
+		noBaseUnit:         e.instance.Language == LangFbsJavaNative,
+	}
 }
 
 func (e *EmitContext) bindFbsNativeSource(src, out VFS, in ModuleCCInputs, reserved NodeRef) (NodeRef, VFS) {
 	ctx := e.ctx
-	bindings := &ctx.fbsBindings
+	info := e.codegen.lookup(out)
 
-	if bindings.native == nil {
-		bindings.native = make(map[fbsFileKey]*fbsNativeBinding)
+	if info == nil {
+		if reserved == 0 {
+			reserved = ctx.emit.reserve()
+		}
+
+		info = e.register(GeneratedFileSpec{OutputPath: out, SourcePath: src, ProducerRef: reserved, FbsNative: &FbsNativeRecipe{}})
 	}
 
-	key := fbsFileKey{out, e.instance.Platform}
-	binding := bindings.native[key]
+	recipe := info.fbsNative()
 
-	if binding == nil {
-		binding = &fbsNativeBinding{ref: reserved}
+	recipe.local = e.fbsNativeContext(in)
 
-		bindings.native[key] = binding
-		bindings.nativeOrder = append(bindings.nativeOrder, binding)
-	}
+	if e.instance.Language != LangFbsJavaNative && !recipe.owned {
+		recipe.owned = true
 
-	binding.local = e
-	binding.localIn = in
+		owner := e.frame.serial
 
-	bindings.pins = append(bindings.pins, e.pendingEmit(func() {}))
-
-	if e.instance.Language != LangFbsJavaNative && binding.owner == nil {
-		binding.owner = e
-
-		binding.emit = e.pendingEmit(func() {
+		info.OnUse = e.pendingEmit(func() {
 			command := in
 
-			if binding.local != binding.owner {
-				local := binding.local.d
+			if local := &recipe.local; local.serial != owner {
 				env := *in.ModuleCompileEnv
 
-				env.CompilerEnv = local.cc.CompilerEnv
+				env.CompilerEnv = local.compilerEnv
 				env.CFlags = local.cFlags
 				env.CXXFlags = local.cxxFlags
 				env.COnlyFlags = local.cOnlyFlags
 				env.ClangWarnings = local.clangWarnings
-				env.NoOptimize = local.cc.NoOptimize
+				env.NoOptimize = local.noOptimize
 				env.ModuleScopeCFlags = local.moduleScopeCFlags
-				env.Flags.NoCompilerWarnings = local.flags.NoCompilerWarnings
-				env.Flags.NoWShadow = local.flags.NoWShadow
-				env.NoBaseUnit = binding.local.instance.Language == LangFbsJavaNative
+				env.Flags.NoCompilerWarnings = local.noCompilerWarnings
+				env.Flags.NoWShadow = local.noWShadow
+				env.NoBaseUnit = local.noBaseUnit
 
 				blocks := composeCCModuleArgBlocks(ctx.na, e.instance.Platform, &env)
 
 				command.ModuleCompileEnv = &env
 				command.CFlags = env.CFlags
 				command.CCBlocks = &blocks
-				command.PerSourceCFlags = binding.localIn.PerSourceCFlags
+				command.PerSourceCFlags = local.perSourceCFlags
 			}
 
-			e.composeCCNodeAt(src, out, command, ctx.host, binding.ref)
+			e.composeCCNodeAt(src, out, command, ctx.host, info.ProducerRef)
 		})
 	}
 
-	return binding.ref, out
+	return info.ProducerRef, out
 }
 
-func (ctx *GenCtx) fbsFlatcBinding(platform *Platform, out VFS) *fbsFlatcBinding {
-	bindings := &ctx.fbsBindings
-
-	if bindings.flatc == nil {
-		bindings.flatc = make(map[fbsFileKey]*fbsFlatcBinding)
-	}
-
-	key := fbsFileKey{out, platform}
-	binding := bindings.flatc[key]
-
-	if binding == nil {
-		binding = &fbsFlatcBinding{ref: ctx.emit.reserve()}
-
-		bindings.flatc[key] = binding
-		bindings.flatcOrder = append(bindings.flatcOrder, binding)
-	}
-
-	return binding
-}
-
-func (ctx *GenCtx) flushFbsContextBindings() bool {
+func (ctx *GenCtx) flushFbsFlatcRecipes() bool {
 	emitted := false
 
-	for _, binding := range ctx.fbsBindings.nativeOrder {
-		if pending := binding.emit; pending != nil && (pending.fn != nil || pending.emitter != nil) {
-			emitted = true
+	for _, scanner := range []*IncludeScanner{ctx.scannerTarget, ctx.scannerHost, ctx.scannerTargetPIC} {
+		if scanner == nil {
+			continue
 		}
 
-		binding.emit.fire()
-	}
-
-	for _, binding := range ctx.fbsBindings.flatcOrder {
-		if binding.used {
-			if pending := binding.emit; pending != nil && (pending.fn != nil || pending.emitter != nil) {
+		for _, recipe := range scanner.codegen.attributes.fbsFlatc.values() {
+			if recipe.used && recipe.emit.fn != nil {
 				emitted = true
+
+				recipe.emit.fire()
 			}
-
-			binding.emit.fire()
 		}
-	}
-
-	for _, pin := range ctx.fbsBindings.pins {
-		pin.fire()
 	}
 
 	return emitted

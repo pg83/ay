@@ -41,6 +41,8 @@ type GeneratedFileSpec struct {
 	BuildInputs        []VFS
 	OnUse              *PendingEmit
 	Scoped             *ScopedCommand
+	FbsFlatc           *FbsFlatcRecipe
+	FbsNative          *FbsNativeRecipe
 	GeneratorRefs      []NodeRef
 	ClosureLeaves      []VFS
 	InputLoopSources   []VFS

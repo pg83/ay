@@ -119,10 +119,6 @@ func (e *StreamingEmitter) emitResolved(n *Node, id NodeRef) {
 }
 
 func (e *StreamingEmitter) hasUnresolvedDeps(n *Node) bool {
-	if n.foreignToolsPending {
-		return true
-	}
-
 	for r := range n.buildDeps(e.fetchRefs) {
 		if !e.resolved.has(uint32(r)) {
 			return true
@@ -167,8 +163,8 @@ func (ctx *GenCtx) activateSelectedInputs(selected BitSet, stack []NodeRef) BitS
 		stack = append(stack, node.DepRefs...)
 
 		for _, dependency := range node.ForeignDepRefs {
-			if tool, ok := ctx.foreignTools.byRef.get(dependency); ok && tool.host != nil {
-				dependency = tool.host.LDRef
+			if target := ctx.foreignToolOf(dependency); target != nil && target.ForeignTool.host != nil {
+				dependency = target.ForeignTool.host.LDRef
 			}
 
 			selectProducer(dependency)

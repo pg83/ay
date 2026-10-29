@@ -114,6 +114,9 @@ const (
 
 type ModuleEmitResult struct {
 	protoExcluded                   bool
+	ToolRequired                    bool
+	ToolPath                        ARG
+	ForeignTool                     *ForeignTool
 	deferredWarnings                *moduleWarnings
 	testDependencyModule            TestDependencyModule
 	ModuleVariants                  uint16
@@ -193,8 +196,6 @@ type GenCtx struct {
 	dependencyInstances map[string][]ModuleInstance
 	dependencyBuilds    map[string][]TestBuildDependency
 	configuration       ConfigurationDependencies
-	fbsBindings         fbsContextBindings
-	foreignTools        foreignToolBindings
 	fs                  FS
 	parsers             *IncludeParserManager
 	emit                *StreamingEmitter
@@ -316,7 +317,7 @@ func runGenIntoWithResources(fs FS, parsers *IncludeParserManager, targets []str
 
 	suites := ctx.prepareDiscoveredModuleTests(discovered)
 
-	ctx.flushFbsContextBindings()
+	ctx.flushFbsFlatcRecipes()
 	ctx.bindCommandScopes()
 	ctx.bindForeignTools()
 	ctx.emitDiscoveredModuleTests(suites)
@@ -681,12 +682,10 @@ func (ctx *GenCtx) genStartTarget(dir string) {
 		root := genModule(ctx, ctx.rootInstance(dir, demandSelf))
 
 		if root.LDPath != nil {
-			ctx.foreignTools.startRefs = append(ctx.foreignTools.startRefs, root.LDRef)
 			ctx.emit.result(root.LDRef)
 		}
 
 		if root.GlobalRef != nil {
-			ctx.foreignTools.startRefs = append(ctx.foreignTools.startRefs, *root.GlobalRef)
 			ctx.emit.result(*root.GlobalRef)
 		}
 
@@ -3028,8 +3027,8 @@ func (ctx *GenCtx) toolResult(modulePath ARG) *ModuleEmitResult {
 	ctx.consumeModuleWarnings(res)
 
 	if res.LDRef != NodeRef(0) {
+		res.ToolPath = modulePath
 		ctx.tools.put(modulePath, res)
-		ctx.foreignTools.hostPaths.put(res.LDRef, modulePath)
 		ctx.moduleByRef.put(res.LDRef, res)
 	}
 

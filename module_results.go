@@ -1,10 +1,6 @@
 package main
 
 func (ctx *GenCtx) moduleResultRefs(instance ModuleInstance, result *ModuleEmitResult) (refs []NodeRef) {
-	defer func() {
-		ctx.foreignTools.startRefs = append(ctx.foreignTools.startRefs, refs...)
-	}()
-
 	reg := ctx.scannerFor(instance).codegen
 	output, ref := result.ARPath, result.ARRef
 

@@ -10,6 +10,8 @@ type GeneratedFileAttributes struct {
 	sandbox            DenseMap[uint32, *SandboxRecipe]
 	scoped             DenseMap[uint32, *ScopedCommand]
 	parsedIncludes     DenseMap[uint32, ParsedIncludeSet]
+	fbsFlatc           DenseMap[uint32, *FbsFlatcRecipe]
+	fbsNative          DenseMap[uint32, *FbsNativeRecipe]
 }
 
 func (info *GeneratedFileInfo) gztProto() *GztProtoProducer {
@@ -62,6 +64,18 @@ func (info *GeneratedFileInfo) scoped() *ScopedCommand {
 
 func (info *GeneratedFileInfo) parsedIncludes() ParsedIncludeSet {
 	value, _ := info.attributes.parsedIncludes.get(info.id)
+
+	return value
+}
+
+func (info *GeneratedFileInfo) fbsFlatc() *FbsFlatcRecipe {
+	value, _ := info.attributes.fbsFlatc.get(info.id)
+
+	return value
+}
+
+func (info *GeneratedFileInfo) fbsNative() *FbsNativeRecipe {
+	value, _ := info.attributes.fbsNative.get(info.id)
 
 	return value
 }
@@ -122,6 +136,14 @@ func (r *CodegenRegistry) store(dst *GeneratedFileInfo, spec GeneratedFileSpec) 
 		r.attributes.scoped.put(dst.id, spec.Scoped)
 	}
 
+	if spec.FbsFlatc != nil {
+		r.attributes.fbsFlatc.put(dst.id, spec.FbsFlatc)
+	}
+
+	if spec.FbsNative != nil {
+		r.attributes.fbsNative.put(dst.id, spec.FbsNative)
+	}
+
 	for _, bucket := range spec.ParsedIncludes {
 		if bucket != nil {
 			r.attributes.parsedIncludes.put(dst.id, spec.ParsedIncludes)
@@ -143,6 +165,8 @@ func (info *GeneratedFileInfo) specification() GeneratedFileSpec {
 		BuildInputs:         info.BuildInputs,
 		OnUse:               info.OnUse,
 		Scoped:              info.scoped(),
+		FbsFlatc:            info.fbsFlatc(),
+		FbsNative:           info.fbsNative(),
 		GeneratorRefs:       info.GeneratorRefs,
 		ClosureLeaves:       info.ClosureLeaves,
 		InputLoopSources:    info.InputLoopSources,
