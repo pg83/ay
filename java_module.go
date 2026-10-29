@@ -391,7 +391,8 @@ type JavaModule struct {
 	incDirs          javaIncDirs
 	selfPeers        []*JavaModule
 	direct           []javaResolvedPeer
-	closure          *javaPeersClosure
+	closure          javaClosure
+	closureReady     bool
 	rules            *javaDMRules
 	managed          []JavaClosureEntry
 	managedDone      bool
@@ -466,10 +467,7 @@ func genJavaModule(ctx *GenCtx, instance ModuleInstance, moduleName TOK, stmts [
 
 	dir := instance.Path.relString()
 
-	ctx.javaModules++
-
 	jm := &JavaModule{
-		id:             ctx.javaModules,
 		dir:            dir,
 		path:           instance.Path,
 		instance:       instance,
@@ -478,6 +476,8 @@ func genJavaModule(ctx *GenCtx, instance ModuleInstance, moduleName TOK, stmts [
 		contribWithVer: !unit.transparent && javaPathIsPrefixOf("contrib/java", dir),
 		passPeers:      true,
 	}
+
+	ctx.jc.register(jm)
 
 	jm.data = collectJavaData(ctx, jm, stmts, env)
 
@@ -532,16 +532,19 @@ func genJavaModule(ctx *GenCtx, instance ModuleInstance, moduleName TOK, stmts [
 			jm.direct = append(jm.direct, javaResolvedPeer{m: p, resolution: jprUnversioned, impl: jm.implPeers[p.dir]})
 		}
 
-		jm.closure = newJavaPeersClosure()
+		ctx.jc.begin()
 
 		for _, d := range jm.direct {
-			jm.closure.merge(d.m, emptyJavaPeersClosure, 1)
+			ctx.jc.merge(d.m, nil)
 		}
+
+		jm.closure = ctx.jc.commit()
 	} else {
 		jm.direct = ctx.javaManageLocalPeers(jm, jm.managedPeers, jm.rules)
-		jm.closure = jm.mergeClosure(jm.rules)
+		jm.closure = ctx.javaMergeClosure(jm)
 	}
 
+	jm.closureReady = true
 	jm.globals = javaOwnGlobals(jm.unmanageable)
 
 	jm.setupIncDirs()

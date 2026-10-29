@@ -5,9 +5,10 @@ import (
 	"strings"
 )
 
-var emptyJavaPeersClosure = &javaPeersClosure{}
-
-const javaPathCountMask = 1<<31 - 1
+const (
+	javaPathCountMask   = 1<<31 - 1
+	javaClosureExcluded = 1 << 31
+)
 
 const (
 	jprUnversioned javaPeerResolution = iota
@@ -25,107 +26,205 @@ type javaResolvedPeer struct {
 	impl       bool
 }
 
-type javaClosureStat struct {
-	excluded  bool
-	pathCount uint32
-}
+type javaClosure []uint64
 
-type javaPeersClosure struct {
-	stats   map[*JavaModule]*javaClosureStat
-	topSort []*JavaModule
-}
+func javaClosureElem(id, pathCount uint32, excluded bool) uint64 {
+	e := uint64(id)<<32 | uint64(pathCount&javaPathCountMask)
 
-func newJavaPeersClosure() *javaPeersClosure {
-	return &javaPeersClosure{stats: map[*JavaModule]*javaClosureStat{}}
-}
-
-func (c *javaPeersClosure) merge(node *JavaModule, closure *javaPeersClosure, pathsCount uint32) {
-	for _, id := range closure.topSort {
-		st := closure.stats[id]
-		count := (st.pathCount * pathsCount) & javaPathCountMask
-
-		if existing, ok := c.stats[id]; ok {
-			existing.pathCount = (existing.pathCount + count) & javaPathCountMask
-			existing.excluded = existing.excluded && st.excluded
-		} else {
-			c.stats[id] = &javaClosureStat{excluded: st.excluded, pathCount: count}
-			c.topSort = append(c.topSort, id)
-		}
+	if excluded {
+		e |= javaClosureExcluded
 	}
 
-	if existing, ok := c.stats[node]; ok {
-		existing.pathCount = (existing.pathCount + pathsCount) & javaPathCountMask
-		existing.excluded = false
-	} else {
-		c.stats[node] = &javaClosureStat{pathCount: pathsCount & javaPathCountMask}
-		c.topSort = append(c.topSort, node)
-	}
+	return e
 }
 
-func (c *javaPeersClosure) exclude(pred func(*JavaModule) bool, nodeClosure func(*JavaModule) *javaPeersClosure, skipPropagation func(*JavaModule) bool) *javaPeersClosure {
-	if pred == nil || !slices.ContainsFunc(c.topSort, pred) {
+func javaClosureID(e uint64) uint32 {
+	return uint32(e >> 32)
+}
+
+func javaClosurePaths(e uint64) uint32 {
+	return uint32(e) & javaPathCountMask
+}
+
+func javaClosureIsExcluded(e uint64) bool {
+	return e&javaClosureExcluded != 0
+}
+
+type javaClosureMarks struct {
+	gen   Vec[uint64]
+	epoch uint32
+}
+
+type javaClosureScratch struct {
+	byID      []*JavaModule
+	slot      Vec[uint64]
+	slotEpoch uint32
+	buf       []uint64
+	excl      Vec[uint64]
+	exclEpoch uint32
+	exBuf     []uint64
+	marks     []*javaClosureMarks
+	depth     int
+}
+
+func (s *javaClosureScratch) register(jm *JavaModule) {
+	jm.id = uint32(len(s.byID))
+	s.byID = append(s.byID, jm)
+}
+
+func (s *javaClosureScratch) begin() {
+	s.slotEpoch++
+	s.buf = s.buf[:0]
+	s.slot.ensureLen(len(s.byID))
+}
+
+func (s *javaClosureScratch) mergeElem(id, pathCount uint32, excluded bool) {
+	cell := &s.slot.s[id]
+
+	if uint32(*cell>>32) == s.slotEpoch {
+		p := &s.buf[uint32(*cell)]
+
+		*p = javaClosureElem(id, javaClosurePaths(*p)+pathCount, javaClosureIsExcluded(*p) && excluded)
+
+		return
+	}
+
+	*cell = uint64(s.slotEpoch)<<32 | uint64(len(s.buf))
+	s.buf = append(s.buf, javaClosureElem(id, pathCount, excluded))
+}
+
+func (s *javaClosureScratch) merge(node *JavaModule, closure javaClosure) {
+	for _, e := range closure {
+		s.mergeElem(javaClosureID(e), javaClosurePaths(e), javaClosureIsExcluded(e))
+	}
+
+	s.mergeElem(node.id, 1, false)
+}
+
+func (s *javaClosureScratch) commit() javaClosure {
+	return slices.Clone(s.buf)
+}
+
+func (s *javaClosureScratch) exclude(c javaClosure, pred func(*JavaModule) bool, skipTransparent bool) javaClosure {
+	if pred == nil {
 		return c
 	}
 
-	res := &javaPeersClosure{stats: make(map[*JavaModule]*javaClosureStat, len(c.topSort)), topSort: make([]*JavaModule, 0, len(c.topSort))}
-	excludedPaths := map[*JavaModule]uint32{}
+	byID := s.byID
 
-	for i := len(c.topSort) - 1; i >= 0; i-- {
-		id := c.topSort[i]
-		st := *c.stats[id]
+	if !slices.ContainsFunc(c, func(e uint64) bool { return pred(byID[javaClosureID(e)]) }) {
+		return c
+	}
 
-		res.stats[id] = &st
-		res.topSort = append(res.topSort, id)
+	s.exclEpoch++
+	s.excl.ensureLen(len(byID))
 
-		if !pred(id) {
+	epoch := s.exclEpoch
+	excl := s.excl.s
+	out := append(s.exBuf[:0], c...)
+
+	for i := len(out) - 1; i >= 0; i-- {
+		id := javaClosureID(out[i])
+		m := byID[id]
+
+		if !pred(m) {
 			continue
 		}
 
-		stp := res.stats[id]
+		out[i] |= javaClosureExcluded
 
-		stp.excluded = true
+		paths := javaClosurePaths(out[i])
+		cell := &excl[id]
+		prev := uint32(0)
 
-		prev, seen := excludedPaths[id]
-		newExcludes := stp.pathCount
-
-		if seen {
-			newExcludes = stp.pathCount - prev
+		if uint32(*cell>>32) == epoch {
+			prev = uint32(*cell)
 		}
 
-		excludedPaths[id] = stp.pathCount
+		*cell = uint64(epoch)<<32 | uint64(paths)
 
-		if newExcludes == 0 {
+		if paths == prev || skipTransparent && m.unit.transparent {
 			continue
 		}
 
-		if skipPropagation != nil && skipPropagation(id) {
-			continue
-		}
+		newExcludes := paths - prev
 
-		for peer, peerStat := range nodeClosure(id).stats {
-			excludedPaths[peer] += newExcludes * peerStat.pathCount
-		}
-	}
+		for _, pe := range javaClosureOf(m) {
+			pc := &excl[javaClosureID(pe)]
+			acc := uint32(0)
 
-	for i, j := 0, len(res.topSort)-1; i < j; i, j = i+1, j-1 {
-		res.topSort[i], res.topSort[j] = res.topSort[j], res.topSort[i]
-	}
+			if uint32(*pc>>32) == epoch {
+				acc = uint32(*pc)
+			}
 
-	for id, excludes := range excludedPaths {
-		st := res.stats[id]
-
-		if st.pathCount == excludes {
-			st.excluded = true
+			*pc = uint64(epoch)<<32 | uint64(acc+newExcludes*javaClosurePaths(pe))
 		}
 	}
 
-	return res
+	for i, e := range out {
+		cell := excl[javaClosureID(e)]
+
+		if uint32(cell>>32) == epoch && javaClosurePaths(e) == uint32(cell) {
+			out[i] |= javaClosureExcluded
+		}
+	}
+
+	s.exBuf = out
+
+	return out
 }
 
-func (c *javaPeersClosure) contains(id *JavaModule) bool {
-	st, ok := c.stats[id]
+func (s *javaClosureScratch) pushMarks() *javaClosureMarks {
+	if s.depth == len(s.marks) {
+		s.marks = append(s.marks, &javaClosureMarks{})
+	}
 
-	return ok && !st.excluded
+	m := s.marks[s.depth]
+
+	s.depth++
+	m.epoch++
+
+	return m
+}
+
+func (s *javaClosureScratch) popMarks() {
+	s.depth--
+}
+
+func (m *javaClosureMarks) cell(id uint32) *uint64 {
+	m.gen.ensureLen(int(id) + 1)
+
+	return &m.gen.s[id]
+}
+
+func (m *javaClosureMarks) visit(id uint32) bool {
+	c := m.cell(id)
+
+	if uint32(*c>>32) == m.epoch {
+		return false
+	}
+
+	*c = uint64(m.epoch)<<32 | uint64(uint32(*c))
+
+	return true
+}
+
+func (m *javaClosureMarks) addMember(id uint32) {
+	c := m.cell(id)
+
+	*c = *c&^(1<<32-1) | uint64(m.epoch)
+}
+
+func (m *javaClosureMarks) member(id uint32) bool {
+	return int(id) < m.gen.len() && uint32(m.gen.s[id]) == m.epoch
+}
+
+func (m *javaClosureMarks) addMembers(c javaClosure) {
+	for _, e := range c {
+		if !javaClosureIsExcluded(e) {
+			m.addMember(javaClosureID(e))
+		}
+	}
 }
 
 type javaDMRules struct {
@@ -379,63 +478,69 @@ func javaClosureExcludePred(rules *javaDMRules) func(*JavaModule) bool {
 	return rules.excludesModule
 }
 
-func javaClosureOf(m *JavaModule) *javaPeersClosure {
-	if m.closure == nil {
-		return emptyJavaPeersClosure
-	}
-
+func javaClosureOf(m *JavaModule) javaClosure {
 	return m.closure
 }
 
-func javaSkipPropagation(m *JavaModule) bool {
-	return m.unit.transparent
-}
-
-func (jm *JavaModule) buildExpandedTransparentClosure(transparent *JavaModule, rules *javaDMRules) *javaPeersClosure {
-	expanded := newJavaPeersClosure()
+func (ctx *GenCtx) javaExpandTransparent(transparent *JavaModule, rules *javaDMRules) javaClosure {
+	s := &ctx.jc
 	excludePred := javaClosureExcludePred(rules)
-	directChildren := map[*JavaModule]bool{}
 
-	for _, d := range transparent.direct {
-		directChildren[d.m] = true
+	var pred func(*JavaModule) bool
+
+	if excludePred != nil {
+		pred = func(m *JavaModule) bool {
+			return excludePred(m) && !slices.ContainsFunc(transparent.direct, func(d javaResolvedPeer) bool { return d.m == m })
+		}
 	}
+
+	s.begin()
 
 	for _, d := range transparent.direct {
 		if !d.m.passPeers {
-			expanded.merge(d.m, emptyJavaPeersClosure, 1)
+			s.merge(d.m, nil)
 
 			continue
 		}
 
-		var pred func(*JavaModule) bool
-
-		if excludePred != nil {
-			pred = func(m *JavaModule) bool {
-				return excludePred(m) && !directChildren[m]
-			}
-		}
-
-		expanded.merge(d.m, d.m.closure.exclude(pred, javaClosureOf, javaSkipPropagation), 1)
+		s.merge(d.m, s.exclude(d.m.closure, pred, true))
 	}
 
-	return expanded
+	return s.commit()
 }
 
-func (jm *JavaModule) mergeClosure(rules *javaDMRules) *javaPeersClosure {
-	closure := newJavaPeersClosure()
-	excludePred := javaClosureExcludePred(rules)
+func (ctx *GenCtx) javaMergeClosure(jm *JavaModule) javaClosure {
+	s := &ctx.jc
 
-	for _, d := range jm.direct {
+	var expanded []javaClosure
+
+	for i, d := range jm.direct {
+		if !d.m.unit.transparent {
+			continue
+		}
+
+		if expanded == nil {
+			expanded = make([]javaClosure, len(jm.direct))
+		}
+
+		expanded[i] = ctx.javaExpandTransparent(d.m, jm.rules)
+	}
+
+	excludePred := javaClosureExcludePred(jm.rules)
+
+	s.begin()
+
+	for i, d := range jm.direct {
 		if d.m.unit.transparent {
-			closure.merge(d.m, jm.buildExpandedTransparentClosure(d.m, rules), 1)
+			s.merge(d.m, expanded[i])
 
 			continue
 		}
 
-		closure.merge(d.m, javaClosureOf(d.m).exclude(excludePred, javaClosureOf, javaSkipPropagation), 1)
+		s.merge(d.m, s.exclude(javaClosureOf(d.m), excludePred, true))
 	}
 
-	return closure
+	return s.commit()
 }
 
 func (ctx *GenCtx) javaResolveConflicts(jm *JavaModule) map[*JavaModule]javaResolutionInfo {
@@ -451,20 +556,17 @@ func (ctx *GenCtx) javaResolveConflicts(jm *JavaModule) map[*JavaModule]javaReso
 		resolutions: map[string]*javaResolutionRecord{},
 	}
 
-	explicitResolves := newJavaPeersClosure()
-	visited := map[*JavaModule]bool{}
+	marks := ctx.jc.pushMarks()
+
+	defer ctx.jc.popMarks()
+
+	marks.addMembers(jm.closure)
 
 	var queue []javaResolvedPeer
 
 	enqueue := func(peers []javaResolvedPeer) {
 		admit := func(peer javaResolvedPeer) bool {
-			if visited[peer.m] {
-				return false
-			}
-
-			visited[peer.m] = true
-
-			if !jm.closure.contains(peer.m) && !explicitResolves.contains(peer.m) {
+			if !marks.visit(peer.m.id) || !marks.member(peer.m.id) {
 				return false
 			}
 
@@ -505,10 +607,11 @@ func (ctx *GenCtx) javaResolveConflicts(jm *JavaModule) map[*JavaModule]javaReso
 		case resolved == nil:
 			continue
 		default:
-			visited[resolved] = true
+			marks.visit(resolved.id)
 
-			if resolved.closure != nil {
-				explicitResolves.merge(resolved, resolved.closure.exclude(excludePred, javaClosureOf, nil), 1)
+			if resolved.closureReady {
+				marks.addMembers(ctx.jc.exclude(resolved.closure, excludePred, false))
+				marks.addMember(resolved.id)
 			}
 		}
 
