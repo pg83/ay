@@ -89,6 +89,16 @@ class IndexMergeTest(unittest.TestCase):
         self.assertEqual(link[4:], real[4:])
         self.assertEqual(len(reader.data), len(b"abb"))
 
+    def test_placeholders_yield_to_contents(self):
+        placeholder = self.index([("a/ya.make", "file", b""), ("a/empty", "file", b"")])
+        real = self.index([("a/ya.make", "file", b"LIBRARY()\n"), ("a/empty", "file", b"")])
+        for inputs in ((placeholder, real), (real, placeholder)):
+            result, merged = self.merge(*inputs)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(IndexedReader(merged).tree(), {
+                "a/": None, "a/empty": b"", "a/ya.make": b"LIBRARY()\n",
+            })
+
     def test_disagreeing_file_fails(self):
         result, _ = self.merge(self.index([("a.txt", "file", b"one")]), self.index([("a.txt", "file", b"three")]))
         self.assertEqual(result.returncode, 1)

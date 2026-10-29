@@ -14,7 +14,8 @@ import (
 
 const usage = `usage: indexmerge --out <merged.indexed> <slice.indexed>...
   the union of .indexed archives (dev/index.go): a path present in several
-  inputs must agree on kind, mode and size and is taken from the first one
+  inputs must agree on kind, mode and size and is taken from the first one;
+  an empty file is a slice placeholder and yields to a non-empty one
 `
 
 const (
@@ -193,13 +194,13 @@ func (m *merger) walk(i int, in *input, index int, into *dir, where string, alia
 		if c.kind != kindDir {
 			have, ok := into.children[c.name]
 
-			if !ok {
+			switch {
+			case !ok || have.file != nil && have.file.size == 0 && c.b > 0:
 				into.children[c.name] = child{file: m.fileRef(i, c.a, c.b), mode: c.mode}
-
-				continue
-			}
-
-			if have.file == nil || have.mode != c.mode || have.file.size != c.b {
+			case have.file == nil:
+				die("%s: %s disagrees with an earlier input", in.path, at)
+			case c.b == 0 || have.file.size == c.b && have.mode == c.mode:
+			default:
 				die("%s: %s disagrees with an earlier input", in.path, at)
 			}
 
