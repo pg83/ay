@@ -31,6 +31,20 @@ func (v *PageVec[T]) set(id uint32, x T) {
 	v.pages[p].Store(&page)
 }
 
+func (v *PageVec[T]) at(id uint32) *T {
+	p, off := pageOffset(id)
+	page := v.pages[p].Load()
+
+	if page == nil {
+		fresh := make([]T, int64(1)<<uint(p))
+
+		page = &fresh
+		v.pages[p].Store(page)
+	}
+
+	return unsafeAt(*page, uint64(off))
+}
+
 func (v *PageVec[T]) get(id uint32) T {
 	p, off := pageOffset(id)
 

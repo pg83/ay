@@ -76,16 +76,23 @@ type ExportEntry struct {
 	replayed bool
 }
 
-func (ctx *GenCtx) enterExport() int32 {
-	ctx.exportLog.pushBack(ExportEntry{})
+func (ctx *GenCtx) pushExport(entry ExportEntry) int32 {
+	at := ctx.exportLen
 
-	return int32(len(ctx.exportLog.s) - 1)
+	*ctx.exportLog.at(uint32(at)) = entry
+	ctx.exportLen++
+
+	return at
+}
+
+func (ctx *GenCtx) enterExport() int32 {
+	return ctx.pushExport(ExportEntry{})
 }
 
 func (ctx *GenCtx) leaveExport(at int32, result *ModuleEmitResult) {
-	end := int32(len(ctx.exportLog.s))
+	end := ctx.exportLen
 
-	ctx.exportLog.s[at] = ExportEntry{module: result, end: end}
+	*ctx.exportLog.at(uint32(at)) = ExportEntry{module: result, end: end}
 
 	if result != nil && result.exportAt == 0 && end > at+1 {
 		result.exportAt = at + 1
@@ -93,22 +100,22 @@ func (ctx *GenCtx) leaveExport(at int32, result *ModuleEmitResult) {
 }
 
 func (ctx *GenCtx) logExport(entry ExportEntry) {
-	entry.end = int32(len(ctx.exportLog.s) + 1)
-	ctx.exportLog.pushBack(entry)
+	entry.end = ctx.exportLen + 1
+	ctx.pushExport(entry)
 }
 
 func (ctx *GenCtx) markExportRoot(start int32) {
-	ctx.exportRoots = append(ctx.exportRoots, [2]int32{start, int32(len(ctx.exportLog.s))})
+	ctx.exportRoots = append(ctx.exportRoots, [2]int32{start, ctx.exportLen})
 }
 
 func (ctx *GenCtx) replayExport() {
-	log := ctx.exportLog.s
+	log := &ctx.exportLog
 	tick := uint32(0)
 
 	var replay func(at int32)
 
 	replay = func(at int32) {
-		entry := &log[at]
+		entry := log.at(uint32(at))
 
 		if entry.replayed {
 			return
@@ -126,7 +133,7 @@ func (ctx *GenCtx) replayExport() {
 			ctx.exportOrder = append(ctx.exportOrder, entry.module)
 		case exportVisit:
 			if entry.end > at+1 {
-				for next := at + 1; next < entry.end; next = log[next].end {
+				for next := at + 1; next < entry.end; next = log.at(uint32(next)).end {
 					replay(next)
 				}
 			} else if module := entry.module; module != nil && module.exportAt != 0 {
@@ -136,12 +143,12 @@ func (ctx *GenCtx) replayExport() {
 	}
 
 	for _, root := range ctx.exportRoots {
-		for at := root[0]; at < root[1]; at = log[at].end {
+		for at := root[0]; at < root[1]; at = log.at(uint32(at)).end {
 			replay(at)
 		}
 	}
 
-	for at := int32(0); at < int32(len(log)); at = log[at].end {
+	for at := int32(0); at < ctx.exportLen; at = log.at(uint32(at)).end {
 		replay(at)
 	}
 }

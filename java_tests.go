@@ -575,18 +575,23 @@ func (ctx *GenCtx) javaClasspathClashSuite(jm *JavaModule) *TestSuite {
 	s.setupPythonpathEnv = true
 	s.supportsTestParameters = true
 
-	paths := make([]string, 1, 1+ctx.javaManagedLen(jm))
+	jars := make([]VFS, 1, 1+ctx.javaManagedLen(jm))
 
-	paths[0] = jm.dir + "/" + jm.name + ".jar"
+	jars[0] = build(jm.dir, "/", jm.name, ".jar")
 
 	for e := range ctx.javaManagedPeersClosure(jm) {
 		if e.java != nil {
-			paths = append(paths, e.path.relString())
+			jars = append(jars, e.path)
 		}
 	}
 
-	for _, p := range paths {
-		if info := ctx.javaReg(jm).use(build(p)); info != nil {
+	paths := make([]string, len(jars))
+	reg := ctx.javaReg(jm)
+
+	for i, jar := range jars {
+		paths[i] = jar.relString()
+
+		if info := reg.use(jar); info != nil {
 			s.deps = append(s.deps, info.ProducerRef)
 		}
 	}

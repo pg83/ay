@@ -5384,15 +5384,15 @@ func expandTokens(items []ANY, env Environment, command bool, phase TokenExpansi
 
 		expanded := expandToken(item.string(), env, phase)
 
-		var words []string
+		if !command {
+			for f := range strings.FieldsSeq(expanded) {
+				out = append(out, internAny(f))
+			}
 
-		if command {
-			words = splitShellWords(expanded)
-		} else {
-			words = strings.Fields(expanded)
+			continue
 		}
 
-		for _, f := range words {
+		for _, f := range splitShellWords(expanded) {
 			out = append(out, internAny(f))
 		}
 	}
