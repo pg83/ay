@@ -612,7 +612,7 @@ func (ctx *GenCtx) javaDMRulesOf(dm, excludes []ANY) *javaDMRules {
 		}
 	}
 
-	r := &javaDMRules{jc: &ctx.jc, lib2Ver: map[uint32]uint32{}, dm: slices.Clone(dm), excludes: slices.Clone(excludes), excluded: map[uint32]struct{}{}}
+	r := &javaDMRules{jc: &ctx.jc, lib2Ver: make(map[uint32]uint32, len(dm)), dm: slices.Clone(dm), excludes: slices.Clone(excludes), excluded: map[uint32]struct{}{}}
 
 	for _, item := range dm {
 		r.addDependencyManagement(ctx.jc.anyPathID(item))

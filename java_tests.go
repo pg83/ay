@@ -603,10 +603,10 @@ func (ctx *GenCtx) javaClasspathClashSuite(jm *JavaModule) *TestSuite {
 	}
 
 	s.runCmd = func(work string, _ TestChunk) []ANY {
-		strs := []string{testToolHostPath, "run_check", "--source-root", "$(S)", "--checker", "run_classpath_clash", "--check-name", "classpath.clash",
-			"--trace-path", work + "/ytest.report.trace", "--out-path", work + "/testing_out_stuff",
-			"--log-path", work + "/testing_out_stuff/run_check.log", "--no-snippet-from-stderr", "--batch", "--batch-name", name,
-			"$(B)", testCmdFileStart}
+		strs := append(make([]string, 0, 24+len(paths)+len(ignored)), testToolHostPath, "run_check", "--source-root", "$(S)", "--checker", "run_classpath_clash", "--check-name", "classpath.clash",
+			"--trace-path", work+"/ytest.report.trace", "--out-path", work+"/testing_out_stuff",
+			"--log-path", work+"/testing_out_stuff/run_check.log", "--no-snippet-from-stderr", "--batch", "--batch-name", name,
+			"$(B)", testCmdFileStart)
 
 		strs = append(append(append(strs, paths...), testCmdFileEnd), ignored...)
 

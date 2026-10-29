@@ -42,10 +42,11 @@ func (b *javaNodeBuilder) useResource(name string) {
 }
 
 func (b *javaNodeBuilder) cmd(args []ANY, cwd VFS, extra ...EnvVar) {
-	env := make(EnvVars, 0, 1+len(extra))
+	env := envVarsVCS[:len(envVarsVCS):len(envVarsVCS)]
 
-	env = append(env, envVarsVCS...)
-	env = append(env, extra...)
+	if len(extra) > 0 {
+		env = append(append(make(EnvVars, 0, len(envVarsVCS)+len(extra)), envVarsVCS...), extra...)
+	}
 
 	for _, e := range extra {
 		found := false
