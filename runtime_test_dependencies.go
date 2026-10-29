@@ -3,7 +3,6 @@ package main
 import (
 	"path"
 	"slices"
-	"strings"
 )
 
 type TestDependencyModule struct {
@@ -135,7 +134,7 @@ func (ctx *GenCtx) runtimeTestDependencies(dir string) []TestBuildDependency {
 	}
 
 	slices.SortFunc(artifacts, func(a, b TestBuildDependency) int {
-		return strings.Compare(testDependencyOutput(a.result).string(), testDependencyOutput(b.result).string())
+		return vfsCompare(testDependencyOutput(a.result), testDependencyOutput(b.result))
 	})
 
 	return slices.CompactFunc(artifacts, func(a, b TestBuildDependency) bool {

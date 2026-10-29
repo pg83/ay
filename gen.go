@@ -833,7 +833,7 @@ func mergeCheckSuite(suites []*TestSuite, s *TestSuite) bool {
 			prev.deps = append(prev.deps, s.deps...)
 			prev.relatedPaths = sortedUnique(append(prev.relatedPaths, s.relatedPaths...))
 
-			slices.SortFunc(prev.checkFiles, func(a, b VFS) int { return strings.Compare(a.string(), b.string()) })
+			slices.SortFunc(prev.checkFiles, vfsCompare)
 
 			prev.checkFiles = slices.Compact(prev.checkFiles)
 

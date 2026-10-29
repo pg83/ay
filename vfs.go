@@ -1,5 +1,7 @@
 package main
 
+import "strings"
+
 const vfsPrefixLen = len("$(S)/")
 
 const (
@@ -100,6 +102,20 @@ func (v VFS) string() string {
 	}
 
 	return v.prefix() + rel
+}
+
+func vfsCompare(a, b VFS) int {
+	ra, rb := a.relString(), b.relString()
+
+	if ra == "" || rb == "" {
+		return strings.Compare(a.string(), b.string())
+	}
+
+	if c := strings.Compare(a.prefix(), b.prefix()); c != 0 {
+		return c
+	}
+
+	return strings.Compare(ra, rb)
 }
 
 func (v VFS) sharedString() string {

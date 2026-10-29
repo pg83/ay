@@ -142,7 +142,7 @@ func (e *EmitContext) goTestRunSuite(binRef NodeRef, globals []ResourceDecl) *Te
 }
 
 func (e *EmitContext) goFmtSuite(files []VFS, globals []ResourceDecl) *TestSuite {
-	slices.SortFunc(files, func(a, b VFS) int { return strings.Compare(a.string(), b.string()) })
+	slices.SortFunc(files, vfsCompare)
 
 	s := e.goSuiteBase("gofmt", "gofmt", "style", globals)
 
