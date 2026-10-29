@@ -2,6 +2,7 @@ package main
 
 import (
 	"path"
+	"slices"
 	"strings"
 )
 
@@ -455,7 +456,7 @@ func (ctx *GenCtx) javaEmitTest(jm *JavaModule) {
 
 	b.cmd(append(w, strYaEndCommandFile.any()), 0)
 	b.cmd(append(b.python("build/scripts/make_manifest_from_bf.py"), runBf.any(), jm.target.any()), 0)
-	b.closure(closure)
+	b.closure(closure, ctx.javaManagedLen(jm))
 	b.macroOuts(jm)
 	b.setKV(pkJT, pcNone, false)
 	b.outputs = []VFS{jm.target}
@@ -686,7 +687,7 @@ func (ctx *GenCtx) javaEmitExternal(jm *JavaModule) {
 
 	b.setKV(pkJV, pcLightBlue, true)
 	b.outputs = []VFS{jm.target, srcJar}
-	b.closure(closure)
+	b.closure(closure, ctx.javaManagedLen(jm))
 
 	for _, in := range autoInputs {
 		b.deps = append(b.deps, b.use(in))
@@ -706,7 +707,10 @@ func javaKotlinJVMTarget(jdk string) string {
 	return jdk
 }
 
-func (b *javaNodeBuilder) closure(closure javaClosureSeq) {
+func (b *javaNodeBuilder) closure(closure javaClosureSeq, n int) {
+	b.inputs = slices.Grow(b.inputs, n)
+	b.deps = slices.Grow(b.deps, n)
+
 	for e := range closure {
 		ref := NodeRef(0)
 

@@ -302,7 +302,7 @@ func (ctx *GenCtx) javaEmitJar(jm *JavaModule) {
 
 	b.script("build/scripts/process_command_files.py")
 
-	w = append(w, strFile.any(), bfg.any(), strM.any(), strYaStartCommandFile.any())
+	w = append(slices.Grow(w, 6+ctx.javaManagedLen(jm)), strFile.any(), bfg.any(), strM.any(), strYaStartCommandFile.any())
 
 	for e := range closure {
 		w = append(w, e.path.rel().any())
@@ -424,7 +424,7 @@ func (ctx *GenCtx) javaEmitJar(jm *JavaModule) {
 	}
 
 	b.setKV(pkJV, pcLightBlue, true)
-	b.closure(closure)
+	b.closure(closure, ctx.javaManagedLen(jm))
 	b.macroOuts(jm)
 	b.emitModule(jm)
 }

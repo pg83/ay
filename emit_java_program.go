@@ -226,7 +226,7 @@ func (ctx *GenCtx) javaEmitRunnable(jm *JavaModule) {
 		b.javaScriptgenScripts(jm, globals, closure, jdk)
 		b.outputs = append(b.outputs, lateOuts...)
 		b.setKV(pkUJ, pcNone, false)
-		b.closure(closure)
+		b.closure(closure, ctx.javaManagedLen(jm))
 		b.macroOuts(jm)
 		b.emitModule(jm)
 
@@ -282,7 +282,7 @@ func (ctx *GenCtx) javaEmitRunnable(jm *JavaModule) {
 	b.cmd(append(b.python("build/scripts/find_and_tar.py"), tarball.any()), cpDir)
 	b.javaScriptgenScripts(jm, globals, closure, jdk)
 	b.outputs = append(b.outputs, lateOuts...)
-	b.closure(closure)
+	b.closure(closure, ctx.javaManagedLen(jm))
 	b.macroOuts(jm)
 	b.setKV(pkJP, pcLightBlue, true)
 	b.emitModule(jm)

@@ -85,11 +85,10 @@ func (u *javaUnit) compilable() bool {
 	return u.kind == juJar || u.kind == juRunnable && !u.contribRunnable || u.kind == juTest
 }
 
-func javaConfPrologue(jm *JavaModule, d *JavaData) {
-	u := jm.unit
-
-	if u.compilable() {
-		d.dm = appendInternAnys(d.dm, []string{
+func (ctx *GenCtx) javaPrologueDM() []ANY {
+	if ctx.javaPrologue == nil {
+		ctx.javaPrologue = appendInternAnys(nil, []string{
+			"contrib/java/org/jetbrains/kotlin/kotlin-stdlib-jdk8/" + javaKotlinVersion,
 			"contrib/java/com/google/flatbuffers/flatbuffers-java/" + javaFlatbuffersVersion,
 			"contrib/java/com/google/protobuf/protobuf-java/" + javaProtoRuntimeVersion,
 			"contrib/java/com/google/protobuf/protobuf-javalite/" + javaProtoRuntimeVersion,
@@ -98,12 +97,23 @@ func javaConfPrologue(jm *JavaModule, d *JavaData) {
 		})
 
 		for _, lib := range javaKotlinAllowedVersions {
-			d.dm = append(d.dm, internStr("contrib/java/org/jetbrains/kotlin/"+lib+"/"+javaKotlinVersion).any())
+			ctx.javaPrologue = append(ctx.javaPrologue, internStr("contrib/java/org/jetbrains/kotlin/"+lib+"/"+javaKotlinVersion).any())
 		}
 	}
 
+	return ctx.javaPrologue
+}
+
+func javaConfPrologue(ctx *GenCtx, jm *JavaModule, d *JavaData) {
+	u := jm.unit
+	prologue := ctx.javaPrologueDM()
+
+	if u.compilable() {
+		d.dm = append(d.dm, prologue[1:]...)
+	}
+
 	if u.kind == juJar {
-		d.dm = append(d.dm, internStr("contrib/java/org/jetbrains/kotlin/kotlin-stdlib-jdk8/"+javaKotlinVersion).any())
+		d.dm = append(d.dm, prologue[0])
 		d.peerStmts = append(d.peerStmts, JavaPeerSpec{dir: "build/platform/java/jdk"})
 	}
 
@@ -326,7 +336,7 @@ func collectJavaStmts(ctx *GenCtx, jm *JavaModule, d *JavaData, stmts []Stmt, en
 			}
 
 			javaModuleArgs(jm, d, expandSourceArguments(v.Args, env))
-			javaConfPrologue(jm, d)
+			javaConfPrologue(ctx, jm, d)
 		case *EndStmt:
 			collectJavaAutoinclude(ctx, jm, d, env)
 		case *PeerdirStmt:

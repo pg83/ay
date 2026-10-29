@@ -85,29 +85,6 @@ func (m *javaExcludeMatcher) excluded(rel string, isDir bool) bool {
 	return false
 }
 
-func (ctx *GenCtx) javaListAll(dir string) []javaDirEntry {
-	view := ctx.fs.listdir(dirKey(dir))
-	out := make([]javaDirEntry, 0, len(view.names))
-
-	for _, packed := range view.names {
-		name := STR(packed >> 1).string()
-		p := name
-
-		if dir != "" {
-			p = dir + "/" + name
-		}
-
-		out = append(out, javaDirEntry{path: p, isDir: packed&1 != 0})
-	}
-
-	return out
-}
-
-type javaDirEntry struct {
-	path  string
-	isDir bool
-}
-
 func (ctx *GenCtx) javaGlob(moddir, pattern string, ex *javaExcludeMatcher) []string {
 	root := moddir
 
@@ -154,20 +131,30 @@ func (ctx *GenCtx) javaGlob(moddir, pattern string, ex *javaExcludeMatcher) []st
 					matches = append(matches, p)
 				}
 			case javaGlobPattern, javaGlobAnything:
-				for _, e := range ctx.javaListAll(dir) {
-					if !e.isDir && !last {
+				for _, packed := range ctx.fs.listdir(dirKey(dir)).names {
+					isDir := packed&1 != 0
+
+					if !isDir && !last {
 						continue
 					}
 
-					if part.kind == javaGlobPattern && !part.re.match(javaPathBasename(e.path)) {
+					name := STR(packed >> 1).string()
+
+					if part.kind == javaGlobPattern && !part.re.match(name) {
 						continue
+					}
+
+					p := name
+
+					if dir != "" {
+						p = dir + "/" + name
 					}
 
 					switch {
-					case e.isDir:
-						next = append(next, e.path)
-					case !ex.excluded(e.path, false):
-						matches = append(matches, e.path)
+					case isDir:
+						next = append(next, p)
+					case !ex.excluded(p, false):
+						matches = append(matches, p)
 					}
 				}
 			case javaGlobRecursive:

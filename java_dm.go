@@ -774,6 +774,12 @@ func (ctx *GenCtx) javaManagedPeersClosure(jm *JavaModule) javaClosureSeq {
 	}
 }
 
+func (ctx *GenCtx) javaManagedLen(jm *JavaModule) int {
+	managed := ctx.javaManagedOf(jm)
+
+	return len(managed.mods) + len(managed.foreign)
+}
+
 func (ctx *GenCtx) javaManagedOf(jm *JavaModule) javaManaged {
 	if jm.managedDone {
 		return jm.managed

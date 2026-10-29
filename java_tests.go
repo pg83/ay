@@ -387,8 +387,8 @@ func (ctx *GenCtx) javaJunitSuite(jm *JavaModule) *TestSuite {
 		s.relatedPaths = append(s.relatedPaths, "$(S)/"+rel)
 	}
 
-	var classpath []string
-	var testDeps []JavaClosureEntry
+	classpath := make([]string, 0, ctx.javaManagedLen(jm))
+	testDeps := make([]JavaClosureEntry, 0, ctx.javaManagedLen(jm))
 
 	for e := range closure {
 		if rel := e.path.relString(); strings.HasSuffix(rel, ".jar") {
@@ -414,7 +414,7 @@ func (ctx *GenCtx) javaJunitSuite(jm *JavaModule) *TestSuite {
 
 	deps := ctx.javaBuilder(jm)
 
-	deps.closure(slices.Values(testDeps))
+	deps.closure(slices.Values(testDeps), len(testDeps))
 
 	s.projectBuildDeps = true
 	s.deps = deps.deps
@@ -575,7 +575,9 @@ func (ctx *GenCtx) javaClasspathClashSuite(jm *JavaModule) *TestSuite {
 	s.setupPythonpathEnv = true
 	s.supportsTestParameters = true
 
-	paths := []string{jm.dir + "/" + jm.name + ".jar"}
+	paths := make([]string, 1, 1+ctx.javaManagedLen(jm))
+
+	paths[0] = jm.dir + "/" + jm.name + ".jar"
 
 	for e := range ctx.javaManagedPeersClosure(jm) {
 		if e.java != nil {
