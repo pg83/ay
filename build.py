@@ -636,16 +636,56 @@ validation_results = []
 validation_gates = []
 validation_result_paths = []
 validation_gate_by_id = {}
+validation_inputs_by_id = {}
+
+
+def validation_merged(case_id, members):
+    """A case over several cases at once: their slices and references merged."""
+    indexed = f"$(B)/validation/indexed/{case_id}.indexed"
+    reference = f"$(B)/validation/reference/{case_id}.norm.jsonl"
+    slices = [validation_inputs_by_id[member][0] for member in members]
+    references = [validation_inputs_by_id[member][1] for member in members]
+    merged_indexed = command(
+        name=f"validation_indexed_{slug(case_id)}",
+        outputs=[indexed],
+        deps=[ay_indexmerge, *slices],
+        cmd=[
+            mkdir("$(B)/validation/indexed"),
+            [ay_indexmerge.outputs[0], "--out", indexed, *(target.outputs[0] for target in slices)],
+        ],
+        descr="IM",
+        color="blue",
+    )
+    merged_reference = command(
+        name=f"validation_reference_{slug(case_id)}",
+        outputs=[reference],
+        deps=[ay_graphmerge, *references],
+        cmd=[
+            mkdir("$(B)/validation/reference"),
+            [
+                "bash", "-o", "pipefail", "-c", '"$1" "${@:3}" > "$2"', "graphmerge",
+                ay_graphmerge.outputs[0], reference, *(target.outputs[0] for target in references),
+            ],
+        ],
+        descr="GM",
+        color="blue",
+    )
+    return merged_indexed, merged_reference
+
 
 for case in validation_config:
     case_id = case["id"]
     case_slug = slug(case_id)
     if case_id != case_slug:
         raise RuntimeError(f"validation case id must be path-safe: {case_id!r}")
-    slice_archive = validation_resource(case["slice_url"], case.get("slice_sha256"))
-    graph_archive = validation_resource(case["graph_url"], case.get("graph_sha256"))
-    slice_indexed = validation_indexed(slice_archive, resource_id(case["slice_url"]), ".arcadia.root")
-    reference = validation_reference(graph_archive, resource_id(case["graph_url"]))
+    if "merge" in case:
+        slice_indexed, reference = validation_merged(case_id, case["merge"])
+    else:
+        slice_archive = validation_resource(case["slice_url"], case.get("slice_sha256"))
+        graph_archive = validation_resource(case["graph_url"], case.get("graph_sha256"))
+        slice_indexed = validation_indexed(slice_archive, resource_id(case["slice_url"]), ".arcadia.root")
+        reference = validation_reference(graph_archive, resource_id(case["graph_url"]))
+    validation_inputs_by_id[case_id] = (slice_indexed, reference)
     result_directory = f"$(B)/validation/cases/{case_id}"
     result_path = result_directory + "/result.json"
     encoded_spec = base64.urlsafe_b64encode(
@@ -756,6 +796,7 @@ if partition is not None:
     ]
 
 group("install", ay)
+group("p12", validation_gate_by_id["p12_full"])
 group("unit", *unit_members)
 group("validation_resources", *resource_targets.values())
 group("validation_results", validation_summary)

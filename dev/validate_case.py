@@ -183,15 +183,15 @@ class CaseRunner:
                     "detail": detail,
                     "generation_seconds": round(generation_seconds, 6),
                     "ay_sha256": file_sha256(self.ay),
-                    "slice_resource": resource_id(self.spec["slice_url"]),
-                    "graph_resource": resource_id(self.spec["graph_url"]),
+                    "slice_resource": resource_id(self.spec["slice_url"]) if "merge" not in self.spec else self.spec["id"],
+                    "graph_resource": resource_id(self.spec["graph_url"]) if "merge" not in self.spec else self.spec["id"],
                     "parity": parity,
                 }
 
 
 def decode_spec(encoded: str) -> dict:
     value = json.loads(base64.urlsafe_b64decode(encoded.encode()).decode())
-    required = ("id", "target", "command", "slice_url", "graph_url", "xfail")
+    required = ("id", "target", "command", "xfail", *(() if "merge" in value else ("slice_url", "graph_url")))
     missing = [key for key in required if key not in value]
     if missing:
         raise ValueError(f"validation case is missing: {', '.join(missing)}")
