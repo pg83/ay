@@ -881,7 +881,25 @@ func (ctx *GenCtx) javaRecordIncluded(jm *JavaModule) {
 		return
 	}
 
+	r, stable := ctx.javaIncludedRecipeOf(jm, true)
+
+	if len(r.paths)+len(r.chunks)+len(r.own)+len(r.refs)+len(r.peers) == 0 {
+		return
+	}
+
+	jm.incInputs = len(r.paths) > 0 || len(r.chunks) > 0 || slices.ContainsFunc(r.peers, func(p *JavaModule) bool { return p.incInputs })
+
+	if !stable {
+		jm.incRecipe = &r
+	}
+
+	jm.included = &ModuleIncludedDeps{settle: func(d *ModuleIncludedDeps) { ctx.javaSettleIncluded(jm, d) }}
+}
+
+func (ctx *GenCtx) javaIncludedRecipeOf(jm *JavaModule, record bool) (javaIncludedRecipe, bool) {
 	var r javaIncludedRecipe
+
+	stable := true
 
 	for _, p := range jm.unmanageable {
 		res := p.res
@@ -931,9 +949,6 @@ func (ctx *GenCtx) javaRecordIncluded(jm *JavaModule) {
 		}
 	}
 
-	inputs := len(r.paths) > 0 || len(r.chunks) > 0
-	refs := len(r.own) > 0 || len(r.refs) > 0
-
 	for e := range ctx.javaManagedPeersClosure(jm) {
 		p := e.java
 
@@ -944,29 +959,34 @@ func (ctx *GenCtx) javaRecordIncluded(jm *JavaModule) {
 		if p.outRef != 0 {
 			r.paths = append(r.paths, p.target)
 			r.own = append(r.own, p.outRef)
-
-			inputs = true
+		} else {
+			stable = false
 		}
 
-		ctx.javaRecordIncluded(p)
+		if record {
+			ctx.javaRecordIncluded(p)
+		}
 
-		if p.incState == javaIncludedDone && p.included != nil {
+		switch {
+		case p.incState != javaIncludedDone:
+			stable = false
+		case p.included != nil:
 			r.peers = append(r.peers, p)
-			inputs = inputs || p.incInputs
 		}
 	}
 
-	if !inputs && !refs && len(r.own) == 0 && len(r.peers) == 0 {
-		return
-	}
-
-	jm.incInputs = inputs
-	jm.incRecipe = &r
-	jm.included = &ModuleIncludedDeps{settle: func(d *ModuleIncludedDeps) { ctx.javaSettleIncluded(jm, d) }}
+	return r, stable
 }
 
 func (ctx *GenCtx) javaSettleIncluded(jm *JavaModule, d *ModuleIncludedDeps) {
 	r := jm.incRecipe
+
+	if r == nil {
+		rebuilt, _ := ctx.javaIncludedRecipeOf(jm, false)
+
+		r = &rebuilt
+	}
+
 	chunks := make([][]VFS, 0, len(r.chunks)+len(r.peers))
 	refs := make([][]NodeRef, 0, len(r.refs)+len(r.peers)+1)
 
