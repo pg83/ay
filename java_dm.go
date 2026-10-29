@@ -50,9 +50,27 @@ func javaClosureIsExcluded(e uint64) bool {
 	return e&javaClosureExcluded != 0
 }
 
-type javaClosureMarks struct {
-	gen   Vec[uint64]
+type javaPeerSlot struct {
+	visited uint32
+	member  uint32
+	acc     uint32
+	seen    uint32
+	target  uint32
+}
+
+type javaLibSlot struct {
 	epoch uint32
+	m     uint32
+	kind  javaPeerResolution
+}
+
+type javaResolveLevel struct {
+	epoch uint32
+	peers Vec[javaPeerSlot]
+	libs  Vec[javaLibSlot]
+	queue []javaResolvedPeer
+	stack [][]javaResolvedPeer
+	order []*JavaModule
 }
 
 type javaClosureScratch struct {
@@ -63,13 +81,28 @@ type javaClosureScratch struct {
 	excl      Vec[uint64]
 	exclEpoch uint32
 	exBuf     []uint64
-	marks     []*javaClosureMarks
+	libIDs    map[string]uint32
+	levels    []*javaResolveLevel
 	depth     int
 }
 
 func (s *javaClosureScratch) register(jm *JavaModule) {
 	jm.id = uint32(len(s.byID))
 	s.byID = append(s.byID, jm)
+
+	lib := javaPathParent(jm.dir)
+	id, ok := s.libIDs[lib]
+
+	if !ok {
+		if s.libIDs == nil {
+			s.libIDs = map[string]uint32{}
+		}
+
+		id = uint32(len(s.libIDs))
+		s.libIDs[lib] = id
+	}
+
+	jm.lib = id
 }
 
 func (s *javaClosureScratch) begin() {
@@ -174,56 +207,67 @@ func (s *javaClosureScratch) exclude(c javaClosure, pred func(*JavaModule) bool,
 	return out
 }
 
-func (s *javaClosureScratch) pushMarks() *javaClosureMarks {
-	if s.depth == len(s.marks) {
-		s.marks = append(s.marks, &javaClosureMarks{})
+func (s *javaClosureScratch) pushLevel() *javaResolveLevel {
+	if s.depth == len(s.levels) {
+		s.levels = append(s.levels, &javaResolveLevel{})
 	}
 
-	m := s.marks[s.depth]
+	lv := s.levels[s.depth]
 
 	s.depth++
-	m.epoch++
+	lv.epoch++
 
-	return m
+	return lv
 }
 
-func (s *javaClosureScratch) popMarks() {
+func (s *javaClosureScratch) popLevel() {
 	s.depth--
 }
 
-func (m *javaClosureMarks) cell(id uint32) *uint64 {
-	m.gen.ensureLen(int(id) + 1)
+func (lv *javaResolveLevel) peer(id uint32) *javaPeerSlot {
+	if int(id) >= lv.peers.len() {
+		lv.peers.ensureLen(int(id) + 1)
+	}
 
-	return &m.gen.s[id]
+	return &lv.peers.s[id]
 }
 
-func (m *javaClosureMarks) visit(id uint32) bool {
-	c := m.cell(id)
+func (lv *javaResolveLevel) lib(id uint32) *javaLibSlot {
+	if int(id) >= lv.libs.len() {
+		lv.libs.ensureLen(int(id) + 1)
+	}
 
-	if uint32(*c>>32) == m.epoch {
+	return &lv.libs.s[id]
+}
+
+func (lv *javaResolveLevel) addMember(id uint32) {
+	lv.peer(id).member = lv.epoch
+}
+
+func (lv *javaResolveLevel) addMembers(c javaClosure) {
+	for _, e := range c {
+		if !javaClosureIsExcluded(e) {
+			lv.addMember(javaClosureID(e))
+		}
+	}
+}
+
+func (lv *javaResolveLevel) visit(id uint32) bool {
+	p := lv.peer(id)
+
+	if p.visited == lv.epoch {
 		return false
 	}
 
-	*c = uint64(m.epoch)<<32 | uint64(uint32(*c))
+	p.visited = lv.epoch
 
 	return true
 }
 
-func (m *javaClosureMarks) addMember(id uint32) {
-	c := m.cell(id)
-
-	*c = *c&^(1<<32-1) | uint64(m.epoch)
-}
-
-func (m *javaClosureMarks) member(id uint32) bool {
-	return int(id) < m.gen.len() && uint32(m.gen.s[id]) == m.epoch
-}
-
-func (m *javaClosureMarks) addMembers(c javaClosure) {
-	for _, e := range c {
-		if !javaClosureIsExcluded(e) {
-			m.addMember(javaClosureID(e))
-		}
+func (lv *javaResolveLevel) resolveTo(conflict, target uint32) {
+	if p := lv.peer(conflict); p.acc != lv.epoch {
+		p.acc = lv.epoch
+		p.target = target
 	}
 }
 
@@ -336,94 +380,67 @@ func (r *javaDMRules) addDependencyManagement(libWithVer string) {
 	r.lib2Ver[javaPathParent(libWithVer)] = libWithVer
 }
 
-type javaResolutionInfo struct {
-	minDepth   int
-	resolution javaResolvedPeer
-}
-
-type javaResolutionRecord struct {
-	choice  javaResolvedPeer
-	version string
-}
-
 type javaConflictResolver struct {
-	ctx         *GenCtx
-	parent      *JavaModule
-	rules       *javaDMRules
-	accumulated map[*JavaModule]javaResolutionInfo
-	resolutions map[string]*javaResolutionRecord
+	ctx    *GenCtx
+	parent *JavaModule
+	rules  *javaDMRules
+	lv     *javaResolveLevel
 }
 
-func (r *javaConflictResolver) accept(conflict *JavaModule, resolution javaResolvedPeer, depth int) *JavaModule {
-	info, ok := r.accumulated[conflict]
+func (r *javaConflictResolver) accept(conflict, target *JavaModule, managed bool) *JavaModule {
+	lv := r.lv
 
-	if !ok {
-		info = javaResolutionInfo{minDepth: depth, resolution: resolution}
-		r.accumulated[conflict] = info
+	lv.resolveTo(conflict.id, target.id)
+
+	t := lv.peer(conflict.id).target
+
+	if managed {
+		lv.resolveTo(t, t)
 	}
 
-	if resolution.resolution == jprManaged {
-		if _, ok := r.accumulated[info.resolution.m]; !ok {
-			r.accumulated[info.resolution.m] = info
-		}
-	}
-
-	return info.resolution.m
+	return r.ctx.jc.byID[t]
 }
 
 func (r *javaConflictResolver) resolve(cur javaResolvedPeer, depth int) *JavaModule {
 	if cur.resolution == jprUnversioned {
-		return r.accept(cur.m, cur, depth)
+		return r.accept(cur.m, cur.m, false)
 	}
 
-	peerDir := cur.m.dir
-	libName := javaPathParent(peerDir)
-	libVer := javaPathBasename(peerDir)
+	lv := r.lv
 
-	if rec, ok := r.resolutions[libName]; ok {
-		if rec.choice.resolution == jprManaged {
-			if _, ok := r.accumulated[cur.m]; !ok {
-				r.accumulated[cur.m] = javaResolutionInfo{minDepth: depth, resolution: rec.choice}
-			}
+	if l := lv.lib(cur.m.lib); l.epoch == lv.epoch {
+		if l.kind == jprManaged {
+			lv.resolveTo(cur.m.id, l.m)
 		}
 
 		return nil
 	}
 
-	rec := &javaResolutionRecord{choice: cur, version: libVer}
+	*lv.lib(cur.m.lib) = javaLibSlot{epoch: lv.epoch, m: cur.m.id, kind: cur.resolution}
 
-	r.resolutions[libName] = rec
+	resolved := r.explicitResolution(cur.m.dir, depth == 1)
 
-	resolve, dmVer := r.explicitResolution(peerDir, depth == 1)
-
-	if resolve == nil {
+	if resolved == nil {
 		if cur.resolution == jprManaged {
-			rec.choice.resolution = jprTransitive
+			lv.lib(cur.m.lib).kind = jprTransitive
 		}
 
-		return r.accept(cur.m, rec.choice, depth)
+		return r.accept(cur.m, cur.m, false)
 	}
 
-	rec.choice = javaResolvedPeer{m: resolve, resolution: jprManaged}
-	rec.version = dmVer
+	*lv.lib(cur.m.lib) = javaLibSlot{epoch: lv.epoch, m: resolved.id, kind: jprManaged}
 
-	return r.accept(cur.m, rec.choice, depth)
+	return r.accept(cur.m, resolved, true)
 }
 
-func (r *javaConflictResolver) explicitResolution(peerDir string, isDirect bool) (*JavaModule, string) {
+func (r *javaConflictResolver) explicitResolution(peerDir string, isDirect bool) *JavaModule {
 	rule := r.rules.ruleForPeer(peerDir, isDirect)
 
 	if rule == "" {
-		return nil, ""
+		return nil
 	}
 
-	m := r.ctx.javaContrib(r.parent, rule)
-
-	if m == nil {
-		return nil, ""
-	}
-
-	return m, javaPathBasename(rule)
+	return r.ctx.javaContrib(r.parent, rule)
 }
 
 func (ctx *GenCtx) javaManageLocalPeers(jm *JavaModule, rawPeers []*JavaModule, rules *javaDMRules) []javaResolvedPeer {
@@ -543,38 +560,28 @@ func (ctx *GenCtx) javaMergeClosure(jm *JavaModule) javaClosure {
 	return s.commit()
 }
 
-func (ctx *GenCtx) javaResolveConflicts(jm *JavaModule) map[*JavaModule]javaResolutionInfo {
+func (ctx *GenCtx) javaResolveConflicts(jm *JavaModule, lv *javaResolveLevel) {
 	if len(jm.direct) == 0 {
-		return nil
+		return
 	}
 
-	resolver := &javaConflictResolver{
-		ctx:         ctx,
-		parent:      jm,
-		rules:       jm.rules,
-		accumulated: map[*JavaModule]javaResolutionInfo{},
-		resolutions: map[string]*javaResolutionRecord{},
-	}
+	resolver := javaConflictResolver{ctx: ctx, parent: jm, rules: jm.rules, lv: lv}
 
-	marks := ctx.jc.pushMarks()
+	lv.addMembers(jm.closure)
 
-	defer ctx.jc.popMarks()
+	queue := lv.queue[:0]
 
-	marks.addMembers(jm.closure)
-
-	var queue []javaResolvedPeer
-
-	enqueue := func(peers []javaResolvedPeer) {
-		admit := func(peer javaResolvedPeer) bool {
-			if !marks.visit(peer.m.id) || !marks.member(peer.m.id) {
-				return false
-			}
-
-			queue = append(queue, peer)
-
-			return true
+	admit := func(peer javaResolvedPeer) bool {
+		if !lv.visit(peer.m.id) || lv.peer(peer.m.id).member != lv.epoch {
+			return false
 		}
 
+		queue = append(queue, peer)
+
+		return true
+	}
+
+	enqueue := func(peers []javaResolvedPeer) {
 		for _, peer := range peers {
 			if !admit(peer) || !peer.m.unit.transparent {
 				continue
@@ -607,25 +614,23 @@ func (ctx *GenCtx) javaResolveConflicts(jm *JavaModule) map[*JavaModule]javaReso
 		case resolved == nil:
 			continue
 		default:
-			marks.visit(resolved.id)
+			lv.visit(resolved.id)
 
 			if resolved.closureReady {
-				marks.addMembers(ctx.jc.exclude(resolved.closure, excludePred, false))
-				marks.addMember(resolved.id)
+				lv.addMembers(ctx.jc.exclude(resolved.closure, excludePred, false))
+				lv.addMember(resolved.id)
 			}
 		}
 
 		enqueue(resolved.direct)
 	}
 
-	return resolver.accumulated
+	lv.queue = queue[:0]
 }
 
-func javaPreorderSort(direct []javaResolvedPeer, resolution map[*JavaModule]javaResolutionInfo, skipTransitiveImpl bool) []*JavaModule {
-	var res []*JavaModule
-
-	seen := map[*JavaModule]bool{}
-	stack := [][]javaResolvedPeer{direct}
+func (lv *javaResolveLevel) preorder(byID []*JavaModule, direct []javaResolvedPeer, skipTransitiveImpl bool) []*JavaModule {
+	res := lv.order[:0]
+	stack := append(lv.stack[:0], direct)
 
 	for len(stack) > 0 {
 		top := stack[len(stack)-1]
@@ -644,25 +649,31 @@ func javaPreorderSort(direct []javaResolvedPeer, resolution map[*JavaModule]java
 			continue
 		}
 
-		info, ok := resolution[cur.m]
+		p := lv.peer(cur.m.id)
 
-		if !ok {
+		if p.acc != lv.epoch {
 			continue
 		}
 
-		target := info.resolution.m
+		t := p.target
 
-		if seen[target] {
+		if tp := lv.peer(t); tp.seen == lv.epoch {
 			continue
+		} else {
+			tp.seen = lv.epoch
 		}
 
-		seen[target] = true
+		target := byID[t]
+
 		res = append(res, target)
 
 		if len(target.direct) > 0 {
 			stack = append(stack, target.direct)
 		}
 	}
+
+	lv.stack = stack[:0]
+	lv.order = res
 
 	return res
 }
@@ -674,7 +685,13 @@ func (ctx *GenCtx) javaManagedPeersClosure(jm *JavaModule) []JavaClosureEntry {
 
 	jm.managedDone = true
 
-	sorted := javaPreorderSort(jm.direct, ctx.javaResolveConflicts(jm), jm.unit.compileView)
+	lv := ctx.jc.pushLevel()
+
+	defer ctx.jc.popLevel()
+
+	ctx.javaResolveConflicts(jm, lv)
+
+	sorted := lv.preorder(ctx.jc.byID, jm.direct, jm.unit.compileView)
 	excludedTags := jm.unit.dmTagsExclude
 
 	if jm.data.uberjar {

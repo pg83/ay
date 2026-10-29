@@ -374,6 +374,7 @@ type JavaProtoPlugin struct {
 
 type JavaModule struct {
 	id               uint32
+	lib              uint32
 	dir              string
 	path             VFS
 	instance         ModuleInstance
