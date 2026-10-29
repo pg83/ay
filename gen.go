@@ -368,6 +368,7 @@ func newGenCtx(fs FS, parsers *IncludeParserManager, hostP, targetP *Platform, e
 		descSlices: newSliceCache[DescProtoPeer](1 << 3),
 		tcMemo:     map[ToolchainKey]ModuleToolchain{},
 		javaRules:  newIntMap[[]*javaDMRules](0),
+		jc:         newJavaClosureScratch(),
 
 		walking:   make(map[ModuleInstance]bool),
 		host:      hostP,

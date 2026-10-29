@@ -374,7 +374,9 @@ type JavaProtoPlugin struct {
 
 type JavaModule struct {
 	id               uint32
+	self             uint32
 	lib              uint32
+	file             uint32
 	dir              string
 	path             VFS
 	instance         ModuleInstance
@@ -607,10 +609,10 @@ func (ctx *GenCtx) javaDMRulesOf(dm, excludes []ANY) *javaDMRules {
 		}
 	}
 
-	r := &javaDMRules{lib2Ver: map[string]string{}, dm: slices.Clone(dm), excludes: slices.Clone(excludes), excluded: map[string]struct{}{}}
+	r := &javaDMRules{jc: &ctx.jc, lib2Ver: map[uint32]uint32{}, dm: slices.Clone(dm), excludes: slices.Clone(excludes), excluded: map[uint32]struct{}{}}
 
 	for _, item := range dm {
-		r.addDependencyManagement(item.string())
+		r.addDependencyManagement(ctx.jc.anyPathID(item))
 	}
 
 	for _, e := range excludes {

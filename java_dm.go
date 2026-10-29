@@ -8,6 +8,7 @@ import (
 const (
 	javaPathCountMask   = 1<<31 - 1
 	javaClosureExcluded = 1 << 31
+	javaPathRoot        = 1
 )
 
 const (
@@ -89,28 +90,63 @@ type javaClosureScratch struct {
 	exBuf     []uint64
 	expBuf    []uint64
 	expEnd    []uint32
-	libIDs    map[string]uint32
+	pathIDs   map[string]uint32
+	paths     []string
+	parents   []uint32
+	anyPaths  map[ANY]uint32
 	levels    []*javaResolveLevel
 	depth     int
+}
+
+func newJavaClosureScratch() javaClosureScratch {
+	return javaClosureScratch{
+		pathIDs:  map[string]uint32{"": javaPathRoot},
+		paths:    []string{"", ""},
+		parents:  []uint32{0, 0},
+		anyPaths: map[ANY]uint32{},
+	}
+}
+
+func (s *javaClosureScratch) pathID(p string) uint32 {
+	if id, ok := s.pathIDs[p]; ok {
+		return id
+	}
+
+	parent := s.pathID(javaPathParent(p))
+	id := uint32(len(s.paths))
+
+	s.pathIDs[p] = id
+	s.paths = append(s.paths, p)
+	s.parents = append(s.parents, parent)
+
+	return id
+}
+
+func (s *javaClosureScratch) anyPathID(a ANY) uint32 {
+	id, ok := s.anyPaths[a]
+
+	if !ok {
+		id = s.pathID(a.string())
+		s.anyPaths[a] = id
+	}
+
+	return id
 }
 
 func (s *javaClosureScratch) register(jm *JavaModule) {
 	jm.id = uint32(len(s.byID))
 	s.byID = append(s.byID, jm)
 
-	lib := javaPathParent(jm.dir)
-	id, ok := s.libIDs[lib]
+	jm.self = s.pathID(jm.dir)
+	jm.lib = s.parents[jm.self]
+}
 
-	if !ok {
-		if s.libIDs == nil {
-			s.libIDs = map[string]uint32{}
-		}
-
-		id = uint32(len(s.libIDs))
-		s.libIDs[lib] = id
+func (s *javaClosureScratch) fileID(jm *JavaModule) uint32 {
+	if jm.file == 0 {
+		jm.file = s.pathID(jm.fileName())
 	}
 
-	jm.lib = id
+	return jm.file
 }
 
 func (s *javaClosureScratch) begin() {
@@ -280,12 +316,14 @@ func (lv *javaResolveLevel) resolveTo(conflict, target uint32) {
 }
 
 type javaDMRules struct {
-	lib2Ver  map[string]string
+	jc       *javaClosureScratch
+	lib2Ver  map[uint32]uint32
 	dm       []ANY
 	excludes []ANY
-	excluded map[string]struct{}
+	excluded map[uint32]struct{}
 	loose    []string
 	memo     TwoBitSet
+	ruleMemo map[uint32]bool
 }
 
 func javaPathIsPrefixOf(prefix, path string) bool {
@@ -315,28 +353,26 @@ func (r *javaDMRules) addExclude(e string) {
 		return
 	}
 
-	r.excluded[prefix] = struct{}{}
+	r.excluded[r.jc.pathID(prefix)] = struct{}{}
 }
 
-func (r *javaDMRules) isExcluded(path string) bool {
+func (r *javaDMRules) isExcluded(id uint32) bool {
 	if len(r.excluded) > 0 {
-		for p := path; ; {
+		parents := r.jc.parents
+
+		for p := id; ; p = parents[p] {
 			if _, ok := r.excluded[p]; ok {
 				return true
 			}
 
-			i := strings.LastIndexByte(p, '/')
-
-			if i < 0 {
+			if p == javaPathRoot || parents[p] == javaPathRoot {
 				break
 			}
-
-			p = p[:i]
 		}
 	}
 
 	for _, e := range r.loose {
-		if javaPathIsPrefixOf(e, path) {
+		if javaPathIsPrefixOf(e, r.jc.paths[id]) {
 			return true
 		}
 	}
@@ -349,7 +385,7 @@ func (r *javaDMRules) excludesModule(m *JavaModule) bool {
 		return v == 2
 	}
 
-	excluded := r.isExcluded(m.fileName())
+	excluded := r.isExcluded(r.jc.fileID(m))
 
 	if excluded {
 		r.memo.set(m.id, 2)
@@ -360,32 +396,55 @@ func (r *javaDMRules) excludesModule(m *JavaModule) bool {
 	return excluded
 }
 
-func (r *javaDMRules) ruleForPeer(peerDir string, isDirect bool) string {
-	if rule, ok := r.lib2Ver[peerDir]; ok && (isDirect || !r.isExcluded(rule)) {
+func (r *javaDMRules) ruleExcluded(rule uint32) bool {
+	if len(r.excluded) == 0 && len(r.loose) == 0 {
+		return false
+	}
+
+	excluded, ok := r.ruleMemo[rule]
+
+	if !ok {
+		if r.ruleMemo == nil {
+			r.ruleMemo = map[uint32]bool{}
+		}
+
+		excluded = r.isExcluded(rule)
+		r.ruleMemo[rule] = excluded
+	}
+
+	return excluded
+}
+
+func (r *javaDMRules) ruleForPeer(peer *JavaModule, isDirect bool) uint32 {
+	if rule, ok := r.lib2Ver[peer.self]; ok && (isDirect || !r.ruleExcluded(rule)) {
 		return rule
 	}
 
-	parent := javaPathParent(peerDir)
-
-	if rule, ok := r.lib2Ver[parent]; ok {
+	if rule, ok := r.lib2Ver[peer.lib]; ok {
 		if isDirect {
-			return peerDir
+			return peer.self
 		}
 
-		if !r.isExcluded(rule) {
+		if !r.ruleExcluded(rule) {
 			return rule
 		}
 	}
 
-	return ""
+	return 0
 }
 
-func (r *javaDMRules) addDependencyManagement(libWithVer string) {
+func (r *javaDMRules) addDependencyManagement(libWithVer uint32) {
 	if _, ok := r.lib2Ver[libWithVer]; ok {
 		return
 	}
 
-	r.lib2Ver[javaPathParent(libWithVer)] = libWithVer
+	r.lib2Ver[r.jc.parents[libWithVer]] = libWithVer
+}
+
+func (r *javaDMRules) pins(m *JavaModule) bool {
+	v, ok := r.lib2Ver[m.lib]
+
+	return ok && v == m.self
 }
 
 type javaConflictResolver struct {
@@ -426,7 +485,7 @@ func (r *javaConflictResolver) resolve(cur javaResolvedPeer, depth int) *JavaMod
 
 	*lv.lib(cur.m.lib) = javaLibSlot{epoch: lv.epoch, m: cur.m.id, kind: cur.resolution}
 
-	resolved := r.explicitResolution(cur.m.dir, depth == 1)
+	resolved := r.explicitResolution(cur.m, depth == 1)
 
 	if resolved == nil {
 		if cur.resolution == jprManaged {
@@ -441,14 +500,14 @@ func (r *javaConflictResolver) resolve(cur javaResolvedPeer, depth int) *JavaMod
 	return r.accept(cur.m, resolved, true)
 }
 
-func (r *javaConflictResolver) explicitResolution(peerDir string, isDirect bool) *JavaModule {
-	rule := r.rules.ruleForPeer(peerDir, isDirect)
+func (r *javaConflictResolver) explicitResolution(peer *JavaModule, isDirect bool) *JavaModule {
+	rule := r.rules.ruleForPeer(peer, isDirect)
 
-	if rule == "" {
+	if rule == 0 {
 		return nil
 	}
 
-	return r.ctx.javaContrib(r.parent, rule)
+	return r.ctx.javaContrib(r.parent, r.ctx.jc.paths[rule])
 }
 
 func (ctx *GenCtx) javaManageLocalPeers(jm *JavaModule, rawPeers []*JavaModule, rules *javaDMRules) []javaResolvedPeer {
@@ -458,14 +517,15 @@ func (ctx *GenCtx) javaManageLocalPeers(jm *JavaModule, rawPeers []*JavaModule, 
 		impl := jm.implPeers[peer.dir]
 
 		if peer.proxyFor != nil {
-			rule := rules.ruleForPeer(peer.dir, true)
+			ruleID := rules.ruleForPeer(peer, true)
 
-			if rule == "" {
+			if ruleID == 0 {
 				ctx.onWarn(Warn{Kind: WarnModuleFailed, Message: jm.dir + ": Dependency with default version: " + peer.proxyFor.dir})
 
 				continue
 			}
 
+			rule := ctx.jc.paths[ruleID]
 			target := ctx.javaContrib(jm, rule)
 
 			if target == nil {
@@ -821,7 +881,7 @@ func (ctx *GenCtx) javaRecordIncluded(jm *JavaModule) {
 	for _, e := range ctx.javaManagedPeersClosure(jm) {
 		p := e.java
 
-		if p == nil || !slices.Contains(jm.managedPeers, p) && jm.rules.lib2Ver[javaPathParent(p.dir)] != p.dir {
+		if p == nil || !slices.Contains(jm.managedPeers, p) && !jm.rules.pins(p) {
 			continue
 		}
 
