@@ -147,7 +147,7 @@ func (b *javaNodeBuilder) javaScriptgenScripts(jm *JavaModule, globals map[strin
 				strOutput.any(), out.any(), strTemplate.any(), tmpl.any(),
 				strD2.any(), internStr(flag).any(),
 				strD2.any(), internV("JAR_NAME=", jm.name, ".jar").any(),
-				strD2.any(), internStr("CLASSPATH=" + javaJoinedNames(javaClosureJars(closure, ".jar"))).any(),
+				strD2.any(), b.ctx.javaClasspathArg(closure, ".jar"),
 				strD2.any(), internV("PROJECT_DIR=", jm.dir).any(),
 				strD2.any(), internV("JAR_BASENAME=", jm.name).any(),
 				strD2.any(), internV("MAIN_CLASS=", d.jarMainClass).any(),
@@ -182,15 +182,18 @@ func javaYesIf(v bool) string {
 	return ""
 }
 
-func javaJoinedNames(paths []VFS) string {
-	var sb strings.Builder
+func (ctx *GenCtx) javaClasspathArg(closure javaClosureSeq, ext string) ANY {
+	buf := append(ctx.javaScratch[:0], "CLASSPATH="...)
 
-	for _, p := range paths {
-		sb.WriteString("::")
-		sb.WriteString(path.Base(p.relString()))
+	for e := range closure {
+		if rel := e.path.relString(); strings.HasSuffix(rel, ext) {
+			buf = append(append(buf, "::"...), path.Base(rel)...)
+		}
 	}
 
-	return sb.String()
+	ctx.javaScratch = buf
+
+	return internBytes(buf).any()
 }
 
 func (ctx *GenCtx) javaEmitRunnable(jm *JavaModule) {
@@ -244,7 +247,7 @@ func (ctx *GenCtx) javaEmitRunnable(jm *JavaModule) {
 			strOutput.any(), build(jm.dir, "/run.sh").any(),
 			strD2.any(), strGenerateDefaultRunnerYes.any(),
 			strD2.any(), internV("JAR_NAME=", jm.name, ".jar").any(),
-			strD2.any(), internStr("CLASSPATH=" + javaJoinedNames(javaEntryPaths(closure))).any(),
+			strD2.any(), ctx.javaClasspathArg(closure, ""),
 			strD2.any(), internV("PROJECT_DIR=", jm.name).any(),
 			strD2.any(), internV("JAR_BASENAME=", jm.name).any(),
 			strD2.any(), internV("MAIN_CLASS=", d.jarMainClass).any(),

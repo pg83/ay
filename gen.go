@@ -224,6 +224,7 @@ type GenCtx struct {
 	javaExclBuf         []ANY
 	javaRawVars         map[string]string
 	javaPrologue        []ANY
+	javaScratch         []byte
 	dllForStack         []string
 	includeStack        []string
 	ifEnvScratch        EnvStore
