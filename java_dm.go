@@ -1,6 +1,7 @@
 package main
 
 import (
+	"slices"
 	"strings"
 )
 
@@ -62,6 +63,10 @@ func (c *javaPeersClosure) merge(node *JavaModule, closure *javaPeersClosure, pa
 }
 
 func (c *javaPeersClosure) exclude(pred func(*JavaModule) bool, nodeClosure func(*JavaModule) *javaPeersClosure, skipPropagation func(*JavaModule) bool) *javaPeersClosure {
+	if pred == nil || !slices.ContainsFunc(c.topSort, pred) {
+		return c
+	}
+
 	res := &javaPeersClosure{stats: make(map[*JavaModule]*javaClosureStat, len(c.topSort)), topSort: make([]*JavaModule, 0, len(c.topSort))}
 	excludedPaths := map[*JavaModule]uint32{}
 
@@ -129,6 +134,7 @@ type javaDMRules struct {
 	excludes []string
 	excluded map[string]struct{}
 	loose    []string
+	memo     TwoBitSet
 }
 
 func javaPathIsPrefixOf(prefix, path string) bool {
@@ -185,6 +191,22 @@ func (r *javaDMRules) isExcluded(path string) bool {
 	}
 
 	return false
+}
+
+func (r *javaDMRules) excludesModule(m *JavaModule) bool {
+	if v := r.memo.get(m.id); v != 0 {
+		return v == 2
+	}
+
+	excluded := r.isExcluded(m.fileName())
+
+	if excluded {
+		r.memo.set(m.id, 2)
+	} else {
+		r.memo.set(m.id, 1)
+	}
+
+	return excluded
 }
 
 func (r *javaDMRules) ruleForPeer(peerDir string, isDirect bool) string {
@@ -350,9 +372,11 @@ func (ctx *GenCtx) javaManageLocalPeers(jm *JavaModule, rawPeers []*JavaModule, 
 }
 
 func javaClosureExcludePred(rules *javaDMRules) func(*JavaModule) bool {
-	return func(m *JavaModule) bool {
-		return rules.isExcluded(m.fileName())
+	if len(rules.excluded) == 0 && len(rules.loose) == 0 {
+		return nil
 	}
+
+	return rules.excludesModule
 }
 
 func javaClosureOf(m *JavaModule) *javaPeersClosure {
@@ -383,8 +407,12 @@ func (jm *JavaModule) buildExpandedTransparentClosure(transparent *JavaModule, r
 			continue
 		}
 
-		pred := func(m *JavaModule) bool {
-			return !directChildren[m] && excludePred(m)
+		var pred func(*JavaModule) bool
+
+		if excludePred != nil {
+			pred = func(m *JavaModule) bool {
+				return excludePred(m) && !directChildren[m]
+			}
 		}
 
 		expanded.merge(d.m, d.m.closure.exclude(pred, javaClosureOf, javaSkipPropagation), 1)

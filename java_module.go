@@ -373,6 +373,7 @@ type JavaProtoPlugin struct {
 }
 
 type JavaModule struct {
+	id               uint32
 	dir              string
 	path             VFS
 	instance         ModuleInstance
@@ -465,7 +466,10 @@ func genJavaModule(ctx *GenCtx, instance ModuleInstance, moduleName TOK, stmts [
 
 	dir := instance.Path.relString()
 
+	ctx.javaModules++
+
 	jm := &JavaModule{
+		id:             ctx.javaModules,
 		dir:            dir,
 		path:           instance.Path,
 		instance:       instance,

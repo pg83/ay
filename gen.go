@@ -219,6 +219,7 @@ type GenCtx struct {
 	descSlices          *SliceCache[DescProtoPeer]
 	tcMemo              map[ToolchainKey]ModuleToolchain
 	javaRules           *IntMap[[]*javaDMRules]
+	javaModules         uint32
 	dllForStack         []string
 	includeStack        []string
 	ifEnvScratch        EnvStore
