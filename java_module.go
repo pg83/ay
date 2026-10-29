@@ -495,7 +495,7 @@ func genJavaModule(ctx *GenCtx, instance ModuleInstance, moduleName TOK, stmts [
 		return r
 	}
 
-	ctx.recordConfiguration(instance, jm.data.recurses, jm.data.test.depends)
+	ctx.recordConfiguration(instance, nil, jm.data.test.depends)
 
 	jm.name = jm.data.name
 

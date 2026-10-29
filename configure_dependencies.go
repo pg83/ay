@@ -85,7 +85,7 @@ func (ctx *GenCtx) configureDependencies() {
 
 		seen[dir] = true
 
-		declaration, _ := ctx.recurseScan(dir)
+		declaration := ctx.evaluateDir(dir, ctx.target).declaration
 
 		if declaration != nil {
 			root := ctx.roots[ctx.rootInstanceForDeclaration(dir, demandNone, declaration)]

@@ -8,11 +8,7 @@ type TestBuildDependency struct {
 }
 
 func (ctx *GenCtx) testDependencyInstances(dir string) []ModuleInstance {
-	declaration, certain := inferModuleDeclaration(moduleStmts(ctx, dir))
-
-	if !certain {
-		declaration, _ = ctx.recurseScan(dir)
-	}
+	declaration := ctx.evaluateDir(dir, ctx.target).declaration
 
 	if declaration == nil {
 		throwFmt("gen: %s has no module declaration (PROGRAM/LIBRARY)", dir)

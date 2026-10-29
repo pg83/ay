@@ -189,6 +189,7 @@ func protoResultWholeArchiveCmdPaths(res *ProtoSrcsResult) []VFS {
 type GenCtx struct {
 	scanData         ModuleData
 	scanDataBusy     bool
+	dirs             map[dirEvaluationKey]*DirEvaluation
 	configuration    ConfigurationDependencies
 	fbsBindings      fbsContextBindings
 	foreignTools     foreignToolBindings
@@ -411,18 +412,51 @@ func newGenCtx(fs FS, parsers *IncludeParserManager, hostP, targetP *Platform, e
 	return ctx
 }
 
+type DirEvaluation struct {
+	declaration *ModuleStmt
+	recurses    []string
+}
+
+type dirEvaluationKey struct {
+	path     VFS
+	platform *Platform
+}
+
+func (ctx *GenCtx) evaluateDir(dir string, platform *Platform) *DirEvaluation {
+	dir = filepath.Clean(dir)
+
+	key := dirEvaluationKey{source(dir), platform}
+
+	if evaluation, ok := ctx.dirs[key]; ok {
+		return evaluation
+	}
+
+	instance := ctx.rootInstanceForDeclaration(dir, demandNone, nil)
+
+	instance.Platform = platform
+
+	declaration, recurses := ctx.scanModuleConfiguration(instance)
+	evaluation := &DirEvaluation{declaration: declaration, recurses: recurses}
+
+	if ctx.dirs == nil {
+		ctx.dirs = map[dirEvaluationKey]*DirEvaluation{}
+	}
+
+	ctx.dirs[key] = evaluation
+
+	return evaluation
+}
+
 func (ctx *GenCtx) moduleName(dir string) TOK {
-	return stmtsModuleName(moduleStmts(ctx, filepath.Clean(dir)))
+	if declaration := ctx.evaluateDir(dir, ctx.target).declaration; declaration != nil {
+		return declaration.Name
+	}
+
+	return 0
 }
 
 func (ctx *GenCtx) rootInstance(dir string, demand ModuleDemand) ModuleInstance {
-	decl, certain := inferModuleDeclaration(moduleStmts(ctx, filepath.Clean(dir)))
-
-	if !certain {
-		decl, _ = ctx.recurseScan(dir)
-	}
-
-	return ctx.rootInstanceForDeclaration(dir, demand, decl)
+	return ctx.rootInstanceForDeclaration(dir, demand, ctx.evaluateDir(dir, ctx.target).declaration)
 }
 
 func (ctx *GenCtx) rootInstanceForDeclaration(dir string, demand ModuleDemand, decl *ModuleStmt) ModuleInstance {
@@ -522,9 +556,7 @@ func (ctx *GenCtx) recurseClosure(root string) []string {
 		seen[dir] = true
 		out = append(out, dir)
 
-		_, children := ctx.recurseScan(dir)
-
-		for _, child := range children {
+		for _, child := range ctx.evaluateDir(dir, ctx.target).recurses {
 			walk(child)
 		}
 	}
@@ -534,24 +566,13 @@ func (ctx *GenCtx) recurseClosure(root string) []string {
 	return out
 }
 
-func (ctx *GenCtx) recurseScan(dir string) (*ModuleStmt, []string) {
-	instance := ctx.rootInstanceForDeclaration(dir, demandNone, nil)
-
-	return ctx.scanModuleConfiguration(instance, true)
-}
-
 func (ctx *GenCtx) moduleDeclaration(instance ModuleInstance) *ModuleStmt {
-	declaration, certain := inferModuleDeclaration(moduleStmts(ctx, instance.Path.relString()))
-
-	if !certain {
-		declaration, _ = ctx.scanModuleConfiguration(instance, false)
-	}
-
-	return declaration
+	return ctx.evaluateDir(instance.Path.relString(), instance.Platform).declaration
 }
 
-func (ctx *GenCtx) scanModuleConfiguration(instance ModuleInstance, recurses bool) (*ModuleStmt, []string) {
+func (ctx *GenCtx) scanModuleConfiguration(instance ModuleInstance) (*ModuleStmt, []string) {
 	dir := instance.Path.relString()
+	platform := instance.Platform
 	env := buildIfEnvInto(&ctx.ifEnvScratch, instance)
 	d := &ctx.scanData
 
@@ -575,10 +596,6 @@ func (ctx *GenCtx) scanModuleConfiguration(instance ModuleInstance, recurses boo
 
 	scan = func(stmts []Stmt) {
 		for _, st := range stmts {
-			if module != nil && !recurses {
-				return
-			}
-
 			switch v := st.(type) {
 			case *IncludeStmt:
 				ctx.withIncludedStmts(v, env, scan)
@@ -590,10 +607,9 @@ func (ctx *GenCtx) scanModuleConfiguration(instance ModuleInstance, recurses boo
 				v = d.moduleContentDeclaration(v)
 				module = v
 
-				if recurses {
-					instance = ctx.rootInstanceForDeclaration(dir, demandNone, v)
-					apply(st)
-				}
+				instance = ctx.rootInstanceForDeclaration(dir, demandNone, v)
+				instance.Platform = platform
+				apply(st)
 			case *EndStmt:
 				if d.processModuleEnd(dir, v.Line, ctx.onWarn) {
 					d.moduleEnded = true
@@ -631,18 +647,11 @@ func (ctx *GenCtx) scanModuleConfiguration(instance ModuleInstance, recurses boo
 					apply(st)
 				}
 
-				if v.Name != tokRecurse && v.Name != tokRecurseRootRelative && (v.Name != tokRecurseForTests || !ctx.testMode) {
-					continue
-				}
+				if v.Name == tokRecurse || v.Name == tokRecurseRootRelative || v.Name == tokRecurseForTests {
+					expanded := *v
 
-				for _, a := range expandStmtTokens(v.Args, env) {
-					child := a.string()
-
-					if v.Name != tokRecurseRootRelative {
-						child = dir + "/" + child
-					}
-
-					children = append(children, filepath.Clean(child))
+					expanded.Args = expandStmtTokens(v.Args, env)
+					children = appendConfigurationRecurses(children, dir, expanded, platform)
 				}
 			}
 		}
@@ -654,9 +663,7 @@ func (ctx *GenCtx) scanModuleConfiguration(instance ModuleInstance, recurses boo
 		children = nil
 	}
 
-	if recurses {
-		ctx.recordConfiguration(instance, children, nil)
-	}
+	ctx.recordConfiguration(instance, children, nil)
 
 	return module, children
 }
@@ -697,72 +704,6 @@ func picTransition(name TOK) bool {
 
 func isDllModuleType(name TOK) bool {
 	return name == tokDll || name == tokDllTool || isPythonDllModule(name)
-}
-
-func stmtsModuleName(stmts []Stmt) TOK {
-	if decl := stmtsModuleDeclaration(stmts); decl != nil {
-		return decl.Name
-	}
-
-	return 0
-}
-
-func stmtsModuleDeclaration(stmts []Stmt) *ModuleStmt {
-	decl, _ := inferModuleDeclaration(stmts)
-
-	return decl
-}
-
-func inferModuleDeclaration(stmts []Stmt) (*ModuleStmt, bool) {
-	var declaration *ModuleStmt
-
-	certain := true
-
-	for _, st := range stmts {
-		var candidate *ModuleStmt
-
-		switch v := st.(type) {
-		case *IncludeStmt:
-			return nil, false
-		case *ModuleStmt:
-			return v, true
-		case *UnknownStmt:
-			if v.Name == tokDllFor {
-				candidate = &ModuleStmt{Name: tokDll, Line: v.Line}
-			} else if v.Name == tokGoTestFor {
-				candidate = &ModuleStmt{Name: tokGoTest, Line: v.Line}
-			}
-		case *IfStmt:
-			thenDecl, thenCertain := inferModuleDeclaration(v.Then)
-			elseDecl, elseCertain := inferModuleDeclaration(v.Else)
-
-			if thenDecl != nil && elseDecl != nil && thenDecl.Name != elseDecl.Name {
-				return nil, false
-			}
-
-			candidate = thenDecl
-
-			if candidate == nil {
-				candidate = elseDecl
-			}
-
-			certain = certain && thenCertain && elseCertain
-
-			if candidate != nil {
-				certain = certain && thenDecl != nil && elseDecl != nil && thenDecl.Schema == elseDecl.Schema
-			}
-		}
-
-		if candidate != nil {
-			if declaration != nil && declaration.Name != candidate.Name {
-				return nil, false
-			}
-
-			declaration = candidate
-		}
-	}
-
-	return declaration, certain
 }
 
 func isLinkingModuleType(name TOK) bool {
@@ -904,7 +845,8 @@ func discoverRecursedTargets(ctx *GenCtx, targetDir string) DiscoveredTargets {
 			continue
 		}
 
-		module, children := ctx.recurseScan(dir)
+		evaluation := ctx.evaluateDir(dir, ctx.target)
+		module, children := evaluation.declaration, evaluation.recurses
 
 		if ctx.testMode {
 			recurses[dir] = children
@@ -1505,15 +1447,7 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 	}()
 
 	if instance.Language == LangJava {
-		name := ctx.moduleName(instance.Path.relString())
-
-		if name == 0 {
-			if declaration, _ := ctx.recurseScan(instance.Path.relString()); declaration != nil {
-				name = declaration.Name
-			}
-		}
-
-		return genJavaModule(ctx, instance, name, stmts, env)
+		return genJavaModule(ctx, instance, moduleName, stmts, env)
 	}
 
 	d := collectModuleInto(ctx, instance, stmts, env, ctx.onWarn, &frame.d)
@@ -1571,7 +1505,7 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 
 	configurationDepends := append(slices.Clone(d.test.depends), d.configurationDepends...)
 
-	ctx.recordConfiguration(instance, d.recurses, configurationDepends)
+	ctx.recordConfiguration(instance, nil, configurationDepends)
 
 	if instance.Language == LangPy && d.moduleStmt != nil && d.moduleStmt.Name != tokProtoLibrary && d.multimodule != tokRosLibrary && d.multimodule != tokFbsLibrary {
 		cpp := instance

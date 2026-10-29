@@ -65,7 +65,7 @@ func genRequestedPeer(ctx *GenCtx, request ModuleInstance) *ModuleEmitResult {
 	var declaration *ModuleStmt
 
 	exc := try(func() {
-		declaration = stmtsModuleDeclaration(moduleStmts(ctx, request.Path.relString()))
+		declaration = ctx.evaluateDir(request.Path.relString(), ctx.target).declaration
 	})
 
 	if exc != nil {
