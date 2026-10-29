@@ -187,3 +187,21 @@ func (d *Darts) longestMatch(parts ...string) (int, bool) {
 
 	return int(best), found
 }
+
+func (d *Darts) walk(s string, visit func(key int, whole bool)) {
+	st := int32(0)
+
+	for i := 0; i < len(s); i++ {
+		t := *unsafeAt(d.base, uint64(st)) + int32(s[i]) + 1
+
+		if t >= int32(len(d.check)) || *unsafeAt(d.check, uint64(t)) != st+1 {
+			return
+		}
+
+		st = t
+
+		if value := *unsafeAt(d.value, uint64(st)); value != 0 {
+			visit(int(value-1), i == len(s)-1)
+		}
+	}
+}

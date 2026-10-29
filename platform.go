@@ -221,7 +221,7 @@ func newPlatform(os OS, isa ISA, buildType string, tc *Toolchain, flags map[stri
 	p.Linker = pc.Linker.flags(p)
 	p.conf = loadConf(pc.Parsers, root, p.ifEnv)
 	p.Sysincl = p.conf.sysincl()
-	p.peerPolicies = pc.Parsers.peerPolicies(strings.Fields(p.ifEnv.expand(p.ifEnv.string(envPeerdirsRulesPath))))
+	p.peerPolicies = pc.Parsers.peerPolicies(p.ifEnv.expand(p.ifEnv.string(envPeerdirsRulesPath)))
 	p.BuildTypeUpperSTR = internStr(p.ifEnv.string(envBUILD_TYPE))
 	p.DebugInfoFlags = debugInfoFlags(p.ifEnv, flags)
 	p.CompileCFlags = composeCompileCFlags(p.ifEnv, flags, p.DebugInfoFlags)
