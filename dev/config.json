@@ -4989,6 +4989,8 @@
       "p12_group_18",
       "p12_group_19",
       "p12_group_20"
-    ]
+    ],
+    "alias": "p12",
+    "gate": false
   }
 ]

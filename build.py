@@ -637,7 +637,6 @@ validation_gates = []
 validation_result_paths = []
 validation_gate_by_id = {}
 validation_inputs_by_id = {}
-standalone_gate_by_id = {}
 
 
 def validation_merged(case_id, members):
@@ -738,8 +737,9 @@ for case in validation_config:
     )
 
     group(f"validation_result_{case_slug}", result)
-    if "merge" in case:
-        standalone_gate_by_id[case_id] = gate
+    if "alias" in case:
+        group(case["alias"], gate)
+    if case.get("gate") is False:
         continue
     validation_results.append(result)
     validation_gates.append(gate)
@@ -800,7 +800,6 @@ if partition is not None:
     ]
 
 group("install", ay)
-group("p12", standalone_gate_by_id["p12_full"])
 group("unit", *unit_members)
 group("validation_resources", *resource_targets.values())
 group("validation_results", validation_summary)
