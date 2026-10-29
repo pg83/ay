@@ -400,6 +400,9 @@ type JavaModule struct {
 	unmanageableDart []javaForeignPeer
 	unmanageableDone bool
 	included         *ModuleIncludedDeps
+	incState         javaIncludedState
+	incInputs        bool
+	incRecipe        *javaIncludedRecipe
 	globals          []ResourceDecl
 	result           *ModuleEmitResult
 	outRef           NodeRef

@@ -76,6 +76,16 @@ type IncludedInputPlan struct {
 type ModuleIncludedDeps struct {
 	Inputs []VFS
 	Refs   []NodeRef
+	settle func(*ModuleIncludedDeps)
+}
+
+func (d *ModuleIncludedDeps) settled() *ModuleIncludedDeps {
+	if settle := d.settle; settle != nil {
+		d.settle = nil
+		settle(d)
+	}
+
+	return d
 }
 
 type ModuleInputInfo struct {
@@ -256,7 +266,9 @@ func (r *CodegenRegistry) moduleIncludedDeps(input VFS) *ModuleIncludedDeps {
 	}
 
 	if info, ok := r.byRel.get(input.rel()); ok {
-		return info.moduleIncludedDeps()
+		if deps := info.moduleIncludedDeps(); deps != nil {
+			return deps.settled()
+		}
 	}
 
 	return nil

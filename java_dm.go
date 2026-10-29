@@ -18,6 +18,12 @@ const (
 	jprTransitive
 )
 
+const (
+	javaIncludedUnseen javaIncludedState = iota
+	javaIncludedPending
+	javaIncludedDone
+)
+
 type javaPeerResolution uint8
 
 type javaResolvedPeer struct {
@@ -739,83 +745,128 @@ func (ctx *GenCtx) javaManagedPeersClosure(jm *JavaModule) []JavaClosureEntry {
 	return out
 }
 
+type javaIncludedState uint8
+
+type javaIncludedRecipe struct {
+	paths  []VFS
+	own    []NodeRef
+	chunks [][]VFS
+	refs   [][]NodeRef
+	peers  []*JavaModule
+}
+
 func (ctx *GenCtx) javaIncludedDeps(jm *JavaModule) *ModuleIncludedDeps {
-	if jm.included != nil {
-		return jm.included
+	ctx.javaRecordIncluded(jm)
+
+	if !jm.incInputs {
+		return nil
 	}
 
-	jm.included = &ModuleIncludedDeps{}
+	return jm.included
+}
+
+func (ctx *GenCtx) javaRecordIncluded(jm *JavaModule) {
+	if jm.incState != javaIncludedUnseen {
+		return
+	}
+
+	jm.incState = javaIncludedPending
+
+	defer func() { jm.incState = javaIncludedDone }()
 
 	if !jm.passPeers {
-		return jm.included
+		return
 	}
 
-	var paths []VFS
-	var own []NodeRef
-	var chunks [][]VFS
-	var refs [][]NodeRef
+	var r javaIncludedRecipe
 
 	for _, p := range jm.unmanageable {
 		res := p.res
 
 		if res.LDPath != nil {
-			paths = append(paths, *res.LDPath)
-			own = append(own, res.LDRef)
+			r.paths = append(r.paths, *res.LDPath)
+			r.own = append(r.own, res.LDRef)
 
 			if res.IncludedDeps != nil {
-				chunks = append(chunks, res.IncludedDeps.Inputs)
-				refs = append(refs, res.IncludedDeps.Refs)
+				r.chunks = append(r.chunks, res.IncludedDeps.Inputs)
+				r.refs = append(r.refs, res.IncludedDeps.Refs)
 			}
 
 			continue
 		}
 
 		if res.ARPath != nil {
-			paths = append(paths, *res.ARPath)
-			own = append(own, res.ARRef)
+			r.paths = append(r.paths, *res.ARPath)
+			r.own = append(r.own, res.ARRef)
 		}
 
 		if res.GlobalPath != nil && res.GlobalRef != nil {
-			paths = append(paths, *res.GlobalPath)
-			own = append(own, *res.GlobalRef)
+			r.paths = append(r.paths, *res.GlobalPath)
+			r.own = append(r.own, *res.GlobalRef)
 		}
 
 		if res.SbomComponentRef != nil {
-			paths = append(paths, *res.SbomComponentPath)
-			own = append(own, *res.SbomComponentRef)
+			r.paths = append(r.paths, *res.SbomComponentPath)
+			r.own = append(r.own, *res.SbomComponentRef)
 		}
 
-		chunks = append(chunks, res.PeerArchiveClosurePaths, res.PeerGlobalClosurePaths, res.PeerDynamicClosurePaths, res.PeerSbomClosurePaths)
-		refs = append(refs, res.PeerArchiveClosureRefs, res.PeerGlobalClosureRefs, res.PeerDynamicClosureRefs, res.PeerSbomClosureRefs)
+		r.chunks = append(r.chunks, res.PeerArchiveClosurePaths, res.PeerGlobalClosurePaths, res.PeerDynamicClosurePaths, res.PeerSbomClosurePaths)
+		r.refs = append(r.refs, res.PeerArchiveClosureRefs, res.PeerGlobalClosureRefs, res.PeerDynamicClosureRefs, res.PeerSbomClosureRefs)
 	}
 
-	edges := make(map[*JavaModule]bool, len(jm.managedPeers))
-
-	for _, p := range jm.managedPeers {
-		edges[p] = true
-	}
+	inputs := len(r.paths) > 0 || slices.ContainsFunc(r.chunks, func(c []VFS) bool { return len(c) > 0 })
+	refs := len(r.own) > 0 || slices.ContainsFunc(r.refs, func(c []NodeRef) bool { return len(c) > 0 })
 
 	for _, e := range ctx.javaManagedPeersClosure(jm) {
 		p := e.java
 
-		if p == nil || !edges[p] && jm.rules.lib2Ver[javaPathParent(p.dir)] != p.dir {
+		if p == nil || !slices.Contains(jm.managedPeers, p) && jm.rules.lib2Ver[javaPathParent(p.dir)] != p.dir {
 			continue
 		}
 
 		if p.outRef != 0 {
-			paths = append(paths, p.target)
-			own = append(own, p.outRef)
+			r.paths = append(r.paths, p.target)
+			r.own = append(r.own, p.outRef)
+
+			inputs = true
 		}
 
-		peer := ctx.javaIncludedDeps(p)
+		ctx.javaRecordIncluded(p)
+
+		if p.incState == javaIncludedDone && p.included != nil {
+			r.peers = append(r.peers, p)
+			inputs = inputs || p.incInputs
+		}
+	}
+
+	if !inputs && !refs && len(r.own) == 0 && len(r.peers) == 0 {
+		return
+	}
+
+	jm.incInputs = inputs
+	jm.incRecipe = &r
+	jm.included = &ModuleIncludedDeps{settle: func(d *ModuleIncludedDeps) { ctx.javaSettleIncluded(jm, d) }}
+}
+
+func (ctx *GenCtx) javaSettleIncluded(jm *JavaModule, d *ModuleIncludedDeps) {
+	r := jm.incRecipe
+	chunks := make([][]VFS, 0, len(r.chunks)+len(r.peers))
+	refs := make([][]NodeRef, 0, len(r.refs)+len(r.peers)+1)
+
+	chunks = append(chunks, r.chunks...)
+	refs = append(refs, r.refs...)
+
+	for _, p := range r.peers {
+		peer := p.included.settled()
 
 		chunks = append(chunks, peer.Inputs)
 		refs = append(refs, peer.Refs)
 	}
 
-	jm.included = &ModuleIncludedDeps{Inputs: ctx.na.dedupClosure(paths, chunks), Refs: ctx.na.uniqueRefs(append(refs, own)...)}
+	d.Inputs = ctx.na.dedupClosure(r.paths, chunks)
+	d.Refs = ctx.na.uniqueRefs(append(refs, r.own)...)
 
-	return jm.included
+	jm.incRecipe = nil
 }
 
 func (jm *JavaModule) consumesUnmanageable() bool {

@@ -264,7 +264,7 @@ func (ctx *GenCtx) javaRegisterOutputs(jm *JavaModule, frame *ModuleFrame) {
 		})
 	}
 
-	if deps := ctx.javaIncludedDeps(jm); len(deps.Inputs) > 0 {
+	if deps := ctx.javaIncludedDeps(jm); deps != nil {
 		reg.forwardModuleIncludedDeps(jm.target, deps)
 	}
 }
