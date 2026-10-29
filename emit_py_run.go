@@ -223,9 +223,7 @@ func (e *EmitContext) emitRunPython(stmt *RunPythonStmt, resourceUses []STR) []A
 	}
 
 	pe := func() {
-		inputClosure := pyInputClosure(snap, stmt)
-
-		e.emitPYRun(stmt, scriptVFS, inVFSByToken, outVFSByToken, stdoutVFS, outputs, directSources, directBuilds, directBuilds[toolEnd:], inputClosure,
+		e.emitPYRun(stmt, scriptVFS, inVFSByToken, outVFSByToken, stdoutVFS, outputs, directSources, directBuilds, directBuilds[toolEnd:],
 			e.textInputSources(snap.inVFSs, len(snap.inVFSs)-stmt.INNoParse), pyRef, interp, toolRefs, auxTools, kv, resources)
 	}
 
@@ -266,20 +264,6 @@ type pyRunSnap struct {
 	scanner  *IncludeScanner
 	scanCtx  *ScanContext
 	inVFSs   []VFS
-}
-
-func pyInputClosure(s *pyRunSnap, stmt *RunPythonStmt) InputChunks {
-	var closures []Closure
-
-	for i, f := range stmt.INFiles[:len(stmt.INFiles)-stmt.INNoParse] {
-		if s.inVFSs[i].isBuild() || !s.ctx.parsers.registry.scansIncludes(f.string()) {
-			continue
-		}
-
-		closures = append(closures, s.scanner.walkClosure(s.inVFSs[i], s.scanCtx, scanDomainCC))
-	}
-
-	return s.ctx.na.dedupClosureChunks(closures...)
 }
 
 func splitCodegenDetect(stmt *RunPythonStmt) (hasCCShard bool, hasHeader bool) {
@@ -396,7 +380,6 @@ func (e *EmitContext) emitPYRun(
 	directSources []VFS,
 	directBuilds []VFS,
 	dataBuilds []VFS,
-	inputClosure InputChunks,
 	textInputs []VFS,
 	id NodeRef,
 	interp ANY,
@@ -472,17 +455,7 @@ func (e *EmitContext) emitPYRun(
 
 	cmdArgs = cmdArgs[:len(cmdArgs):len(cmdArgs)]
 
-	nInputs := len(inputClosure)
-
-	if len(directSources) > 0 {
-		nInputs++
-	}
-
-	if len(directBuilds) > 0 {
-		nInputs++
-	}
-
-	inputs := na.inputs.alloc(nInputs)[:0]
+	inputs := na.inputs.alloc(2)[:0]
 
 	if len(directSources) > 0 {
 		inputs = append(inputs, directSources)
@@ -492,7 +465,6 @@ func (e *EmitContext) emitPYRun(
 		inputs = append(inputs, directBuilds)
 	}
 
-	inputs = append(inputs, inputClosure...)
 	na.inputs.commit(len(inputs))
 
 	inputChunks := InputChunks(inputs[:len(inputs):len(inputs)])
@@ -518,7 +490,7 @@ func (e *EmitContext) emitPYRun(
 		Env:  env, Inputs: inputChunks, KV: kv,
 		Outputs:        outputs,
 		ForeignDepRefs: toolRefs,
-		Resources:      resources}, input: InputSpec{roots: appendInputChunks(na, na.inputList(directSources, dataBuilds), inputClosure), text: textInputs},
+		Resources:      resources}, input: InputSpec{roots: na.inputList(directSources, dataBuilds), text: textInputs},
 	}
 
 	e.emitReservedNode(node, id)
