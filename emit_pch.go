@@ -27,7 +27,6 @@ func (e *EmitContext) emitPchFile(stmt PchFileStmt) {
 	e.frame.pending++
 
 	pending := e.pendingEmit(func() {
-		closure := e.scanner.walkClosure(header, e.d.scanCtx, scanDomainCC)
 		llvmRoot := e.pchLLVMRoot()
 		resources := na.strs.alloc(3)[:0]
 
@@ -47,11 +46,11 @@ func (e *EmitContext) emitPchFile(stmt PchFileStmt) {
 
 		na.strs.commit(len(resources))
 
-		inputs := na.inputList(na.vfsList(tool), na.dedupClosureChunks(closure)...)
+		inputs := na.inputList(na.vfsList(tool), na.vfsList(header))
 
 		e.emitReservedNode(NodeSpec{Node: Node{Platform: e.instance.Platform, Cmds: pch.cmds(e.ctx.visitScoped(&pch.scoped)),
 			Env: envVarsVCS, Inputs: inputs, Outputs: na.vfsList(out),
-			DepRefs: na.refList(toolRef), Resources: resources, KV: &pchKV}, input: InputSpec{roots: inputs[1:], root: closure.self},
+			DepRefs: na.refList(toolRef), Resources: resources, KV: &pchKV}, input: InputSpec{roots: inputs[1:]},
 		}, ref)
 
 		pch.scoped.rendered = pch

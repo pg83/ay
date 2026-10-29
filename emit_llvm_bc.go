@@ -32,15 +32,12 @@ func (e *EmitContext) llvmCompileNode(src string, out VFS, compiler string, cxx 
 
 	args = append(args, opts...)
 
-	closure := e.scanner.walkClosure(input, d.scanCtx, scanDomainCC)
-	inputs := na.dedupClosureChunks(closure)
-
-	inputs = na.inputList(na.vfsList(wrapper), inputs...)
+	inputs := na.inputList(na.vfsList(wrapper), na.vfsList(input))
 
 	return NodeSpec{Node: Node{Platform: e.instance.Platform,
 		Cmds: na.cmdList(Cmd{CmdArgs: na.chunkList(args), Env: envVarsVCS, Resources: value.Resources}),
 		Env:  envVarsVCS, Inputs: inputs, Outputs: na.vfsList(out),
-		KV: &llvmBcKV, Resources: usesPython3Clang16},
+		KV: &llvmBcKV, Resources: usesPython3Clang16}, input: InputSpec{roots: inputs[1:]},
 	}
 }
 

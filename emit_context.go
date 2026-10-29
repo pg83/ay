@@ -440,7 +440,7 @@ func (e *EmitContext) includeNodeInputs(node *NodeSpec) {
 
 				e.scanner.deferClosure(&node.Node, cl, fixIncludes)
 
-				if cl.buckets != nil {
+				if cl.buckets != nil || cl.self != input {
 					if extra == nil {
 						extra = closureScratches.get()
 					}
@@ -469,7 +469,7 @@ func (e *EmitContext) includeNodeInputs(node *NodeSpec) {
 		bound := len(node.Inputs) + len(included)
 
 		for _, cl := range extra {
-			bound += len(cl.bucketList())
+			bound += 1 + len(cl.bucketList())
 		}
 
 		chunks := e.ctx.na.inputs.alloc(bound)[:0]
@@ -489,6 +489,10 @@ func (e *EmitContext) includeNodeInputs(node *NodeSpec) {
 		}
 
 		for _, cl := range extra {
+			if cl.self != 0 && dd.addStable(cl.self.strID()) {
+				chunks = append(chunks, e.ctx.na.vfsList(cl.self))
+			}
+
 			for _, bucket := range cl.bucketList() {
 				if unseen := e.ctx.na.filterSeen(dd, bucket); len(unseen) > 0 {
 					chunks = append(chunks, unseen)

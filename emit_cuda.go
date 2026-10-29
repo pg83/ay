@@ -52,16 +52,11 @@ func (e *EmitContext) emitLibraryCudaSource(meta SrcMeta, in ModuleCCInputs) {
 	e.collectCPPStyleInputs(srcVFS, cudaCompileScriptVFS, cudaRuntimeIncludeVFS)
 
 	outVFS, inVFS := composeCCPaths(instance, e.moduleSourceRel(meta.Source), srcVFS, in, d.cc.objSufDot()+e.cudaSettings().ObjectSuffix)
-	srcCV := e.scanner.walkClosure(srcVFS, d.scanCtx, scanDomainCC)
-	runtimeCV := e.scanner.walkClosure(cudaRuntimeIncludeVFS, d.scanCtx, scanDomainCC)
-	closure := na.dedupClosureChunks(srcCV, runtimeCV)
 	mtimeRef, mtime := ctx.tool(cudaMtimeArg)
 	pidRef, pid := ctx.tool(cudaCustomPidArg)
 	env := e.cudaEnv()
 	args := e.cudaCompileArgs(in, mtime, pid, na.anyList(argDashC.any(), inVFS.any(), argDashO.any(), outVFS.any()), false)
-	inputs := na.inputList(na.vfsList(cudaCompileScriptVFS), na.vfsList(mtime, pid))
-
-	inputs = appendInputChunks(na, inputs, closure)
+	inputs := na.inputList(na.vfsList(cudaCompileScriptVFS), na.vfsList(mtime, pid), na.vfsList(srcVFS, cudaRuntimeIncludeVFS))
 
 	node := NodeSpec{Node: Node{Platform: instance.Platform, Cmds: na.cmdList(Cmd{CmdArgs: args, Env: env, Resources: resourceKeyUnion(e.cudaSettings().Resources, compilerCommandBlocks(in.CCBlocks, true).resources)}), Env: env, Inputs: inputs, Outputs: na.vfsList(outVFS), KV: &cudaKV, Resources: instance.Platform.CCUsesResources,
 		DepRefs: na.refList(mtimeRef, pidRef)}, input: InputSpec{roots: appendInputChunks(na, inputs[:1], inputs[2:])},
@@ -125,20 +120,8 @@ func (e *EmitContext) emitSplitCudaSource(src ANY, arches []string, embedPTX boo
 	pidRef, pid := e.ctx.tool(cudaCustomPidArg)
 	in := e.ccInputsFor(CompileSpec{})
 	env := e.cudaEnv()
-
-	var sourceClosure, compileClosure InputChunks
-
-	getClosures := func() {
-		if sourceClosure != nil {
-			return
-		}
-
-		srcCV := e.scanner.walkClosure(srcVFS, d.scanCtx, scanDomainCC)
-		runtimeCV := e.scanner.walkClosure(cudaRuntimeIncludeVFS, d.scanCtx, scanDomainCC)
-
-		sourceClosure = na.dedupClosureChunks(srcCV)
-		compileClosure = na.dedupClosureChunks(srcCV, runtimeCV)
-	}
+	sourceRoots := na.vfsList(srcVFS)
+	compileRoots := na.vfsList(srcVFS, cudaRuntimeIncludeVFS)
 
 	var images []VFS
 	e.collectCPPStyleInputs(srcVFS, cudaCompileScriptVFS, cudaRuntimeIncludeVFS)
@@ -148,7 +131,6 @@ func (e *EmitContext) emitSplitCudaSource(src ANY, arches []string, embedPTX boo
 		ref := e.ctx.emit.reserve()
 
 		pending := e.pendingEmit(func() {
-			getClosures()
 			var flags []ANY
 
 			if d.cuda.SplitSanitize {
@@ -173,9 +155,7 @@ func (e *EmitContext) emitSplitCudaSource(src ANY, arches []string, embedPTX boo
 				cmds = append(cmds, Cmd{CmdArgs: na.chunkList(copyArgs), Cwd: e.instance.Path.rel().build(), Env: envVarsVCS})
 			}
 
-			inputs := na.inputList(na.vfsList(cudaCompileScriptVFS), e.ctx.scripts[copyFsToolsVFS.rel()], na.vfsList(mtime, pid))
-
-			inputs = appendInputChunks(na, inputs, compileClosure)
+			inputs := na.inputList(na.vfsList(cudaCompileScriptVFS), e.ctx.scripts[copyFsToolsVFS.rel()], na.vfsList(mtime, pid), compileRoots)
 
 			e.emitReservedNode(NodeSpec{Node: Node{Platform: e.instance.Platform, Cmds: na.cmdList(cmds...), Env: env, Inputs: inputs, Outputs: outs, KV: &cudaKV, DepRefs: na.refList(mtimeRef, pidRef), Resources: e.instance.Platform.CCUsesResources}, input: InputSpec{roots: appendInputChunks(na, inputs[:2], inputs[3:])}}, ref)
 		})
@@ -201,8 +181,6 @@ func (e *EmitContext) emitSplitCudaSource(src ANY, arches []string, embedPTX boo
 	fatRef := e.ctx.emit.reserve()
 
 	fatPending := e.pendingEmit(func() {
-		getClosures()
-
 		script := buildScriptsFatbinaryWrapperPy
 		args := []ANY{wrapccPython3STR.any(), script.any(), internV(d.cuda.Root, "/bin/fatbinary").any(), str64.any(), strCompressAll.any(), internV("--ident=", srcVFS.string()).any()}
 
@@ -212,9 +190,9 @@ func (e *EmitContext) emitSplitCudaSource(src ANY, arches []string, embedPTX boo
 
 		args = append(args, internV("--embedded-fatbin=", fatbin.string()).any())
 
-		inputs := appendInputChunks(na, na.inputList(na.vfsList(images...), na.vfsList(script)), sourceClosure)
+		inputs := na.inputList(na.vfsList(images...), na.vfsList(script), sourceRoots)
 
-		e.emitReservedNode(NodeSpec{Node: Node{Platform: e.instance.Platform, Cmds: na.cmdList(Cmd{CmdArgs: na.chunkList(na.anyList(args...)), Env: envVarsVCS, Resources: e.cudaSettings().RootResources}), Env: envVarsVCS, Inputs: inputs, Outputs: na.vfsList(fatbin), KV: &cudaKV, Resources: usesPython3}}, fatRef)
+		e.emitReservedNode(NodeSpec{Node: Node{Platform: e.instance.Platform, Cmds: na.cmdList(Cmd{CmdArgs: na.chunkList(na.anyList(args...)), Env: envVarsVCS, Resources: e.cudaSettings().RootResources}), Env: envVarsVCS, Inputs: inputs, Outputs: na.vfsList(fatbin), KV: &cudaKV, Resources: usesPython3}, input: InputSpec{roots: inputs}}, fatRef)
 	})
 
 	e.register(GeneratedFileSpec{OutputPath: fatbin, ProducerRef: fatRef, OnUse: fatPending})
@@ -225,7 +203,6 @@ func (e *EmitContext) emitSplitCudaSource(src ANY, arches []string, embedPTX boo
 	stub := output("." + stubArch + ".cudafe1.stub.c")
 
 	hostPending := e.pendingEmit(func() {
-		getClosures()
 		var flags []ANY
 
 		if d.cuda.SplitSanitize {
@@ -242,9 +219,7 @@ func (e *EmitContext) emitSplitCudaSource(src ANY, arches []string, embedPTX boo
 			"--orig_src_file_name", srcVFS.relString(), "--unicode_source_kind=UTF-8", "--allow_managed", "--extended-lambda", "--relaxed_constexpr", "--m64", "--parse_templates",
 			"--gen_c_file_name", hostOuts[1].string(), "--stub_file_name", filepath.Base(stub.relString()), "--module_id_file_name", moduleID.string(), hostOuts[0].string()})
 
-		inputs := na.inputList(na.vfsList(cudaCompileScriptVFS), na.vfsList(mtime, pid), na.vfsList(moduleID), e.codegen.mustInfo(moduleID).ClosureLeaves)
-
-		inputs = appendInputChunks(na, inputs, compileClosure)
+		inputs := na.inputList(na.vfsList(cudaCompileScriptVFS), na.vfsList(mtime, pid), na.vfsList(moduleID), e.codegen.mustInfo(moduleID).ClosureLeaves, compileRoots)
 
 		e.emitReservedNode(NodeSpec{Node: Node{Platform: e.instance.Platform, Cmds: na.cmdList(Cmd{CmdArgs: args, Env: env, Resources: resourceKeyUnion(e.cudaSettings().Resources, compilerCommandBlocks(in.CCBlocks, true).resources)}, Cmd{CmdArgs: na.chunkList(na.anyList(frontend...)), Env: envVarsVCS}), Env: env, Inputs: inputs, Outputs: hostOuts, KV: &cudaKV, DepRefs: na.refList(mtimeRef, pidRef), Resources: e.instance.Platform.CCUsesResources}, input: InputSpec{roots: appendInputChunks(na, inputs[:1], inputs[2:])}}, hostRef)
 	})

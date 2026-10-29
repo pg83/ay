@@ -79,12 +79,12 @@ func (e *EmitContext) emitFortranSource(meta SrcMeta) {
 	na := e.ctx.na
 	src := e.sourceForEmission(meta)
 	out, _ := composeCCPaths(e.instance, e.moduleSourceRel(meta.Source), src, ModuleCCInputs{FlatOutput: meta.Compile.FlatOutput}, ".o")
-	closure := e.scanner.walkClosure(src, e.d.scanCtx, scanDomainCC)
 	args := na.chunkList(e.d.cc.FortranHead, na.anyList(argDashC.any(), src.any(), argDashO.any(), out.any()))
+	inputs := na.inputList(na.vfsList(src))
 
 	ref := e.emitNode(NodeSpec{Node: Node{Platform: e.instance.Platform,
-		Cmds: na.cmdList(Cmd{CmdArgs: args, Env: envVarsVCS, Resources: e.d.cc.FortranResourceUses}), Env: envVarsVCS, Inputs: na.dedupClosureChunks(closure), Outputs: na.vfsList(out),
-		KV: &fortranKV, Resources: e.d.cc.FortranResources}, input: InputSpec{root: closure.self},
+		Cmds: na.cmdList(Cmd{CmdArgs: args, Env: envVarsVCS, Resources: e.d.cc.FortranResourceUses}), Env: envVarsVCS, Inputs: inputs, Outputs: na.vfsList(out),
+		KV: &fortranKV, Resources: e.d.cc.FortranResources}, input: InputSpec{roots: inputs},
 	})
 
 	e.collectObj(ref, out, meta)

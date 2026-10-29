@@ -51,8 +51,6 @@ func (e *EmitContext) emitConfigureFile(srcVFS, outVFS VFS) NodeRef {
 	python3 := d.cc.TC.Python3
 	cfRef := ctx.emit.reserve()
 	parsed := e.scanner.parsedBucketForInput(srcVFS, parsedIncludesLocal, nil)
-	scanner := e.scanner
-	scanCtx := d.scanCtx
 
 	pe := func() {
 		cmdArgs := na.anys.alloc(4 + len(cfgVars))[:0]
@@ -63,17 +61,11 @@ func (e *EmitContext) emitConfigureFile(srcVFS, outVFS VFS) NodeRef {
 
 		cmdArgs = cmdArgs[:len(cmdArgs):len(cmdArgs)]
 
-		cv := scanner.walkClosure(srcVFS, scanCtx, scanDomainCC)
-		closureInputs := na.dedupClosureChunks(cv)
-		inputs := na.inputs.alloc(1 + len(closureInputs))[:1+len(closureInputs)]
-
-		inputs[0] = na.vfsList(configureFilePyVFS)
-		copy(inputs[1:], closureInputs)
-		na.inputs.commit(len(inputs))
+		inputs := na.inputList(na.vfsList(configureFilePyVFS), na.vfsList(srcVFS))
 
 		e.emitReservedNode(NodeSpec{Node: Node{Platform: instance.Platform,
 			Cmds: na.cmdList(Cmd{CmdArgs: na.chunkList(cmdArgs), Env: env}),
-			Env:  env, Inputs: InputChunks(inputs[:len(inputs):len(inputs)]), KV: &cfKV,
+			Env:  env, Inputs: inputs, KV: &cfKV,
 			Outputs:   na.vfsList(outVFS),
 			Resources: usesPython3}, input: InputSpec{roots: na.rootInputList(na.vfsList(configureFilePyVFS, srcVFS))},
 		}, cfRef)

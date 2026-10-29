@@ -309,7 +309,7 @@ func (e *EmitContext) emitCythonCppPlanned(plans []CythonStmtPlan) {
 			sourceFlags = stmt.Native.Compile.CFlags
 		}
 
-		cmdArgs := na.anys.alloc(11 + len(d.cythonOptions) + len(stmt.Options) + len(stmt.Directives) + len(d.cythonAddIncl) + len(sourceFlags))[:0]
+		cmdArgs := na.anys.alloc(11 + len(d.cythonOptions) + len(stmt.Options) + len(stmt.Directives) + len(d.cythonAddIncl) + len(e.peers.CythonInclude) + len(sourceFlags))[:0]
 
 		cmdArgs = append(cmdArgs, d.tc.Python3.any())
 

@@ -43,8 +43,7 @@ func (e *EmitContext) registerSCInputs() {
 func (e *EmitContext) emitSCReserved(srcVFS, headerVFS, domschemecBinary VFS, domschemecLDRef NodeRef, id NodeRef) {
 	na := e.ctx.na
 	env := envVarsVCS
-	closure := e.scanner.walkClosure(srcVFS, e.d.scanCtx, scanDomainSc)
-	inputs := appendInputChunks(na, na.inputList(na.vfsList(domschemecBinary)), na.dedupClosureChunks(closure))
+	inputs := na.inputList(na.vfsList(domschemecBinary), na.vfsList(srcVFS))
 
 	node := NodeSpec{Node: Node{Platform: e.instance.Platform,
 		Cmds: na.cmdList(Cmd{
@@ -53,7 +52,7 @@ func (e *EmitContext) emitSCReserved(srcVFS, headerVFS, domschemecBinary VFS, do
 		}),
 		Env: env, Inputs: inputs, KV: &scKV,
 		Outputs:        na.vfsList(headerVFS),
-		ForeignDepRefs: na.refList(domschemecLDRef)}, input: InputSpec{roots: inputs[1:], root: closure.self},
+		ForeignDepRefs: na.refList(domschemecLDRef)}, input: InputSpec{roots: inputs[1:]},
 	}
 
 	e.emitReservedNode(node, id)

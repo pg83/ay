@@ -145,8 +145,7 @@ func (e *EmitContext) emitAliceEnumSrcStmt(stmt *GenerateEnumSerializationStmt) 
 
 	pending := e.pendingEmit(func() {
 		toolRef, toolBin := ctx.tool(argYandexIoToolsEnumSerializerGenerator)
-		closure := e.scanner.walkClosure(header, e.d.scanCtx, scanDomainCC)
-		inputs := appendInputChunks(na, na.inputList(na.vfsList(toolBin), na.vfsList(header)), closure.bucketList())
+		inputs := na.inputList(na.vfsList(toolBin), na.vfsList(header))
 
 		args := na.anyList(toolBin.any(), strInputPath.any(), header.any(),
 			strIncludePath.any(), header.rel().any(), strOutputPath.any(), output.any())
@@ -157,7 +156,7 @@ func (e *EmitContext) emitAliceEnumSrcStmt(stmt *GenerateEnumSerializationStmt) 
 			Cmds: na.cmdList(Cmd{CmdArgs: na.chunkList(args), Env: envVarsVCS}),
 			Env:  envVarsVCS, Inputs: inputs, Outputs: na.vfsList(output),
 			ForeignDepRefs: na.refList(toolRef),
-			KV:             &enKV}, input: InputSpec{roots: na.inputList(inputs[0][1:], inputs[1:]...), root: closure.self},
+			KV:             &enKV}, input: InputSpec{roots: inputs[1:]},
 		}, ref)
 	})
 
@@ -207,17 +206,16 @@ func (e *EmitContext) emitEN(
 		outputs = na.vfsList(serializedCPPVFS)
 	}
 
-	closure := e.inputClosure(headerInput)
 	env := envVarsVCS
 	foreignDepRefs := na.refList(enumParserLD)
-	inputs := appendInputChunks(na, na.inputList(na.vfsList(enumParserBin)), na.dedupClosureChunks(closure))
+	inputs := na.inputList(na.vfsList(enumParserBin), na.vfsList(headerInput))
 
 	node := NodeSpec{Node: Node{Platform: e.instance.Platform,
 		Cmds: na.cmdList(Cmd{CmdArgs: na.chunkList(cmdArgs),
 			Env: env}),
 		Env: env, Inputs: inputs, KV: &enKV,
 		Outputs:        outputs,
-		ForeignDepRefs: foreignDepRefs}, input: InputSpec{roots: na.inputList(inputs[0][1:], inputs[1:]...), root: closure.self},
+		ForeignDepRefs: foreignDepRefs}, input: InputSpec{roots: inputs[1:]},
 	}
 
 	e.emitReservedNode(node, id)

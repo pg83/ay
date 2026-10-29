@@ -96,15 +96,18 @@ func (e *EmitContext) emitASAsm(srcVFS VFS, in ModuleCCInputs, yasmLD NodeRef, n
 		}
 	}
 
-	closures := []Closure{in.IncludeView}
+	roots := na.vfs.alloc(1 + len(preincludes))[:0]
+
+	roots = append(roots, inVFS)
 
 	if !nasm {
 		for _, preinclude := range preincludes {
-			input := e.moduleSourceVFS(preinclude)
-
-			closures = append(closures, e.scanner.walkClosure(input, e.d.scanCtx, scanDomainAsm))
+			roots = append(roots, e.moduleSourceVFS(preinclude))
 		}
 	}
+
+	na.vfs.commit(len(roots))
+	roots = roots[:len(roots):len(roots)]
 
 	cmdArgs := na.anys.alloc(20 + len(e.d.yasmPlatformFlags) + len(e.d.yasmFlags) + len(e.d.nasmFlags) +
 		2*len(in.AddIncl) + len(sourceFlags) + 2*len(preincludes))[:0]
@@ -155,18 +158,18 @@ func (e *EmitContext) emitASAsm(srcVFS VFS, in ModuleCCInputs, yasmLD NodeRef, n
 		env = envVarsVCSYasm
 	}
 
-	inputs := na.dedupClosureChunks(closures...)
-	buildFrom := na.inputList(nil, inputs...)
+	buildFrom := na.inputList(roots)
+	inputs := buildFrom
 
 	if !nasm {
-		inputs = na.inputList(na.vfsList(yasmBinaryVFS), inputs...)
+		inputs = na.inputList(na.vfsList(yasmBinaryVFS), roots)
 	}
 
 	node := NodeSpec{Node: Node{Platform: instance.Platform,
 		Cmds: na.cmdList(Cmd{CmdArgs: na.chunkList(cmdArgs),
 			Env: env}),
 		Env: env, Inputs: inputs, Outputs: na.vfsList(outVFS),
-		KV: &asKV}, input: InputSpec{roots: buildFrom, root: in.IncludeView.self},
+		KV: &asKV}, input: InputSpec{roots: buildFrom},
 	}
 
 	if nasm {

@@ -49,10 +49,7 @@ func (e *EmitContext) bpfCompileNode(stmt LlvmCompileStmt, out VFS) NodeSpec {
 		resources = append(resources, strLLDRootName)
 	}
 
-	closure := e.scanner.walkClosure(input, d.scanCtx, scanDomainCC)
-	inputs := na.dedupClosureChunks(closure)
+	inputs := na.inputList(na.vfsList(buildScriptsClangWrapperPy), na.vfsList(input))
 
-	inputs = na.inputList(na.vfsList(buildScriptsClangWrapperPy), inputs...)
-
-	return NodeSpec{Node: Node{Platform: p, Cmds: commands, Env: env, Inputs: inputs, Outputs: outputs, KV: &bpfKV, Resources: resources}}
+	return NodeSpec{Node: Node{Platform: p, Cmds: commands, Env: env, Inputs: inputs, Outputs: outputs, KV: &bpfKV, Resources: resources}, input: InputSpec{roots: inputs[1:]}}
 }

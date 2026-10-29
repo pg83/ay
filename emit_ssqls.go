@@ -28,11 +28,9 @@ func (e *EmitContext) emitSsqlsSource(meta SrcMeta) {
 	ref := e.ctx.emit.reserve()
 
 	pending := e.pendingEmit(func() {
-		closure := e.scanner.walkClosure(src, e.d.scanCtx, scanDomainCC)
-
 		e.emitReservedNode(NodeSpec{Node: Node{Platform: e.instance.Platform, Env: envVarsVCS,
-			Cmds: na.cmdList(Cmd{CmdArgs: na.chunkList(na.anyList(tool.any(), src.any(), strS3.any(), srcRootDirVFS.any(), strB3.any(), bldRootDirVFS.any()), meta.Compile.CFlags), Env: envVarsVCS}), Inputs: na.rootInputList(na.vfsList(tool, src), closure.bucketList()...), Outputs: na.vfsList(cpp, header),
-			ForeignDepRefs: na.refList(toolRef), KV: &ssqlsKV}, input: InputSpec{roots: na.inputList(na.vfsList(src), closure.bucketList()...)},
+			Cmds: na.cmdList(Cmd{CmdArgs: na.chunkList(na.anyList(tool.any(), src.any(), strS3.any(), srcRootDirVFS.any(), strB3.any(), bldRootDirVFS.any()), meta.Compile.CFlags), Env: envVarsVCS}), Inputs: na.rootInputList(na.vfsList(tool, src)), Outputs: na.vfsList(cpp, header),
+			ForeignDepRefs: na.refList(toolRef), KV: &ssqlsKV}, input: InputSpec{roots: na.inputList(na.vfsList(src))},
 		}, ref)
 	})
 
