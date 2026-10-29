@@ -229,8 +229,8 @@ func (m *javaClosureMarks) addMembers(c javaClosure) {
 
 type javaDMRules struct {
 	lib2Ver  map[string]string
-	dm       []string
-	excludes []string
+	dm       []ANY
+	excludes []ANY
 	excluded map[string]struct{}
 	loose    []string
 	memo     TwoBitSet

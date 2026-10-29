@@ -89,21 +89,21 @@ func javaConfPrologue(jm *JavaModule, d *JavaData) {
 	u := jm.unit
 
 	if u.compilable() {
-		d.dm = append(d.dm,
-			"contrib/java/com/google/flatbuffers/flatbuffers-java/"+javaFlatbuffersVersion,
-			"contrib/java/com/google/protobuf/protobuf-java/"+javaProtoRuntimeVersion,
-			"contrib/java/com/google/protobuf/protobuf-javalite/"+javaProtoRuntimeVersion,
-			"contrib/java/com/google/protobuf/protobuf-java-util/"+javaProtoRuntimeVersion,
-			"contrib/java/com/google/protobuf/protobuf-kotlin/"+javaProtoRuntimeVersion,
-		)
+		d.dm = appendInternAnys(d.dm, []string{
+			"contrib/java/com/google/flatbuffers/flatbuffers-java/" + javaFlatbuffersVersion,
+			"contrib/java/com/google/protobuf/protobuf-java/" + javaProtoRuntimeVersion,
+			"contrib/java/com/google/protobuf/protobuf-javalite/" + javaProtoRuntimeVersion,
+			"contrib/java/com/google/protobuf/protobuf-java-util/" + javaProtoRuntimeVersion,
+			"contrib/java/com/google/protobuf/protobuf-kotlin/" + javaProtoRuntimeVersion,
+		})
 
 		for _, lib := range javaKotlinAllowedVersions {
-			d.dm = append(d.dm, "contrib/java/org/jetbrains/kotlin/"+lib+"/"+javaKotlinVersion)
+			d.dm = append(d.dm, internStr("contrib/java/org/jetbrains/kotlin/"+lib+"/"+javaKotlinVersion).any())
 		}
 	}
 
 	if u.kind == juJar {
-		d.dm = append(d.dm, "contrib/java/org/jetbrains/kotlin/kotlin-stdlib-jdk8/"+javaKotlinVersion)
+		d.dm = append(d.dm, internStr("contrib/java/org/jetbrains/kotlin/kotlin-stdlib-jdk8/"+javaKotlinVersion).any())
 		d.peerStmts = append(d.peerStmts, JavaPeerSpec{dir: "build/platform/java/jdk"})
 	}
 
@@ -118,10 +118,10 @@ func javaConfPrologue(jm *JavaModule, d *JavaData) {
 	switch {
 	case u.kind == juTest && jm.stmt == tokJtest:
 		d.peerStmts = append(d.peerStmts, JavaPeerSpec{dir: "devtools/junit-runner"}, JavaPeerSpec{dir: "devtools/jtest-annotations/junit4"})
-		d.dm = append(d.dm, "contrib/java/com/google/code/gson/gson/2.10.1", "contrib/java/com/beust/jcommander/1.72", "contrib/java/junit/junit/4.12")
+		d.dm = appendInternAnys(d.dm, []string{"contrib/java/com/google/code/gson/gson/2.10.1", "contrib/java/com/beust/jcommander/1.72", "contrib/java/junit/junit/4.12"})
 	case u.kind == juTest && jm.stmt == tokJtestFor:
 		d.peerStmts = append(d.peerStmts, JavaPeerSpec{dir: d.unittestDir}, JavaPeerSpec{dir: "devtools/junit-runner"})
-		d.dm = append(d.dm, "contrib/java/com/google/code/gson/gson/2.8.6", "contrib/java/com/beust/jcommander/1.72", "contrib/java/junit/junit/4.12")
+		d.dm = appendInternAnys(d.dm, []string{"contrib/java/com/google/code/gson/gson/2.8.6", "contrib/java/com/beust/jcommander/1.72", "contrib/java/junit/junit/4.12"})
 	case u.kind == juTest && jm.stmt == tokJunit5:
 		d.peerStmts = append(d.peerStmts, JavaPeerSpec{dir: "devtools/jtest-annotations/junit5"})
 	case u.kind == juTest && jm.stmt == tokJunit6:
@@ -164,7 +164,7 @@ func (d *JavaData) expandJavaProtobufPeers() {
 }
 
 func collectJavaData(ctx *GenCtx, jm *JavaModule, stmts []Stmt, env Environment) *JavaData {
-	d := &JavaData{jdkReal: ctx.javaDefaultJDK(), env: env, lintLevel: "extended", abiJar: true, srcDirs: []VFS{jm.path}}
+	d := &JavaData{jdkReal: ctx.javaDefaultJDK(), env: env, lintLevel: "extended", abiJar: true, srcDirs: []VFS{jm.path}, dm: ctx.javaDMBuf[:0], excludes: ctx.javaExclBuf[:0]}
 	sourcesJar := env.string(envBUILD_TYPE) == "DEBUG" && env.string(envNO_DEBUGINFO) != "yes"
 	sbom := sbomActive(ctx, jm.instance)
 
@@ -447,6 +447,14 @@ func collectJavaStmts(ctx *GenCtx, jm *JavaModule, d *JavaData, stmts []Stmt, en
 			if assignment := declarativeMacroAssignment(v, false, env); assignment != nil {
 				recordHandledMacro(v.Name, expandStmtTokens(v.Args, env))
 				collectJavaStmts(ctx, jm, d, []Stmt{assignment}, env)
+
+				continue
+			}
+
+			if list, ok := d.ruleList(jm, v.Raw.string()); ok {
+				if list != nil {
+					*list = javaAppendResolved(*list, v.Args, expandStmtTokens(v.Args, env))
+				}
 
 				continue
 			}
@@ -737,14 +745,6 @@ func applyJavaMacro(ctx *GenCtx, jm *JavaModule, d *JavaData, name string, args,
 		}
 	case "UBERJAR_SERVICES_RESOURCE_TRANSFORMER":
 		env.setString(envUberjarServicesResourceTransformerFlag, "--service-transformer")
-	case "DEPENDENCY_MANAGEMENT":
-		d.dm = append(d.dm, args...)
-	case "EXCLUDE", "JAVA_RUNTIME_EXCLUDE", "JAVA_TEST_EXCLUDE":
-		if name != "EXCLUDE" && !javaMacroIsAlias(jm, name) {
-			return
-		}
-
-		d.excludes = append(d.excludes, args...)
 	case "JAVA_DEPENDENCIES_CONFIGURATION":
 	case "JAR_RESOURCE":
 		d.jarResource = arg0
@@ -1341,6 +1341,47 @@ func javaRunProgramRawArgs(raw []string, env Environment, rawVars map[string]str
 	}
 
 	return out
+}
+
+func (d *JavaData) ruleList(jm *JavaModule, name string) (*[]ANY, bool) {
+	switch name {
+	case "DEPENDENCY_MANAGEMENT":
+		return &d.dm, true
+	case "EXCLUDE":
+		return &d.excludes, true
+	case "JAVA_RUNTIME_EXCLUDE", "JAVA_TEST_EXCLUDE":
+		if !javaMacroIsAlias(jm, name) {
+			return nil, true
+		}
+
+		return &d.excludes, true
+	}
+
+	return nil, false
+}
+
+func javaAppendResolved(dst, src, expanded []ANY) []ANY {
+	if len(expanded) == 0 {
+		return dst
+	}
+
+	if &expanded[0] == &src[0] {
+		return append(dst, expanded...)
+	}
+
+	for _, a := range expanded {
+		if !strHasDollar(a.str().any()) {
+			dst = append(dst, a)
+
+			continue
+		}
+
+		for _, s := range javaDropUnresolved([]string{a.string()}) {
+			dst = append(dst, internStr(s).any())
+		}
+	}
+
+	return dst
 }
 
 func javaDropUnresolved(args []string) []string {

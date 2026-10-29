@@ -220,6 +220,8 @@ type GenCtx struct {
 	tcMemo              map[ToolchainKey]ModuleToolchain
 	javaRules           *IntMap[[]*javaDMRules]
 	jc                  javaClosureScratch
+	javaDMBuf           []ANY
+	javaExclBuf         []ANY
 	dllForStack         []string
 	includeStack        []string
 	ifEnvScratch        EnvStore

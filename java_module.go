@@ -282,8 +282,8 @@ type JavaData struct {
 	uberjarOpts            []string
 	javaSrcs               []JavaSrcsSpec
 	peerStmts              []JavaPeerSpec
-	dm                     []string
-	excludes               []string
+	dm                     []ANY
+	excludes               []ANY
 	jarResource            string
 	srcResource            string
 	localJar               string
@@ -480,6 +480,7 @@ func genJavaModule(ctx *GenCtx, instance ModuleInstance, moduleName TOK, stmts [
 	ctx.jc.register(jm)
 
 	jm.data = collectJavaData(ctx, jm, stmts, env)
+	jm.rules = ctx.javaDMRulesFor(jm)
 
 	if unit.fbs {
 		if jm.data.excludeTags["JAVA_FBS"] {
@@ -523,8 +524,6 @@ func genJavaModule(ctx *GenCtx, instance ModuleInstance, moduleName TOK, stmts [
 	ctx.memoPut(instance, result)
 	ctx.javaResolvePeers(jm)
 
-	jm.rules = ctx.javaDMRulesFor(jm)
-
 	if unit.transparent {
 		jm.direct = make([]javaResolvedPeer, 0, len(jm.managedPeers))
 
@@ -565,27 +564,38 @@ func genJavaModule(ctx *GenCtx, instance ModuleInstance, moduleName TOK, stmts [
 }
 
 func (ctx *GenCtx) javaDMRulesFor(jm *JavaModule) *javaDMRules {
-	var dm, excludes []string
+	d := jm.data
+
+	var dm, excludes []ANY
 
 	if !jm.unit.transparent {
-		dm, excludes = jm.data.dm, jm.data.excludes
+		dm, excludes = d.dm, d.excludes
 	}
 
-	h := xxh3.New()
+	r := ctx.javaDMRulesOf(dm, excludes)
 
-	for _, item := range dm {
-		throw2(h.WriteString(item))
-		throw2(h.WriteString("\x00"))
+	ctx.javaDMBuf, ctx.javaExclBuf = d.dm[:0], d.excludes[:0]
+	d.dm, d.excludes = nil, nil
+
+	return r
+}
+
+func javaAnyListHash(list []ANY) uint64 {
+	if len(list) == 0 {
+		return 0
 	}
 
-	throw2(h.WriteString("\x01"))
+	return xxh3.Hash(sliceBytes(list))
+}
 
-	for _, item := range excludes {
-		throw2(h.WriteString(item))
-		throw2(h.WriteString("\x00"))
+func (ctx *GenCtx) javaDMRulesOf(dm, excludes []ANY) *javaDMRules {
+	key := javaAnyListHash(dm) ^ mix64(javaAnyListHash(excludes)+uint64(len(dm)))
+
+	if key == 0 {
+		key = 1
 	}
 
-	same, _ := ctx.javaRules.cell(h.Sum64())
+	same, _ := ctx.javaRules.cell(key)
 
 	for _, r := range *same {
 		if slices.Equal(r.dm, dm) && slices.Equal(r.excludes, excludes) {
@@ -593,14 +603,14 @@ func (ctx *GenCtx) javaDMRulesFor(jm *JavaModule) *javaDMRules {
 		}
 	}
 
-	r := &javaDMRules{lib2Ver: map[string]string{}, dm: dm, excludes: excludes, excluded: map[string]struct{}{}}
+	r := &javaDMRules{lib2Ver: map[string]string{}, dm: slices.Clone(dm), excludes: slices.Clone(excludes), excluded: map[string]struct{}{}}
 
 	for _, item := range dm {
-		r.addDependencyManagement(item)
+		r.addDependencyManagement(item.string())
 	}
 
 	for _, e := range excludes {
-		r.addExclude(e)
+		r.addExclude(e.string())
 	}
 
 	*same = append(*same, r)
