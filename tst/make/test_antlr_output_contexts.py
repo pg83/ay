@@ -2,6 +2,14 @@ from tst.make.lib import MakeTest, PROJECT
 
 
 class AntlrOutputContextsTest(MakeTest):
+    def test_declared_output_arguments_are_rooted_in_the_build_directory(self):
+        self.grammar()
+        self.write("ya.make", "LIBRARY()\nRUN_ANTLR4(Answer.g4 -Dlanguage=Cpp AnswerParser.cpp IN Answer.g4 OUT AnswerParser.cpp)\nEND()\n")
+        generated = self.node(self.graph(), "AnswerParser.cpp")
+        args = [arg.replace("$(BUILD_ROOT)", "$(B)") for command in generated["cmds"] for arg in command["cmd_args"]]
+        self.assertIn(f"$(B)/{PROJECT}/AnswerParser.cpp", args)
+        self.assertNotIn("AnswerParser.cpp", args)
+
     def grammar(self):
         self.write("Answer.g4", "grammar Answer; answer: NUMBER EOF; NUMBER: [0-9]+;\n")
 
