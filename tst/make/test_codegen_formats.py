@@ -27,6 +27,35 @@ class CodegenFormatsTest(MakeTest):
         self.node(graph, "answer.cpp")
         self.node(graph, "answer.cpp.o")
 
+    def test_generated_archives_keep_producer_rename_and_executable_options(self):
+        self.write("ya.make", "LIBRARY()\nCOPY_FILE(sources.tar generated.tar)\nFROM_ARCHIVE(generated.tar RENAME original.sh EXECUTABLE OUT_NOAUTO renamed.sh)\nRESOURCE(renamed.sh /script)\nEND()\n")
+        value = b"#!/bin/sh\nprintf '42\\n'\n"
+        with tarfile.open(self.project / "sources.tar", "w") as archive:
+            entry = tarfile.TarInfo("original.sh")
+            entry.size = len(value)
+            archive.addfile(entry, io.BytesIO(value))
+        graph = self.graph()
+        extracted = self.node(graph, "renamed.sh")
+        copied = self.node(graph, "generated.tar")
+        self.assertIn(copied["uid"], extracted["deps"])
+        self.assertIn(f"$(B)/{PROJECT}/generated.tar", extracted["inputs"])
+        args = [arg for command in extracted["cmds"] for arg in command["cmd_args"]]
+        self.assertEqual(args[args.index("--rename") + 1], "original.sh")
+        self.assertIn("--executable", args)
+
+    def test_objects_extracted_from_archives_are_added_to_the_library(self):
+        self.write("ya.make", "LIBRARY(answer)\nFROM_ARCHIVE(sources.tar OUT answer.o)\nEND()\n")
+        value = b"prebuilt object\n"
+        with tarfile.open(self.project / "sources.tar", "w") as archive:
+            entry = tarfile.TarInfo("answer.o")
+            entry.size = len(value)
+            archive.addfile(entry, io.BytesIO(value))
+        graph = self.graph()
+        extracted = self.node(graph, "answer.o")
+        library = self.node(graph, "libanswer.a")
+        self.assertIn(f"$(B)/{PROJECT}/answer.o", library["inputs"])
+        self.assertIn(extracted["uid"], library["deps"])
+
     def test_cfgproto(self):
         self.write("ya.make", f"LIBRARY()\nADDINCL({PROJECT})\nSRCS(answer.cfgproto)\nEND()\n")
         self.write("answer.cfgproto", 'syntax = "proto2";\npackage e2e;\noption (NProtoConfig.Include) = "value.h";\nmessage Answer { optional int32 value = 1; }\n')
