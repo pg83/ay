@@ -5,6 +5,8 @@ import os
 import shlex
 import shutil
 import sys
+import subprocess
+import time
 import tarfile
 import tempfile
 import threading
@@ -169,6 +171,66 @@ class ExecutorTest(MakeTest):
         self.assertGreaterEqual(result.stderr.count("E2E_EXECUTOR_DIAGNOSTIC"), 2)
         metadata = self.install / PROJECT / "answer.sdcmeta"
         self.assertEqual(json.loads(metadata.read_text()), {})
+
+    def test_native_executors_share_a_cached_result_after_waiting_for_its_lock(self):
+        if not os.path.isdir("/proc/self/fd"):
+            self.skipTest("requires Linux process file descriptors")
+        started = self.work / "started"
+        release = self.work / "release"
+        calls = self.work / "calls"
+        self.write("ya.make", "UNION(answer)\nRUN_PYTHON3(generate.py STDOUT result.txt)\nEXPLICIT_OUTPUTS(${BINDIR}/result.txt)\nEND()\n")
+        self.write("generate.py", (
+            "import os, time\nfrom pathlib import Path\n"
+            f"with Path({str(calls)!r}).open('a') as out: out.write('called\\n')\n"
+            f"Path({str(started)!r}).write_text(os.getcwd())\n"
+            f"while not Path({str(release)!r}).exists(): time.sleep(0.01)\n"
+            "print('shared result')\n"
+        ))
+        args = [self.binary, "make", "-j2", "--build-dir", str(self.cache), "--install", str(self.install), PROJECT]
+        processes = []
+        try:
+            first = subprocess.Popen(args, cwd=self.root, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+            processes.append(first)
+            deadline = time.monotonic() + 30
+            while not started.exists() and first.poll() is None and time.monotonic() < deadline:
+                time.sleep(0.01)
+            self.assertTrue(started.exists(), "first executor did not reach the generator")
+            lock_directory = started.read_text()
+            second = subprocess.Popen(args, cwd=self.root, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+            processes.append(second)
+            deadline = time.monotonic() + 30
+            waiting = False
+            while second.poll() is None and time.monotonic() < deadline:
+                try:
+                    for fd in os.scandir(f"/proc/{second.pid}/fd"):
+                        try:
+                            waiting = os.readlink(fd.path) == lock_directory
+                        except FileNotFoundError:
+                            continue
+                        if waiting:
+                            break
+                except FileNotFoundError:
+                    break
+                if waiting:
+                    break
+                time.sleep(0.01)
+            self.assertTrue(waiting, "second executor did not open the shared node lock")
+            release.write_text("continue")
+            for process in processes:
+                _, stderr = process.communicate(timeout=30)
+                self.assertEqual(process.returncode, 0, stderr)
+            self.assertEqual(calls.read_text().splitlines(), ["called"])
+            self.assertEqual((self.install / PROJECT / "result.txt").read_text(), "shared result\n")
+        finally:
+            release.write_text("continue")
+            for process in processes:
+                if process.poll() is None:
+                    process.terminate()
+                    try:
+                        process.communicate(timeout=5)
+                    except subprocess.TimeoutExpired:
+                        process.kill()
+                        process.communicate()
 
     def mock_test_tool(self):
         calls = self.work / "test-tool-calls.jsonl"
