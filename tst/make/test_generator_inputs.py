@@ -45,6 +45,13 @@ class GeneratorInputsTest(MakeTest):
         self.write("ya.make", f"LIBRARY()\nBASE_CODEGEN({PROJECT}/generator answer)\nSRCS(answer.cpp)\nEND()\n")
         self.node(self.graph(), "answer.cpp")
 
+    def test_base_codegen_accepts_source_root_template_paths(self):
+        self.tool()
+        self.write("templates/answer.in", "42\n")
+        self.write("ya.make", f"LIBRARY()\nBASE_CODEGEN({PROJECT}/generator {PROJECT}/templates/answer)\nSRCS(answer.cpp)\nEND()\n")
+        generated = self.node(self.graph(), "answer.cpp")
+        self.assertIn(f"$(S)/{PROJECT}/templates/answer.in", generated["inputs"])
+
     def test_python_flatbuffers(self):
         for module in ("PY3_PROGRAM", "PY2_PROGRAM"):
             with self.subTest(module=module):
