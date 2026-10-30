@@ -16,6 +16,12 @@ class ResourceDeclarationsTest(MakeTest):
                 args = [arg for command in self.node(self.graph(), "result.txt")["cmds"] for arg in command["cmd_args"]]
                 self.assertTrue(any("E2E_RESOURCE" in arg and arg.startswith("$(") for arg in args), args)
 
+    def test_aarch64_host_toolchains_keep_native_resource_dependencies(self):
+        self.package("DECLARE_EXTERNAL_HOST_RESOURCES_BUNDLE(E2E_RESOURCE sbr:123456789 FOR LINUX sbr:123456788 FOR LINUX-AARCH64)")
+        graph = self.graph("--host-platform=default-linux-aarch64")
+        self.node(graph, "result.txt")
+        self.assertTrue("123456789" in json.dumps(graph), "native resource bundle dependency is missing")
+
     def test_host_resource_bundle_strip_prefixes_must_be_integral(self):
         for prefix in ("-1", "1.5", "bad", "4294967296"):
             with self.subTest(prefix=prefix):
