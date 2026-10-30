@@ -2,6 +2,13 @@ from tst.make.lib import MakeTest, PROJECT
 
 
 class PrebuiltProgramPlatformsTest(MakeTest):
+    def test_windows_yql_prebuilt_tools_use_the_exe_suffix(self):
+        self.write("ya.make", "YQL_PREBUILT_TOOL(answer)\nCOPY_FILE(value.exe staged.exe)\nPRIMARY_OUTPUT(${BINDIR}/staged.exe)\nEND()\n")
+        self.write("value.exe", "prebuilt executable\n")
+        graph = self.graph("--target-platform=default-win-x86_64")
+        copied = self.node(graph, "answer.exe")
+        self.assertIn(self.node(graph, "staged.exe")["uid"], copied["deps"])
+
     def test_windows_prebuilt_programs_use_the_exe_suffix(self):
         self.write("ya.make", f"PREBUILT_PROGRAM(answer)\nPRIMARY_OUTPUT(${{ARCADIA_ROOT}}/{PROJECT}/value.exe)\nEND()\n")
         self.write("value.exe", "prebuilt executable\n")
