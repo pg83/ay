@@ -4,6 +4,17 @@ from tst.make.lib import MakeTest, PROJECT
 
 
 class TestDataOptionsTest(MakeTest):
+    def test_resource_aliases_share_the_same_sandbox_download(self):
+        self.python_test("DATA(sbr://123456789=first sbr://123456789=second)")
+        graph = self.graph("-t")
+        downloads = [node for node in graph["graph"] if "$(B)/sandbox-storage/123456789/resource" in node["outputs"]]
+        self.assertEqual(len(downloads), 1)
+        checked = self.node(graph, "test-results/py3test/meta.json")
+        self.assertIn(downloads[0]["uid"], checked["deps"])
+        args = [arg for command in checked["cmds"] for arg in command["cmd_args"]]
+        for alias in ("first", "second"):
+            self.assertIn("123456789=" + alias, args)
+
     def python_test(self, macros=""):
         self.write("ya.make", f"PY3TEST()\nTEST_SRCS(test_answer.py)\n{macros}\nEND()\n")
         self.write("test_answer.py", "def test_answer(): assert True\n")
