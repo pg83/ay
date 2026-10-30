@@ -22,6 +22,20 @@ class TypescriptTests(MakeTest):
         graph = self.graph("-t")
         self.assertTrue(any("run_jest" in json.dumps(node.get("cmds", [])) for node in graph["graph"]))
 
+    def test_test_data_globs_keep_exact_files_and_matching_subdirectories(self):
+        self.package()
+        self.write("jest.config.js", "module.exports = {};\n")
+        self.write("tests/ya.make", f"TS_TEST_JEST_FOR({PROJECT})\nTS_TEST_SRCS(../src)\nTS_TEST_CONFIG(../jest.config.js)\nTS_TEST_DATA(data/exact.txt data/group*/nested.txt data/trailing*)\nEND()\n")
+        self.write("src/answer.test.ts", 'test("answer", () => expect(6 * 7).toBe(42));\n')
+        for name in ("exact.txt", "group1/nested.txt", "group2/nested.txt", "trailing"):
+            self.write("tests/data/" + name, "42\n")
+        suite = self.node(self.graph("-t"), "tests/test-results/jest/meta.json")
+        args = [arg for command in suite["cmds"] for arg in command["cmd_args"]]
+        start = args.index("--test-data-dirs") + 1
+        dirs = {arg.removeprefix("$(SOURCE_ROOT)/").removeprefix("$(S)/")
+                for arg in args[start:args.index("--config", start)]}
+        self.assertEqual(dirs, {f"{PROJECT}/tests/data" + suffix for suffix in ("", "/group1", "/group2")})
+
     def test_vitest_imports(self):
         self.package()
         self.write("vitest.config.ts", "export default {};\n")
