@@ -14,6 +14,13 @@ class AntlrOutputContextsTest(MakeTest):
         args = [arg for command in generated["cmds"] for arg in command["cmd_args"]]
         self.assertNotIn("IN", args)
 
+    def test_repeated_and_empty_output_includes_keep_one_header_dependency(self):
+        self.grammar()
+        self.write("dependency.h", "#pragma once\n")
+        self.write("ya.make", f'LIBRARY()\nADDINCL({PROJECT})\nRUN_ANTLR4(Answer.g4 -Dlanguage=Cpp -o ${{BINDIR}} IN Answer.g4 OUT AnswerParser.cpp OUTPUT_INCLUDES dependency.h dependency.h "")\nEND()\n')
+        compiled = self.node(self.graph(), "AnswerParser.cpp.o")
+        self.assertEqual(compiled["inputs"].count(f"$(S)/{PROJECT}/dependency.h"), 1)
+
     def test_general_antlr_can_declare_cpp_outputs_outside_the_module(self):
         self.grammar()
         self.write("ya.make", "LIBRARY()\nRUN_ANTLR4(Answer.g4 -o ${BINDIR}/../__ay_e2e_generated__ IN Answer.g4 OUT ${BINDIR}/../__ay_e2e_generated__/AnswerParser.cpp)\nEND()\n")
