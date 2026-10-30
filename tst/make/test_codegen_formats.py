@@ -5,6 +5,33 @@ from tst.make.lib import MakeTest, PROJECT
 
 
 class CodegenFormatsTest(MakeTest):
+    def test_nested_rodata_sources_are_linked_into_the_library(self):
+        self.write("ya.make", "LIBRARY(answer)\nSRCS(data/value.rodata)\nEND()\n")
+        self.write("data/value.rodata", "answer = 42\n")
+        graph = self.graph()
+        producers = [node for node in graph["graph"]
+                     if f"$(S)/{PROJECT}/data/value.rodata" in node["inputs"]
+                     and any(path.endswith(".o") for path in node["outputs"])]
+        self.assertEqual(len(producers), 1)
+        self.assertIn(producers[0]["uid"], self.node(graph, "libanswer.a")["deps"])
+
+    def test_arm_rodata_sources_are_generated_as_cpp(self):
+        self.write("ya.make", "LIBRARY(answer)\nSRCS(value.rodata answer.cpp)\nEND()\n")
+        self.write("value.rodata", "answer = 42\n")
+        self.write("answer.cpp", "int answer() { return 42; }\n")
+        graph = self.graph("--target-platform=default-linux-aarch64")
+        generated = self.node(graph, "value.rodata.cpp")
+        self.assertIn(f"$(S)/{PROJECT}/value.rodata", generated["inputs"])
+        self.assertIn("rodata2cpp.py", str(generated["cmds"]))
+
+    def test_arm_archive_asm_keeps_generated_rodata(self):
+        self.write("ya.make", "LIBRARY()\nARCHIVE_ASM(NAME answer value.txt)\nEND()\n")
+        self.write("value.txt", "42\n")
+        graph = self.graph("--target-platform=default-linux-aarch64")
+        self.node(graph, "answer.rodata")
+        generated = self.node(graph, "answer.rodata.cpp")
+        self.assertIn(f"$(B)/{PROJECT}/answer.rodata", generated["inputs"])
+
     def test_gettext_can_keep_the_translation_source_path(self):
         self.write("ya.make", "LIBRARY()\nSET(GETTEXT_KEEP_PATH yes)\nSRCS(locale/answer.po)\nRESOURCE(locale/answer.mo /translations)\nEND()\n")
         self.write("locale/answer.po", 'msgid "answer"\nmsgstr "42"\n')
