@@ -190,3 +190,15 @@ class IndexedSourceErrorsTest(MakeTest):
                                         cwd=self.root, text=True, capture_output=True, timeout=30)
                 self.assertNotEqual(result.returncode, 0)
                 self.assertIn(message, result.stderr.lower())
+
+    def test_directory_cannot_be_memory_mapped_as_an_indexed_archive(self):
+        indexed = self.work / "directory.indexed"
+        indexed.mkdir()
+        for index in range(16):
+            (indexed / f"entry_{index:02d}").write_text("")
+        self.assertGreaterEqual(indexed.stat().st_size, 64)
+        result = subprocess.run([os.environ["AY_GATE_TEST_BINARY"], "make", "-j0", "-G",
+                                 "--source-root", str(indexed), PROJECT],
+                                cwd=self.root, text=True, capture_output=True, timeout=30)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("mmap " + str(indexed), result.stderr)
