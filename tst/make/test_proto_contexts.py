@@ -2,6 +2,17 @@ from tst.make.lib import MakeTest, PROJECT
 
 
 class ProtoContextsTest(MakeTest):
+    def test_alice_function_specs_are_embedded_as_resources_by_default(self):
+        self.write("ya.make", "LIBRARY()\nALICE_GENERATE_FUNCTION_SPECS()\nEND()\n")
+        graph = self.graph()
+        outputs = ("llm_function_specs.json", "llm_function_specs_all_versions.json", "llm_function_specs_namespaces.json", "llm_function_specs_en-GB.json", "llm_function_specs_en-GB_all_versions.json", "llm_function_specs_namespaces_en-GB.json")
+        for output in outputs:
+            with self.subTest(output=output):
+                generated = self.node(graph, output)
+                consumers = [node for node in graph["graph"] if f"$(B)/{PROJECT}/{output}" in node["inputs"]]
+                self.assertTrue(consumers)
+                self.assertTrue(any(generated["uid"] in node["deps"] for node in consumers))
+
     def test_common_google_apis(self):
         self.write("answer.proto", f'syntax = "proto3"; package e2e; option go_package = "a.yandex-team.ru/{PROJECT}"; message Answer {{ int32 value = 1; }}\n')
         for arguments in ("", "rpc/status"):
