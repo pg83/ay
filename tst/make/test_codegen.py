@@ -44,6 +44,13 @@ class CodegenTest(MakeTest):
                 self.assertEqual(args[1:1 + len(flags)], flags)
                 self.assertRegex(args[1 + len(flags)], f"^-o\\$\\(B(UILD_ROOT)?\\)/{PROJECT}/lexer\\.l\\.cpp$")
 
+    def test_repeated_flex_flags_keep_their_order(self):
+        flags = ("--nounistd", "--batch", "--never-interactive")
+        macros = "\n".join(f"FLEX_FLAGS({flag})" for flag in flags)
+        graph = self.generated("lexer.l", "lexer.l.cpp", "%option noyywrap\n%%\n. ;\n%%\n", macros)
+        args = self.node(graph, "lexer.l.cpp")["cmds"][0]["cmd_args"]
+        self.assertEqual(args[1:4], list(flags))
+
     def flex_tool_graph(self, before, after=""):
         self.write("ya.make", f"LIBRARY()\n{before}\nSRCS(lexer.lpp answer.cpp)\n{after}\nEND()\n")
         self.write("lexer.lpp", '%option noyywrap\n%%\n[0-9]+ return 1;\n. ;\n%%\n')
