@@ -82,15 +82,14 @@ func evalIfAtomString(nodes []CondNode, i int32, env Environment) string {
 		return env.string(n.Env)
 	case ckString:
 		return evalIfExpr(n.Name, env)
-	case ckDefined, ckIsNum:
-		if evalCondAt(nodes, i, env) {
-			return "yes"
-		}
-
-		return "no"
 	}
 
-	panic(exceptionf("macros: unexpected cond kind %d in comparator operand position", n.Kind))
+	// IfCondCompiler only emits DEFINED and ISNUM as other comparator operands.
+	if evalCondAt(nodes, i, env) {
+		return "yes"
+	}
+
+	return "no"
 }
 
 func evalIsNumOperand(n *CondNode, env Environment) string {
