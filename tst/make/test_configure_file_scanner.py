@@ -2,6 +2,14 @@ from tst.make.lib import MakeTest, PROJECT
 
 
 class ConfigureFileScannerTest(MakeTest):
+    def test_command_line_values_override_declared_template_defaults(self):
+        self.write("ya.make", "LIBRARY()\nDEFAULT(E2E_VALUE 17)\nCONFIGURE_FILE(config.in result.txt)\nRESOURCE(result.txt /result)\nEND()\n")
+        self.write("config.in", "@E2E_VALUE@\n")
+        configured = self.node(self.graph("-DE2E_VALUE=42"), "result.txt")
+        args = [arg for command in configured["cmds"] for arg in command["cmd_args"]]
+        self.assertIn("E2E_VALUE=42", args)
+        self.assertNotIn("E2E_VALUE=17", args)
+
     def test_copied_templates_keep_their_producer_when_configured(self):
         self.write("config.in", "@E2E_VALUE@\n")
         for macro in ("COPY_FILE", "COPY_FILE_WITH_CONTEXT"):
