@@ -79,3 +79,12 @@ class ResourceBundleJsonTest(MakeTest):
             with self.subTest(value=value):
                 self.write("resources.json", json.dumps({"by_platform": value}))
                 self.assertNotEqual(self.make().returncode, 0)
+
+    def test_resource_json_crosses_native_file_read_boundaries(self):
+        text = json.dumps({"by_platform": {"linux-x86_64": {"uri": "sbr:123456789"}}})
+        for size in (1024 * 1024, 2 * 1024 * 1024):
+            with self.subTest(size=size):
+                self.write("resources.json", text + " " * (size - len(text)))
+                generated = self.node(self.graph(), "result.txt")
+                args = [arg for command in generated["cmds"] for arg in command["cmd_args"]]
+                self.assertIn("sbr:123456789", args)
