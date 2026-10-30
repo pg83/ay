@@ -1,7 +1,5 @@
 package main
 
-import "iter"
-
 var denseIndexZero denseIndexPage
 
 const denseIndexPageBits = 10
@@ -45,17 +43,15 @@ func (idx *DenseIndex) put(k, slot uint32) {
 	p[k&(1<<denseIndexPageBits-1)] = slot
 }
 
-func (idx *DenseIndex) each() iter.Seq2[uint32, uint32] {
-	return func(yield func(uint32, uint32) bool) {
-		for i, page := range idx.pages.s {
-			if page == &denseIndexZero {
-				continue
-			}
+func (idx *DenseIndex) each(visit func(uint32, uint32)) {
+	for i, page := range idx.pages.s {
+		if page == &denseIndexZero {
+			continue
+		}
 
-			for j, slot := range page {
-				if slot != 0 && !yield(uint32(i)<<denseIndexPageBits|uint32(j), slot) {
-					return
-				}
+		for j, slot := range page {
+			if slot != 0 {
+				visit(uint32(i)<<denseIndexPageBits|uint32(j), slot)
 			}
 		}
 	}

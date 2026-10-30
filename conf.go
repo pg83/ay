@@ -946,9 +946,9 @@ func (t *confTables) build() {
 
 	names := make([]ENV, 0, len(counts.vals.s))
 
-	for key := range counts.idx.each() {
+	counts.idx.each(func(key, _ uint32) {
 		names = append(names, ENV(key))
-	}
+	})
 
 	slices.SortFunc(names, func(a, b ENV) int { return strings.Compare(a.string(), b.string()) })
 
@@ -986,12 +986,12 @@ func (t *confTables) build() {
 
 	refs := make([]ConfStmtRef, conditionalCount)
 
-	for key, slot := range counts.idx.each() {
+	counts.idx.each(func(key, slot uint32) {
 		n := counts.vals.s[slot]
 
 		t.byTarget.put(ENV(key), refs[:0:n])
 		refs = refs[n:]
-	}
+	})
 
 	for _, r := range t.source {
 		if r.stmt.branch != 0 {
@@ -1003,7 +1003,7 @@ func (t *confTables) build() {
 
 	reads := make([]ENV, 0, len(dependencies))
 
-	for key, slot := range t.byTarget.idx.each() {
+	t.byTarget.idx.each(func(key, slot uint32) {
 		start := len(reads)
 
 		for _, r := range t.byTarget.vals.s[slot] {
@@ -1015,7 +1015,7 @@ func (t *confTables) build() {
 		}
 
 		t.targetReads.put(ENV(key), reads[start:len(reads):len(reads)])
-	}
+	})
 
 	for _, module := range t.modules.vals.s {
 		if module != nil {
@@ -1244,9 +1244,9 @@ func loadConf(pm *IncludeParserManager, root *ConfFile, platformEnv Environment)
 
 	c.sysinclList = strings.Fields(env.expand(env.string(envSYSINCL)))
 
-	for key := range tables.byTarget.idx.each() {
+	tables.byTarget.idx.each(func(key, _ uint32) {
 		c.inherited.put(ENV(key), confStringBinding(platformEnv, ENV(key)))
-	}
+	})
 
 	return c
 }
