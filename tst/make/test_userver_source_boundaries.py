@@ -53,3 +53,22 @@ class UserverSourceBoundariesTest(MakeTest):
         self.write("ya.make", "LIBRARY()\nUSRV_BUILD(answer.cpp FROM sources.tar DEPS_FILE deps.json)\nEND()\n")
         self.write("deps.json", "{}\n")
         self.assertNotEqual(self.make().returncode, 0)
+
+    def test_generated_archives_keep_their_primary_output_dependency(self):
+        self.write("ya.make", "LIBRARY()\nRUN_PYTHON3(generate.py OUT_NOAUTO marker.txt sources.tar)\nUSRV_BUILD(answer.cpp FROM sources.tar)\nEND()\n")
+        self.write("generate.py", "from pathlib import Path\nPath('marker.txt').write_text('ready')\n")
+        graph = self.graph()
+        archive = self.node(graph, "marker.txt")
+        unpacked = self.node(graph, "answer.cpp")
+        self.assertIn(archive["uid"], unpacked["deps"])
+        for output in ("marker.txt", "sources.tar"):
+            self.assertIn(f"$(B)/{PROJECT}/{output}", unpacked["inputs"])
+
+    def test_unpacked_proto_files_are_available_to_proto_compilation(self):
+        self.archive()
+        self.write("ya.make", "PROTO_LIBRARY()\nUSRV_BUILD(FROM sources.tar OUT_NOAUTO answer.proto)\nSRCS(${BINDIR}/answer.proto)\nEND()\n")
+        graph = self.graph()
+        unpacked = self.node(graph, "answer.proto")
+        generated = self.node(graph, "answer.pb.cc")
+        self.assertIn(unpacked["uid"], generated["deps"])
+        self.assertIn(f"$(B)/{PROJECT}/answer.proto", generated["inputs"])
