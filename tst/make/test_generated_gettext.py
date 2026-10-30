@@ -5,6 +5,10 @@ from tst.make.lib import MakeTest, PROJECT
 
 
 class GeneratedGettextTest(MakeTest):
+    def test_missing_translation_sources_are_rejected(self):
+        self.write("ya.make", "LIBRARY()\nSRCS(missing.po)\nRESOURCE(missing.mo /translations)\nEND()\n")
+        self.assertNotEqual(self.make().returncode, 0)
+
     def check_translation(self, graph):
         source = self.node(graph, "answer.po")
         translated = self.node(graph, "answer.mo")
