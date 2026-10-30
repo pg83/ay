@@ -145,8 +145,15 @@ class ExecutorTest(MakeTest):
             "            yield word\n"
             "args = list(unpack(sys.argv[2:]))\n"
             f"with Path({str(calls)!r}).open('a') as output: output.write(json.dumps(args) + '\\n')\n"
+            "if args[0] == 'download':\n"
+            "    root = Path(args[args.index('--storage-root') + 1])\n"
+            "    identifier = args[args.index('--id') + 1]\n"
+            "    target = root / 'sandbox-storage' / identifier\n"
+            "    target.mkdir(parents=True, exist_ok=True)\n"
+            "    (target / 'resource_info.json').write_text(json.dumps({'id': identifier}))\n"
+            "    (target / 'resource').write_text(identifier)\n"
             "for i, arg in enumerate(args[:-1]):\n"
-            "    if arg in ('--meta', '--trace', '--trace-path', '--log-path', '--tar'):\n"
+            "    if arg in ('--meta', '--trace', '--trace-path', '--log-path', '--tar', '--dir-output-tared-path'):\n"
             "        output = Path(args[i + 1]); output.parent.mkdir(parents=True, exist_ok=True)\n"
             "        output.write_text('{}\\n')\n"
             "    elif arg == '--out-path':\n"
@@ -171,6 +178,26 @@ class ExecutorTest(MakeTest):
                 self.assertIn("123456789", validation[-1])
                 self.assertEqual((self.install / PROJECT / "value.out").read_text(), "local output\n")
         self.assertEqual(self.requests, ["/runtime.tar"])
+
+    def test_native_executor_caches_sandbox_data_downloads(self):
+        self.write("ya.make", "EXECTEST()\nRUN(/bin/true)\nDATA(sbr://123456789)\nEND()\n")
+        calls, prefix = self.mock_test_tool()
+        python = self.work / "test-python.py"
+        python.write_text("import os, sys\nos.execv(sys.executable, [sys.executable, *sys.argv[2:]])\n")
+        python_prefix = "bin/python3=" + shlex.quote(sys.executable) + " " + shlex.quote(str(python))
+        for _ in range(2):
+            result = self.execute("-t", "--cmd-prefix", prefix, "--cmd-prefix", python_prefix, ninja=False)
+            self.assertEqual(result.returncode, 0, result.stderr)
+        records = [json.loads(line) for line in calls.read_text().splitlines()]
+        downloads = [args for args in records if args[0] == "download"]
+        self.assertEqual(len(downloads), 1)
+        self.assertIn("123456789", downloads[0])
+        outputs = {}
+        for manifest in (self.cache / "uid").rglob("*"):
+            if manifest.is_file():
+                outputs.update(json.loads(manifest.read_text()))
+        cached = outputs["$(B)/sandbox-storage/123456789/resource"]["cas"]
+        self.assertEqual((self.cache / "cas" / cached[:2] / cached).read_text(), "123456789")
 
     def test_malformed_cached_manifest_is_invalidated_and_rebuilt(self):
         artifact = self.copy_project()
