@@ -132,6 +132,27 @@ class ExecutorTest(MakeTest):
                 self.assertEqual(result.returncode, 0, result.stderr)
                 self.assertEqual(artifact.read_text(), value + "\n")
 
+    def test_native_executor_fetches_a_stripped_host_runtime_bundle(self):
+        archive = io.BytesIO()
+        interpreter = f'#!/bin/sh\nexec {shlex.quote(sys.executable)} "$@"\n'.encode()
+        with tarfile.open(fileobj=archive, mode="w") as output:
+            entry = tarfile.TarInfo("runtime/bin/python3")
+            entry.size = len(interpreter)
+            entry.mode = 0o755
+            output.addfile(entry, io.BytesIO(interpreter))
+        self.payloads["/runtime.tar"] = archive.getvalue()
+        self.write_tree("build/platform/python/ymake_python3/ya.make", (
+            "RESOURCES_LIBRARY()\nNO_YMAKE_PYTHON3()\n"
+            f"DECLARE_EXTERNAL_HOST_RESOURCES_BUNDLE(YMAKE_PYTHON3 {self.server_url}/runtime.tar FOR LINUX STRIP_PREFIX 1)\nEND()\n"
+        ))
+        artifact = self.copy_project()
+        for attempt in range(2):
+            with self.subTest(attempt=attempt):
+                result = self.execute(ninja=False, env={"YA_TOKEN": ""})
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertEqual(artifact.read_text(), "first\n")
+                self.assertEqual(self.requests, ["/runtime.tar"])
+
     def mock_test_tool(self):
         calls = self.work / "test-tool-calls.jsonl"
         tool = self.work / "test-tool.py"
