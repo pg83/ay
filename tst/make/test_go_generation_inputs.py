@@ -2,6 +2,18 @@ from tst.make.lib import MakeTest, PROJECT
 
 
 class GoGenerationInputsTest(MakeTest):
+    def test_flatbuffers_namespace_maps_are_inherited_once_through_a_diamond(self):
+        self.write("ya.make", f"GO_LIBRARY()\nPEERDIR({PROJECT}/left {PROJECT}/right)\nSRCS(answer.fbs)\nEND()\n")
+        self.write("answer.fbs", 'include "base/base.fbs";\nnamespace e2e; table Answer { value: shared.Base; } root_type Answer;\n')
+        self.write("base/ya.make", f"GO_LIBRARY()\nFBS_NAMESPACE(shared a.yandex-team.ru/{PROJECT}/base)\nSRCS(base.fbs)\nEND()\n")
+        self.write("base/base.fbs", "namespace shared; table Base { value: int; }\n")
+        for name in ("left", "right"):
+            self.write(name + "/ya.make", f"GO_LIBRARY()\nPEERDIR({PROJECT}/base)\nSRCS(value.go)\nEND()\n")
+            self.write(name + "/value.go", f"package {name}\nconst Answer = 42\n")
+        generated = self.node(self.graph(), "answer.fbs.gosrc")
+        args = [arg for command in generated["cmds"] for arg in command["cmd_args"]]
+        self.assertEqual(args.count(f"shared=a.yandex-team.ru/{PROJECT}/base"), 1)
+
     def test_explicit_generated_go_source_keeps_its_producer(self):
         self.write("ya.make", "GO_LIBRARY()\nCOPY_FILE(template.go generated.go)\nSRCS(${BINDIR}/generated.go)\nEND()\n")
         self.write("template.go", "package answer\nfunc Answer() int { return 42 }\n")
