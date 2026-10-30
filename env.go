@@ -220,9 +220,7 @@ func (e Environment) cloneInto(dst *EnvStore) Environment {
 }
 
 func (s *EnvStore) confWrite(id ENV) {
-	if s.confBase == s {
-		s.confBase = nil
-	} else if s.confBase != nil {
+	if s.confBase != nil {
 		s.confWrites = append(s.confWrites, id)
 	}
 }
