@@ -27,3 +27,23 @@ class GoCodegenOptionsTest(MakeTest):
         args = [arg for command in generated["cmds"] for arg in command["cmd_args"]]
         self.assertTrue(any("json_names_for_fields=false" in arg for arg in args), args)
         self.assertTrue(any(path.endswith("answer.swagger.json") for path in generated["outputs"]))
+
+    def test_contributed_mockgen_packages_keep_their_public_import_path(self):
+        self.write_tree("vendor/ay_e2e/example/ya.make", "GO_LIBRARY()\nVERSION(1.0.0)\nLICENSE(MIT)\nSRCS(api.go)\nEND()\n")
+        self.write_tree("vendor/ay_e2e/example/api.go", "package example\ntype Answerer interface { Answer() int }\n")
+        self.write("ya.make", "GO_PROGRAM(reflector)\nGO_MOCKGEN_CONTRIB_FROM(ay_e2e/example)\nGO_MOCKGEN_TYPES(Answerer)\nGO_MOCKGEN_REFLECT()\nEND()\n")
+        generated = self.node(self.graph(), "main.go")
+        args = [arg for command in generated["cmds"] for arg in command["cmd_args"]]
+        self.assertIn("ay_e2e/example", args)
+        self.assertNotIn("vendor/ay_e2e/example", args)
+
+    def test_go_tests_use_the_declared_package_for_inline_resources(self):
+        self.write("ya.make", "GO_TEST(answer)\nSRCS(answer.go)\nGO_TEST_SRCS(answer_test.go)\nRESOURCE(- E2E=42)\nEND()\n")
+        self.write("answer.go", "package answer\nfunc Answer() int { return 42 }\n")
+        self.write("answer_test.go", 'package answer\nimport "testing"\nfunc TestAnswer(t *testing.T) {}\n')
+        graph = self.graph("-t")
+        resources = [node for node in graph["graph"] if any(path.startswith(f"$(B)/{PROJECT}/") and path.endswith(".res.go") for path in node["outputs"])]
+        self.assertTrue(resources)
+        for node in resources:
+            args = [arg for command in node["cmds"] for arg in command["cmd_args"]]
+            self.assertEqual(args[args.index("-package") + 1], "answer")
