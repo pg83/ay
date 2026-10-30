@@ -2,6 +2,43 @@ from tst.make.lib import MakeTest, PROJECT
 
 
 class SourceContextsTest(MakeTest):
+    def test_late_bound_program_inputs_preserve_declared_text_files(self):
+        self.write("ya.make", f'''LIBRARY()
+RUN_PROGRAM({PROJECT}/generator IN $E2E_LATE ordinary.h OUT generated.cpp)
+DECLARE_IN_DIRS(DATA *.h DIRS data)
+SET(E2E_LATE ${{DATA_FILES}})
+END()
+''')
+        self.write("generator/ya.make", "PY3_PROGRAM(generator)\nPY_SRCS(MAIN main.py)\nEND()\n")
+        self.write("generator/main.py", 'from pathlib import Path\nPath("generated.cpp").write_text("int answer() { return 42; }")\n')
+        self.write("data/value.h", '#include "../unparsed.h"\n')
+        self.write("unparsed.h", "#define UNPARSED 1\n")
+        self.write("ordinary.h", '#include "parsed.h"\n')
+        self.write("parsed.h", "#define PARSED 1\n")
+        inputs = self.node(self.graph(), "generated.cpp")["inputs"]
+        for name in ("data/value.h", "ordinary.h", "parsed.h"):
+            self.assertIn(f"$(S)/{PROJECT}/{name}", inputs)
+        self.assertNotIn(f"$(S)/{PROJECT}/unparsed.h", inputs)
+
+    def test_literal_and_declared_text_inputs_keep_separate_scan_policies(self):
+        self.write("ya.make", '''LIBRARY()
+DECLARE_IN_DIRS(DATA *.h DIRS data)
+SET(INPUTS ${DATA_FILES})
+SET_APPEND(INPUTS extra.h)
+RUN_PYTHON3(generate.py IN ordinary.h ${INPUTS} STDOUT generated.cpp)
+END()
+''')
+        self.write("generate.py", 'print("int answer() { return 42; }")\n')
+        self.write("data/value.h", '#include "../unparsed.h"\n')
+        self.write("unparsed.h", "#define UNPARSED 1\n")
+        self.write("ordinary.h", '#include "parsed.h"\n')
+        self.write("extra.h", '#include "parsed.h"\n')
+        self.write("parsed.h", "#define PARSED 1\n")
+        inputs = self.node(self.graph(), "generated.cpp")["inputs"]
+        for name in ("data/value.h", "ordinary.h", "extra.h", "parsed.h"):
+            self.assertIn(f"$(S)/{PROJECT}/{name}", inputs)
+        self.assertNotIn(f"$(S)/{PROJECT}/unparsed.h", inputs)
+
     def test_directory_declarations_exclude_matching_file_names(self):
         self.write("ya.make", "LIBRARY()\nDECLARE_IN_DIRS(DATA *.txt DIRS . EXCLUDES ignored.txt)\nRUN_PYTHON3(generate.py IN ${DATA_FILES} STDOUT generated.cpp)\nEND()\n")
         self.write("generate.py", 'print("int answer() { return 42; }")\n')
