@@ -45,3 +45,26 @@ class CythonScannerBoundariesTest(MakeTest):
                 self.write("answer.pyx", "cimport dependency\ncdef extern from " + target + ":\n    pass\n")
                 generated = self.node(self.graph(), "answer.pyx.cpp")
                 self.assertIn(f"$(S)/{PROJECT}/dependency.pxd", generated["inputs"])
+
+    def test_incomplete_module_names_keep_complete_earlier_imports(self):
+        self.write("dependency.pxd", "cdef int value\n")
+        for clause in ("from ( cimport value\n", "cimport dependency, \\\n    dependency"):
+            with self.subTest(clause=clause):
+                self.write("answer.pyx", "cimport dependency\n" + clause)
+                generated = self.node(self.graph(), "answer.pyx.cpp")
+                self.assertIn(f"$(S)/{PROJECT}/dependency.pxd", generated["inputs"])
+
+    def test_quoted_angle_include_names_use_the_literal_file_name(self):
+        self.write("answer.pyx", 'include "<included.pxi>"\ndef answer(): return 42\n')
+        for name in ("included.pxi", "<included.pxi>"):
+            self.write(name, "cdef int value\n")
+        generated = self.node(self.graph(), "answer.pyx.cpp")
+        self.assertIn(f"$(S)/{PROJECT}/<included.pxi>", generated["inputs"])
+
+    def test_empty_include_names_keep_complete_imports_with_keep_going(self):
+        self.write("dependency.pxd", "cdef int value\n")
+        for target in ('""', '"<>"'):
+            with self.subTest(target=target):
+                self.write("answer.pyx", "cimport dependency\ninclude " + target + "\ndef answer(): return 42\n")
+                generated = self.node(self.graph("-k"), "answer.pyx.cpp")
+                self.assertIn(f"$(S)/{PROJECT}/dependency.pxd", generated["inputs"])
