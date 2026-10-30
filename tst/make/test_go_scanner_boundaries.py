@@ -15,6 +15,12 @@ class GoScannerBoundariesTest(MakeTest):
         self.write("answer.go", 'package answer\nimport (""')
         self.assertNotEqual(self.make().returncode, 0)
 
+    def test_missing_package_identifier_does_not_lose_the_source(self):
+        self.write("ya.make", "GO_LIBRARY()\nSRCS(answer.go)\nEND()\n")
+        self.write("answer.go", "package\n")
+        compiled = self.node(self.graph(), f"{PROJECT}.a")
+        self.assertIn(f"$(S)/{PROJECT}/answer.go", compiled["inputs"])
+
     def test_cgo_ignores_comment_markers_inside_escaped_and_raw_strings(self):
         self.write("ya.make", "GO_LIBRARY()\nCGO_SRCS(answer.go)\nEND()\n")
         self.write("answer.h", "int answer(void);\n")
