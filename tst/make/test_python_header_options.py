@@ -2,6 +2,13 @@ from tst.make.lib import MakeTest
 
 
 class PythonHeaderOptionsTest(MakeTest):
+    def test_python_headers_require_a_nonempty_include_directory_setting(self):
+        self.write("answer.cpp", "int answer() { return 42; }\n")
+        for previous in ("no", "yes"):
+            with self.subTest(previous=previous):
+                self.write("ya.make", f"LIBRARY()\nSET(USE_PYTHON3_PREV {previous})\nSET(PY3_BASE_INCLUDE_DIR)\nPYTHON3_ADDINCL()\nSRCS(answer.cpp)\nEND()\n")
+                self.assertNotEqual(self.make().returncode, 0)
+
     def test_external_python_headers_use_configured_flags(self):
         self.write("answer.cpp", "int answer() { return 42; }\n")
         for macro in ("PYTHON2_ADDINCL", "PYTHON3_ADDINCL"):
