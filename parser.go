@@ -100,8 +100,6 @@ type IncludeParserKind uint8
 
 func includeParserKind(parser IncludeDirectiveParser) IncludeParserKind {
 	switch parser.(type) {
-	case nil:
-		return includeParserNone
 	case CIncludeDirectiveParser:
 		return includeParserC
 	case GoCgoIncludeDirectiveParser:
@@ -134,9 +132,9 @@ func includeParserKind(parser IncludeDirectiveParser) IncludeParserKind {
 		return includeParserProto
 	case CfgProtoIncludeDirectiveParser:
 		return includeParserCfgProto
-	default:
-		panic("unregistered include parser")
 	}
+
+	return includeParserNone
 }
 
 func (r *IncludeDirectiveParserRegistry) parser(kind IncludeParserKind) IncludeDirectiveParser {
