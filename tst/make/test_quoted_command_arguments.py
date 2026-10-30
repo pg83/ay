@@ -25,3 +25,11 @@ class QuotedCommandArgumentsTest(MakeTest):
         generated = self.node(self.graph("-DE2E_GENERATOR_ARGS=" + arguments), "Generated.java")
         args = next(command["cmd_args"] for command in generated["cmds"] if "Generator" in command["cmd_args"])
         self.assertEqual(args[args.index("Generator") + 1:], [r"left\q", r"left\right", "left/right"])
+
+    def test_configure_file_preserves_escaped_surrounding_quotes(self):
+        self.write("ya.make", "LIBRARY()\nSET(E2E_VALUE ${E2E_QUOTED})\nCONFIGURE_FILE(config.h.in ${BINDIR}/config.h)\nSRCS(answer.cpp)\nEND()\n")
+        self.write("config.h.in", "#define ANSWER @E2E_VALUE@\n")
+        self.write("answer.cpp", '#include "config.h"\nint answer() { return ANSWER; }\n')
+        generated = self.node(self.graph(r'-DE2E_QUOTED=\"42\"'), "config.h")
+        args = [arg for command in generated["cmds"] for arg in command["cmd_args"]]
+        self.assertIn('E2E_VALUE="42"', args)
