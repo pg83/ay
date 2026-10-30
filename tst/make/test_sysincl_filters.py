@@ -4,6 +4,31 @@ from tst.make.lib import MakeTest, PROJECT
 
 
 class SysinclFiltersTest(MakeTest):
+    def test_empty_source_filter_applies_to_every_source(self):
+        self.assert_mapped("")
+
+    def test_nested_nonliteral_alternatives_keep_regex_matching(self):
+        self.assert_mapped(f"^(unused|{PROJECT}/ans[wv]er)[.]cpp$")
+
+    def test_negative_lookahead_residuals_match_source_paths(self):
+        for pattern in (f"^(?!excluded)^{PROJECT}/", f"^(?!excluded).*{PROJECT}/"):
+            with self.subTest(pattern=pattern):
+                self.assert_mapped(pattern)
+
+    def test_escaped_parentheses_in_negative_lookahead_are_supported(self):
+        self.assert_mapped(f"^(?!excluded\\)name){PROJECT}/")
+
+    def test_unclosed_negative_lookahead_is_a_configuration_error(self):
+        self.mapping("^(?!unterminated")
+        self.assertNotEqual(self.make().returncode, 0)
+
+    def test_empty_negative_alternative_excludes_every_source(self):
+        self.mapping(f"^(?!(unused|)){PROJECT}/")
+        self.assertNotEqual(self.make().returncode, 0)
+
+    def test_start_anchor_alone_matches_source_paths(self):
+        self.assert_mapped("^")
+
     def setUp(self):
         super().setUp()
         self.config = (self.root / "build/sysincl/misc.yml").read_text()
