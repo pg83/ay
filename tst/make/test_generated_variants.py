@@ -2,6 +2,15 @@ from tst.make.lib import MakeTest, PROJECT
 
 
 class GeneratedVariantsTest(MakeTest):
+    def test_enum_serialization_normalizes_parent_segments(self):
+        self.write("ya.make", "LIBRARY()\nGENERATE_ENUM_SERIALIZATION(nested/../answer.h)\nEND()\n")
+        self.write("nested/.keep", "")
+        self.write("answer.h", "#pragma once\nenum class Answer { Value = 42 };\n")
+        graph = self.graph()
+        generated = self.node(graph, "answer.h_serialized.cpp")
+        self.assertIn(f"$(S)/{PROJECT}/answer.h", generated["inputs"])
+        self.assertIn(generated["uid"], self.node(graph, "answer.h_serialized.cpp.o")["deps"])
+
     def test_declare_recursive_inputs(self):
         self.write("ya.make", "LIBRARY()\nDECLARE_IN_DIRS(DATA *.txt RECURSIVE DIRS data)\nRUN_PYTHON3(generate.py IN ${DATA_FILES} STDOUT generated.cpp)\nEND()\n")
         self.write("generate.py", 'print("int answer() { return 42; }")\n')
