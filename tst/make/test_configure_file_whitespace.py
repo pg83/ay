@@ -21,3 +21,7 @@ class ConfigureFileWhitespaceTest(MakeTest):
         for suffix in ("#cmakedefine", "#cmakedefine0", "#cmakedefine0X", "#cmakedefineX"):
             with self.subTest(suffix=suffix):
                 self.assertIn("E2E_FLAG=yes", self.configure("@E2E_FLAG@\n" + suffix))
+
+    def test_consecutive_tabs_between_cmake_keyword_and_variable(self):
+        args = self.configure("#cmakedefine\t\tE2E_FLAG\n#cmakedefine \tE2E_FLAG\n")
+        self.assertEqual(args.count("E2E_FLAG=yes"), 1)
