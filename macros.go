@@ -71,9 +71,7 @@ func evalCondAt(nodes []CondNode, i int32, env Environment) bool {
 		return err == nil
 	}
 
-	throwFmt("macros: bare integer %d cannot be evaluated as a boolean condition", n.Ival)
-
-	return false
+	panic(exceptionf("macros: bare integer %d cannot be evaluated as a boolean condition", n.Ival))
 }
 
 func evalIfAtomString(nodes []CondNode, i int32, env Environment) string {
@@ -92,9 +90,7 @@ func evalIfAtomString(nodes []CondNode, i int32, env Environment) string {
 		return "no"
 	}
 
-	throwFmt("macros: unexpected cond kind %d in comparator operand position", n.Kind)
-
-	return ""
+	panic(exceptionf("macros: unexpected cond kind %d in comparator operand position", n.Kind))
 }
 
 func evalIsNumOperand(n *CondNode, env Environment) string {

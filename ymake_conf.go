@@ -254,9 +254,7 @@ func resolveCxxToolchain(fs FS, cfg *YaConfToolchains, host, target string) *Too
 		}
 	}
 
-	throwFmt("ymake conf: unsupported platforms host=%s target=%s for tool %s", host, target, toolchainCxxTool)
-
-	return nil
+	panic(exceptionf("ymake conf: unsupported platforms host=%s target=%s for tool %s", host, target, toolchainCxxTool))
 }
 
 func newToolchain(fs FS, cfg *YaConfToolchains, key string, descr, tool, host, target map[string]any) *Toolchain {
@@ -432,9 +430,7 @@ func canonizeResourcePlatform(platform string) string {
 		return "win32"
 	}
 
-	throwFmt("ymake conf: unsupported resource platform %q", platform)
-
-	return ""
+	panic(exceptionf("ymake conf: unsupported resource platform %q", platform))
 }
 
 func readLocalYmake(fs FS) [][2]string {

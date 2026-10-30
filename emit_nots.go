@@ -325,9 +325,7 @@ func (e *EmitContext) notsResource(dir, name string) ResourceDecl {
 		}
 	}
 
-	throwFmt("nots: %s did not declare resource %s", dir, name)
-
-	return ResourceDecl{}
+	panic(exceptionf("nots: %s did not declare resource %s", dir, name))
 }
 
 func (e *EmitContext) notsPeerInstance(dir string) ModuleInstance {

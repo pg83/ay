@@ -244,9 +244,7 @@ func selectResourceDescriptor(descriptor ResourceDescriptor, hostPlatform string
 		}
 	}
 
-	throwFmt("fetch: resource %q has no entry for host platform %q", descriptor.Pattern, hostPlatform)
-
-	return ResourceDescriptor{}
+	panic(exceptionf("fetch: resource %q has no entry for host platform %q", descriptor.Pattern, hostPlatform))
 }
 
 func sortedResourceGlobals(in []ResourceDecl) []ResourceDecl {
@@ -274,9 +272,7 @@ func resolveResourceGlobalRef(s string, globals []ResourceDecl) string {
 		}
 	}
 
-	throwFmt("resources: %q references resource global not in the PEERDIR closure", s)
-
-	return ""
+	panic(exceptionf("resources: %q references resource global not in the PEERDIR closure", s))
 }
 
 func resolveResourceGlobalArgs(args []ANY, globals []ResourceDecl) []ANY {

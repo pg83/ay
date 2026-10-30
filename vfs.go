@@ -89,9 +89,7 @@ func cwdVFS(s string) VFS {
 		return intern(s)
 	}
 
-	throwFmt("cwdVFS: unexpected cwd %q", s)
-
-	return 0
+	panic(exceptionf("cwdVFS: unexpected cwd %q", s))
 }
 
 func (v VFS) string() string {

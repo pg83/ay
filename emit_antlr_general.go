@@ -154,7 +154,5 @@ func antlrOutputModuleRel(modulePath string, outVFS VFS) string {
 		return strings.TrimPrefix(outVFS.relString(), prefix)
 	}
 
-	throwFmt("gen: antlr output %q is outside module %q", outVFS.relString(), modulePath)
-
-	return ""
+	panic(exceptionf("gen: antlr output %q is outside module %q", outVFS.relString(), modulePath))
 }

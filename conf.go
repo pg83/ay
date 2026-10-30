@@ -1715,9 +1715,7 @@ func cutConfQuoted(rel, value string) (string, string) {
 		}
 	}
 
-	throwFmt("conf: %s: unterminated macro parameter value %q", rel, value)
-
-	return "", ""
+	panic(exceptionf("conf: %s: unterminated macro parameter value %q", rel, value))
 }
 
 type confMacroBinding struct {
