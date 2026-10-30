@@ -16,3 +16,8 @@ class ConfigureFileWhitespaceTest(MakeTest):
         for suffix in ("#cmakedefine  ", "#cmakedefine\t \t", "#cmakedefine01  \t", "#cmakedefine01\t \t!"):
             with self.subTest(suffix=suffix):
                 self.assertIn("E2E_FLAG=yes", self.configure("@E2E_FLAG@\n" + suffix))
+
+    def test_incomplete_cmake_definition_keywords_preserve_prior_references(self):
+        for suffix in ("#cmakedefine", "#cmakedefine0", "#cmakedefine0X", "#cmakedefineX"):
+            with self.subTest(suffix=suffix):
+                self.assertIn("E2E_FLAG=yes", self.configure("@E2E_FLAG@\n" + suffix))
