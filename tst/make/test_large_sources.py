@@ -2,6 +2,24 @@ from tst.make.lib import MakeTest, PROJECT
 
 
 class LargeSourcesTest(MakeTest):
+    def test_include_after_a_megabyte_of_leading_whitespace_without_newlines(self):
+        self.write("ya.make", "LIBRARY()\nSRCS(answer.cpp)\nEND()\n")
+        self.write("answer.cpp", " " * (2 * 1024 * 1024) + '#include "dependency.h"')
+        self.write("dependency.h", "#pragma once\n")
+        self.assertIn(f"$(S)/{PROJECT}/dependency.h", self.node(self.graph(), "answer.cpp.o")["inputs"])
+
+    def test_unclosed_multichunk_comments_do_not_create_include_dependencies(self):
+        self.write("ya.make", "LIBRARY()\nSRCS(answer.cpp)\nEND()\n")
+        self.write("answer.cpp", '/*\n#include "absent.h"\n' + "x" * (2 * 1024 * 1024))
+        self.node(self.graph(), "answer.cpp.o")
+
+    def test_preprocessor_directives_can_end_before_an_include_target(self):
+        self.write("ya.make", "LIBRARY()\nSRCS(answer.cpp)\nEND()\n")
+        for text in ("#include", "# /* unfinished"):
+            with self.subTest(text=text):
+                self.write("answer.cpp", text)
+                self.node(self.graph(), "answer.cpp.o")
+
     def test_includes_across_large_source_chunks(self):
         self.write("ya.make", "LIBRARY()\nSRCS(answer.cpp)\nEND()\n")
         self.write("dependency.h", "#pragma once\n#define ANSWER 42\n")
