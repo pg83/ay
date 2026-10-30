@@ -34,3 +34,15 @@ class LlvmCompilationOptionsTest(MakeTest):
         generated = self.node(self.graph(), "answer.cpp.bc")
         args = [arg for command in generated["cmds"] for arg in command["cmd_args"]]
         self.assertIn("-DE2E_CXX=42", args)
+
+    def test_yql_bitcode_outputs_keep_the_library_abi_suffix(self):
+        self.write("ya.make", "YQL_LIBRARY(answer)\nUSE_LLVM_BC16()\nLLVM_BC(answer.cpp NAME answer)\nEND()\n")
+        self.write("answer.cpp", 'extern "C" int answer() { return 42; }\n')
+        self.node(self.graph(), "answer.cpp.abi_stable.bc")
+
+    def test_google_api_include_paths_reach_the_bitcode_compiler(self):
+        self.write("ya.make", "LIBRARY()\nNO_RUNTIME()\nNO_UTIL()\nSET(NEED_PLATFORM_PEERDIRS no)\nUSE_LLVM_BC16()\nPEERDIR(contrib/libs/googleapis-common-protos)\nLLVM_BC(answer.cpp NAME answer)\nEND()\n")
+        self.write("answer.cpp", 'extern "C" int answer() { return 42; }\n')
+        generated = self.node(self.graph(), "answer.cpp.bc")
+        args = [arg.replace("$(BUILD_ROOT)", "$(B)") for command in generated["cmds"] for arg in command["cmd_args"]]
+        self.assertIn("-I$(B)/contrib/libs/googleapis-common-protos", args)
