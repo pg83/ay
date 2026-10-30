@@ -12,7 +12,6 @@ var (
 	py2LibraryMacros  = MacroPolicy{restricted: []TOK{tokPython3Addincl, tokUsePython3, tokPython2Addincl}, ignored: []TOK{tokUsePython2}}
 	py3LibraryMacros  = MacroPolicy{restricted: []TOK{tokPython3Addincl, tokUsePython3, tokPython2Addincl, tokUsePython2}}
 	py23LibraryMacros = uniteMacroPolicies(py2LibraryMacros, py3LibraryMacros)
-	py23TestMacros    = uniteMacroPolicies(py2LibraryMacros, py3LibraryMacros, py3LibraryMacros)
 )
 
 var py23NativeLibraryMacros = uniteMacroPolicies(
@@ -62,22 +61,12 @@ func moduleMacroPolicy(d *ModuleData) MacroPolicy {
 	case tokPy3Library, tokPy3Program, tokPy3ProgramBin, tokPy3Test, tokPy3TestBin:
 		return py3LibraryMacros
 	case tokPy23Library:
-		return python2Variant(py23LibraryMacros, d.unit.Type == tokPy2Library)
+		return py23LibraryMacros[1]
 	case tokPy23NativeLibrary:
-		return python2Variant(py23NativeLibraryMacros, d.unit.Type == tokLibrary)
-	case tokPy23Test:
-		return python2Variant(py23TestMacros, d.unit.Type == tokPytestBin)
+		return py23NativeLibraryMacros[1]
 	}
 
 	return MacroPolicy{}
-}
-
-func python2Variant(variants []MacroPolicy, python2 bool) MacroPolicy {
-	if python2 {
-		return variants[0]
-	}
-
-	return variants[1]
 }
 
 func dropsMacro(d *ModuleData, modulePath string, name TOK, onWarn func(Warn)) bool {
