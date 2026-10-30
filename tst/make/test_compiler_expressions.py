@@ -4,6 +4,11 @@ from tst.make.lib import MakeTest
 
 
 class CompilerExpressionsTest(MakeTest):
+    def test_recursive_flags_parameter_is_a_configuration_error(self):
+        self.write("ya.make", "LIBRARY()\nCFLAGS(-DE2E_BEFORE=42 $Flags)\nSRCS(answer.cpp)\nEND()\n")
+        self.write("answer.cpp", "int answer() { return 42; }\n")
+        self.assertNotEqual(self.make().returncode, 0)
+
     def flags(self, value):
         config = self.root / "ya.conf"
         self.write_tree("ya.conf", config.read_text() + "\n[flags]\nCFLAGS = " + json.dumps(value) + "\n")
