@@ -153,6 +153,23 @@ class ExecutorTest(MakeTest):
                 self.assertEqual(artifact.read_text(), "first\n")
                 self.assertEqual(self.requests, ["/runtime.tar"])
 
+    def test_native_executor_keeps_stderr_from_each_command_in_one_node(self):
+        archive = io.BytesIO()
+        interpreter = (f'#!/bin/sh\nprintf "E2E_EXECUTOR_DIAGNOSTIC\\n" >&2\n'
+                       f'exec {shlex.quote(sys.executable)} "$@"\n').encode()
+        with tarfile.open(fileobj=archive, mode="w") as output:
+            entry = tarfile.TarInfo("bin/python3")
+            entry.size = len(interpreter)
+            entry.mode = 0o755
+            output.addfile(entry, io.BytesIO(interpreter))
+        self.payloads["/runtime.tar"] = archive.getvalue()
+        self.write("ya.make", "UNION(answer)\nENABLE(USE_SDC_META)\nEND()\n")
+        result = self.execute(ninja=False)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertGreaterEqual(result.stderr.count("E2E_EXECUTOR_DIAGNOSTIC"), 2)
+        metadata = self.install / PROJECT / "answer.sdcmeta"
+        self.assertEqual(json.loads(metadata.read_text()), {})
+
     def mock_test_tool(self):
         calls = self.work / "test-tool-calls.jsonl"
         tool = self.work / "test-tool.py"
