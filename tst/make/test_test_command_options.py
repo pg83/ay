@@ -5,6 +5,31 @@ from tst.make.lib import MakeTest, PROJECT
 
 
 class TestCommandOptionsTest(MakeTest):
+    def test_python_subtest_forks_split_the_run_nodes(self):
+        self.write("ya.make", "PY3TEST()\nTEST_SRCS(test_answer.py)\nFORK_SUBTESTS()\nSPLIT_FACTOR(2)\nEND()\n")
+        self.write("test_answer.py", "def test_first(): assert True\ndef test_second(): assert True\n")
+        graph = self.graph("-t")
+        for chunk in range(2):
+            args = [arg for command in self.node(graph, f"test-results/py3test/chunk{chunk}/meta.json")["cmds"] for arg in command["cmd_args"]]
+            self.assertIn("--split-by-tests", args)
+            self.assertEqual(args[args.index("--modulo") + 1], "2")
+            self.assertEqual(args[args.index("--modulo-index") + 1], str(chunk))
+
+    def test_python_sanitizer_flag_reaches_the_runner(self):
+        self.write("ya.make", "PY3TEST()\nTEST_SRCS(test_answer.py)\nEND()\n")
+        self.write("test_answer.py", "def test_answer(): assert True\n")
+        args = [arg for command in self.node(self.graph("-t", "-DSANITIZER_TYPE=address"), "test-results/py3test/meta.json")["cmds"] for arg in command["cmd_args"]]
+        self.assertEqual(args[args.index("--sanitize") + 1], "address")
+
+    def test_distributed_fuzz_runs_truncate_logs(self):
+        self.write("ya.make", "FUZZ()\nSRCS(fuzz.cpp)\nEND()\n")
+        self.write("fuzz.cpp", '#include <stddef.h>\n#include <stdint.h>\nextern "C" int LLVMFuzzerTestOneInput(const uint8_t*, size_t) { return 0; }\n')
+        graph = self.graph("-t", "--dist")
+        commands = [command["cmd_args"] for node in graph["graph"] for command in node["cmds"] if "run_fuzz" in command["cmd_args"]]
+        self.assertTrue(commands)
+        for args in commands:
+            self.assertIn("--truncate-logs", args)
+
     def test_conftest_loading_policies_reach_python_test_environment(self):
         self.write("test_answer.py", "def test_answer(): assert True\n")
         for macro, value in (("CONFTEST_LOAD_POLICY_LOCAL", "LOCAL"), ("CONFTEST_LOAD_POLICY_LEGACY_GLOBAL", "LEGACY_GLOBAL")):
