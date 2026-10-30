@@ -110,6 +110,16 @@ class ExecutorTest(MakeTest):
             self.assertEqual(artifact.read_text(), "first\n")
         self.assertEqual(self.requests, ["/runtime.tar", "/runtime.tar"])
 
+    def test_native_executor_hashes_large_source_inputs(self):
+        artifact = self.copy_project()
+        payload = "x" * (2 * 1024 * 1024)
+        for text in (payload, payload[:-1] + "y"):
+            with self.subTest(last_byte=text[-1]):
+                self.write("value.txt", text)
+                result = self.execute(sandboxing=False, ninja=False)
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertTrue(artifact.read_bytes() == text.encode(), "large source contents differ")
+
     def test_malformed_cached_manifest_is_invalidated_and_rebuilt(self):
         artifact = self.copy_project()
         result = self.execute()
