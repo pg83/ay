@@ -2,6 +2,13 @@ from tst.make.lib import MakeTest, PROJECT
 
 
 class NativeConfigTest(MakeTest):
+    def test_cuda_memory_macros_with_unresolved_dash_suffixes_still_generate_nodes(self):
+        self.write("ya.make", "LIBRARY()\nSET_CUDA_NODE_RAM_REQUIEREMENT($E2E_UNDEFINED--)\nSRCS(answer.cu)\nEND()\n")
+        self.write("answer.cu", "__global__ void answer(int* value) { *value = 42; }\n")
+        graph = self.graph()
+        compiled = [node for node in graph["graph"] if f"$(S)/{PROJECT}/answer.cu" in node["inputs"] and any(path.endswith(".o") for path in node["outputs"])]
+        self.assertEqual(len(compiled), 1)
+
     def test_cuda_compilation_receives_the_requested_memory_limit(self):
         self.write("answer.cu", "__global__ void answer(int* value) { *value = 42; }\n")
         for amount in ("8", "12.5"):
