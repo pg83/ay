@@ -5,6 +5,21 @@ from tst.make.lib import MakeTest, PROJECT
 
 
 class TestCommandOptionsTest(MakeTest):
+    def test_literal_shaped_references_expand_to_empty_environment_values(self):
+        self.write("ya.make", "PY3TEST()\nTEST_SRCS(test_answer.py)\nENV(E2E_VALUE=$E2E_INPUT)\nEND()\n")
+        self.write("test_answer.py", "def test_answer(): assert True\n")
+        for value in ('${"hello"}', '${"héllo"}', '${"a\\\"b"}', '${"line\\\nnext"}'):
+            with self.subTest(value=value):
+                args = [arg for command in self.node(self.graph("-t", "-DE2E_INPUT=" + value), "test-results/py3test/meta.json")["cmds"] for arg in command["cmd_args"]]
+                self.assertIn("E2E_VALUE=", args)
+
+    def test_unclosed_literal_configuration_values_in_test_environment_are_errors(self):
+        self.write("ya.make", "PY3TEST()\nTEST_SRCS(test_answer.py)\nENV(E2E_VALUE=$E2E_INPUT)\nEND()\n")
+        self.write("test_answer.py", "def test_answer(): assert True\n")
+        for value in ('${"unfinished', '${"trailing\\'):
+            with self.subTest(value=value):
+                self.assertNotEqual(self.make("-t", "-DE2E_INPUT=" + value).returncode, 0)
+
     def test_recursive_variables_in_test_environment_are_configuration_errors(self):
         config = self.root / "build/ymake.core.conf"
         self.write_tree("build/ymake.core.conf", config.read_text() + "\nE2E_GROWING = prefix$E2E_GROWING\n")
