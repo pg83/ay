@@ -272,10 +272,6 @@ func (e Environment) setString(id ENV, v string) {
 }
 
 func (e Environment) setInt(id ENV, n int) {
-	if len(e.s.appends) != 0 {
-		e.s.dropAppend(id)
-	}
-
 	delete(e.s.textInputs, id)
 
 	e.s.clearResourceBinding(id)
