@@ -2,6 +2,16 @@ from tst.make.lib import MakeTest, PROJECT
 
 
 class NestedPackagePeersTest(MakeTest):
+    def test_ci_groups_keep_nested_package_results(self):
+        self.write("ya.make", f"CI_GROUP(bundle)\nPEERDIR({PROJECT}/child)\nEND()\n")
+        self.write("child/ya.make", "PACKAGE(child)\nFILES(value.txt)\nEND()\n")
+        self.write("child/value.txt", "42\n")
+        graph = self.graph()
+        packaged = self.node(graph, "bundle.ci.pkg.fake")
+        child = self.node(graph, "child/child.final.pkg.fake")
+        self.assertIn(child["uid"], packaged["deps"])
+        self.assertIn(f"$(B)/{PROJECT}/child/child.final.pkg.fake", packaged["inputs"])
+
     def test_nested_packages_keep_file_contents_in_the_parent(self):
         self.write("ya.make", f"PACKAGE(bundle)\nPEERDIR({PROJECT}/child)\nEND()\n")
         self.write("child/ya.make", "PACKAGE(child)\nFILES(value.txt)\nEND()\n")
