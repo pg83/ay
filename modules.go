@@ -5945,18 +5945,10 @@ type SetVars struct {
 }
 
 func (v *SetVars) len() int {
-	if v == nil {
-		return 0
-	}
-
 	return len(v.vals)
 }
 
 func (v *SetVars) has(k STR) bool {
-	if v == nil {
-		return false
-	}
-
 	_, ok := v.vals[k]
 
 	return ok
