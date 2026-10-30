@@ -13,6 +13,14 @@ class EnvironmentTest(MakeTest):
                 compiled = self.node(self.graph(), "answer.cpp.o")
                 self.assertIn(f"$(S)/{PROJECT}/answer.cpp", compiled["inputs"])
 
+    def test_module_directory_variables_are_false_in_boolean_conditions(self):
+        self.write("answer.cpp", "int answer() { return 42; }\n")
+        for root in ("CURDIR", "BINDIR"):
+            with self.subTest(root=root):
+                self.write("ya.make", f"LIBRARY()\nIF({root})\nMESSAGE(FATAL_ERROR directory_path_was_true)\nELSE()\nSRCS(answer.cpp)\nENDIF()\nEND()\n")
+                compiled = self.node(self.graph(), "answer.cpp.o")
+                self.assertIn(f"$(S)/{PROJECT}/answer.cpp", compiled["inputs"])
+
     def test_graph_with_ownership_checks(self):
         self.write("ya.make", "PROGRAM(answer)\nSRCS(main.cpp)\nRESOURCE(value.txt /value)\nEND()\n")
         self.write("main.cpp", "int main() { return 0; }\n")
