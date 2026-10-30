@@ -55,3 +55,27 @@ class ResourceBundleJsonTest(MakeTest):
         generated = self.node(self.graph(), "result.txt")
         args = [arg for command in generated["cmds"] for arg in command["cmd_args"]]
         self.assertFalse(any("sbr:123456789" in arg for arg in args), args)
+
+    def test_resource_mappings_can_grow_past_the_initial_bucket_count(self):
+        platforms = ("linux", "linux-x86_64", "linux-aarch64", "darwin", "darwin-x86_64",
+                     "darwin-arm64", "win32", "win32-x86_64", "any")
+        self.write("resources.json", json.dumps({"by_platform": {
+            platform: {"uri": "sbr:123456789"} for platform in platforms
+        }}))
+        generated = self.node(self.graph(), "result.txt")
+        args = [arg for command in generated["cmds"] for arg in command["cmd_args"]]
+        self.assertIn("sbr:123456789", args)
+
+    def test_repeated_platform_keys_use_the_last_resource(self):
+        self.write("resources.json", '{"by_platform":{"linux-x86_64":{"uri":"sbr:111"},'
+                   '"linux-x86_64":{"uri":"sbr:222"}}}\n')
+        generated = self.node(self.graph(), "result.txt")
+        args = [arg for command in generated["cmds"] for arg in command["cmd_args"]]
+        self.assertIn("sbr:222", args)
+        self.assertNotIn("sbr:111", args)
+
+    def test_platform_mappings_must_be_non_null_objects(self):
+        for value in (None, [], 42, "linux"):
+            with self.subTest(value=value):
+                self.write("resources.json", json.dumps({"by_platform": value}))
+                self.assertNotEqual(self.make().returncode, 0)
