@@ -4,6 +4,10 @@ from tst.make.lib import MakeTest, PROJECT
 
 
 class ToolsConfigurationTest(MakeTest):
+    def test_tools_configuration_requires_its_json_manifest(self):
+        self.write("ya.make", f"PY3_LIBRARY()\nYA_TOOLS_CONF({PROJECT}/missing)\nEND()\n")
+        self.assertNotEqual(self.make().returncode, 0)
+
     def test_tool_definitions_toolchains_and_resource_aliases(self):
         self.write("ya.make", f"PY3_LIBRARY()\nYA_TOOLS_CONF({PROJECT}/conf/)\nEND()\n")
         formula = f"{PROJECT}/conf/formula.json"
