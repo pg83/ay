@@ -13,6 +13,12 @@ class TypescriptImportsTest(MakeTest):
         self.write("vitest.config.ts", "export default {};\n")
         self.write("tests/ya.make", f"TS_TEST_VITEST_FOR({PROJECT})\nTS_TEST_SRCS(../src)\nTS_TEST_CONFIG(../vitest.config.ts)\nEND()\n")
 
+    def test_missing_relative_modules_are_configuration_errors(self):
+        self.write("src/missing.spec.ts", 'import "./absent";\nimport "./absent.js";\n')
+        result = self.make("-t")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("absent", result.stderr)
+
     def test_keyword_prefix_identifier_continuations_keep_dependencies(self):
         clauses = (
             "import {name} from {target};",
