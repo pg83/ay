@@ -35,3 +35,12 @@ class HashCollisionGraphsTest(MakeTest):
 
     def test_zero_secondary_slice_hashes_preserve_shared_command_chunks(self):
         self.assert_dependencies("xxh-slice-lo=0")
+
+    def test_primary_include_cache_hash_collisions_preserve_dependencies(self):
+        self.assert_dependencies("hash-bucket-h1=0 hash-list-h1=0")
+
+    def test_zero_secondary_include_cache_hashes_preserve_dependencies(self):
+        self.assert_dependencies("hash-bucket-h2=0 hash-list-h2=0")
+
+    def test_include_cache_epochs_can_wrap_after_collisions(self):
+        self.assert_dependencies("hash-bucket-h1=0 hash-list-h1=0 epoch-start=4294967280")
