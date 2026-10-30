@@ -4,6 +4,16 @@ from tst.make.lib import MakeTest, PROJECT
 
 
 class PythonContextsTest(MakeTest):
+    def test_repeated_rooted_extra_lint_sources_keep_all_files(self):
+        self.write("ya.make", f"PY3_LIBRARY()\nPY_SRCS(answer.py)\nPY_EXTRA_LINT_FILES(${{ARCADIA_ROOT}}/{PROJECT}/first.py)\nPY_EXTRA_LINT_FILES(second.py)\nPY_EXTRA_LINT_FILES(third.py)\nEND()\n")
+        for name in ("answer", "first", "second", "third"):
+            self.write(name + ".py", "ANSWER = 42\n")
+        linted = self.node(self.graph("-t"), "test-results/flake8/meta.json")
+        args = [arg.replace("$(SOURCE_ROOT)", "$(S)")
+                for command in linted["cmds"] for arg in command["cmd_args"]]
+        for name in ("answer", "first", "second", "third"):
+            self.assertIn(f"$(S)/{PROJECT}/{name}.py", args)
+
     def test_native_variants(self):
         self.write("answer.cpp", "int answer() { return 42; }\n")
         for declaration, macros in (("PY23_NATIVE_LIBRARY()", ""), ("PY2MODULE(answer)", ""), ("LIBRARY()", "USE_PYTHON2()\nPYTHON2_ADDINCL()"), ("LIBRARY()", "PYTHON3_ADDINCL()")):
