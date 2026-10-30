@@ -61,8 +61,10 @@ def main():
         args.result_file.parent.mkdir(parents=True, exist_ok=True)
         args.result_file.write_text(json.dumps({
             "modules": modules,
+            "backend": args.backend,
             "tests": result.testsRun,
             "success": result.wasSuccessful(),
+            "skipped": [{"test": str(test), "reason": reason} for test, reason in result.skipped],
             "failures": [{"test": str(test), "traceback": trace} for test, trace in result.failures],
             "errors": [{"test": str(test), "traceback": trace} for test, trace in result.errors],
         }, indent=2))

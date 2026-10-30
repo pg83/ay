@@ -4,7 +4,6 @@ import (
 	"encoding/binary"
 	"fmt"
 	"os"
-	"strings"
 	"syscall"
 	"unsafe"
 )
@@ -30,22 +29,6 @@ type IndexedTree struct {
 	entries []indexedEntry
 	names   []byte
 	blob    []byte
-}
-
-func isIndexedFile(path string) bool {
-	f, err := os.Open(path)
-
-	if err != nil {
-		return false
-	}
-
-	defer f.Close()
-
-	var magic [len(indexedMagic)]byte
-
-	n, _ := f.ReadAt(magic[:], 0)
-
-	return n == len(magic) && string(magic[:]) == indexedMagic
 }
 
 func openIndexed(path string) (*IndexedTree, error) {
@@ -139,28 +122,4 @@ func (t *IndexedTree) child(dir int, name string) int {
 	}
 
 	return -1
-}
-
-func (t *IndexedTree) lookup(rel string) int {
-	i := 0
-
-	for rel != "" {
-		if !t.isDir(i) {
-			return -1
-		}
-
-		name := rel
-
-		if slash := strings.IndexByte(rel, '/'); slash >= 0 {
-			name, rel = rel[:slash], rel[slash+1:]
-		} else {
-			rel = ""
-		}
-
-		if i = t.child(i, name); i < 0 {
-			return -1
-		}
-	}
-
-	return i
 }

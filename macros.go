@@ -215,18 +215,11 @@ func makeDefaultIfEnv() Environment {
 func evalConfAtomString(nodes []CondNode, i int32, env Environment) string {
 	n := &nodes[i]
 
-	switch n.Kind {
-	case ckConfIdent:
+	if n.Kind == ckConfIdent {
 		return env.string(n.Env)
-	case ckString:
-		return n.Name
-	case ckInt:
-		return strconv.Itoa(n.Ival)
 	}
 
-	throwFmt("macros: unexpected cond kind %d in comparator operand position", n.Kind)
-
-	return ""
+	return n.Name
 }
 
 func evalConfEq(nodes []CondNode, n *CondNode, env Environment) bool {

@@ -341,10 +341,6 @@ func javaPathParent(p string) string {
 	return ""
 }
 
-func javaPathBasename(p string) string {
-	return p[strings.LastIndexByte(p, '/')+1:]
-}
-
 func (r *javaDMRules) addExclude(e string) {
 	prefix := strings.TrimSuffix(e, "/")
 

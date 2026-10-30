@@ -5,6 +5,63 @@ from tst.make.lib import MakeTest, PROJECT
 
 
 class JavaGeneratorInputsTest(MakeTest):
+    def test_java_generator_requires_a_runnable_host_variant(self):
+        self.generator()
+        self.write("ya.make", f"JAVA_LIBRARY(answer)\nJDK_VERSION(17)\nRUN_JAVA_PROGRAM(Generator CLASSPATH {PROJECT}/tool OUT Generated.java)\nJAVA_SRCS(Generated.java)\nEND()\n")
+        self.write("tool/ya.make", "IF(OS_WINDOWS)\nJAVA_PROGRAM(generator)\nELSE()\nJAVA_LIBRARY(generator)\nENDIF()\nJDK_VERSION(17)\nJAVA_SRCS(Generator.java)\nEND()\n")
+        result = self.make("--target-platform=default-win-x86_64")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn(f"{PROJECT}/tool", result.stderr)
+
+    def test_input_jar_keeps_native_archives_and_resources(self):
+        self.generator()
+        self.write("ya.make", f"JAVA_LIBRARY(answer)\nJDK_VERSION(17)\nPEERDIR({PROJECT}/subject)\nRUN_JAVA_PROGRAM(Generator CLASSPATH {PROJECT}/tool IN ${{ARCADIA_BUILD_ROOT}}/{PROJECT}/subject/subject.jar OUT Generated.java)\nJAVA_SRCS(Generated.java)\nEND()\n")
+        self.write("subject/ya.make", f"JAVA_LIBRARY(subject)\nJDK_VERSION(17)\nPEERDIR({PROJECT}/native)\nEND()\n")
+        self.write("native/ya.make", f"LIBRARY(native)\nSRCS(answer.cpp)\nRESOURCE(value.txt /value)\nPEERDIR({PROJECT}/leaf)\nEND()\n")
+        self.write("native/answer.cpp", "int answer() { return 42; }\n")
+        self.write("native/value.txt", "42\n")
+        self.write("leaf/ya.make", "LIBRARY(leaf)\nSRCS(leaf.cpp)\nEND()\n")
+        self.write("leaf/leaf.cpp", "int leaf() { return 17; }\n")
+        graph = self.graph()
+        node = self.node(graph, "Generated.java")
+        for output in ("native/libnative.a", "native/libnative.global.a", "leaf/libleaf.a"):
+            with self.subTest(output=output):
+                path = f"$(B)/{PROJECT}/{output}"
+                self.assertIn(path, node["inputs"])
+                self.assertTrue(any(path in peer["outputs"] and peer["uid"] in node["deps"] for peer in graph["graph"]))
+
+    def test_generator_preserves_literal_dollars_and_expands_references(self):
+        self.generator()
+        self.write("ya.make", f'''JAVA_LIBRARY(answer)
+JDK_VERSION(17)
+SET(E2E_VALUE expanded)
+RUN_JAVA_PROGRAM(Generator $ $9 $- $E2E_MISSING ${{E2E_MISSING}} $E2E_VALUE ${{E2E_VALUE}} CLASSPATH {PROJECT}/tool OUT Generated.java)
+JAVA_SRCS(Generated.java)
+END()
+''')
+        node = self.node(self.graph(), "Generated.java")
+        args = next(command["cmd_args"] for command in node["cmds"] if "Generator" in command["cmd_args"])
+        start = args.index("Generator")
+        self.assertEqual(args[start + 1:], ["$", "$9", "$-", "expanded", "expanded"])
+
+    def test_malformed_generator_variable_references(self):
+        self.generator()
+        for reference in ("${}", "${broken"):
+            with self.subTest(reference=reference):
+                self.write("ya.make", f"JAVA_LIBRARY(answer)\nJDK_VERSION(17)\nRUN_JAVA_PROGRAM(Generator {reference} CLASSPATH {PROJECT}/tool OUT Generated.java)\nJAVA_SRCS(Generated.java)\nEND()\n")
+                self.assertNotEqual(self.make().returncode, 0)
+
+    def test_recursive_generator_variable_is_an_error(self):
+        self.generator()
+        self.write("ya.make", f'''JAVA_LIBRARY(answer)
+JDK_VERSION(17)
+SET(E2E_RECURSIVE $E2E_RECURSIVE)
+RUN_JAVA_PROGRAM(Generator $E2E_RECURSIVE CLASSPATH {PROJECT}/tool OUT Generated.java)
+JAVA_SRCS(Generated.java)
+END()
+''')
+        self.assertNotEqual(self.make().returncode, 0)
+
     def test_input_jar_keeps_peer_sbom(self):
         self.generator()
         self.write("ya.make", f"JAVA_LIBRARY(answer)\nJDK_VERSION(17)\nPEERDIR({PROJECT}/subject)\nRUN_JAVA_PROGRAM(Generator CLASSPATH {PROJECT}/tool IN ${{ARCADIA_BUILD_ROOT}}/{PROJECT}/subject/subject.jar OUT Generated.java)\nJAVA_SRCS(Generated.java)\nEND()\n")

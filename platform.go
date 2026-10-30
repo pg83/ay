@@ -407,14 +407,6 @@ func (p *Platform) toolEnv() EnvVars {
 	return p.ToolEnvVars
 }
 
-func (p *Platform) linkerSelectionGDBIndexFlags() []string {
-	return []string{"-Wl,--gdb-index"}
-}
-
-func (p *Platform) linkerSelectionTailFlags() []string {
-	return nil
-}
-
 func (p *Platform) pic() *Platform {
 	if p.PIC {
 		return p

@@ -30,10 +30,25 @@ class MakeTest(unittest.TestCase):
         else:
             self.root = arcadia
         self.project = self.root / self.project_name
+        if self.backend == "ay":
+            self.private_directory(Path(self.project_name).parent)
         # Never reuse or remove a pre-existing directory in the user's tree.
         self.project.mkdir()
         self.addCleanup(shutil.rmtree, self.project)
         self.calls = 0
+
+    def private_directory(self, relative):
+        current = self.root
+        for part in Path(relative).parts:
+            current = current / part
+            if current.is_symlink():
+                source = Path(os.readlink(current))
+                current.unlink()
+                current.mkdir()
+                for entry in source.iterdir():
+                    (current / entry.name).symlink_to(entry)
+            else:
+                current.mkdir(exist_ok=True)
 
     def write(self, path, text):
         path = self.project / path
@@ -50,17 +65,7 @@ class MakeTest(unittest.TestCase):
         """
         target = self.root / path
         if self.backend == "ay":
-            current = self.root
-            for part in Path(path).parent.parts:
-                current = current / part
-                if current.is_symlink():
-                    source = Path(os.readlink(current))
-                    current.unlink()
-                    current.mkdir()
-                    for entry in source.iterdir():
-                        (current / entry.name).symlink_to(entry)
-                else:
-                    current.mkdir(exist_ok=True)
+            self.private_directory(Path(path).parent)
             if target.is_symlink():
                 target.unlink()
             target.write_text(text)
@@ -80,8 +85,10 @@ class MakeTest(unittest.TestCase):
         target.write_text(text)
         self.addCleanup(restore)
 
-    def make(self, *flags, dump_graph=True, env=None):
-        cmd = [self.binary, "make", "-j0", "--sandboxing"]
+    def make(self, *flags, dump_graph=True, env=None, sandboxing=True):
+        cmd = [self.binary, "make", "-j0"]
+        if sandboxing:
+            cmd.append("--sandboxing")
         if dump_graph:
             cmd.append("-G")
         if self.backend == "ya":

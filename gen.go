@@ -711,10 +711,6 @@ func (ctx *GenCtx) genStartTarget(dir string) {
 	}
 }
 
-func isFinalTargetModuleType(name TOK) bool {
-	return isProgramModuleType(name) && name != tokGoTest && name != tokBoosttest && name != tokBoosttestWithMain || name == tokExectest || name == tokDllTool || name == tokDocs || name == tokJavaProgram || name == tokJavaContrib || name == tokProtoDescriptions || name == tokProtoRegistry || name == tokYqlUdf || name == tokYqlUdfContrib || name == tokYqlPythonUdf || name == tokYqlPython3Udf || name == tokYqlPrebuiltTool
-}
-
 func picTransition(name TOK) bool {
 	return name == tokDll || name == tokUdfBase || name == tokDllJava || isPythonDllModule(name) || name == tokYqlUdf || name == tokYqlUdfContrib || name == tokYqlPythonUdf || name == tokYqlPython3Udf || name == tokDynamicLibrary
 }

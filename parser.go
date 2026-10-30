@@ -345,24 +345,3 @@ func eachLine(chunks [][]byte, fn func(line []byte)) {
 		}
 	}
 }
-
-func eachChunkLine(data []byte, fn func(line []byte)) {
-	for len(data) > 0 {
-		i := bytes.IndexByte(data, '\n')
-
-		if i < 0 {
-			fn(data)
-
-			return
-		}
-
-		line := data[:i]
-
-		if len(line) > 0 && line[len(line)-1] == '\r' {
-			line = line[:len(line)-1]
-		}
-
-		fn(line)
-		data = data[i+1:]
-	}
-}

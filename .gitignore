@@ -2,6 +2,7 @@
 /ay
 /ay_test
 /ay_gate
+/ay_gate_test
 /dev_*
 /coverage
 /cli_coverage

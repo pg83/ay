@@ -2,6 +2,31 @@ from tst.make.lib import MakeTest, PROJECT
 
 
 class PackagingTest(MakeTest):
+    def test_packaging_keeps_global_archives_of_native_peers(self):
+        self.write("library/ya.make", "LIBRARY(objects)\nSRCS(GLOBAL answer.cpp)\nEND()\n")
+        self.write("library/answer.cpp", "int answer() { return 42; }\n")
+        for declaration in ("PACKAGE", "CI_GROUP"):
+            with self.subTest(declaration=declaration):
+                self.write("ya.make", f"{declaration}(bundle)\nPEERDIR({PROJECT}/library)\nEND()\n")
+                graph = self.graph()
+                packages = [node for node in graph["graph"] if any(path.startswith(f"$(B)/{PROJECT}/") and path.endswith((".final.pkg.fake", ".ci.pkg.fake")) for path in node["outputs"])]
+                self.assertEqual(len(packages), 1)
+                self.assertIn(f"$(B)/{PROJECT}/library/libobjects.global.a", packages[0]["inputs"])
+
+    def test_java_program_packaging_keeps_its_runtime_classpath(self):
+        self.write("program/ya.make", f"JAVA_PROGRAM(answer)\nJDK_VERSION(17)\nJAVA_SRCS(Main.java)\nPEERDIR({PROJECT}/library)\nEND()\n")
+        self.write("program/Main.java", "public class Main { public static void main(String[] args) {} }\n")
+        self.write("library/ya.make", "JAVA_LIBRARY(library)\nJDK_VERSION(17)\nJAVA_SRCS(Value.java)\nEND()\n")
+        self.write("library/Value.java", "public class Value {}\n")
+        for declaration in ("PACKAGE", "CI_GROUP"):
+            with self.subTest(declaration=declaration):
+                self.write("ya.make", f"{declaration}(bundle)\nPEERDIR({PROJECT}/program)\nEND()\n")
+                graph = self.graph()
+                packages = [node for node in graph["graph"] if any(path.startswith(f"$(B)/{PROJECT}/") and path.endswith((".final.pkg.fake", ".ci.pkg.fake")) for path in node["outputs"])]
+                self.assertEqual(len(packages), 1)
+                for output in ("program/answer.jar", "program/answer.run.cp.jar", "library/library.jar"):
+                    self.assertIn(f"$(B)/{PROJECT}/{output}", packages[0]["inputs"])
+
     def peers(self):
         self.write("app/ya.make", "PROGRAM(answer)\nSRCS(main.cpp)\nEND()\n")
         self.write("app/main.cpp", "int main() { return 0; }\n")

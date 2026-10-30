@@ -43,6 +43,12 @@ class MacroVariantsTest(MakeTest):
         self.write("parser.y", "%token NUMBER\n%%\nexpression: NUMBER;\n%%\n")
         self.node(self.graph(), "parser.y.c")
 
+    def test_bison_cpp(self):
+        self.write("ya.make", "LIBRARY()\nBISON_GEN_CPP()\nBISON_FLAGS(--warnings=none)\nSRCS(parser.y)\nEND()\n")
+        self.write("parser.y", "%token NUMBER\n%%\nexpression: NUMBER;\n%%\n")
+        node = self.node(self.graph(), "parser.y.cpp")
+        self.assertIn(f"$(S)/{PROJECT}/parser.y", node["inputs"])
+
     def test_build_info(self):
         self.write("ya.make", "LIBRARY()\nCREATE_BUILDINFO_FOR(buildinfo.h)\nRESOURCE(buildinfo.h /buildinfo)\nSRCS(answer.cpp)\nEND()\n")
         self.write("answer.cpp", 'int answer() { return 42; }\n')

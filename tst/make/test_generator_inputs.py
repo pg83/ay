@@ -4,6 +4,29 @@ from tst.make.lib import MakeTest, PROJECT
 
 
 class GeneratorInputsTest(MakeTest):
+    def test_split_codegen_tail_options_reach_the_generator(self):
+        self.tool()
+        self.write("ya.make", f"LIBRARY()\nSPLIT_CODEGEN({PROJECT}/generator answer --e2e-mode=checks OUT_NUM 6)\nEND()\n")
+        node = self.node(self.graph(), "answer.0.cpp")
+        args = [arg for command in node["cmds"] for arg in command["cmd_args"]]
+        self.assertIn("--e2e-mode=checks", args)
+        self.assertIn(f"$(S)/{PROJECT}/answer.in", node["inputs"])
+
+    def test_struct_codegen_keeps_its_schema_and_generated_header(self):
+        self.write("ya.make", f"LIBRARY()\nADDINCL(${{ARCADIA_BUILD_ROOT}}/{PROJECT})\nSTRUCT_CODEGEN(answer)\nSRCS(answer.cpp)\nEND()\n")
+        self.write("answer.in", "struct Answer { ui32 Value; }\n")
+        graph = self.graph()
+        generated = self.node(graph, "answer.cpp")
+        self.assertIn(f"$(S)/{PROJECT}/answer.in", generated["inputs"])
+        self.assertIn(f"$(B)/{PROJECT}/answer.h", generated["outputs"])
+        compiled = self.node(graph, "answer.cpp.o")
+        self.assertIn(generated["uid"], compiled["deps"])
+
+    def test_obsolete_enum_serialization_noutf_is_rejected(self):
+        self.write("ya.make", "LIBRARY()\nGENERATE_ENUM_SERIALIZATION_NOUTF(answer.h)\nEND()\n")
+        self.write("answer.h", "#pragma once\nenum class Answer { Value = 42 };\n")
+        self.assertNotEqual(self.make().returncode, 0)
+
     def tool(self):
         self.write("generator/ya.make", "PY3_PROGRAM(generator)\nPY_SRCS(MAIN main.py)\nEND()\n")
         self.write("generator/main.py", 'import pathlib, sys\npathlib.Path(sys.argv[2]).write_text("int answer() { return 42; }\\n")\npathlib.Path(sys.argv[3]).write_text("#pragma once\\n")\nif "--cpp-parts" in sys.argv:\n    count = int(sys.argv[sys.argv.index("--cpp-parts") + 1]) + 5\n    for i in range(count):\n        pathlib.Path(sys.argv[2].removesuffix(".cpp") + f".{i}.cpp").write_text(f"int part{i}() {{ return {i}; }}\\n")\n')

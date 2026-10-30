@@ -27,7 +27,7 @@ func newGlobMatcher(expr string) *globMatcher {
 		panic(err)
 	}
 
-	m := &globMatcher{}
+	m := &globMatcher{epoch: uint32(chaosFirstEpoch(0))}
 
 	if re.Op == syntax.OpConcat && re.Sub[0].Op == syntax.OpBeginText && re.Sub[len(re.Sub)-1].Op == syntax.OpEndText {
 		body := &syntax.Regexp{Op: syntax.OpConcat, Sub: re.Sub[1 : len(re.Sub)-1]}
@@ -63,11 +63,8 @@ func newGlobMatcher(expr string) *globMatcher {
 		}
 	}
 
-	m.prog, err = syntax.Compile(re.Simplify())
-
-	if err != nil {
-		panic(err)
-	}
+	// Compile returns a program or panics; its error result is always nil.
+	m.prog, _ = syntax.Compile(re.Simplify())
 
 	m.seen = make([]uint32, len(m.prog.Inst))
 	m.current = make([]uint32, 0, len(m.prog.Inst))

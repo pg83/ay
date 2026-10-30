@@ -27,8 +27,10 @@ graphs on fixed source slices.
 ./build -j4 -Dcoverage -Darcadia=/home/pg/1 cli_coverage
 ```
 
-The make e2e targets run the same Python tests in `tst/make/` using only graph
-generation (`make -j0`, usually with `-G`). Both require `-Darcadia` pointing to an existing
+The make e2e targets run the Python tests in `tst/make/`. Graph tests use
+`make -j0`, usually with `-G`; explicitly marked ay-only tests also exercise
+execution. The ay suite uses the test binary with chaos fault points;
+the production binary compiles those points out. Both require `-Darcadia` pointing to an existing
 Arcadia tree. `ay_e2e` runs test modules in parallel, with each test linking
 the tree's top-level entries into its own temporary source root. `ya_e2e`
 also runs modules in parallel: `ay dev overlay` gives each worker a private
@@ -45,6 +47,10 @@ the source tree. Ya also runs with `--no-prefetch`, so neither VCS status nor
 prefetch opens that database from the overlay. Neither target
 reuses cached test results, since Arcadia can change independently.
 
+Tests can override `project_name` with a path inside a subtree that has specific
+build policies. The ay fixture expands its parent directories privately before
+creating the test project.
+
 With `-Dcoverage`, `ay_e2e` uses an instrumented binary and merges each test
 module's counters into `.build/coverage/make/cover.out` and `report.txt`.
 This local report measures coverage of the whole binary by the make tests
@@ -57,7 +63,10 @@ it is not a passing-test gate. The JSON statuses are in `.build/e2e/ay/`.
 `.build/coverage/cli/cover.out` and `report.txt`, and requires at least 90%
 statement coverage of the whole binary. It measures coverage independently
 of make test failures; use `ay_e2e` for their pass/fail status. Every make
-test must pass on upstream `ya`; confirmed ay failures stay red without
-XFAIL or backend-specific assertions.
+graph test must pass on upstream `ya`; confirmed ay failures stay red without
+XFAIL or backend-specific assertions. Mark tests of the local executor or
+ay-specific CLI commands with `@ay_only("reason")` from `tst.backends`.
+The make runner skips these tests on `ya`, including their fixture setup,
+and records the skip reasons in its JSON results.
 
 See [dev/BUILD.md](dev/BUILD.md) for the validation cases and the gate.

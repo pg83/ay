@@ -2,6 +2,15 @@ from tst.make.lib import MakeTest, PROJECT
 
 
 class GeneratedCythonTest(MakeTest):
+    def test_shared_missing_pxi_is_a_configuration_error(self):
+        self.write("ya.make", "PY3_LIBRARY()\nPY_SRCS(first.pyx second.pyx)\nEND()\n")
+        for name in ("first.pyx", "second.pyx"):
+            self.write(name, 'include "shared.pxi"\ndef answer(): return 42\n')
+        self.write("shared.pxi", 'include "e2e_missing.pxi"\n')
+        result = self.make()
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("e2e_missing.pxi", result.stderr)
+
     def test_python3_only_source_in_py23_module(self):
         self.write("ya.make", "PY23_LIBRARY()\nIF (PYTHON3)\nPY_SRCS(answer.pyx)\nENDIF()\nEND()\n")
         self.write("answer.pyx", "from libcpp.vector cimport vector\ndef answer(): return 42\n")

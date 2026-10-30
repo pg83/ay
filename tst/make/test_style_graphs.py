@@ -49,6 +49,23 @@ class MapsStyleGraphsTest(MakeTest):
 
 
 class StyleGraphsTest(MakeTest):
+    def test_uservices_current_directory_linters(self):
+        self.write_tree("build/conf/autoincludes.json", json.dumps([PROJECT]))
+        self.write("linters.make.inc", "USRV_STYLE_JSON_CURRENT_DIRECTORY()\nUSRV_STYLE_YAML_CURRENT_DIRECTORY()\n")
+        self.write("ya.make", "LIBRARY()\nSRCS(answer.cpp)\nEND()\n")
+        self.write("answer.cpp", "int answer() { return 42; }\n")
+        self.write("answer.json", '{"answer":42}\n')
+        self.write("answer.yaml", "answer: 42\n")
+        self.write("nested/ignored.json", '{"ignored":true}\n')
+        self.write("nested/ignored.yaml", "ignored: true\n")
+        graph = self.graph("-t")
+        commands = json.dumps([node["cmds"] for node in graph["graph"]
+                               if "yamlfmt" in json.dumps(node["cmds"]) or "clang_format_json" in json.dumps(node["cmds"])])
+        for name in ("answer.json", "answer.yaml"):
+            self.assertIn(f"/{PROJECT}/{name}", commands)
+        self.assertNotIn("ignored.json", commands)
+        self.assertNotIn("ignored.yaml", commands)
+
     def test_yql_style(self):
         self.write("ya.make", "LIBRARY()\nRESOURCE(value.yql /query)\nSTYLE_YQL(DIRS_RECURSE queries)\nEND()\n")
         self.write("value.yql", "SELECT 42;\n")

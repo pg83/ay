@@ -590,10 +590,6 @@ func (l *Lexer) isWordByte(b byte) bool {
 	return kind == 1 || kind == 2 && l.inArgs
 }
 
-func isWordByte(b byte) bool {
-	return wordBytes[b] == 1
-}
-
 func (l *Lexer) skipTrivia() {
 	for l.pos < len(l.src) {
 		b := l.src[l.pos]

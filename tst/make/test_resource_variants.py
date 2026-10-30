@@ -2,6 +2,32 @@ from tst.make.lib import MakeTest, PROJECT
 
 
 class ResourceVariantsTest(MakeTest):
+    def test_resource_value_from_environment(self):
+        self.write("ya.make", "LIBRARY()\nRESOURCE(- e2e.environment=$ENV{E2E_RESOURCE_VALUE})\nEND()\n")
+        graph = self.graph(env={"E2E_RESOURCE_VALUE": "forty_two"})
+        args = [arg for node in graph["graph"] for command in node["cmds"] for arg in command["cmd_args"]]
+        self.assertIn("e2e.environment=forty_two", args)
+
+    def test_resource_file_keywords_require_values(self):
+        self.write("answer.cpp", "int answer() { return 42; }\n")
+        for keyword in ("PREFIX", "DEST", "STRIP"):
+            with self.subTest(keyword=keyword):
+                self.write("ya.make", f"LIBRARY()\nSRCS(answer.cpp)\nRESOURCE_FILES({keyword})\nEND()\n")
+                self.assertNotEqual(self.make().returncode, 0)
+
+    def test_resource_directory_can_be_relative_to_source_root(self):
+        self.write("ya.make", f"LIBRARY()\nALL_RESOURCE_FILES(txt PREFIX /data/ ${{ARCADIA_ROOT}}/{PROJECT}/data)\nEND()\n")
+        self.write("data/answer.txt", "42\n")
+        inputs = {path for node in self.graph()["graph"] for path in node["inputs"]}
+        self.assertIn(f"$(S)/{PROJECT}/data/answer.txt", inputs)
+
+    def test_absolute_resource_directory_is_ignored(self):
+        self.write("ya.make", "LIBRARY()\nSRCS(answer.cpp)\nALL_RESOURCE_FILES(txt /ay_e2e_missing_directory)\nEND()\n")
+        self.write("answer.cpp", "int answer() { return 42; }\n")
+        graph = self.graph()
+        self.node(graph, "answer.cpp.o")
+        self.assertFalse(any("ay_e2e_missing_directory" in path for node in graph["graph"] for path in node["inputs"]))
+
     def test_source_root_relative_generated_resource(self):
         self.write("ya.make", "RECURSE(generated)\n")
         self.write("generated/test/ya.make", f"PY3TEST()\nSET(NLG_LIBRARY_PATH {PROJECT}/generated)\nINCLUDE(${{ARCADIA_ROOT}}/{PROJECT}/shared/resources.inc)\nTEST_SRCS(test_answer.py)\nEND()\n")

@@ -8,7 +8,50 @@ def args(node):
     return [arg.replace("$(SOURCE_ROOT)", "$(S)").replace("$(BUILD_ROOT)", "$(B)") for command in node["cmds"] for arg in command["cmd_args"]]
 
 
+class SdcV3GeneratorsTest(MakeTest):
+    project_name = "sdg/sdc/ros/monitorings/diag_updater/__ay_e2e__"
+
+    def test_diagnostics_v3_files_groups_and_nested_groups(self):
+        cases = (
+            ("e2e_direct.yaml", "e2e_direct.h", "--diag-file", "e2e_direct"),
+            ("E2E_fixture", "E2E_fixture/_group.h", "--group-manifest", "E2E_fixture"),
+            ("E2E_fixture/child", "E2E_fixture/child/_group.h", "--group-manifest", "E2E_fixture::child"),
+            ("E2E_fixture/child/diag.yaml", "E2E_fixture/child/diag.h", "--diag-file", "E2E_fixture::child::diag"),
+        )
+        for file, _, kind, _ in cases:
+            self.write_tree(f"{DESCRIPTIONS}/{file}" + ("/_manifest_.yaml" if kind == "--group-manifest" else ""), "{}\n")
+        commands = ["LIBRARY()", "ADDINCL(sdg/sdc/ros/monitorings/diag_updater/include)",
+                    "PEERDIR(contrib/restricted/boost/hana sdg/sdc/ros/misc/protocol/msg/diagnostic)"]
+        generated_root = "sdg/sdc/ros/monitorings/diag_updater/gen_diags/diagnostics/v3/"
+        for index, (file, output, _, _) in enumerate(cases):
+            commands.extend((f"SDC_DIAGS_SPLIT_GENERATOR_V3({DESCRIPTIONS}/{file})",
+                             f"RESOURCE(${{ARCADIA_BUILD_ROOT}}/{generated_root}{output} /diagnostic{index})"))
+        self.write("ya.make", "\n".join((*commands, "END()", "")))
+        graph = self.graph()
+        for file, output, kind, namespace in cases:
+            with self.subTest(diagnostic=file):
+                matches = [node for node in graph["graph"] if f"$(B)/{generated_root}{output}" in node["outputs"]]
+                self.assertEqual(len(matches), 1)
+                command = args(matches[0])
+                self.assertIn(kind, command)
+                self.assertIn("yandex::sdc::diagnostics::v3::" + namespace, command)
+                self.assertTrue(any(value.endswith(f"{DESCRIPTIONS}/{file}" + ("/_manifest_.yaml" if kind == "--group-manifest" else "")) for value in command))
+                self.assertEqual("--group-include-file" in command, "/" in file)
+
+
 class SdcGeneratorsTest(MakeTest):
+    def test_diagnostic_inputs_must_be_inside_the_descriptions_tree(self):
+        self.write("local.yaml", "{}\n")
+        (self.project / "local").mkdir()
+        self.write("ya.make", "LIBRARY()\nEND()\n")
+        for macro, file in (("SDC_DIAGS_SPLIT_GENERATOR_V3", "local.yaml"),
+                            ("SDC_DIAGS_SPLIT_GENERATOR_V3", "local"),
+                            ("SDC_DIAGS_SPLIT_GENERATOR_V3", DESCRIPTIONS),
+                            ("SDC_DIAGS_SPLIT_GENERATOR_V4", "local.yaml")):
+            with self.subTest(macro=macro, file=file):
+                self.write("ya.make", f"LIBRARY()\n{macro}({file})\nEND()\n")
+                self.assertNotEqual(self.make().returncode, 0)
+
     def test_diagnostics_v4(self):
         for tag in ("CPP_DIAG", "GO_DIAG"):
             with self.subTest(tag=tag):

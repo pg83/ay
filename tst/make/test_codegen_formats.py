@@ -5,6 +5,12 @@ from tst.make.lib import MakeTest, PROJECT
 
 
 class CodegenFormatsTest(MakeTest):
+    def test_gettext_can_keep_the_translation_source_path(self):
+        self.write("ya.make", "LIBRARY()\nSET(GETTEXT_KEEP_PATH yes)\nSRCS(locale/answer.po)\nRESOURCE(locale/answer.mo /translations)\nEND()\n")
+        self.write("locale/answer.po", 'msgid "answer"\nmsgstr "42"\n')
+        generated = self.node(self.graph(), "locale/answer.mo")
+        self.assertIn(f"$(S)/{PROJECT}/locale/answer.po", generated["inputs"])
+
     def test_decimal_md5(self):
         self.write("ya.make", "LIBRARY()\nDECIMAL_MD5_LOWER_32_BITS(hash.cpp FUNCNAME e2e_hash input.txt)\nEND()\n")
         self.write("input.txt", "42\n")

@@ -4,6 +4,53 @@ from tst.make.lib import MakeTest, PROJECT
 
 
 class TestDependenciesTest(MakeTest):
+    def test_legacy_docker_image_tag_syntax(self):
+        link = f"docker://registry.example.com/answer@sha256:{'a' * 64}"
+        self.write("ya.make", f"PY3TEST()\nTEST_SRCS(test_answer.py)\nDOCKER_IMAGE(answer={link})\nEND()\n")
+        self.write("test_answer.py", "def test_answer(): assert True\n")
+        images = [node for node in self.graph("-t")["graph"] if "fetch_from_docker_repo.py" in json.dumps(node["cmds"])]
+        self.assertEqual(len(images), 1)
+        args = [arg for command in images[0]["cmds"] for arg in command["cmd_args"]]
+        self.assertEqual(args[args.index("--link") + 1], link)
+        self.assertEqual(args[args.index("--tag") + 1], "answer")
+
+    def test_malformed_docker_image_urls_are_rejected(self):
+        images = ("docker://registry.example.com/answer@sha256:" + "a" * 64,
+                  "docker://registry.example.com/answer=answer",
+                  "docker://registry.example.com/answer@sha256digest=answer")
+        self.write("test_answer.py", "def test_answer(): assert True\n")
+        for image in images:
+            with self.subTest(image=image):
+                self.write("ya.make", f"PY3TEST()\nTEST_SRCS(test_answer.py)\nDOCKER_IMAGE({image})\nEND()\n")
+                self.assertNotEqual(self.make("-t").returncode, 0)
+
+    def test_short_docker_digests_can_be_recorded_in_the_graph(self):
+        image = "docker://registry.example.com/answer@sha256:short=answer"
+        self.write("ya.make", f"PY3TEST()\nTEST_SRCS(test_answer.py)\nDOCKER_IMAGE({image})\nEND()\n")
+        self.write("test_answer.py", "def test_answer(): assert True\n")
+        images = [node for node in self.graph("-t")["graph"] if "fetch_from_docker_repo.py" in json.dumps(node["cmds"])]
+        self.assertEqual(len(images), 1)
+
+    def test_test_suites_share_the_same_docker_image_producer(self):
+        image = f"docker://registry.example.com/answer@sha256:{'a' * 64}=answer"
+        self.write("ya.make", "RECURSE(first second)\n")
+        for directory in ("first", "second"):
+            self.write(f"{directory}/ya.make", f"PY3TEST()\nTEST_SRCS(test_answer.py)\nDOCKER_IMAGE({image})\nEND()\n")
+            self.write(f"{directory}/test_answer.py", "def test_answer(): assert True\n")
+        graph = self.graph("-t")
+        images = [node for node in graph["graph"] if "fetch_from_docker_repo.py" in json.dumps(node["cmds"])]
+        self.assertEqual(len(images), 1)
+        for directory in ("first", "second"):
+            self.assertIn(images[0]["uid"], self.node(graph, f"{directory}/test-results/py3test/meta.json")["deps"])
+
+    def test_docker_fetch_uses_system_python_when_requested(self):
+        image = f"docker://registry.example.com/answer@sha256:{'a' * 64}=answer"
+        self.write("ya.make", f"EXECTEST()\nRUN(python3 ${{ARCADIA_ROOT}}/{PROJECT}/test_answer.py)\nDOCKER_IMAGE({image})\nEND()\n")
+        self.write("test_answer.py", "def test_answer(): assert True\n")
+        images = [node for node in self.graph("-t", "-DUSE_ARCADIA_PYTHON=no", "-DOS_SDK=local")["graph"] if "fetch_from_docker_repo.py" in json.dumps(node["cmds"])]
+        self.assertEqual(len(images), 1)
+        self.assertEqual(images[0]["cmds"][0]["cmd_args"][0], "python3")
+
     # The gate's references are cut without ya's idle-result stripping
     # (YA_STRIP_IDLE_BUILD_RESULTS=0), which ay does not model; under it the
     # non-final variants of a DEPENDS multimodule stay in the results.
@@ -99,3 +146,18 @@ class TestDependenciesTest(MakeTest):
         graph = self.graph("-t")
         nodes = [node for node in graph["graph"] if "fetch_from_docker_repo.py" in json.dumps(node.get("cmds", []))]
         self.assertEqual(len(nodes), len(images))
+
+    def test_docker_image_tags_between_seventeen_and_thirty_two_bytes(self):
+        tags = ["tag" + "x" * length for length in (14, 21, 29)]
+        images = [f"docker://registry.example.com/answer@sha256:{'a' * 64}={tag}" for tag in tags]
+        self.write("ya.make", "PY3TEST()\nTEST_SRCS(test_answer.py)\nDOCKER_IMAGE(" + " ".join(images) + ")\nEND()\n")
+        self.write("test_answer.py", "def test_answer():\n    assert True\n")
+        graph = self.graph("-t")
+        found = {}
+        for node in graph["graph"]:
+            for command in node["cmds"]:
+                args = command["cmd_args"]
+                if any(arg.endswith("/fetch_from_docker_repo.py") for arg in args):
+                    found[args[args.index("--tag") + 1]] = tuple(node["outputs"])
+        self.assertEqual(set(found), set(tags))
+        self.assertEqual(len(set(found.values())), len(tags))

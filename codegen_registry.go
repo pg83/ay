@@ -217,11 +217,6 @@ func (r *CodegenRegistry) noteOwner(info *GeneratedFileInfo) {
 	}
 
 	slot := r.byRel.idx.get(uint32(info.OutputPath.rel()))
-
-	if slot == 0 {
-		return
-	}
-
 	slots, _ := r.byOwner.get(info.OwnerModule)
 
 	if n := len(slots); n > 0 && slots[n-1] == slot {

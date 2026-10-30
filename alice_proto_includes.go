@@ -79,11 +79,7 @@ func aliceProtoWord(r rune) bool {
 	return r == '_' || unicode.IsLetter(r) || unicode.IsNumber(r)
 }
 
-func aliceProtoKeyword(content, keyword string, at, from int) bool {
-	if !strings.HasPrefix(content[at:], keyword) {
-		return false
-	}
-
+func aliceProtoKeywordBoundary(content string, at, from int) bool {
 	if at == 0 {
 		return true
 	}
@@ -117,7 +113,7 @@ func aliceProtoPackageName(content string) string {
 
 		at += from
 
-		if aliceProtoKeyword(content, "package", at, 0) {
+		if aliceProtoKeywordBoundary(content, at, 0) {
 			start := at + len("package")
 			spaces := aliceProtoSpaces(content, start)
 
@@ -159,7 +155,7 @@ func aliceProtoMessages(data []byte) []string {
 
 		at += from
 
-		if !aliceProtoKeyword(content, "message", at, from) {
+		if !aliceProtoKeywordBoundary(content, at, from) {
 			from = at + 1
 
 			continue

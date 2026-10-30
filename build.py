@@ -199,6 +199,15 @@ def go_overlay_build(output, tags):
     ]
 
 
+def go_coverage_build(output, tags, stage):
+    # Go's cover tool reads original source paths rather than the overlay.
+    return [
+        mkdir(stage),
+        ["cp", "--", *GO_MODULE_FILES, *GENERATED_DENSE_MAPS, *GENERATED_SERVICE_TOKENS, *GENERATED_RE2GO, stage + "/"],
+        ["go", "build", "-C", stage, "-cover", "-covermode=atomic", *go_build_tail(output, tags)],
+    ]
+
+
 def go_binary(name, output, cmd):
     return command(
         name=name,
@@ -252,19 +261,18 @@ ay_normalize = command(
 )
 
 if coverage_enabled:
-    # The cover tool opens sources by their original names and ignores
-    # -overlay, so the instrumented build compiles a staged copy of the module.
-    GO_STAGED_MODULE = "$(B)/go-src"
-    ay_test_cmd = [
-        mkdir(GO_STAGED_MODULE),
-        ["cp", "--", *GO_MODULE_FILES, *GENERATED_DENSE_MAPS, *GENERATED_SERVICE_TOKENS, *GENERATED_RE2GO, GO_STAGED_MODULE + "/"],
-        ["go", "build", "-C", GO_STAGED_MODULE, "-cover", "-covermode=atomic",
-         *go_build_tail("$(B)/bin/ay-test", TEST_TAGS)],
-    ]
+    ay_test_cmd = go_coverage_build("$(B)/bin/ay-test", TEST_TAGS, "$(B)/go-src")
 else:
     ay_test_cmd = go_overlay_build("$(B)/bin/ay-test", TEST_TAGS)
 
 ay_test = go_binary("ay_test", "$(B)/bin/ay-test", ay_test_cmd)
+
+gate_test_tags = ["aygate", *TEST_TAGS]
+ay_gate_test = go_binary(
+    "ay_gate_test", "$(B)/bin/ay-gate-test",
+    go_coverage_build("$(B)/bin/ay-gate-test", gate_test_tags, "$(B)/gate-go-src")
+    if coverage_enabled else go_overlay_build("$(B)/bin/ay-gate-test", gate_test_tags),
+)
 
 # go vet needs the generated dense maps, so it runs inside the build graph.
 vet_stamp = "$(B)/tests/vet.stamp"
@@ -392,14 +400,14 @@ for test_path in build.glob("$(S)/tst/**/test_*.py"):
     ))
 
 make_test_paths = sorted(build.glob("$(S)/tst/make/test_*.py"))
-make_test_inputs = sorted(build.glob("$(S)/tst/make/*.py"))
+make_test_inputs = sorted(build.glob("$(S)/tst/make/*.py")) + ["$(S)/tst/backends.py"]
 # An external, mutable Arcadia is not an input tracked by build's CAS. Give
 # only these test invocations fresh identities; never reuse a cached pass.
 make_test_run = uuid.uuid4().hex
 ay_e2e_tests = []
 make_test_results = []
 make_coverage_archives = []
-make_test_binary = ay_test if coverage_enabled or race_enabled else ay
+make_test_binary = ay_test
 for test_path in make_test_paths:
     name = test_path.rsplit("/", 1)[-1].removesuffix(".py")
     result_file = f"$(B)/e2e/ay/{name}.json"
@@ -407,6 +415,10 @@ for test_path in make_test_paths:
     test_inputs = list(make_test_inputs)
     test_outputs = [result_file]
     test_env = {"AY_E2E_RUN_ID": make_test_run, "PYTHONDONTWRITEBYTECODE": "1"}
+    test_deps = [make_test_binary]
+    if name == "test_indexed_fs":
+        test_deps += [ay_gate_test, ay_index]
+        test_env.update(AY_GATE_TEST_BINARY=ay_gate_test.outputs[0], AY_INDEX_BINARY=ay_index.outputs[0])
     test_commands = [
         ["python3", "-m", "tst.make", "--backend", "ay",
          "--arcadia", build.flags.arcadia, "--binary", make_test_binary.outputs[0],
@@ -430,7 +442,7 @@ for test_path in make_test_paths:
         name=f"ay_e2e_collect_{name.removeprefix('test_')}",
         inputs=test_inputs,
         outputs=test_outputs,
-        deps=[make_test_binary],
+        deps=test_deps,
         cmd=test_commands,
         cwd="$(S)",
         env=test_env,

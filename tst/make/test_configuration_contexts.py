@@ -25,6 +25,44 @@ class ConfigurationContextsTest(MakeTest):
         self.write("formula.json", "{}\n")
         self.assertNotEqual(self.make().returncode, 0)
 
+    def test_obsolete_ya_conf_json_with_missing_formula(self):
+        self.write("ya.make", "PY3_LIBRARY()\nYA_CONF_JSON(__ay_e2e__/config.json)\nPY_SRCS(answer.py)\nEND()\n")
+        self.write("answer.py", "answer = 42\n")
+        self.write("config.json", json.dumps({
+            "bottles": {
+                "missing": {"formula": "__ay_e2e__/missing.json"},
+                "duplicate": {"formula": "__ay_e2e__/missing.json"},
+                "existing": {"formula": "__ay_e2e__/existing.json"},
+                "repeated_suffix": {"formula": "__ay_e2e__/existing.jsonx.json"},
+                "other_extension": {"formula": "ignored.txt"},
+                "empty": {"formula": ""},
+                "inline": {"formula": {}},
+            },
+            "simple_tools": {
+                "missing": {"resource": "ay_e2e_missing_resource"},
+                "present": {"resource": "ay_e2e_fixture"},
+                "duplicate": {"resource": "ay_e2e_fixture"},
+                "empty": {"resource": ""},
+                "inline": {"resource": {}},
+            },
+        }, indent=2))
+        self.write("existing.json", "{}\n")
+        self.write("existing.jsonx.json", "{}\n")
+        self.write_tree("build/external_resources/ay_e2e_fixture/resources.json", "{}\n")
+        self.assertNotEqual(self.make().returncode, 0)
+
+    def test_obsolete_ya_conf_json_with_truncated_document(self):
+        self.write("ya.make", "PY3_LIBRARY()\nYA_CONF_JSON(__ay_e2e__/config.json)\nEND()\n")
+        prefix = '{"bottles":{"missing":{"formula":"__ay_e2e__/missing.json"}},'
+        suffixes = ('"formula"', '"formula" ', '"formula":', '"formula": ',
+                    '"formula": "', '"formula": "unfinished.', '"formula": "unfinished.jso',
+                    '"resource"', '"resource" ', '"resource":', '"resource": ',
+                    '"resource": "', '"resource": "unfinished')
+        for suffix in suffixes:
+            with self.subTest(suffix=suffix):
+                self.write("config.json", prefix + suffix)
+                self.assertNotEqual(self.make().returncode, 0)
+
     def test_generated_header_include_flags(self):
         self.write("ya.make", "LIBRARY()\nADDINCL(${ARCADIA_BUILD_ROOT}/__ay_e2e__)\nCOPY_FILE_WITH_CONTEXT(value.h generated/value.h)\nSRCS(answer.cpp)\nEND()\n")
         self.write("value.h", "#define ANSWER 42\n")

@@ -2,6 +2,40 @@ from tst.make.lib import MakeTest, PROJECT
 
 
 class SourceContextsTest(MakeTest):
+    def test_directory_declarations_exclude_matching_file_names(self):
+        self.write("ya.make", "LIBRARY()\nDECLARE_IN_DIRS(DATA *.txt DIRS . EXCLUDES ignored.txt)\nRUN_PYTHON3(generate.py IN ${DATA_FILES} STDOUT generated.cpp)\nEND()\n")
+        self.write("generate.py", 'print("int answer() { return 42; }")\n')
+        for name in ("ignored", "retained"):
+            self.write(name + ".txt", "42\n")
+        inputs = self.node(self.graph(), "generated.cpp")["inputs"]
+        self.assertIn(f"$(S)/{PROJECT}/retained.txt", inputs)
+        self.assertNotIn(f"$(S)/{PROJECT}/ignored.txt", inputs)
+
+    def test_directory_declarations_exclude_matching_relative_paths(self):
+        self.write("ya.make", f"LIBRARY()\nDECLARE_IN_DIRS(DATA *.txt SRCDIR ${{ARCADIA_ROOT}} RECURSIVE DIRS {PROJECT}/data EXCLUDES {PROJECT}/data/ignored/*.txt)\nRUN_PYTHON3(generate.py IN ${{DATA_FILES}} STDOUT generated.cpp)\nEND()\n")
+        self.write("generate.py", 'print("int answer() { return 42; }")\n')
+        for name in ("ignored/answer", "retained"):
+            self.write("data/" + name + ".txt", "42\n")
+        inputs = self.node(self.graph(), "generated.cpp")["inputs"]
+        self.assertIn(f"$(S)/{PROJECT}/data/retained.txt", inputs)
+        self.assertNotIn(f"$(S)/{PROJECT}/data/ignored/answer.txt", inputs)
+
+    def test_escaped_scalar_and_text_input_context(self):
+        self.write("ya.make", '''LIBRARY()
+DECLARE_IN_DIRS(DATA *.h DIRS data)
+SET(ESCAPED un\\_related)
+RUN_PYTHON3(generate.py ${ESCAPED} IN ${DATA_FILES} STDOUT generated.cpp)
+END()
+''')
+        self.write("generate.py", 'print("int answer() { return 42; }")\n')
+        self.write("data/value.h", '#include "../hidden.h"\n')
+        self.write("hidden.h", "#define HIDDEN 1\n")
+        node = self.node(self.graph(), "generated.cpp")
+        inputs = node["inputs"]
+        self.assertIn(f"$(S)/{PROJECT}/data/value.h", inputs)
+        self.assertNotIn(f"$(S)/{PROJECT}/hidden.h", inputs)
+        self.assertIn("un_related", [arg for command in node["cmds"] for arg in command["cmd_args"]])
+
     def test_text_inputs_through_variables(self):
         self.write("ya.make", f'''LIBRARY()
 DECLARE_IN_DIRS(DATA *.txt DIRS data)

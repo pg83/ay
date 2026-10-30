@@ -10,14 +10,16 @@ def main():
     args = parser.parse_args()
     failed = 0
     total = 0
+    skipped = 0
     for path in args.results:
         result = json.loads(path.read_text())
         total += result["tests"]
+        skipped += len(result.get("skipped", []))
         failed += not result["success"]
         print(f"{'PASS' if result['success'] else 'FAIL'} {', '.join(result['modules'])}: {result['tests']} tests")
         for error in [*result["failures"], *result["errors"]]:
             print(error["test"] + "\n" + error["traceback"])
-    print(f"{total} tests, {failed} failed modules")
+    print(f"{total} tests, {skipped} skipped, {failed} failed modules")
     if failed:
         return 1
     args.stamp.parent.mkdir(parents=True, exist_ok=True)

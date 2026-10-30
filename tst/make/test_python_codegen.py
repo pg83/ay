@@ -5,6 +5,32 @@ from tst.make.lib import MakeTest, PROJECT
 
 
 class PythonCodegenTest(MakeTest):
+    def test_mixed_cython_modes_preserve_each_sources_outputs(self):
+        modes = (
+            ("CYTHON_CPP_API_H", "cpp_api", ".cpp"),
+            ("CYTHON_C_API_H", "c_api", ".c"),
+            ("CYTHON_CPP_H", "cpp_header", ".cpp"),
+            ("CYTHON_C_H", "c_header", ".c"),
+            ("CYTHON_CPP", "cpp_plain", ".cpp"),
+            ("CYTHON_C", "c_plain", ".c"),
+        )
+        sources = " ".join(f"{mode} {name}.pyx" for mode, name, _ in modes)
+        self.write("ya.make", f"PY3_LIBRARY()\nPY_SRCS({sources})\nEND()\n")
+        for _, name, _ in modes:
+            self.write(name + ".pyx", "cdef public int answer():\n    return 42\ncdef api int api_answer():\n    return 42\n")
+        graph = self.graph()
+        for mode, name, suffix in modes:
+            with self.subTest(mode=mode):
+                output = name + ("" if mode.endswith("_H") else ".pyx") + suffix
+                generated = self.node(graph, output)
+                self.assertIn(f"$(S)/{PROJECT}/{name}.pyx", generated["inputs"])
+                if mode.endswith("_H"):
+                    self.assertIn(f"$(B)/{PROJECT}/{name}.h", generated["outputs"])
+                if mode.endswith("_API_H"):
+                    self.assertIn(f"$(B)/{PROJECT}/{name}_api.h", generated["outputs"])
+                compiled = self.node(graph, output + ".o")
+                self.assertIn(generated["uid"], compiled["deps"])
+
     def test_type_stub_uses_source_directory(self):
         self.write("ya.make", f"PY3_LIBRARY()\nSRCDIR({PROJECT}/src)\nPY_SRCS(answer.pyi)\nEND()\n")
         self.write("src/answer.pyi", "def answer() -> int: ...\n")

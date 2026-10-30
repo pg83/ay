@@ -2,6 +2,63 @@ from tst.make.lib import MakeTest, PROJECT
 
 
 class JavaProtoRootsTest(MakeTest):
+    def test_gazetteer_schema_generates_java_sources(self):
+        self.java_consumer()
+        self.write("schema/ya.make", "PROTO_LIBRARY()\nSRCS(answer.gztproto)\nEND()\n")
+        self.write("schema/answer.gztproto", "package e2e; message Answer { optional int32 value = 1; }\n")
+        graph = self.graph()
+        proto = self.node(graph, "schema/answer.proto")
+        java = self.node(graph, "schema/answer.jsrc")
+        self.assertIn(f"$(S)/{PROJECT}/schema/answer.gztproto", proto["inputs"])
+        self.assertIn(f"$(B)/{PROJECT}/schema/answer.proto", java["inputs"])
+        self.assertIn(proto["uid"], java["deps"])
+
+    def test_global_proto_sources_generate_java_archives(self):
+        self.java_consumer()
+        self.write("schema/ya.make", "PROTO_LIBRARY()\nSRCS(GLOBAL answer.proto)\nEND()\n")
+        self.assertIn(f"$(S)/{PROJECT}/schema/answer.proto", self.node(self.graph(), "schema/answer.jsrc")["inputs"])
+
+    def test_export_ymaps_proto_sets_the_java_namespace_and_include(self):
+        self.java_consumer()
+        self.write("schema/ya.make", "PROTO_LIBRARY()\nEXPORT_YMAPS_PROTO()\nSRCS(answer.proto)\nEND()\n")
+        includes = self.include_args(self.node(self.graph(), "schema/answer.jsrc"))
+        self.assertIn("-I=./maps/doc/proto", includes)
+        self.assertIn("-I=$(S)/maps/doc/proto", includes)
+
+    def test_java_protos_keep_gateway_option_dependencies(self):
+        self.java_consumer()
+        cases = (
+            ("GO_GRPC_GATEWAY_SWAGGER_SRCS", "vendor/github.com/grpc-ecosystem/grpc-gateway/protoc-gen-swagger/options"),
+            ("GO_GRPC_GATEWAY_V2_OPENAPI_SRCS", "vendor/github.com/grpc-ecosystem/grpc-gateway/v2/protoc-gen-openapiv2/options"),
+        )
+        for macro, dependency in cases:
+            with self.subTest(macro=macro):
+                self.write("schema/ya.make", f"PROTO_LIBRARY()\n{macro}(answer.proto)\nSRCS(answer.proto)\nEND()\n")
+                graph = self.graph()
+                self.node(graph, "schema/answer.jsrc")
+                self.assertTrue(any(dependency in path for node in graph["graph"] for path in node["inputs"]))
+
+    def test_alice_java_protoc_plugins_are_in_the_generation_command(self):
+        self.java_consumer()
+        for macro, plugin in (("ALICE_CAPABILITY", "alice_capability_java"), ("ALICE_TYPED_CALLBACK", "alice_typed_callback_java")):
+            with self.subTest(macro=macro):
+                self.write("schema/ya.make", f"PROTO_LIBRARY()\n{macro}()\nSRCS(answer.proto)\nEND()\n")
+                args = [arg for command in self.node(self.graph(), "schema/answer.jsrc")["cmds"] for arg in command["cmd_args"]]
+                self.assertTrue(any(f"protoc-gen-{plugin}=" in arg for arg in args), args)
+
+    def test_java_protoc_plugin_requires_a_name_and_a_tool(self):
+        self.java_consumer()
+        for args in ("", "e2e"):
+            with self.subTest(args=args):
+                self.write("schema/ya.make", f"PROTO_LIBRARY()\nJAVA_PROTO_PLUGIN({args})\nSRCS(answer.proto)\nEND()\n")
+                self.assertNotEqual(self.make().returncode, 0)
+
+    def test_cpp_only_flatbuffers_cannot_be_used_as_a_java_peer(self):
+        self.java_consumer()
+        self.write("schema/ya.make", "FBS_LIBRARY()\nONLY_TAGS(CPP_FBS)\nSRCS(answer.fbs)\nEND()\n")
+        self.write("schema/answer.fbs", "namespace e2e;\ntable Answer { value:int; }\nroot_type Answer;\n")
+        self.assertNotEqual(self.make().returncode, 0)
+
     def java_consumer(self):
         self.write("ya.make", f"JAVA_LIBRARY(answer)\nJDK_VERSION(17)\nJAVA_SRCS(Answer.java)\nPEERDIR({PROJECT}/schema)\nEND()\n")
         self.write("Answer.java", "public class Answer {}\n")

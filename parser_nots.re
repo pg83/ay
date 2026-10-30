@@ -1,5 +1,7 @@
 package main
 
+// These patterns exclude NUL. yyPeekS supplies NUL at EOF, so the ordinary
+// mismatch and full-length acceptance paths also handle the end of input.
 /*!re2c
 	vsp = [\t\n\f\r ];
 	vnum = "0" | [1-9] [0-9]*;
@@ -16,21 +18,18 @@ func notsVersionRangeMatch(yyinput string) (os, oe, vs, ve int, ok bool) {
 	/*!stags:re2c format = "var @@ int\n\t_ = @@\n"; */
 	/*!re2c
 	re2c:yyfill:enable = 0;
-	re2c:eof = 0;
 	re2c:tags = 1;
 	re2c:define:YYCTYPE = byte;
 	re2c:define:YYPEEK = "yyPeekS(yyinput, yycursor)";
 	re2c:define:YYSKIP = "yycursor += 1";
 	re2c:define:YYBACKUP = "yymarker = yycursor";
 	re2c:define:YYRESTORE = "yycursor = yymarker";
-	re2c:define:YYLESSTHAN = "yylimit <= yycursor";
 	re2c:define:YYSTAGP = "@@{tag} = yycursor";
 	re2c:define:YYSTAGN = "@@{tag} = -1";
 	re2c:define:YYSHIFTSTAG = "@@{tag} += @@{shift}";
 
 	vsp* @os (">=" | "=")? @oe vsp* @vs [0-9]+ "." [0-9]+ "." [0-9]+ @ve vsp* { return os, oe, vs, ve, yycursor == yylimit }
 	* { return 0, 0, 0, 0, false }
-	$ { return 0, 0, 0, 0, false }
 	*/
 }
 
@@ -41,17 +40,14 @@ func notsPackageKeyValid(yyinput string) bool {
 	yylimit := len(yyinput)
 	/*!re2c
 	re2c:yyfill:enable = 0;
-	re2c:eof = 0;
 	re2c:define:YYCTYPE = byte;
 	re2c:define:YYPEEK = "yyPeekS(yyinput, yycursor)";
 	re2c:define:YYSKIP = "yycursor += 1";
 	re2c:define:YYBACKUP = "yymarker = yycursor";
 	re2c:define:YYRESTORE = "yycursor = yymarker";
-	re2c:define:YYLESSTHAN = "yylimit <= yycursor";
 
 	("@" kchar+ "/")? [0-9A-Za-z_~!'()*-] kchar* { return yycursor == yylimit }
 	* { return false }
-	$ { return false }
 	*/
 }
 
@@ -62,16 +58,13 @@ func notsPackageVersionValid(yyinput string) bool {
 	yylimit := len(yyinput)
 	/*!re2c
 	re2c:yyfill:enable = 0;
-	re2c:eof = 0;
 	re2c:define:YYCTYPE = byte;
 	re2c:define:YYPEEK = "yyPeekS(yyinput, yycursor)";
 	re2c:define:YYSKIP = "yycursor += 1";
 	re2c:define:YYBACKUP = "yymarker = yycursor";
 	re2c:define:YYRESTORE = "yycursor = yymarker";
-	re2c:define:YYLESSTHAN = "yylimit <= yycursor";
 
 	vnum "." vnum "." vnum ("-" vpre ("." vpre)*)? ("+" vident+ ("." vident+)*)? { return yycursor == yylimit }
 	* { return false }
-	$ { return false }
 	*/
 }

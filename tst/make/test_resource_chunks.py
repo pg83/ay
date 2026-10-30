@@ -2,6 +2,31 @@ from tst.make.lib import MakeTest, PROJECT
 
 
 class ResourceChunksTest(MakeTest):
+    def test_python_sources_survive_the_1024_file_boundary(self):
+        files = [f"p{index:04d}.py" for index in range(1025)]
+        for name in files:
+            self.write(name, "VALUE = 42\n")
+        self.write("ya.make", "PY3_LIBRARY()\nPY_SRCS(\n" + "\n".join(files) + "\n)\nEND()\n")
+        graph = self.graph()
+        inputs = {path for node in graph["graph"] for path in node["inputs"]}
+        compiled = {path for node in graph["graph"] for path in node["outputs"] if path.startswith(f"$(B)/{PROJECT}/p") and path.endswith(".yapyc3")}
+        self.assertEqual(len(compiled), len(files))
+        self.assertTrue(compiled <= inputs)
+        self.assertTrue({f"$(S)/{PROJECT}/{name}" for name in files} <= inputs)
+
+    def test_python_protos_survive_the_1024_file_boundary(self):
+        files = [f"p{index:04d}.proto" for index in range(1025)]
+        for index, name in enumerate(files):
+            self.write(name, f'syntax = "proto3";\nmessage Answer{index} {{ int32 value = 1; }}\n')
+        self.write("ya.make", "PY3_LIBRARY()\nPY_SRCS(\n" + "\n".join(files) + "\n)\nEND()\n")
+        graph = self.graph()
+        inputs = {path for node in graph["graph"] for path in node["inputs"]}
+        outputs = {path for node in graph["graph"] for path in node["outputs"]}
+        generated = {f"$(B)/{PROJECT}/p{index:04d}__intpy3___pb2.py" for index in range(1025)}
+        self.assertTrue(generated <= outputs)
+        self.assertTrue(generated <= inputs)
+        self.assertTrue({f"$(S)/{PROJECT}/{name}" for name in files} <= inputs)
+
     def test_python_resource_chunk_object_order(self):
         files = []
         for index in range(100):

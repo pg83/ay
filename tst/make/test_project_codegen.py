@@ -2,6 +2,14 @@ from tst.make.lib import MakeTest, PROJECT
 
 
 class ProjectCodegenTest(MakeTest):
+    def test_nlg_can_generate_empty_cpp_bodies(self):
+        self.write("ya.make", "LIBRARY()\nSET(COMPILE_NLG_EMPTY_CPP yes)\nCOMPILE_NLG(answer.nlg NLG_CONFIG config.json TRANSLATIONS_JSON translations.json)\nEND()\n")
+        self.write("answer.nlg", "{% macro answer() %}42{% endmacro %}\n")
+        self.write("config.json", "{}\n")
+        self.write("translations.json", "{}\n")
+        args = [arg for command in self.node(self.graph(), "answer.nlg.cpp")["cmds"] for arg in command["cmd_args"]]
+        self.assertIn("--empty-cpp", args)
+
     def test_nlg(self):
         self.write("ya.make", "LIBRARY()\nCOMPILE_NLG(answer.nlg base.nlg NLG_CONFIG config.json TRANSLATIONS_JSON translations.json)\nEND()\n")
         self.write("answer.nlg", f'{{% from "{PROJECT}/base.nlg" import answer %}}\n{{{{ answer() }}}}\n')
