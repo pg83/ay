@@ -26,3 +26,12 @@ class DocumentationArgumentsTest(MakeTest):
         inputs = self.node(self.graph(), "answer.docslib")["inputs"]
         self.assertIn(f"$(S)/{PROJECT}/index.md", inputs)
         self.assertNotIn(f"$(S)/{PROJECT}/ignored.md", inputs)
+
+    def test_copied_sources_are_consumed_by_documentation_libraries(self):
+        self.write("ya.make", "DOCS_LIBRARY(answer)\nCOPY_FILE(index.md generated.md)\nEND()\n")
+        self.write("index.md", "# Answer\n")
+        graph = self.graph()
+        copied = self.node(graph, "generated.md")
+        library = self.node(graph, "answer.docslib")
+        self.assertIn(copied["uid"], library["deps"])
+        self.assertIn(f"$(B)/{PROJECT}/generated.md", library["inputs"])
