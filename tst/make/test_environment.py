@@ -1,10 +1,18 @@
 import os
 from unittest.mock import patch
 
-from tst.make.lib import MakeTest
+from tst.make.lib import MakeTest, PROJECT
 
 
 class EnvironmentTest(MakeTest):
+    def test_rooted_paths_are_true_in_module_conditions(self):
+        self.write("answer.cpp", "int answer() { return 42; }\n")
+        for root in ("ARCADIA_ROOT", "ARCADIA_BUILD_ROOT"):
+            with self.subTest(root=root):
+                self.write("ya.make", f"LIBRARY()\nSET(E2E_PATH ${{{root}}}/path)\nIF(E2E_PATH)\nSRCS(answer.cpp)\nELSE()\nMESSAGE(FATAL_ERROR rooted_path_was_false)\nENDIF()\nEND()\n")
+                compiled = self.node(self.graph(), "answer.cpp.o")
+                self.assertIn(f"$(S)/{PROJECT}/answer.cpp", compiled["inputs"])
+
     def test_graph_with_ownership_checks(self):
         self.write("ya.make", "PROGRAM(answer)\nSRCS(main.cpp)\nRESOURCE(value.txt /value)\nEND()\n")
         self.write("main.cpp", "int main() { return 0; }\n")
