@@ -45,3 +45,11 @@ class SourceRootDiagnosticsTest(MakeTest):
         result = self.make("-t", "--cache-tests", dump_graph=False, env={"AY_CHAOS": "test-data-read-eio=0"})
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("input/output error", result.stderr)
+
+    def test_make_accepts_the_debug_long_option(self):
+        result = self.make("--debug", "--build-dir", str(self.work / "build"), dump_graph=False)
+        self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_make_accepts_the_xbuild_option(self):
+        result = self.make("--xbuild=debug", "--build-dir", str(self.work / "build"), dump_graph=False)
+        self.assertEqual(result.returncode, 0, result.stderr)
