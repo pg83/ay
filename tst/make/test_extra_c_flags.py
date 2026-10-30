@@ -35,3 +35,23 @@ class ExtraCFlagsTest(MakeTest):
     def test_recursive_extra_flags_are_configuration_errors(self):
         self.flags("-DE2E_LOOP=$EXTRA_C_FLAGS")
         self.assertNotEqual(self.make(*self.compiler_flags).returncode, 0)
+
+    def test_leading_command_separator_preserves_extra_flag_arguments(self):
+        self.flags("&& -DE2E_AFTER=42")
+        self.assertIn("-DE2E_AFTER=42", self.command_args())
+
+    def test_embedded_command_separators_in_extra_flags_are_rejected(self):
+        self.flags("-DE2E_FIRST=1 && -DE2E_SECOND=2")
+        self.assertNotEqual(self.make(*self.compiler_flags).returncode, 0)
+
+    def test_bare_dollars_in_extra_flags_are_preserved(self):
+        self.flags("-DE2E_DOLLAR=$")
+        self.assertIn("-DE2E_DOLLAR=$", self.command_args())
+
+    def test_quoted_extra_flags_reject_dollars_without_variable_names(self):
+        self.flags('-DE2E_DOLLAR="value$"')
+        self.assertNotEqual(self.make(*self.compiler_flags).returncode, 0)
+
+    def test_extra_flags_apply_make_ampersand_escapes(self):
+        self.flags("-DE2E_VALUE=left&right")
+        self.assertIn("-DE2E_VALUE=leftight", self.command_args())
