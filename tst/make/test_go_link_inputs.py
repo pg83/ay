@@ -28,3 +28,14 @@ class GoLinkInputsTest(MakeTest):
         self.write("answer.ld", "SECTIONS {}\n")
         linked = self.node(self.graph(), "answer")
         self.assertIn(f"$(S)/{PROJECT}/answer.ld", linked["inputs"])
+
+    def test_go_linker_input_variables_are_tracked(self):
+        self.program()
+        config = self.root / "ya.conf"
+        flags = {"LDFLAGS": "-Wl,-T,${input:E2E_LINK_SCRIPT}",
+                 "E2E_LINK_SCRIPT": "${ARCADIA_ROOT}/" + PROJECT + "/answer.ld"}
+        self.write_tree("ya.conf", config.read_text() + '\n[flags]\n' +
+                        '\n'.join(name + ' = ' + json.dumps(value) for name, value in flags.items()) + '\n')
+        self.write("answer.ld", "SECTIONS {}\n")
+        linked = self.node(self.graph(), "answer")
+        self.assertIn(f"$(S)/{PROJECT}/answer.ld", linked["inputs"])
