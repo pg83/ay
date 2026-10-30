@@ -62,6 +62,12 @@ class CodegenTest(MakeTest):
     def test_ragel(self):
         self.generated("machine.rl6", "machine.rl6.cpp", '%%{ machine scanner; main := any*; }%%\n%% write data;\n')
 
+    def test_repeated_ragel_imports_keep_one_dependency(self):
+        self.write("shared.rl6", "%%{\nmachine shared;\nvalue = any;\n}%%\n")
+        graph = self.generated("machine.rl6", "machine.rl6.cpp", '%%{\nmachine scanner;\ninclude shared "shared.rl6";\ninclude shared "shared.rl6";\nmain := value*;\n}%%\n%% write data;\n')
+        inputs = self.node(graph, "machine.rl6.cpp")["inputs"]
+        self.assertEqual(inputs.count(f"$(S)/{PROJECT}/shared.rl6"), 1)
+
     def test_buildwith_ragel6(self):
         self.write("ya.make", "LIBRARY(answer)\nBUILDWITH_RAGEL6(lexer.rl -e -CF1)\nSRCS(answer.cpp)\nEND()\n")
         self.write("lexer.rl", '%%{ machine scanner; main := any*; }%%\n%% write data;\n')
