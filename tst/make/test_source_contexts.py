@@ -2,6 +2,20 @@ from tst.make.lib import MakeTest, PROJECT
 
 
 class SourceContextsTest(MakeTest):
+    def test_declared_text_filenames_preserve_embedded_dollar_signs(self):
+        self.write("ya.make", '''LIBRARY()
+SET(E2E_LEAF expanded)
+DECLARE_IN_DIRS(DATA *.h DIRS data)
+RUN_PYTHON3(generate.py IN ${DATA_FILES} STDOUT generated.cpp)
+END()
+''')
+        self.write("generate.py", 'print("int answer() { return 42; }")\n')
+        self.write("data/$E2E_LEAF.h", "#define LITERAL 1\n")
+        self.write("data/expanded.h", "#define EXPANDED 2\n")
+        inputs = self.node(self.graph(), "generated.cpp")["inputs"]
+        for name in ("$E2E_LEAF.h", "expanded.h"):
+            self.assertIn(f"$(S)/{PROJECT}/data/{name}", inputs)
+
     def test_late_bound_program_inputs_preserve_declared_text_files(self):
         self.write("ya.make", f'''LIBRARY()
 RUN_PROGRAM({PROJECT}/generator IN $E2E_LATE ordinary.h OUT generated.cpp)
