@@ -95,3 +95,13 @@ class StyleOptionBoundariesTest(MakeTest):
             with self.subTest(arguments=arguments):
                 self.python(f"NO_LINT({arguments})")
                 self.assertNotEqual(self.make("-t").returncode, 0)
+
+    def test_raw_python_no_lint_values_must_be_supported(self):
+        self.python("SET(_NO_LINT_VALUE unknown_linter)")
+        self.assertNotEqual(self.make("-t").returncode, 0)
+
+    def test_python_linter_lists_require_at_least_one_source_path(self):
+        for seed in ("[]", '["relative.py"]'):
+            with self.subTest(seed=seed):
+                self.write("ya.make", f"PY3_LIBRARY()\nSET(PY_LINTER_FILES {seed})\nSTYLE_RUFF()\nEND()\n")
+                self.assertNotEqual(self.make("-t").returncode, 0)
