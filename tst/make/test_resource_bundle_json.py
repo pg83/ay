@@ -39,3 +39,19 @@ class ResourceBundleJsonTest(MakeTest):
                     platform: {"uri": "sbr:123456789"},
                 }}))
                 self.assertNotEqual(self.make().returncode, 0)
+
+    def test_missing_and_null_resource_uris_are_rejected(self):
+        for entry in ({}, {"uri": None}, {"uri": 42}):
+            with self.subTest(entry=entry):
+                self.write("resources.json", json.dumps({"by_platform": {"linux-x86_64": entry}}))
+                self.assertNotEqual(self.make().returncode, 0)
+
+    def test_empty_platform_mappings_are_rejected(self):
+        self.write("resources.json", json.dumps({"by_platform": {}}))
+        self.assertNotEqual(self.make().returncode, 0)
+
+    def test_missing_target_platform_leaves_the_resource_uri_empty(self):
+        self.write("resources.json", json.dumps({"by_platform": {"darwin-arm64": {"uri": "sbr:123456789"}}}))
+        generated = self.node(self.graph(), "result.txt")
+        args = [arg for command in generated["cmds"] for arg in command["cmd_args"]]
+        self.assertFalse(any("sbr:123456789" in arg for arg in args), args)
