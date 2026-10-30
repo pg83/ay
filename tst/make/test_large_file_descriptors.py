@@ -41,3 +41,17 @@ class LargeFileDescriptorsTest(MakeTest):
         self.write("value.bin", "42\n")
         graph = self.graph()
         self.assertTrue(any(f"$(S)/{PROJECT}/value.bin" in node["inputs"] for node in graph["graph"]))
+
+    def test_generated_search_directories_can_resolve_previous_outputs(self):
+        self.write("ya.make", "RECURSE(first second)\n")
+        self.write("first/ya.make", "LIBRARY()\nCOPY_FILE(template.txt generated/value.bin)\nRESOURCE(generated/value.bin /value)\nEND()\n")
+        self.write("first/template.txt", "42\n")
+        self.write("second/ya.make", f"LIBRARY()\nSRCDIR(${{ARCADIA_BUILD_ROOT}}/{PROJECT}/first/generated)\nLARGE_FILES(value.bin)\nRESOURCE(value.bin /value)\nEND()\n")
+        self.write("second/value.bin.external", json.dumps({"storage": "SANDBOX", "resource_id": 123456789}))
+        graph = self.graph()
+        generated = self.node(graph, "first/generated/value.bin")
+        path = f"$(B)/{PROJECT}/first/generated/value.bin"
+        consumers = [node for node in graph["graph"] if path in node["inputs"]
+                     and any(output.startswith(f"$(B)/{PROJECT}/second/") for output in node["outputs"])]
+        self.assertTrue(consumers)
+        self.assertTrue(any(generated["uid"] in node["deps"] for node in consumers))
