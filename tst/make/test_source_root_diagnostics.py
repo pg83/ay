@@ -70,3 +70,9 @@ class SourceRootDiagnosticsTest(MakeTest):
     def test_make_accepts_the_xbuild_option(self):
         result = self.make("--xbuild=debug", "--build-dir", str(self.work / "build"), dump_graph=False)
         self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_arm64_hosts_select_the_operating_system_architecture_name(self):
+        for operating_system in ("linux", "darwin"):
+            with self.subTest(operating_system=operating_system):
+                result = self.make(dump_graph=False, env={"AY_CHAOS": f"host-arch=arm64 host-os={operating_system}"})
+                self.assertEqual(result.returncode, 0, result.stderr)
