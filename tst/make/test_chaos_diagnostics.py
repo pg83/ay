@@ -42,3 +42,8 @@ class ChaosDiagnosticsTest(MakeTest):
         result = self.make(env={"AY_CHAOS": "hash-list-h1=3 hash-list-h2=3"})
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("BucketCache: bucket-list hash pair collision", result.stderr)
+
+    def test_foreign_panics_are_rethrown_with_the_original_value(self):
+        result = self.make(dump_graph=False, env={"AY_CHAOS": "foreign-panic=0"})
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("panic: chaos: foreign panic", result.stderr)
