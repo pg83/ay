@@ -49,6 +49,20 @@ class DynamicLibraryOptionsTest(MakeTest):
         self.write("symbols.exports", "C answer\n")
         self.assertNotEqual(self.make().returncode, 0)
 
+    def test_deprecated_python_module_exports_argument_is_rejected(self):
+        self.write("answer.cpp", 'extern "C" int answer() { return 42; }\n')
+        self.write("symbols.exports", "C answer\n")
+        for module in ("PY2MODULE", "PY3MODULE", "PY_ANY_MODULE"):
+            with self.subTest(module=module):
+                self.write("ya.make", f"{module}(answer EXPORTS symbols.exports)\nSRCS(answer.cpp)\nEND()\n")
+                self.assertNotEqual(self.make().returncode, 0)
+
+    def test_windows_python2_modules_keep_the_python_runtime_library(self):
+        self.write("ya.make", "PY2MODULE(answer)\nSRCS(answer.cpp)\nEND()\n")
+        self.write("answer.cpp", 'extern "C" int answer() { return 42; }\n')
+        linked = self.node(self.graph("--target-platform=default-win-x86_64"), "answer.pyd")
+        self.assertTrue(any("/contrib/tools/python/lib/" in path for path in linked["inputs"]), linked["inputs"])
+
     def test_windows_python_modules_use_the_pyd_extension(self):
         self.write("ya.make", "PY3MODULE(answer)\nSRCS(answer.cpp)\nEND()\n")
         self.write("answer.cpp", 'extern "C" int answer() { return 42; }\n')
