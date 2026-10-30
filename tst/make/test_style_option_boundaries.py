@@ -53,3 +53,45 @@ class StyleOptionBoundariesTest(MakeTest):
         self.python(f"SET(PYTHON_LINTERS_DEFAULT_CONFIGS {PROJECT}/configs.json)\nSTYLE_RUFF()")
         self.write("configs.json", "{}\n")
         self.assertNotEqual(self.make("-t").returncode, 0)
+
+    def test_disabling_flake8_keeps_explicit_ruff_checks(self):
+        self.python("SET(DISABLE_FLAKE8 yes)\nSTYLE_RUFF()")
+        graph = self.graph("-t")
+        self.node(graph, "test-results/ruff/meta.json")
+        self.assertFalse(any(path.endswith("/test-results/flake8/meta.json")
+                             for node in graph["graph"] for path in node["outputs"]))
+
+    def test_analysis_mode_omits_python_style_checks(self):
+        self.python("SET(CPP_ANALYSIS_MODE yes)\nSTYLE_RUFF()")
+        result = self.make("-t")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        graph = json.loads(result.stdout)
+        self.assertFalse(any(path.endswith(("/test-results/flake8/meta.json", "/test-results/ruff/meta.json"))
+                             for node in graph["graph"] for path in node["outputs"]))
+
+    def test_repeated_cpp_style_calls_create_one_suite(self):
+        self.write("ya.make", "LIBRARY()\nSRCS(answer.cpp)\nSTYLE_CPP()\nSTYLE_CPP()\nEND()\n")
+        self.write("answer.cpp", "int answer() { return 42; }\n")
+        graph = self.graph("-t")
+        suites = [node for node in graph["graph"] if any(
+            path.endswith("/test-results/clang_format/meta.json") for path in node["outputs"])]
+        self.assertEqual(len(suites), 1)
+        self.assertIn(f"/{PROJECT}/answer.cpp", json.dumps(suites[0]["cmds"]))
+
+    def test_cpp_style_rejects_generator_modules_without_native_sources(self):
+        self.write("ya.make", "GEN_LIBRARY(answer)\nRUN_PYTHON3(generate.py STDOUT_NOAUTO generated.txt)\nSTYLE_CPP()\nEND()\n")
+        self.write("generate.py", "print('answer = 42')\n")
+        self.assertNotEqual(self.make("-t").returncode, 0)
+
+    def test_python_linter_source_lists_require_valid_json(self):
+        for seed in ("invalid", "null"):
+            with self.subTest(seed=seed):
+                self.write("ya.make", f"PY3_LIBRARY()\nSET(PY_LINTER_FILES {seed})\nPY_SRCS(answer.py)\nEND()\n")
+                self.write("answer.py", "ANSWER = 42\n")
+                self.assertNotEqual(self.make("-t").returncode, 0)
+
+    def test_python_no_lint_rejects_unknown_names_and_unapproved_paths(self):
+        for arguments in ("unknown_linter", ""):
+            with self.subTest(arguments=arguments):
+                self.python(f"NO_LINT({arguments})")
+                self.assertNotEqual(self.make("-t").returncode, 0)
