@@ -2,6 +2,17 @@ from tst.make.lib import MakeTest, PROJECT
 
 
 class JavaIncludeOptionsTest(MakeTest):
+    def test_flatc_imports_keep_transitive_schema_dependencies(self):
+        self.client()
+        self.write("schema/ya.make", f"FBS_LIBRARY()\nADDINCL(FOR flatc {PROJECT}/schema)\nSRCS(answer.fbs)\nEND()\n")
+        self.write("schema/answer.fbs", 'include "dependency.fbs";\nnamespace e2e; table Answer { value:Dependency; }\n')
+        self.write("schema/dependency.fbs", 'include "leaf.fbs";\nnamespace e2e; table Dependency { value:Leaf; }\n')
+        self.write("schema/leaf.fbs", "namespace e2e; table Leaf { value:int; }\n")
+        graph = self.graph()
+        generated = self.node(graph, "schema/answer.fbs.jsrc")
+        self.assertIn(f"$(S)/{PROJECT}/schema/dependency.fbs", generated["inputs"])
+        self.assertIn(f"$(S)/{PROJECT}/schema/leaf.fbs", generated["inputs"])
+
     def client(self):
         self.write("ya.make", f"JAVA_PROGRAM(answer)\nJDK_VERSION(17)\nJAVA_SRCS(Main.java)\nPEERDIR({PROJECT}/schema)\nEND()\n")
         self.write("Main.java", "public class Main {}\n")
