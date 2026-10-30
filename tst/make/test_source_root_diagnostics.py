@@ -52,6 +52,17 @@ class SourceRootDiagnosticsTest(MakeTest):
         result = self.make("-t", "--cache-tests", dump_graph=False, env={"AY_CHAOS": "test-data-read-eio=0"})
         self.assertEqual(result.returncode, 0, result.stderr)
 
+    def test_cached_test_data_reports_file_open_permissions(self):
+        self.write("ya.make", f"EXECTEST()\nSET(ADD_SRCDIR_TO_TEST_DATA no)\nDATA(arcadia/{PROJECT}/value.txt)\nRUN(echo answer)\nEND()\n")
+        self.write("value.txt", "42\n")
+        data = self.project / "value.txt"
+        self.addCleanup(data.chmod, 0o600)
+        data.chmod(0)
+        result = self.make("-t", "--cache-tests", dump_graph=False)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("permission denied", result.stderr)
+        self.assertIn("value.txt", result.stderr)
+
     def test_make_accepts_the_debug_long_option(self):
         result = self.make("--debug", "--build-dir", str(self.work / "build"), dump_graph=False)
         self.assertEqual(result.returncode, 0, result.stderr)
