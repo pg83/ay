@@ -120,6 +120,18 @@ class ExecutorTest(MakeTest):
                 self.assertEqual(result.returncode, 0, result.stderr)
                 self.assertTrue(artifact.read_bytes() == text.encode(), "large source contents differ")
 
+    def test_native_executor_invalidates_generated_outputs_when_the_tool_changes(self):
+        self.write("ya.make", f"UNION(answer)\nRUN_PROGRAM({PROJECT}/tool STDOUT result.txt)\nEXPLICIT_OUTPUTS(${{BINDIR}}/result.txt)\nEND()\n")
+        self.write("tool/ya.make", f"YQL_PREBUILT_TOOL(generator)\nPRIMARY_OUTPUT(${{ARCADIA_ROOT}}/{PROJECT}/tool/generate.sh)\nEND()\n")
+        artifact = self.install / PROJECT / "result.txt"
+        for value in ("first", "second"):
+            with self.subTest(value=value):
+                self.write("tool/generate.sh", f"#!/bin/sh\nprintf '{value}\\n'\n")
+                (self.project / "tool/generate.sh").chmod(0o755)
+                result = self.execute(ninja=False)
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertEqual(artifact.read_text(), value + "\n")
+
     def test_malformed_cached_manifest_is_invalidated_and_rebuilt(self):
         artifact = self.copy_project()
         result = self.execute()
