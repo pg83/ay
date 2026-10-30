@@ -38,10 +38,6 @@ func literalPrefixes(re *syntax.Regexp) []string {
 
 		return out
 	case syntax.OpConcat:
-		if len(re.Sub) == 0 {
-			return nil
-		}
-
 		head := literalPrefixes(re.Sub[0])
 
 		if len(head) == 1 && len(re.Sub) > 1 && (re.Sub[0].Op == syntax.OpLiteral || re.Sub[0].Op == syntax.OpCapture && re.Sub[0].Sub[0].Op == syntax.OpLiteral) {
@@ -119,8 +115,6 @@ func peerPolicyPattern(pattern string) PeerPolicyPattern {
 
 func (p PeerPolicyPattern) matches(dir string) bool {
 	switch {
-	case p.exact:
-		return dir == p.prefix
 	case p.suffix:
 		return strings.HasSuffix(dir, p.contains)
 	case p.contains != "":
