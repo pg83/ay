@@ -55,3 +55,9 @@ class ExtraCFlagsTest(MakeTest):
     def test_extra_flags_apply_make_ampersand_escapes(self):
         self.flags("-DE2E_VALUE=left&right")
         self.assertIn("-DE2E_VALUE=leftight", self.command_args())
+
+    def test_unclosed_quotes_in_extra_flags_are_configuration_errors(self):
+        for quote in ("'", '"'):
+            with self.subTest(quote=quote):
+                self.flags("-DE2E_VALUE=" + quote + "unfinished")
+                self.assertNotEqual(self.make(*self.compiler_flags).returncode, 0)
