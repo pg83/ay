@@ -46,6 +46,12 @@ class SourceRootDiagnosticsTest(MakeTest):
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("input/output error", result.stderr)
 
+    def test_cached_test_data_ignores_python_bytecode_read_failures(self):
+        self.write("ya.make", f"EXECTEST()\nSET(ADD_SRCDIR_TO_TEST_DATA no)\nDATA(arcadia/{PROJECT}/data)\nRUN(echo answer)\nEND()\n")
+        self.write("data/ignored.pyc", "cached bytecode\n")
+        result = self.make("-t", "--cache-tests", dump_graph=False, env={"AY_CHAOS": "test-data-read-eio=0"})
+        self.assertEqual(result.returncode, 0, result.stderr)
+
     def test_make_accepts_the_debug_long_option(self):
         result = self.make("--debug", "--build-dir", str(self.work / "build"), dump_graph=False)
         self.assertEqual(result.returncode, 0, result.stderr)
