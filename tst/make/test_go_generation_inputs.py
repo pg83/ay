@@ -2,6 +2,15 @@ from tst.make.lib import MakeTest, PROJECT
 
 
 class GoGenerationInputsTest(MakeTest):
+    def test_indented_standard_library_version_assignment_is_valid(self):
+        config = (self.root / "build/conf/go.conf").read_text()
+        self.assertIn("\nGOSTD_VERSION=", config)
+        self.write_tree("build/conf/go.conf", config.replace("\nGOSTD_VERSION=", "\n    GOSTD_VERSION="))
+        self.write("ya.make", "GO_PROGRAM(answer)\nSRCS(main.go)\nEND()\n")
+        self.write("main.go", 'package main\nimport "fmt"\nfunc main() { fmt.Println(42) }\n')
+        graph = self.graph()
+        self.assertIn(self.node(graph, "answer")["uid"], graph["result"])
+
     def test_flatbuffers_namespace_maps_are_inherited_once_through_a_diamond(self):
         self.write("ya.make", f"GO_LIBRARY()\nPEERDIR({PROJECT}/left {PROJECT}/right)\nSRCS(answer.fbs)\nEND()\n")
         self.write("answer.fbs", 'include "base/base.fbs";\nnamespace e2e; table Answer { value: shared.Base; } root_type Answer;\n')
