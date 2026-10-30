@@ -33,3 +33,15 @@ class YqlResourceOptionsTest(MakeTest):
         self.write("ya.make", "YQL_PYTHON_UDF(answer)\nREGISTER_YQL_PYTHON_UDF(ADD_LIBRA_MODULES yes)\nPY_SRCS(answer.py)\nEND()\n")
         self.write("answer.py", "def answer(): return 42\n")
         self.assertNotEqual(self.make("-DOPENSOURCE=yes").returncode, 0)
+
+    def test_internal_python_udfs_can_register_libra_modules(self):
+        self.write("ya.make", "YQL_PYTHON_UDF(answer)\nREGISTER_YQL_PYTHON_UDF(ADD_LIBRA_MODULES yes)\nPY_SRCS(answer.py)\nEND()\n")
+        self.write("answer.py", "def answer(): return 42\n")
+        generated = self.node(self.graph(), "CustomPython.yql_python_udf.cpp")
+        args = [arg for command in generated["cmds"] for arg in command["cmd_args"]]
+        self.assertEqual(args[-1], "1")
+
+    def test_empty_python_udf_directories_are_rejected(self):
+        self.write("ya.make", "YQL_PYTHON_UDF(answer)\nSET(YQL_PYTHON_DIR)\nREGISTER_YQL_PYTHON_UDF()\nPY_SRCS(answer.py)\nEND()\n")
+        self.write("answer.py", "def answer(): return 42\n")
+        self.assertNotEqual(self.make().returncode, 0)
