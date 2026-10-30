@@ -38,3 +38,10 @@ class SourceRootDiagnosticsTest(MakeTest):
         result = self.make(dump_graph=False, env={"AY_CHAOS": "host-arch=e2e_unknown"})
         self.assertEqual(result.returncode, 1, result.stderr)
         self.assertIn("e2e_unknown", result.stderr.lower())
+
+    def test_cached_data_read_errors_are_reported(self):
+        self.write("ya.make", f"EXECTEST()\nDATA(arcadia/{PROJECT}/value.txt)\nRUN(echo answer)\nEND()\n")
+        self.write("value.txt", "42\n")
+        result = self.make("-t", "--cache-tests", dump_graph=False, env={"AY_CHAOS": "test-data-read-eio=0"})
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("input/output error", result.stderr)
