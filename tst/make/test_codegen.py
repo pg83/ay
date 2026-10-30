@@ -16,6 +16,25 @@ class CodegenTest(MakeTest):
     def test_flex(self):
         self.generated("lexer.l", "lexer.l.cpp", '%option noyywrap\n%%\n[0-9]+ return 1;\n. ;\n%%\n')
 
+    def test_nested_flex_sources_generate_compiled_outputs(self):
+        self.write("ya.make", "LIBRARY(answer)\nSRCS(parser/lexer.l)\nEND()\n")
+        self.write("parser/lexer.l", "%option noyywrap\n%%\n[0-9]+ return 1;\n. ;\n%%\n")
+        graph = self.graph()
+        generators = [node for node in graph["graph"]
+                      if f"$(S)/{PROJECT}/parser/lexer.l" in node["inputs"]
+                      and any(path.endswith(".cpp") for path in node["outputs"])]
+        self.assertEqual(len(generators), 1)
+        self.assertTrue(any(generators[0]["uid"] in node["deps"]
+                            and any(path.endswith(".o") for path in node["outputs"])
+                            for node in graph["graph"]))
+
+    def test_flex_tools_can_include_literal_command_arguments(self):
+        graph = self.generated("lexer.l", "lexer.l.cpp", "%option noyywrap\n%%\n. ;\n%%\n",
+                               "SET(_FLEX_TOOL flex --posix)")
+        args = self.node(graph, "lexer.l.cpp")["cmds"][0]["cmd_args"]
+        self.assertIn("--posix", args)
+        self.assertEqual(args[0], "flex")
+
     def test_flex_flags(self):
         lexer = '%option noyywrap\n%%\n[0-9]+ return 1;\n. ;\n%%\n'
         for macros, flags in (("SET(LEX_FLAGS -+)", ["-+"]), ("FLEX_FLAGS(-+ --nounistd)", ["-+", "--nounistd"])):
