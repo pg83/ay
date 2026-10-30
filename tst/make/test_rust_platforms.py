@@ -32,3 +32,14 @@ class RustPlatformsTest(MakeTest):
                 generated = self.node(self.graph("--target-platform=default-win-x86_64", "--host-platform=default-win-x86_64"), output)
                 args = [arg for command in generated["cmds"] for arg in command["cmd_args"]]
                 self.assertEqual(args[args.index("--target") + 1], "x86_64-pc-windows-msvc")
+
+    def test_windows_proc_macro_peers_use_host_library_suffixes(self):
+        self.write("ya.make", f"CRATE_PROC_MACRO(answer)\nPEERDIR({self.project_name}/common)\nEND()\n")
+        self.write("common/ya.make", "CRATE(common)\nEND()\n")
+        self.write("common/src/lib.rs", "pub fn number() -> u32 { 42 }\n")
+        graph = self.graph("--target-platform=default-win-x86_64", "--host-platform=default-win-x86_64")
+        dependency = self.node(graph, "common/libcommon-host.lib")
+        tool = self.node(graph, "libanswer.dll")
+        self.assertIn(dependency["uid"], tool["deps"])
+        args = [arg for command in dependency["cmds"] for arg in command["cmd_args"]]
+        self.assertEqual(args[args.index("--mode") + 1], "host")
