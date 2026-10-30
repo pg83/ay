@@ -5,6 +5,21 @@ from tst.make.lib import MakeTest, PROJECT
 
 
 class TestCommandOptionsTest(MakeTest):
+    def test_recursive_variables_in_test_environment_are_configuration_errors(self):
+        config = self.root / "build/ymake.core.conf"
+        self.write_tree("build/ymake.core.conf", config.read_text() + "\nE2E_GROWING = prefix$E2E_GROWING\n")
+        self.write("ya.make", "PY3TEST()\nTEST_SRCS(test_answer.py)\nENV(E2E_VALUE=$E2E_GROWING)\nEND()\n")
+        self.write("test_answer.py", "def test_answer(): assert True\n")
+        self.assertNotEqual(self.make("-t").returncode, 0)
+
+    def test_exectest_requires_a_run_command(self):
+        self.write("ya.make", "EXECTEST()\nEND()\n")
+        self.assertNotEqual(self.make("-t").returncode, 0)
+
+    def test_exectest_accepts_an_explicit_module_name(self):
+        self.write("ya.make", "EXECTEST(answer)\nRUN(python3 --version)\nEND()\n")
+        self.node(self.graph("-t"), "answer.pkg.fake")
+
     def test_python_subtest_forks_split_the_run_nodes(self):
         self.write("ya.make", "PY3TEST()\nTEST_SRCS(test_answer.py)\nFORK_SUBTESTS()\nSPLIT_FACTOR(2)\nEND()\n")
         self.write("test_answer.py", "def test_first(): assert True\ndef test_second(): assert True\n")
