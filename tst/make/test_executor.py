@@ -132,6 +132,46 @@ class ExecutorTest(MakeTest):
                 self.assertEqual(result.returncode, 0, result.stderr)
                 self.assertEqual(artifact.read_text(), value + "\n")
 
+    def mock_test_tool(self):
+        calls = self.work / "test-tool-calls.jsonl"
+        tool = self.work / "test-tool.py"
+        tool.write_text(
+            "import json, sys\nfrom pathlib import Path\n"
+            "def unpack(words):\n"
+            "    for word in words:\n"
+            "        if word.startswith('@') and Path(word[1:]).is_file():\n"
+            "            yield from unpack(Path(word[1:]).read_text().splitlines())\n"
+            "        else:\n"
+            "            yield word\n"
+            "args = list(unpack(sys.argv[2:]))\n"
+            f"with Path({str(calls)!r}).open('a') as output: output.write(json.dumps(args) + '\\n')\n"
+            "for i, arg in enumerate(args[:-1]):\n"
+            "    if arg in ('--meta', '--trace', '--trace-path', '--log-path', '--tar'):\n"
+            "        output = Path(args[i + 1]); output.parent.mkdir(parents=True, exist_ok=True)\n"
+            "        output.write_text('{}\\n')\n"
+            "    elif arg == '--out-path':\n"
+            "        Path(args[i + 1]).mkdir(parents=True, exist_ok=True)\n"
+        )
+        return calls, "test_tool=" + shlex.quote(sys.executable) + " " + shlex.quote(str(tool))
+
+    def test_native_executor_revalidates_resources_after_validation_restart(self):
+        self.write("value.txt", "local output\n")
+        calls, prefix = self.mock_test_tool()
+        python = self.work / "test-python.py"
+        python.write_text("import os, sys\nos.execv(sys.executable, [sys.executable, *sys.argv[2:]])\n")
+        python_prefix = "bin/python3=" + shlex.quote(sys.executable) + " " + shlex.quote(str(python))
+        for index, restart in enumerate(("first", "second"), 1):
+            with self.subTest(restart=restart):
+                self.write("ya.make", f"UNION(answer)\nVALIDATE_DATA_RESTART({restart})\nFROM_SANDBOX(FILE 123456789 OUT_NOAUTO unused.txt)\nCOPY_FILE(value.txt value.out)\nEXPLICIT_OUTPUTS(${{BINDIR}}/value.out)\nEND()\n")
+                result = self.execute("-t", "--cmd-prefix", prefix, "--cmd-prefix", python_prefix, ninja=False)
+                self.assertEqual(result.returncode, 0, result.stderr)
+                records = [json.loads(line) for line in calls.read_text().splitlines()]
+                validation = [args for args in records if args[0] == "run_test"]
+                self.assertEqual(len(validation), index)
+                self.assertIn("123456789", validation[-1])
+                self.assertEqual((self.install / PROJECT / "value.out").read_text(), "local output\n")
+        self.assertEqual(self.requests, ["/runtime.tar"])
+
     def test_malformed_cached_manifest_is_invalidated_and_rebuilt(self):
         artifact = self.copy_project()
         result = self.execute()
