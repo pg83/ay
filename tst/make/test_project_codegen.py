@@ -2,6 +2,24 @@ from tst.make.lib import MakeTest, PROJECT
 
 
 class ProjectCodegenTest(MakeTest):
+    def test_yt_record_declared_headers_reach_generated_compilation(self):
+        self.write("ya.make", f"LIBRARY()\nADDINCL({PROJECT})\nGENERATE_YT_RECORD(answer.yaml OUTPUT_INCLUDES dependency.h)\nEND()\n")
+        self.write("answer.yaml", "namespace: NE2E\ntypes: []\n")
+        self.write("dependency.h", "#pragma once\n")
+        graph = self.graph()
+        generated = self.node(graph, "answer.record.cpp")
+        args = [arg for command in generated["cmds"] for arg in command["cmd_args"]]
+        self.assertIn(["--output-include", "dependency.h"], [args[i:i + 2] for i in range(len(args) - 1)])
+        self.assertIn(f"$(S)/{PROJECT}/dependency.h", self.node(graph, "answer.record.cpp.o")["inputs"])
+
+    def test_yt_record_rejects_missing_inputs_and_unknown_sections(self):
+        self.write("answer.yaml", "namespace: NE2E\ntypes: []\n")
+        self.write("answer.cpp", "int answer() { return 42; }\n")
+        for args in ("", "answer.yaml INVALID dependency.h"):
+            with self.subTest(args=args):
+                self.write("ya.make", f"LIBRARY()\nSRCS(answer.cpp)\nGENERATE_YT_RECORD({args})\nEND()\n")
+                self.assertNotEqual(self.make().returncode, 0)
+
     def test_nlg_can_generate_empty_cpp_bodies(self):
         self.write("ya.make", "LIBRARY()\nSET(COMPILE_NLG_EMPTY_CPP yes)\nCOMPILE_NLG(answer.nlg NLG_CONFIG config.json TRANSLATIONS_JSON translations.json)\nEND()\n")
         self.write("answer.nlg", "{% macro answer() %}42{% endmacro %}\n")
