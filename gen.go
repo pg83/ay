@@ -190,7 +190,6 @@ func protoResultWholeArchiveCmdPaths(res *ProtoSrcsResult) []VFS {
 
 type GenCtx struct {
 	scanData            ModuleData
-	scanDataBusy        bool
 	dirs                map[dirEvaluationKey]*DirEvaluation
 	dependencyInstances map[string][]ModuleInstance
 	dependencyBuilds    map[string][]TestBuildDependency
@@ -594,14 +593,7 @@ func (ctx *GenCtx) scanModuleConfiguration(instance ModuleInstance) (*ModuleStmt
 	env := buildIfEnvInto(&ctx.ifEnvScratch, instance)
 	d := &ctx.scanData
 
-	if ctx.scanDataBusy {
-		d = &ModuleData{}
-	} else {
-		d.reset()
-		ctx.scanDataBusy = true
-
-		defer func() { ctx.scanDataBusy = false }()
-	}
+	d.reset()
 
 	apply := func(stmt Stmt) {
 		collectStmts(ctx, dir, instance.Kind, instance.Language, []Stmt{stmt}, env, d, ctx.onWarn, instance.Platform)
