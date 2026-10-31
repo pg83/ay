@@ -55,10 +55,6 @@ func (e *EmitContext) resolveBundleSource(target string) (VFS, NodeRef, bool) {
 		return *res.LDPath, res.LDRef, true
 	}
 
-	if res.ARPath != nil {
-		return *res.ARPath, res.ARRef, true
-	}
-
 	return 0, 0, false
 }
 
