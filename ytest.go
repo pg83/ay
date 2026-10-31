@@ -607,7 +607,7 @@ func (ctx *GenCtx) testAccumulator(s *TestSuite, chunks []*Node, refs []NodeRef,
 
 	return &Node{
 		Platform: testNoPlatform,
-		Cmds:     na.cmdList(Cmd{CmdArgs: na.chunkList(na.anyList(testArgs(strs)...)), Cwd: bld}),
+		Cmds:     na.cmdList(Cmd{CmdArgs: na.chunkList(na.anyList(testArgs(strs)...)), Cwd: bld.cwd()}),
 		Env:      sortedEnvVars(o.commonEnvMap()), Inputs: na.inputList(na.vfsList(slices.Compact(inputs)...)), KV: &KV{P: pkTA, PC: pcLightCyan, ShowOutBool: true},
 		Outputs: na.vfsList(append(outs, intern(log))...),
 		DepRefs: na.refList(dedupRefs(refs)...),
@@ -784,7 +784,7 @@ func (ctx *GenCtx) testNode(s *TestSuite, chunk TestChunk) *Node {
 		cmds = append(cmds, Cmd{CmdArgs: na.chunkList(na.anyList(p...))})
 	}
 
-	cmds = append(cmds, Cmd{CmdArgs: na.chunkList(na.anyList(head...)), Cwd: bld})
+	cmds = append(cmds, Cmd{CmdArgs: na.chunkList(na.anyList(head...)), Cwd: bld.cwd()})
 
 	inputs := append(append(append([]VFS{}, s.runInputs...), s.checkFiles...), s.prepareInputs...)
 	inputNames := s.inputNames
@@ -1139,5 +1139,5 @@ func (ctx *GenCtx) testMerger(s *TestSuite, nodes []*Node, refs []NodeRef) *Node
 
 	slices.SortFunc(inputs, vfsCompare)
 
-	return &Node{Platform: testNoPlatform, Env: sortedEnvVars(o.commonEnvMap()), Cmds: na.cmdList(Cmd{CmdArgs: na.chunkList(testArgs(strs)), Cwd: bld}), Inputs: na.inputList(na.vfsList(slices.Compact(inputs)...)), Outputs: na.vfsList(outs...), DepRefs: na.refList(dedupRefs(refs)...), KV: &KV{P: pkTR, PC: pcLightCyan, ShowOutBool: true}}
+	return &Node{Platform: testNoPlatform, Env: sortedEnvVars(o.commonEnvMap()), Cmds: na.cmdList(Cmd{CmdArgs: na.chunkList(testArgs(strs)), Cwd: bld.cwd()}), Inputs: na.inputList(na.vfsList(slices.Compact(inputs)...)), Outputs: na.vfsList(outs...), DepRefs: na.refList(dedupRefs(refs)...), KV: &KV{P: pkTR, PC: pcLightCyan, ShowOutBool: true}}
 }

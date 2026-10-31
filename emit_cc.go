@@ -51,9 +51,6 @@ type ModuleCompileEnv struct {
 	OwnCXXFlagsGlobal    []ANY
 	OwnCOnlyFlagsGlobal  []ANY
 	SFlags               []ANY
-	DefaultVars          map[STR]STR
-	DefaultVarOrder      []STR
-	SetVars              map[STR]STR
 	ObjSuf               STR
 	ObjectSuffixStem     *string
 	NoOptimize           bool
@@ -650,7 +647,7 @@ func coreCxxFlags(p *Platform) []ANY {
 }
 
 func appendCompileFlagPipeline(cmdArgs []ANY, bundle CompileFlagBundle, warningBundle, defineBundle, preNoLibcExtras, moduleScopeCFlags, catboost []ANY) []ANY {
-	return appendAnyLists(cmdArgs, debugPrefixMapFlags, xclangDebugCompilationDir, bundle.CFlags, warningBundle, defineBundle, preNoLibcExtras, bundle.NoLibcBlock, catboost, moduleScopeCFlags, bundle.NoLibcBlock)
+	return appendAnyLists(cmdArgs, bundle.DebugInfo, bundle.CFlags, warningBundle, defineBundle, preNoLibcExtras, bundle.NoLibcBlock, catboost, moduleScopeCFlags, bundle.NoLibcBlock)
 }
 
 type CcModuleArgBlocks struct {
@@ -772,9 +769,8 @@ func composeCCCommandArgBlocks(na *NodeArenas, p *Platform, in *ModuleCompileEnv
 		nf += 2
 	}
 
-	for _, part := range [10][]ANY{
-		debugPrefixMapFlags,
-		xclangDebugCompilationDir,
+	for _, part := range [9][]ANY{
+		p.CLDebugInfo,
 		cflagsStr,
 		warnC,
 		p.Defines,

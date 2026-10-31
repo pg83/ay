@@ -79,7 +79,7 @@ func (e *EmitContext) emitDocsProtoSubmodule() *ModuleEmitResult {
 		inputs := view.bucketList()
 
 		ref := e.emitNode(NodeSpec{Node: Node{Platform: instance.Platform,
-			Cmds: na.cmdList(Cmd{CmdArgs: na.chunkList(na.anyList(args...)), Cwd: srcRootDirVFS, Env: envVarsVCS}),
+			Cmds: na.cmdList(Cmd{CmdArgs: na.chunkList(na.anyList(args...)), Cwd: srcRootDirVFS.cwd(), Env: envVarsVCS}),
 			Env:  envVarsVCS, Inputs: na.rootInputList(na.vfsList(src, wrapper, template, protoc, docTool), inputs...), Outputs: na.vfsList(out), KV: &protoDocsKV, ForeignDepRefs: na.refList(protocRef, docRef), Resources: usesPython3}, input: InputSpec{roots: na.inputList(na.vfsList(src, wrapper, template), inputs...)},
 		})
 

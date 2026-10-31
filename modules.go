@@ -344,7 +344,6 @@ type ModuleData struct {
 	hasFbs                  bool
 	hasFbs64                bool
 	defaultVars             map[STR]STR
-	defaultVarOrder         []STR
 	configureFiles          []*ConfigureFileStmt
 	createBuildInfoFor      *ANY
 	antlr4Grammars          []Antlr4GrammarInfo
@@ -1930,7 +1929,6 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 
 			if _, exists := d.defaultVars[internStr(v.VarName)]; !exists {
 				d.defaultVars[internStr(v.VarName)] = internStr(value)
-				d.defaultVarOrder = append(d.defaultVarOrder, internStr(v.VarName))
 			}
 
 			env.setDefaultString(v.NameEnv, value)
@@ -5964,12 +5962,4 @@ func (v *SetVars) append(k STR, chunk string) {
 	}
 
 	v.appends[k] = append(v.appends[k], chunk)
-}
-
-func (v *SetVars) settled() map[STR]STR {
-	for k := range v.appends {
-		v.get(k)
-	}
-
-	return v.vals
 }

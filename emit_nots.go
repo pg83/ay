@@ -770,7 +770,7 @@ func (e *EmitContext) emitNotsBuild() *ModuleEmitResult {
 
 	head, globals, resourceNames, toolRef, hasDeps := state.Head, state.Globals, state.ResourceNames, state.ToolRef, state.HasDependencies
 	autotar := buildScriptsAutotarGendirsPy
-	cmds := []Cmd{{CmdArgs: na.chunkList(na.anyList(wrapccPython3STR.any(), autotar.any(), strUnpack.any(), strExt.any(), strGentar.any())), Env: envVarsVCS, Cwd: build(dir)}}
+	cmds := []Cmd{{CmdArgs: na.chunkList(na.anyList(wrapccPython3STR.any(), autotar.any(), strUnpack.any(), strExt.any(), strGentar.any())), Env: envVarsVCS, Cwd: build(dir).cwd()}}
 	inputs := append([]VFS{autotar, state.ToolPath}, prepOutputs...)
 
 	inputs = append(inputs, peerInputs...)

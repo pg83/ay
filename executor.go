@@ -507,7 +507,7 @@ func (ex *Executor) runNode(n *Node, srcMount, bldMount string) CommandResult {
 		dir := bldMount
 
 		if c.Cwd != 0 {
-			dir = mountANY(c.Cwd.any(), srcMount, bldMount)
+			dir = mountANY(c.Cwd, srcMount, bldMount)
 		}
 
 		env := os.Environ()

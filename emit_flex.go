@@ -39,7 +39,8 @@ func (e *EmitContext) emitLibraryFlexSource(meta SrcMeta) {
 	meta.Source = outVFS.any()
 	e.enqueueSrc(meta)
 
-	lexFlags := na.anyList(internAnys(splitShellWords(Environment{s: &e.frame.ifEnv}.string(envLEX_FLAGS)))...)
+	env := Environment{s: &e.frame.ifEnv}
+	lexFlags := na.anyList(configuredCompilerFlags(env.string(envLEX_FLAGS), env)...)
 
 	pe := func() {
 		e.emitFlexLX(toolArgs, toolBins, toolRefs, lexFlags, srcVFS, outVFS, lxRef)

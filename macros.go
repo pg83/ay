@@ -34,7 +34,7 @@ func evalCondAt(nodes []CondNode, i int32, env Environment) bool {
 
 	switch n.Kind {
 	case ckIdent:
-		return env.bool(n.Env)
+		return !commandOnlyVar(n.Env) && env.bool(n.Env)
 	case ckConfIdent:
 		return env.string(n.Env) != ""
 	case ckNot:
@@ -74,11 +74,19 @@ func evalCondAt(nodes []CondNode, i int32, env Environment) bool {
 	panic(exceptionf("macros: bare integer %d cannot be evaluated as a boolean condition", n.Ival))
 }
 
+func commandOnlyVar(id ENV) bool {
+	return id == envCURDIR || id == envBINDIR
+}
+
 func evalIfAtomString(nodes []CondNode, i int32, env Environment) string {
 	n := &nodes[i]
 
 	switch n.Kind {
 	case ckIdent:
+		if commandOnlyVar(n.Env) {
+			return ""
+		}
+
 		return env.string(n.Env)
 	case ckString:
 		return evalIfExpr(n.Name, env)

@@ -327,7 +327,7 @@ func (ctx *GenCtx) foreignToolRef(target *ModuleEmitResult) NodeRef {
 	tool.boundRef = ctx.emit.emitNode(NodeSpec{Node: Node{Platform: ctx.host,
 		Cmds: ctx.na.cmdList(Cmd{
 			CmdArgs: ctx.na.chunkList(ctx.na.anyList(strBinMv.any(), from.any(), to.any())),
-			Cwd:     bldRootDirVFS,
+			Cwd:     bldRootDirVFS.cwd(),
 		}), Inputs: ctx.na.inputList(ctx.na.vfsList(from)), Outputs: ctx.na.vfsList(to),
 		DepRefs: ctx.na.refList(tool.host.LDRef),
 		KV:      &KV{P: pkCP, PC: pcLightBlue}},

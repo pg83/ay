@@ -73,18 +73,6 @@ func stringIsTruthy(v string) bool {
 	return true
 }
 
-func trimSurroundingQuotes(v string) string {
-	if len(v) >= 4 && strings.HasPrefix(v, `\"`) && strings.HasSuffix(v, `\"`) {
-		return v[2 : len(v)-2]
-	}
-
-	if len(v) >= 2 && strings.HasPrefix(v, `"`) && strings.HasSuffix(v, `"`) {
-		return v[1 : len(v)-1]
-	}
-
-	return v
-}
-
 func containsRegexMeta(s string) bool {
 	const meta = `\.+*?[]{}()|^$`
 

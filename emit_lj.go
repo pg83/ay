@@ -45,7 +45,7 @@ func (e *EmitContext) emitLJReserved(luaSrc, rawOut, compilerBin VFS, compilerLD
 	node := NodeSpec{Node: Node{Platform: e.instance.Platform,
 		Cmds: na.cmdList(Cmd{
 			CmdArgs: na.chunkList(na.anyList(args...)),
-			Cwd:     cwd,
+			Cwd:     cwd.cwd(),
 			Env:     env,
 		}),
 		Env: env, Inputs: na.inputList(na.vfsList(compilerBin), na.vfsList(luaSrc)), KV: &ljKV,

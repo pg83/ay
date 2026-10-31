@@ -693,7 +693,7 @@ func (e *EmitContext) emitPR(spec RunProgramNodeSpec, id NodeRef) {
 	}
 
 	if stmt.CWD != nil {
-		cmd.Cwd = cwdVFS(expandToken((*stmt.CWD).string(), dirs, tokenExpandFinal))
+		cmd.Cwd = cwdANY(expandToken((*stmt.CWD).string(), dirs, tokenExpandFinal))
 	}
 
 	kv := stmt.KV

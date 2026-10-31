@@ -158,7 +158,7 @@ func (e *EmitContext) emitGoProtoCmd(protoRel string, goOpts *string, plugins []
 	na.inputs.commit(len(inputs))
 
 	ref := e.emitNode(NodeSpec{Node: Node{Platform: instance.Platform,
-		Cmds: na.cmdList(Cmd{CmdArgs: cmd, Cwd: cwd, Env: env}),
+		Cmds: na.cmdList(Cmd{CmdArgs: cmd, Cwd: cwd.cwd(), Env: env}),
 		Env:  env, Inputs: InputChunks(inputs[:len(inputs):len(inputs)]), Outputs: na.vfsList(outs...),
 		KV:             &pbKV,
 		ForeignDepRefs: na.noderefs.list(tools...),

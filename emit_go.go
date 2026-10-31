@@ -133,14 +133,14 @@ type GoStd struct {
 	HeadDll        []ANY
 }
 
-func confGoStdVersion(fs FS) string {
+func confGoStdVersion(fs FS, parsers *IncludeParserManager) string {
 	if !fs.isFile(srcRootRel, goConfRel) {
 		return ""
 	}
 
-	for _, line := range strings.Split(string(concatChunks(fs.read(goConfRel))), "\n") {
-		if v, ok := strings.CutPrefix(line, "GOSTD_VERSION="); ok {
-			return strings.TrimSpace(v)
+	for _, stmt := range parsers.confFile(goConfRel).stmts {
+		if stmt.name == envGOSTD_VERSION && stmt.branch == 0 && stmt.op == confSet {
+			return stmt.value
 		}
 	}
 
@@ -1350,7 +1350,7 @@ func (e *EmitContext) emitGoExe(resolved []ResolvedPeer, objRefs []NodeRef, objO
 	var linkSbomCmd, sbomObjcopyCmd Cmd
 
 	if sbomEmbed {
-		linkSbomCmd = Cmd{CmdArgs: na.chunkList(composeLDCmdLinkSbom(na, d.tc, strGo, instance.Path.rel(), sbomJSON, peerSbomPaths)), Cwd: bldRootDirVFS, Env: goVcsEnv}
+		linkSbomCmd = Cmd{CmdArgs: na.chunkList(composeLDCmdLinkSbom(na, d.tc, strGo, instance.Path.rel(), sbomJSON, peerSbomPaths)), Cwd: bldRootDirVFS.cwd(), Env: goVcsEnv}
 		sbomObjcopyCmd = Cmd{CmdArgs: na.chunkList(composeLDCmdSbomObjcopy(na, d.tc, sbomJSON, outPath)), Env: goVcsEnv}
 	}
 

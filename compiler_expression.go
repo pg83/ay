@@ -27,6 +27,12 @@ func compilerFlagExpression(text string, env Environment, expanding []string) ([
 	})
 }
 
+func configuredCompilerFlags(text string, env Environment) []ANY {
+	args, _ := compilerFlagExpression(text, env, nil)
+
+	return internAnys(args)
+}
+
 func commandArgumentExpression(text string, resolve func(string, bool) ([]string, string)) (args []string, identity string) {
 	scratch := commandExpressionPool.Get().(*commandExpressionScratch)
 
@@ -157,11 +163,21 @@ func commandArgumentExpression(text string, resolve func(string, bool) ([]string
 					if !literal && name == "input" && i < len(text) && text[i] == ':' {
 						i++
 
+						if i < len(text) && text[i] == '"' {
+							for i++; i < len(text) && text[i] != '"'; i++ {
+								if text[i] == '\\' {
+									i++
+								}
+							}
+
+							i++
+						}
+
 						for i < len(text) && text[i] != '}' {
 							i++
 						}
 
-						name = text[nameStart:i]
+						name = text[nameStart:min(i, len(text))]
 					}
 
 					if i == len(text) || text[i] != '}' {
@@ -208,11 +224,15 @@ func commandArgumentExpression(text string, resolve func(string, bool) ([]string
 
 				scratch.word = append(scratch.word, '$')
 			}
-		} else {
-			if quote == 0 && ch == '&' {
+		} else if quote == 0 && ch == '&' {
+			if i+1 == len(text) {
 				throwFmt("could not parse compiler command: command separator in compiler arguments %q", text)
 			}
 
+			_, next := utf8.DecodeRuneInString(text[i+1:])
+
+			i += 1 + next
+		} else {
 			scratch.word = append(scratch.word, text[i:i+width]...)
 			i += width
 		}
@@ -256,7 +276,7 @@ func appendCompilerFlagLiteral(value []byte, text string, quoted bool) []byte {
 			i++
 
 			if i == len(text) {
-				throwFmt("could not parse compiler command: incomplete escape sequence in %q", text)
+				break
 			}
 
 			ch := text[i]

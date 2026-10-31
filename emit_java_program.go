@@ -393,14 +393,6 @@ func (ctx *GenCtx) javaArgVFS(jm *JavaModule, p string) VFS {
 	return ctx.programInputVFS(jm.instance, jm.data.srcDirs, p)
 }
 
-func javaProgramArgVFS(dir, p string) VFS {
-	if strings.HasPrefix(p, "$(B)") || strings.HasPrefix(p, "$(S)") {
-		return cwdVFS(path.Clean(p))
-	}
-
-	return source(path.Clean(dir + "/" + p))
-}
-
 func (ctx *GenCtx) javaTool(dir string) *JavaModule {
 	name := ctx.moduleName(dir)
 
@@ -413,6 +405,35 @@ func (ctx *GenCtx) javaTool(dir string) *JavaModule {
 	}
 
 	return nil
+}
+
+func dropUnknownConfRefs(arg string) string {
+	if !strings.Contains(arg, "$") {
+		return arg
+	}
+
+	var out strings.Builder
+
+	from := 0
+
+	for {
+		start, end, _ := nextConfReference(arg, from, false)
+
+		if start == end {
+			break
+		}
+
+		out.WriteString(arg[from:start])
+		from = end
+	}
+
+	if from == 0 {
+		return arg
+	}
+
+	out.WriteString(arg[from:])
+
+	return out.String()
 }
 
 func (ctx *GenCtx) javaJarTool(dir string) *JavaModule {
@@ -536,19 +557,23 @@ func (ctx *GenCtx) emitJavaRunProgram(dir string, platform *Platform, jdk string
 		case ins[a]:
 			run = append(run, input(a).any())
 		default:
+			if a = dropUnknownConfRefs(a); a == "" {
+				continue
+			}
+
 			argument, _ := replaceAuxToolArg(internStr(a).any(), toolTokens)
 
 			run = append(run, argument)
 		}
 	}
 
-	cwd := bldRootDirVFS
+	cwd := bldRootDirVFS.any()
 
 	if r.cwd != "" {
-		cwd = javaProgramArgVFS(dir, r.cwd)
+		cwd = cwdANY(r.cwd)
 	}
 
-	b.cmd(run, cwd)
+	b.cmdIn(run, cwd)
 
 	tar := b.python("build/scripts/autotar_gendirs.py")
 

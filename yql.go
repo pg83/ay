@@ -2,13 +2,18 @@ package main
 
 import (
 	"path"
+	"slices"
 	"strings"
 )
 
-func confYqlStableABI(fs FS) bool {
+func confYqlStableABI(fs FS, parsers *IncludeParserManager) bool {
 	const conf = "build/conf/project_specific/yql_udf.conf"
 
-	return fs.isFile(srcRootRel, conf) && strings.Contains(string(concatChunks(fs.read(conf))), "macro YQL_STABLE_ABI_VERSION(")
+	if !fs.isFile(srcRootRel, conf) {
+		return false
+	}
+
+	return slices.Contains(parsers.confFile(conf).declared, strYqlStableAbiVersion)
 }
 
 func setupYqlModule(d *ModuleData, name TOK, env Environment) {

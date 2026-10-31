@@ -177,10 +177,10 @@ func (e *EmitContext) emitLD(
 	cmds = append(cmds, Cmd{CmdArgs: na.chunkList(cmd0), Env: envVcsOnly}, Cmd{CmdArgs: na.chunkList(cmd1), Env: envFull, Resources: resourceKeyUnion(vcsResources, peerCompilerResourceKeys(e.d.cc.CFlagValues, len(e.d.cFlagsGlobal) > 0), peerCompilerResourceKeys(e.d.cc.COnlyFlagValues, len(e.d.cOnlyFlagsGlobal) > 0))})
 
 	if sbomEmbed {
-		cmds = append(cmds, Cmd{CmdArgs: na.chunkList(cmdLinkSbom), Cwd: bldRootDirVFS, Env: envVcsOnly})
+		cmds = append(cmds, Cmd{CmdArgs: na.chunkList(cmdLinkSbom), Cwd: bldRootDirVFS.cwd(), Env: envVcsOnly})
 	}
 
-	cmds = append(cmds, Cmd{CmdArgs: na.chunkList(cmd2), Cwd: bldRootDirVFS, Env: envFull, Resources: resourceKeyUnion(peerLDValue.Resources, ownLDValue.Resources, localLDValue.Resources)})
+	cmds = append(cmds, Cmd{CmdArgs: na.chunkList(cmd2), Cwd: bldRootDirVFS.cwd(), Env: envFull, Resources: resourceKeyUnion(peerLDValue.Resources, ownLDValue.Resources, localLDValue.Resources)})
 
 	if emitCopy {
 		cmds = append(cmds, Cmd{CmdArgs: na.chunkList(cmd3), Env: envVcsOnly})

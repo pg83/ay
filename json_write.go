@@ -227,7 +227,12 @@ func appendCmdSlice(buf []byte, cmds []Cmd) []byte {
 
 		if c.Cwd != 0 {
 			buf = append(buf, `,"cwd":`...)
-			buf = appendVFS(buf, c.Cwd)
+
+			if v := c.Cwd.vfs(); v != 0 {
+				buf = appendVFS(buf, v)
+			} else {
+				buf = appendString(buf, c.Cwd.str().string())
+			}
 		}
 
 		if len(c.Env) > 0 {

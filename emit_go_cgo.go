@@ -372,7 +372,7 @@ func (e *EmitContext) emitGoCgo1Stmt() {
 			inclArgs,
 			cflagsStr,
 			srcsBlock,
-		), Env: env, Cwd: srcRootDirVFS}),
+		), Env: env, Cwd: srcRootDirVFS.cwd()}),
 		Env: env, Inputs: na.rootInputList(inputs[:ni:ni]), KV: &goToolKV,
 		Outputs:   outputs[:no:no],
 		Resources: goToolResources(na, e.peers.ResourceGlobals)},

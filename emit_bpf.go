@@ -42,7 +42,7 @@ func (e *EmitContext) bpfCompileNode(stmt LlvmCompileStmt, out VFS) NodeSpec {
 
 		commands = na.cmdList(commands[0], Cmd{
 			CmdArgs: na.chunkList(na.anyList(internV(linker, binary).any(), argR.any(), argB2.any(), argBinary2.any(), argM.any(), argElfX8664.any(), argDashO.any(), object.any(), internStr(path.Base(stmt.Output)).any())),
-			Cwd:     build(e.instance.Path.relString()), Env: env,
+			Cwd:     build(e.instance.Path.relString()).cwd(), Env: env,
 		})
 
 		outputs = na.vfsList(out, object)

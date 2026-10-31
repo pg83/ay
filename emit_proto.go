@@ -900,7 +900,7 @@ func (e *EmitContext) emitPB(
 
 	node := NodeSpec{Node: Node{Platform: instance.Platform,
 		Cmds: na.cmdList(Cmd{CmdArgs: cmdArgs,
-			Cwd: protocCwd,
+			Cwd: protocCwd.cwd(),
 			Env: env}),
 		Env: env, Inputs: pbInputChunks, Outputs: outputs,
 		KV:             spec.kv,

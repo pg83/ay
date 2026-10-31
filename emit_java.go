@@ -42,6 +42,10 @@ func (b *javaNodeBuilder) useResource(name string) {
 }
 
 func (b *javaNodeBuilder) cmd(args []ANY, cwd VFS, extra ...EnvVar) {
+	b.cmdIn(args, cwd.cwd(), extra...)
+}
+
+func (b *javaNodeBuilder) cmdIn(args []ANY, cwd ANY, extra ...EnvVar) {
 	env := envVarsVCS[:len(envVarsVCS):len(envVarsVCS)]
 
 	if len(extra) > 0 {

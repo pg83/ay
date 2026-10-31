@@ -1,6 +1,9 @@
 package main
 
-import "strings"
+import (
+	"slices"
+	"strings"
+)
 
 var cxxStandardFlagChunk = []ANY{cxxStandardFlag.any()}
 
@@ -175,6 +178,15 @@ type CompileFlagBundle struct {
 	CFlags      []ANY
 	Defines     []ANY
 	NoLibcBlock []ANY
+	DebugInfo   []ANY
+}
+
+func clDebugInfoFlags(flags map[string]string) []ANY {
+	if !slices.Contains(splitShellWords(flags["_C_FLAGS"]), "$CL_DEBUG_INFO") {
+		return nil
+	}
+
+	return concat(debugPrefixMapFlags, xclangDebugCompilationDir)
 }
 
 func composeCompileCFlags(env Environment, flags map[string]string, debugInfo []ANY) []ANY {
@@ -203,8 +215,12 @@ func expandCompilerConfFlags(env Environment, value string) []ANY {
 		case "$FSTACK":
 			out = append(out, argFstackProtector.any())
 		default:
-			if strings.HasPrefix(w, "$") {
-				throwFmt("ymake conf: compiler flag %s is not modelled", w)
+			if strings.Contains(w, "$") {
+				args, _ := compilerFlagExpression(w, env, nil)
+
+				out = append(out, internAnys(args)...)
+
+				continue
 			}
 
 			out = append(out, internAny(w))
@@ -234,18 +250,21 @@ func compileFlagBundleFor(p *Platform) CompileFlagBundle {
 			CFlags:      p.CompileCFlags,
 			Defines:     commonDefines,
 			NoLibcBlock: p.NoLibcBlock,
+			DebugInfo:   p.CLDebugInfo,
 		}
 	case ISAX8664:
 		return CompileFlagBundle{
 			CFlags:      p.CompileCFlags,
 			Defines:     hostDefines,
 			NoLibcBlock: p.NoLibcBlock,
+			DebugInfo:   p.CLDebugInfo,
 		}
 	case ISAAArch64, ISAArm64:
 		bundle := CompileFlagBundle{
 			CFlags:      p.CompileCFlags,
 			Defines:     commonDefines,
 			NoLibcBlock: p.NoLibcBlock,
+			DebugInfo:   p.CLDebugInfo,
 		}
 
 		bundle.ArchArgs = p.MarchArgs

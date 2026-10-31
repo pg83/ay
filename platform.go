@@ -20,7 +20,7 @@ type PlatformConf struct {
 }
 
 func readPlatformConf(fs FS, parsers *IncludeParserManager) PlatformConf {
-	return PlatformConf{GoStdVersion: confGoStdVersion(fs), Linker: readLinkerConf(parsers), Parsers: parsers, YqlStableABI: confYqlStableABI(fs), ProtoHeaderEpilogue: confProtoHeaderEpilogue(fs)}
+	return PlatformConf{GoStdVersion: confGoStdVersion(fs, parsers), Linker: readLinkerConf(parsers), Parsers: parsers, YqlStableABI: confYqlStableABI(fs, parsers), ProtoHeaderEpilogue: confProtoHeaderEpilogue(fs)}
 }
 
 func confProtoHeaderEpilogue(fs FS) bool {
@@ -78,6 +78,7 @@ type Platform struct {
 	ifEnv                 Environment
 	Defines               []ANY
 	NoLibcBlock           []ANY
+	CLDebugInfo           []ANY
 	Go                    *GoStd
 }
 
@@ -163,8 +164,6 @@ func newPlatform(os OS, isa ISA, buildType string, tc *Toolchain, flags map[stri
 		Ragel6Flags:           internAnys(splitShellWords(flags["RAGEL6_FLAGS"])),
 		Triple:                string(isa) + "-" + string(os) + "-gnu",
 		March:                 marchFor(isa),
-		CFlags:                internAnys(splitShellWords(cflagsEnv)),
-		CXXFlags:              internAnys(splitShellWords(cxxflagsEnv)),
 		LinkPreludeExtra:      internAnys(linkPreludeExtra),
 		ClangVer:              clangVer,
 		ClangVerSTR:           internStr(clangVer),
@@ -235,8 +234,11 @@ func newPlatform(os OS, isa ISA, buildType string, tc *Toolchain, flags map[stri
 	p.peerPolicies = pc.Parsers.peerPolicies(p.ifEnv.expand(p.ifEnv.string(envPeerdirsRulesPath)))
 	p.BuildTypeUpperSTR = internStr(p.ifEnv.string(envBUILD_TYPE))
 	p.DebugInfoFlags = debugInfoFlags(p.ifEnv, flags)
+	p.CLDebugInfo = clDebugInfoFlags(flags)
 	p.CompileCFlags = composeCompileCFlags(p.ifEnv, flags, p.DebugInfoFlags)
 	p.NoLibcBlock = noLibcBlock(p)
+	p.CFlags = configuredCompilerFlags(cflagsEnv, p.ifEnv)
+	p.CXXFlags = configuredCompilerFlags(cxxflagsEnv, p.ifEnv)
 
 	if p.ifEnv.bool(envARCH_I386) && !p.ifEnv.bool(envARCH_I686) {
 		p.CFlags = append([]ANY{argMarchPentiumpro.any(), argMtunePentiumpro.any()}, p.CFlags...)
@@ -482,4 +484,5 @@ func registerPlatformOwned(p *Platform) {
 	registerOwnedSlice(p.SysrootArgs)
 	registerOwnedSlice(p.Defines)
 	registerOwnedSlice(p.NoLibcBlock)
+	registerOwnedSlice(p.CLDebugInfo)
 }

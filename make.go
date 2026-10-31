@@ -214,11 +214,11 @@ func makePlatforms(fs FS, mf *MakeFlags, parsers *IncludeParserManager, rootYaCo
 	hostPlatformFlags := map[string]string{}
 	targetOptFlags := map[string]string{}
 
-	copyStatsFlags(hostPlatformFlags, rootHostYaFlags)
 	copyStatsFlags(hostPlatformFlags, hostInternalYaFlags)
+	copyStatsFlags(hostPlatformFlags, rootHostYaFlags)
 	copyStatsFlags(hostPlatformFlags, mf.hflags)
-	copyStatsFlags(targetOptFlags, rootTargetYaFlags)
 	copyStatsFlags(targetOptFlags, targetInternalYaFlags)
+	copyStatsFlags(targetOptFlags, rootTargetYaFlags)
 	copyStatsFlags(targetOptFlags, mf.dflags)
 
 	disableFlake8Migrations := rootYaConf["disable_flake8_migrations"] != false

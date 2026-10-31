@@ -67,7 +67,7 @@ func (e *EmitContext) emitGoFlatcSource(meta SrcMeta) {
 
 	node := NodeSpec{Node: Node{Platform: instance.Platform, Env: envVarsVCS,
 		Cmds: na.cmdList(
-			Cmd{CmdArgs: na.chunkList(head, d.flatcFlags, flatcIOLeadArgs[:len(flatcIOLeadArgs)-1], e.peers.FlatcIncludeArgs, tail), Cwd: bldRootDirVFS, Env: envVarsVCS},
+			Cmd{CmdArgs: na.chunkList(head, d.flatcFlags, flatcIOLeadArgs[:len(flatcIOLeadArgs)-1], e.peers.FlatcIncludeArgs, tail), Cwd: bldRootDirVFS.cwd(), Env: envVarsVCS},
 			Cmd{CmdArgs: na.chunkList(post, e.peers.FbsNamespaces), Env: envVarsVCS},
 			Cmd{CmdArgs: na.chunkList(tar), Env: envVarsVCS},
 		), Inputs: na.rootInputList(na.vfsList(tool, src, postprocess, tarSources), ctx.scripts[postprocess.rel()], ctx.scripts[tarSources.rel()]), KV: &goFlatcKV, KVExts: []KVExt{{Key: "tared_kind", Val: "nodir"}},

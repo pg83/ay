@@ -484,7 +484,7 @@ func (e *EmitContext) emitPYRun(
 	}
 
 	if stmt.CWD != nil {
-		cmd.Cwd = cwdVFS((*stmt.CWD).string())
+		cmd.Cwd = cwdANY((*stmt.CWD).string())
 	}
 
 	node := NodeSpec{Node: Node{Platform: e.instance.Platform,

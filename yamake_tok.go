@@ -138,7 +138,7 @@ var tokName = [...]STR{
 	tokTsProtoPackageName:          internStr("TS_PROTO_PACKAGE_NAME"),
 	tokStyleCppUserSessions:        internStr("STYLE_CPP_USER_SESSIONS"),
 	tokSetCustomClangTidy:          internStr("SET_CUSTOM_CLANG_TIDY"),
-	tokYqlStableAbiVersion:         internStr("YQL_STABLE_ABI_VERSION"),
+	tokYqlStableAbiVersion:         strYqlStableAbiVersion,
 	tokYqlCurrentAbiVersion:        internStr("YQL_CURRENT_ABI_VERSION"),
 	tokYqlPrebuiltProgram:          internStr("YQL_PREBUILT_PROGRAM"),
 	tokYqlLibrary:                  internStr("YQL_LIBRARY"),

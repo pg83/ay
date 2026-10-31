@@ -1,7 +1,8 @@
 package main
 
 import (
-	"sort"
+	"bytes"
+	"slices"
 	"strings"
 )
 
@@ -9,7 +10,14 @@ var cfKV = KV{P: pkCF, PC: pcYellow}
 
 func (e *EmitContext) emitExplicitCF(cf *ConfigureFileStmt) {
 	ctx, instance := e.ctx, e.instance
-	srcVFS := e.requireProducedInput("CONFIGURE_FILE src", cf.Src, copyFileInputVFS(ctx.fs, instance.Path, cf.Src))
+	srcVFS := copyFileInputVFS(ctx.fs, instance.Path, cf.Src)
+
+	if candidate := moduleInputCandidateVFS(instance.Path.relString(), cf.Src); srcVFS.isSource() && !ctx.fs.isFileVFS(srcVFS) && e.codegen.lookup(candidate) != nil {
+		srcVFS = candidate
+	}
+
+	srcVFS = e.requireProducedInput("CONFIGURE_FILE src", cf.Src, srcVFS)
+
 	outVFS := copyFileOutputVFS(instance.Path.relString(), cf.Dst)
 
 	e.emitConfigureFile(srcVFS, outVFS)
@@ -45,7 +53,7 @@ func (e *EmitContext) emitConfigureFile(srcVFS, outVFS VFS) NodeRef {
 	var cfgVars []string
 
 	if srcVFS.isSource() {
-		cfgVars = buildCFGVars(ctx.fs, srcVFS.relString(), d.cc.SetVars, d.cc.DefaultVars, instance.Platform.BuildTypeUpperSTR.string())
+		cfgVars = buildCFGVars(ctx.fs, srcVFS.relString(), Environment{s: &e.frame.ifEnv})
 	}
 
 	python3 := d.cc.TC.Python3
@@ -87,45 +95,74 @@ func (e *EmitContext) emitConfigureFile(srcVFS, outVFS VFS) NodeRef {
 	return cfRef
 }
 
-func buildCFGVars(fs FS, rel string, setVars, defaultVars map[STR]STR, buildTypeUpper string) []string {
-	referenced := map[string]bool{}
-	data := concatChunks(fs.read(rel))
+func buildCFGVars(fs FS, rel string, env Environment) []string {
+	names := cfgVarNames(concatChunks(fs.read(rel)))
+	vars := make([]string, len(names))
 
-	for _, next := range [...]func([]byte, int) (int, int, int, bool){cfgVarRefNext, cfgCmakeDefineNext} {
-		for pos := 0; ; {
-			ns, ne, end, ok := next(data, pos)
-
-			if !ok {
-				break
-			}
-
-			referenced[string(data[ns:ne])] = true
-			pos = end
-		}
+	for i, name := range names {
+		vars[i] = name + "=" + cfgVarValue(env, name)
 	}
-
-	var vars []string
-
-	for name := range referenced {
-		k := internStr(name)
-
-		switch {
-		case mapHas(setVars, k):
-			vars = append(vars, name+"="+trimSurroundingQuotes(setVars[k].string()))
-		case mapHas(defaultVars, k):
-			vars = append(vars, name+"="+trimSurroundingQuotes(defaultVars[k].string()))
-		case name == "BUILD_TYPE":
-			vars = append(vars, "BUILD_TYPE="+buildTypeUpper)
-		}
-	}
-
-	sort.Strings(vars)
 
 	return vars
 }
 
-func mapHas(m map[STR]STR, k STR) bool {
-	_, ok := m[k]
+func cfgVarNames(data []byte) []string {
+	var names []string
 
-	return ok
+	for _, line := range bytes.Split(data, []byte("\n")) {
+		line = bytes.TrimSuffix(line, []byte("\r"))
+
+		if words := bytes.FieldsFunc(line, func(r rune) bool { return r == ' ' || r == '\t' }); len(words) >= 2 && (string(words[0]) == "#cmakedefine01" || string(words[0]) == "#cmakedefine") {
+			names = append(names, string(words[1]))
+		}
+
+		for p2 := -1; ; {
+			p1 := bytes.IndexByte(line[p2+1:], '@')
+
+			if p1 < 0 {
+				break
+			}
+
+			p1 += p2 + 1
+
+			q := bytes.IndexByte(line[p1+1:], '@')
+
+			if q < 0 {
+				break
+			}
+
+			p2 = p1 + 1 + q
+
+			if found := line[p1+1 : p2]; len(found) > 0 && !bytes.ContainsFunc(found, func(r rune) bool { return !(r == '-' || r < 128 && isIdentByte(byte(r))) }) {
+				names = append(names, string(found))
+			}
+		}
+	}
+
+	slices.Sort(names)
+
+	return slices.Compact(names)
+}
+
+func cfgVarValue(env Environment, name string) string {
+	value := env.expand("$" + name)
+
+	if strings.ContainsAny(value, " \t") {
+		return ""
+	}
+
+	out := make([]byte, 0, len(value))
+
+	for i := 0; i < len(value); i++ {
+		switch c := value[i]; {
+		case c == '\\' && i+1 < len(value):
+			i++
+			out = append(out, value[i])
+		case c == '"' || c == '\'':
+		default:
+			out = append(out, c)
+		}
+	}
+
+	return string(out)
 }

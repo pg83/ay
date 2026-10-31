@@ -300,7 +300,7 @@ func (e *EmitContext) emitDynamicLibrary() *ModuleEmitResult {
 	cmd2 := composeDynLibCmd(na, instance.Platform, d.tc, instance.Path.relString(), outputVFS, outputName, vcsOVFS, peerArchivePaths, pluginPaths, anyStrs(d.dynamicLibraryFrom), exportsScript, fixElfPath, linkRpath)
 	cmds := na.cmds.alloc(4)[:0]
 
-	cmds = append(cmds, Cmd{CmdArgs: na.chunkList(cmd0), Env: envVcsOnly}, Cmd{CmdArgs: na.chunkList(cmd1), Env: envFull, Resources: resourceKeyUnion(vcsResources, peerCompilerResourceKeys(cOnlyFlagsGlobal, len(d.cOnlyFlagsGlobal) > 0))}, Cmd{CmdArgs: na.chunkList(cmd2), Cwd: bldRootDirVFS, Env: envFull})
+	cmds = append(cmds, Cmd{CmdArgs: na.chunkList(cmd0), Env: envVcsOnly}, Cmd{CmdArgs: na.chunkList(cmd1), Env: envFull, Resources: resourceKeyUnion(vcsResources, peerCompilerResourceKeys(cOnlyFlagsGlobal, len(d.cOnlyFlagsGlobal) > 0))}, Cmd{CmdArgs: na.chunkList(cmd2), Cwd: bldRootDirVFS.cwd(), Env: envFull})
 
 	if copySO {
 		cmds = append(cmds, Cmd{CmdArgs: na.chunkList(composeLDCmdLinkOrCopy(na, d.tc, instance.Path.relString())), Env: envVcsOnly})

@@ -2585,9 +2585,6 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 		SFlags:               d.sFlags,
 		SrcDirs:              d.srcDirs,
 		FS:                   ctx.fs,
-		DefaultVars:          d.defaultVars,
-		DefaultVarOrder:      d.defaultVarOrder,
-		SetVars:              d.setVars.settled(),
 		ObjSuf:               d.unit.ObjSuf,
 		ObjectSuffixStem: func() *string {
 			if d.unit.ObjectSuffixStem != "" {

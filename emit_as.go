@@ -33,7 +33,7 @@ func (e *EmitContext) emitAS(srcVFS VFS, in ModuleCCInputs, hostP *Platform) (No
 
 	node := NodeSpec{Node: Node{Platform: instance.Platform,
 		Cmds: na.cmdList(Cmd{CmdArgs: cmdArgs,
-			Cwd: bldRootDirVFS, Resources: blocks.asResources,
+			Cwd: bldRootDirVFS.cwd(), Resources: blocks.asResources,
 			Env: env}),
 		Env: env, Inputs: na.rootInputList(na.vfsList(in.IncludeView.self), in.IncludeView.bucketList()...), Outputs: na.vfsList(outVFS),
 		KV:        &asKV,

@@ -160,7 +160,7 @@ func fromSandboxNode(na *NodeArenas, instance ModuleInstance, python3 ANY, stmt 
 	env := envVarsVCS
 
 	return NodeSpec{Node: Node{Platform: instance.Platform,
-		Cmds: na.cmdList(Cmd{CmdArgs: na.chunkList(args), Cwd: instance.Path.rel().build(), Env: env}),
+		Cmds: na.cmdList(Cmd{CmdArgs: na.chunkList(args), Cwd: instance.Path.rel().build().cwd(), Env: env}),
 		Env:  env, Inputs: na.inputList(fromSandboxScriptInputs), KV: &fromSandboxKV,
 		Outputs:      na.vfsList(outVFSs...),
 		Requirements: &fromSandboxRequirements,

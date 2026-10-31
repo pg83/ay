@@ -168,7 +168,7 @@ func (e *EmitContext) emitFLReserved(srcRel string, srcVFS VFS, flatcLDRef NodeR
 
 	node := NodeSpec{Node: Node{Platform: instance.Platform,
 		Cmds: na.cmdList(Cmd{CmdArgs: cmdArgs,
-			Cwd: bldRootDirVFS,
+			Cwd: bldRootDirVFS.cwd(),
 			Env: env}),
 		Env:            env,
 		ForeignDepRefs: na.refList(flatcLDRef), Inputs: InputChunks(inputs[:len(inputs):len(inputs)]), KV: v.kv,

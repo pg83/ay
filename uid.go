@@ -241,7 +241,13 @@ func (c *CanonBuf) writeCmdSlice(cmds []Cmd) {
 
 	for _, cm := range cmds {
 		c.writeAnyChunks(cm.CmdArgs)
-		c.writeVFS(cm.Cwd)
+
+		if v := cm.Cwd.vfs(); v != 0 || cm.Cwd == 0 {
+			c.writeVFS(v)
+		} else {
+			c.writeANY(cm.Cwd)
+		}
+
 		c.writeEnv(cm.Env)
 		c.writeVFS(cm.Stdout)
 	}

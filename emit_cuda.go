@@ -63,9 +63,16 @@ func (e *EmitContext) emitLibraryCudaSource(meta SrcMeta, in ModuleCCInputs) {
 	}
 
 	if env := (Environment{s: &e.frame.ifEnv}); env.bool(envCudaNodeRAMRequirement) {
-		ram := throw2(strconv.ParseFloat(strings.TrimPrefix(env.string(envCudaNodeRAMRequirement), "ram:"), 64))
+		value := strings.TrimPrefix(env.expand(env.string(envCudaNodeRAMRequirement)), "ram:")
 
-		node.Requirements = &Requirements{CPU: 1, Network: nwRestricted, RAM: ram}
+		node.Requirements = &Requirements{CPU: 1, Network: nwRestricted}
+
+		if ram, err := strconv.ParseFloat(value, 64); err == nil {
+			node.Requirements.RAM = ram
+		} else {
+			node.Requirements.RAMText = value
+		}
+
 		node.KVExts = []KVExt{{Key: "local_ram_limiter", Val: "1"}}
 	}
 
@@ -152,7 +159,7 @@ func (e *EmitContext) emitSplitCudaSource(src ANY, arches []string, embedPTX boo
 			for i, suffix := range []string{".ptx", ".cudafe1.stub.c", ".module_id"} {
 				copyArgs := na.anyList(wrapccPython3STR.any(), copyFsToolsVFS.any(), argCopy.any(), internV(filepath.Base(base), suffix).any(), outs[i+1].any())
 
-				cmds = append(cmds, Cmd{CmdArgs: na.chunkList(copyArgs), Cwd: e.instance.Path.rel().build(), Env: envVarsVCS})
+				cmds = append(cmds, Cmd{CmdArgs: na.chunkList(copyArgs), Cwd: e.instance.Path.rel().build().cwd(), Env: envVarsVCS})
 			}
 
 			inputs := na.inputList(na.vfsList(cudaCompileScriptVFS), e.ctx.scripts[copyFsToolsVFS.rel()], na.vfsList(mtime, pid), compileRoots)

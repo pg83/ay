@@ -79,7 +79,7 @@ func (e *EmitContext) emitYmapsSprotoHeaderSnap(scanner *IncludeScanner, p Ymaps
 
 	node := NodeSpec{Node: Node{Platform: e.instance.Platform,
 		Cmds: na.cmdList(Cmd{CmdArgs: cmdArgs,
-			Cwd: srcRootDirVFS,
+			Cwd: srcRootDirVFS.cwd(),
 			Env: env}),
 		Env: env, Inputs: na.rootInputList(closure, na.vfsList(sprotocBinary)), Outputs: na.vfsList(p.sprotoH),
 		KV:             &ymapsSprotoKV,

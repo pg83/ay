@@ -49,7 +49,7 @@ func (p *pyPBPending) emitPending() {
 	na.inputs.commit(len(inputChunks))
 
 	node := NodeSpec{Node: Node{Platform: s.instance.Platform,
-		Cmds: na.cmdList(Cmd{CmdArgs: s.cmdArgs, Cwd: s.protoCwd, Env: envVarsVCS}),
+		Cmds: na.cmdList(Cmd{CmdArgs: s.cmdArgs, Cwd: s.protoCwd.cwd(), Env: envVarsVCS}),
 		Env:  envVarsVCS, Inputs: InputChunks(inputChunks[:len(inputChunks):len(inputChunks)]), Outputs: s.outputs,
 		KV:        &pbKV,
 		KVExts:    s.extOut,

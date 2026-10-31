@@ -100,7 +100,7 @@ func (e *EmitContext) emitRosSource(meta SrcMeta, outputs []VFS) {
 
 	args = append(args, src.any(), strOutputDir.any(), outDir.any())
 
-	cmds := []Cmd{{CmdArgs: ctx.na.chunkList(args), Cwd: srcRootDirVFS, Env: envVarsVCS}}
+	cmds := []Cmd{{CmdArgs: ctx.na.chunkList(args), Cwd: srcRootDirVFS.cwd(), Env: envVarsVCS}}
 
 	if zero {
 		second := append([]ANY(nil), args[:3]...)
@@ -108,7 +108,7 @@ func (e *EmitContext) emitRosSource(meta SrcMeta, outputs []VFS) {
 		second[2] = strCppZeroCopy.any()
 		second = append(second, args[4:]...)
 
-		cmds = append(cmds, Cmd{CmdArgs: ctx.na.chunkList(second), Cwd: srcRootDirVFS, Env: envVarsVCS})
+		cmds = append(cmds, Cmd{CmdArgs: ctx.na.chunkList(second), Cwd: srcRootDirVFS.cwd(), Env: envVarsVCS})
 	}
 
 	ref := ctx.emit.reserve()

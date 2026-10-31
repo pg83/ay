@@ -255,7 +255,7 @@ func (e *EmitContext) emitGoCodegenStmt(st GoCodegenStmt) {
 
 	switch st.kind {
 	case goCodegenReflect:
-		cmds = []Cmd{{CmdArgs: na.chunkList(na.anyList(tool.any(), internStr(d.mockgen.module).any(), internStr(d.mockgen.types).any())), Cwd: bindir, Env: envVarsVCS, Stdout: out}}
+		cmds = []Cmd{{CmdArgs: na.chunkList(na.anyList(tool.any(), internStr(d.mockgen.module).any(), internStr(d.mockgen.types).any())), Cwd: bindir.cwd(), Env: envVarsVCS, Stdout: out}}
 	case goCodegenMocks:
 		mockgenRef, mockgen := ctx.tool(internArg(goMockgenTool))
 
@@ -264,8 +264,8 @@ func (e *EmitContext) emitGoCodegenStmt(st GoCodegenStmt) {
 		toolEnd = len(inputs)
 		toolRefs = append(toolRefs, mockgenRef)
 		cmds = []Cmd{
-			{CmdArgs: na.chunkList(na.anyList(tool.any(), strMockgenOutput.any(), strMockgenGob.any())), Cwd: bindir, Env: envVarsVCS},
-			{CmdArgs: na.chunkList(na.anyList(mockgen.any(), strMockgenPkg.any(), internStr(pkg).any(), strMockgenModel.any(), strMockgenGob.any())), Cwd: bindir, Env: env, Stdout: out},
+			{CmdArgs: na.chunkList(na.anyList(tool.any(), strMockgenOutput.any(), strMockgenGob.any())), Cwd: bindir.cwd(), Env: envVarsVCS},
+			{CmdArgs: na.chunkList(na.anyList(mockgen.any(), strMockgenPkg.any(), internStr(pkg).any(), strMockgenModel.any(), strMockgenGob.any())), Cwd: bindir.cwd(), Env: env, Stdout: out},
 		}
 	case goCodegenSource:
 		arcadia := build(dir, "/.arcadia")
@@ -296,7 +296,7 @@ func (e *EmitContext) emitGoCodegenStmt(st GoCodegenStmt) {
 			{CmdArgs: na.chunkList(fsTools, na.anyList(strFsToolsCopy.any(), source(strGoModRel).any(), build(dir, "/.arcadia/go.mod").any())), Env: envVarsVCS},
 			{CmdArgs: na.chunkList(fsTools, na.anyList(strFsToolsCopy.any(), source(strGoModulesTxt).any(), build(dir, "/.arcadia/vendor/modules.txt").any())), Env: envVarsVCS},
 			{CmdArgs: na.chunkList(fsTools, na.anyList(strFsToolsCopy.any(), src.any(), build(dir, "/.arcadia/", st.file).any())), Env: envVarsVCS},
-			{CmdArgs: na.chunkList(mockgenArgs), Cwd: arcadia, Env: env, Stdout: out},
+			{CmdArgs: na.chunkList(mockgenArgs), Cwd: arcadia.cwd(), Env: env, Stdout: out},
 		}
 	case goCodegenOapi:
 		in := resolveSourceVFS(ctx, instance, st.in, d.srcDirs)
@@ -332,7 +332,7 @@ func (e *EmitContext) emitGoCodegenStmt(st GoCodegenStmt) {
 		}
 
 		inputs = dedup(inputs)
-		cmds = []Cmd{{CmdArgs: na.chunkList(args), Cwd: bldRootDirVFS, Env: env, Stdout: out}}
+		cmds = []Cmd{{CmdArgs: na.chunkList(args), Cwd: bldRootDirVFS.cwd(), Env: env, Stdout: out}}
 	}
 
 	ref := e.emitNode(NodeSpec{Node: Node{Platform: instance.Platform,

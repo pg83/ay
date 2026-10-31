@@ -66,7 +66,6 @@ func (x *ModuleData) reset() {
 		dynamicLibraryFrom:   x.dynamicLibraryFrom[:0],
 		ldPlugins:            x.ldPlugins[:0],
 		defaultVars:          clearedMap(x.defaultVars),
-		defaultVarOrder:      x.defaultVarOrder[:0],
 		configureFiles:       scrub(x.configureFiles),
 		antlr4Grammars:       scrub(x.antlr4Grammars),
 		antlrRuns:            scrub(x.antlrRuns),

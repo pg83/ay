@@ -587,6 +587,7 @@ var (
 	strYfmTool                                                                               = internStr("YFM_TOOL")
 	strYqlEssentialsPublicUdfAbiConflict                                                     = internStr("yql/essentials/public/udf/abi_conflict")
 	strYqlEssentialsPublicUdfServiceDropPolicyGlobalsPy                                      = internStr("yql/essentials/public/udf/service/drop_policy_globals.py")
+	strYqlStableAbiVersion                                                                   = internStr("YQL_STABLE_ABI_VERSION")
 	strYqlUdfShared                                                                          = internStr("YQL_UDF_SHARED")
 	strYqlUdfStatic                                                                          = internStr("YQL_UDF_STATIC")
 	strYqlUdfStaticCurrent                                                                   = internStr("YQL_UDF_STATIC_CURRENT")

@@ -232,7 +232,7 @@ func (e *EmitContext) docsRender(out VFS, peers []VFS, book bool) NodeRef {
 
 	extract := e.pythonScriptCmd("extract_docs.py", extractArgs...)
 
-	extract.Cwd = bld
+	extract.Cwd = bld.cwd()
 
 	args := []string{"$(B)/resources/YFM_TOOL/yfm-docs", "--ignore-ya-make", "--input", bindir + "/__s", "--output", bindir + "/__docsbuild"}
 
@@ -252,7 +252,7 @@ func (e *EmitContext) docsRender(out VFS, peers []VFS, book bool) NodeRef {
 
 	render := e.pythonScriptCmd("stdout2stderr.py", args...)
 
-	render.Cwd = bld
+	render.Cwd = bld.cwd()
 
 	env := envVarsVCS
 	resources := append([]STR{}, usesPython3...)
@@ -292,7 +292,7 @@ func (e *EmitContext) docsRender(out VFS, peers []VFS, book bool) NodeRef {
 		manifest := build(module, "/docs.manifest")
 		link := e.pythonScriptCmd("fs_tools.py", "link_or_copy", "_preprocessed.tar.gz", pre.string())
 
-		link.Cwd = build(module)
+		link.Cwd = build(module).cwd()
 		cmds = append(cmds, link, e.pythonScriptCmd("docs_manifest.py", "--output", manifest.string(), "html="+baseName(out.relString()), "preprocessed=preprocessed.tar.gz"))
 		inputs = append(inputs, scriptInputs("fs_tools.py", "docs_manifest.py")...)
 		buildFrom = append(buildFrom, scriptInputs("fs_tools.py", "docs_manifest.py")...)

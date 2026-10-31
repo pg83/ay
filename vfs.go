@@ -92,6 +92,14 @@ func cwdVFS(s string) VFS {
 	panic(exceptionf("cwdVFS: unexpected cwd %q", s))
 }
 
+func cwdANY(s string) ANY {
+	if s == "$(B)" || s == "$(S)" || vfsHasPrefix(s) {
+		return cwdVFS(s).any()
+	}
+
+	return internStr(s).any()
+}
+
 func (v VFS) string() string {
 	rel := v.relString()
 
@@ -130,6 +138,14 @@ func internClean(full string) VFS {
 	}
 
 	return sourceClean(full[vfsPrefixLen:])
+}
+
+func (v VFS) cwd() ANY {
+	if v == 0 {
+		return 0
+	}
+
+	return v.any()
 }
 
 func (v VFS) any() ANY {

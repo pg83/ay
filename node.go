@@ -22,7 +22,7 @@ type Cmd struct {
 	Resources []STR     `json:"-"`
 	CmdArgs   ArgChunks `json:"cmd_args"`
 	Env       EnvVars   `json:"env,omitempty"`
-	Cwd       VFS       `json:"cwd,omitempty"`
+	Cwd       ANY       `json:"cwd,omitempty"`
 	Stdout    VFS       `json:"stdout,omitempty"`
 }
 

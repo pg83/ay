@@ -66,7 +66,7 @@ func (e *EmitContext) emitJVNodeReserved(cmdArgs []ANY, inputs InputChunks, outp
 	cmd := Cmd{CmdArgs: na.chunkList(na.anyChunkAny(cmdArgs)), Env: env}
 
 	if cwd != "" {
-		cmd.Cwd = cwdVFS(cwd)
+		cmd.Cwd = cwdANY(cwd)
 	}
 
 	node := NodeSpec{Node: Node{Platform: e.instance.Platform,

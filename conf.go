@@ -84,6 +84,7 @@ type ConfFile struct {
 	branches []ConfBranch
 	stmts    []ConfStmt
 	macros   map[STR]*ConfMacro
+	declared []STR
 	modules  map[string]string
 	variants map[string][]string
 	calls    map[string][]string
@@ -244,9 +245,11 @@ func (s *ConfState) readFile(rel, text string) *ConfFile {
 		case strings.HasPrefix(header, "macro "):
 			name, _, _ := strings.Cut(strings.TrimPrefix(header, "macro "), "(")
 
+			name = strings.TrimSpace(name)
+			conf.declared = append(conf.declared, internStr(name))
 			branch.expr = internV(`($env`, name, ` == "yes")`).string()
 			block = "macro"
-			guard = internV("env", strings.TrimSpace(name)).string()
+			guard = internV("env", name).string()
 		case strings.HasPrefix(header, "when "), strings.HasPrefix(header, "when("):
 			branch.expr = strings.TrimSpace(strings.TrimPrefix(header, "when"))
 		case strings.HasPrefix(header, "elsewhen "), strings.HasPrefix(header, "elsewhen("):
@@ -342,7 +345,7 @@ func confStmtAssignment(line string) (name, value string, op ConfOp, ok bool) {
 		name = strings.TrimSpace(name[:len(name)-1])
 	}
 
-	return name, strings.TrimSpace(value), op, ok && name != "" && isConfVarName(name)
+	return name, strings.TrimSpace(value), op, ok && name != "" && confVarNameLen(name) == len(name)
 }
 
 type ConfStmtRef struct {
