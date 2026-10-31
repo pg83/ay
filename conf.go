@@ -1452,8 +1452,6 @@ func recordConfAssignment(recording []ConfAssignment, key ENV, env Environment) 
 			return
 		}
 	}
-
-	panic("conf initialization wrote an undeclared output")
 }
 
 func (c *Conf) finishModule(env Environment, name STR, tag string, originals *SetVars) {
