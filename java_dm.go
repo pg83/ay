@@ -757,15 +757,11 @@ func (ctx *GenCtx) javaManagedPeersClosure(jm *JavaModule) javaClosureSeq {
 		for _, id := range managed.mods {
 			m := byID[id]
 
-			if !yield(JavaClosureEntry{path: m.target, java: m}) {
-				return
-			}
+			yield(JavaClosureEntry{path: m.target, java: m})
 		}
 
 		for _, e := range managed.foreign {
-			if !yield(e) {
-				return
-			}
+			yield(e)
 		}
 	}
 }
