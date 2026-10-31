@@ -39,8 +39,6 @@ func modulePeerTags(stmt *ModuleStmt, unit ModuleUnit, language Language) string
 			prefix = "PY2 "
 		case LangGo:
 			prefix = "GO "
-		case LangJava:
-			prefix = "JAVA IJAR "
 		}
 
 		if stmt.Schema {
