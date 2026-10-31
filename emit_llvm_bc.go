@@ -310,8 +310,7 @@ func composeBCCompileCmd(python, clangWrapper, clangBC string, platform *Platfor
 		args = appendAnyLists(args, ownGlobalBucket, catboostOpenSourceDefineFor(platform), coreCxxFlags(platform), in.CXXFlagsVar)
 	}
 
-	args = append(args, platform.TargetArg.any())
-	args = appendAnyLists(args, bundle.ArchArgs, platform.SysrootArgs)
+	args = appendAnyLists(args, platform.TargetArgs, bundle.ArchArgs, platform.SysrootArgs)
 
 	if cxx {
 		args = append(args, argWnoUnknownWarningOption.any())

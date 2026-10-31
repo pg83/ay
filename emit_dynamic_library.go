@@ -391,7 +391,7 @@ func composeDynLibCmd(na *NodeArenas, p *Platform, tc ModuleToolchain, modulePat
 	cmdArgs = append(cmdArgs, argDashO.any(), output.any())
 	cmdArgs = append(cmdArgs, p.Linker.Shared...)
 	cmdArgs = appendLinkerTemplate(cmdArgs, p.Linker.Soname, "$_SONAME", outputName)
-	cmdArgs = append(cmdArgs, p.TargetArg.any())
+	cmdArgs = append(cmdArgs, p.TargetArgs...)
 	cmdArgs = append(cmdArgs, p.SysrootArgs...)
 	cmdArgs = appendAnyLists(cmdArgs, p.Linker.BeforePeers, p.Linker.StartGroup)
 

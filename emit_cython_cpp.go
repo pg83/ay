@@ -111,16 +111,16 @@ var py2CythonEmbeddedFiles = []string{
 	"contrib/tools/cython_py2/Cython/Utility/UFuncs_C.c",
 }
 
-func cythonDefaultOptions(os OS) string {
+func cythonDefaultOptions(p *Platform) string {
 	const options = "-X legacy_implicit_noexcept=True"
 
-	switch os {
-	case OSLinux:
-		return options + " -E UNAME_SYSNAME=Linux"
-	case OSDarwin:
-		return options + " -E UNAME_SYSNAME=Darwin"
-	case OSWindows:
+	switch {
+	case p.windows():
 		return options + " -E UNAME_SYSNAME=Windows"
+	case p.OS == OSLinux:
+		return options + " -E UNAME_SYSNAME=Linux"
+	case p.OS == OSDarwin:
+		return options + " -E UNAME_SYSNAME=Darwin"
 	}
 
 	return options

@@ -699,7 +699,9 @@ func goExtldflagsArgs(na *NodeArenas, p *Platform, tc ModuleToolchain, useArcadi
 		push(internV("-Wl,-soname,", soname).any())
 	}
 
-	push(p.TargetArg.any())
+	for _, x := range p.TargetArgs {
+		push(x)
+	}
 
 	for _, x := range p.SysrootArgs {
 		push(x)

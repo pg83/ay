@@ -8,10 +8,11 @@ var (
 const (
 	OSLinux    OS  = "linux"
 	OSDarwin   OS  = "darwin"
-	OSWindows  OS  = "windows"
 	ISAX8664   ISA = "x86_64"
 	ISAAArch64 ISA = "aarch64"
 	ISAArm64   ISA = "arm64"
+	ISAI386    ISA = "i386"
+	ISAI686    ISA = "i686"
 )
 
 const (

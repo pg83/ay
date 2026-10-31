@@ -797,7 +797,7 @@ func collectModuleInto(ctx *GenCtx, instance ModuleInstance, stmts []Stmt, env E
 	env.setVFS(envCURDIR, source(modulePath))
 	env.setVFS(envBINDIR, build(modulePath))
 	env.setVFS(envCmakeCurrentBinaryDir, build(modulePath))
-	env.setDefaultString(envCythonOptions, cythonDefaultOptions(instance.Platform.OS))
+	env.setDefaultString(envCythonOptions, cythonDefaultOptions(instance.Platform))
 	env.setDefaultString(envProtobufIncludePath, pbRuntimeBaseVFS.string())
 	env.setDefaultString(envPyProtoMypyEnabled, "yes")
 
@@ -993,7 +993,7 @@ func collectModuleInto(ctx *GenCtx, instance ModuleInstance, stmts []Stmt, env E
 	applyCythonHeaderAddIncl(modulePath, d)
 
 	musl := muslCFlags(d.muslEnabled && !effectiveNoPlatform(d.flags))
-	sse := sseBaseCFlags(env.bool(envARCH_X86_64) && instance.Language != LangFbsJavaNative)
+	sse := sseBaseCFlags(env.bool(envARCH_X86_64) && instance.Language != LangFbsJavaNative, env.bool(envARCH_I386) && instance.Language != LangFbsJavaNative)
 
 	if n := len(d.cFlagsAppend) + len(musl) + len(sse); n > 0 {
 		scope := d.moduleScopeCFlags

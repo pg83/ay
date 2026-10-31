@@ -438,8 +438,8 @@ func composeLDCmdVcsCompileForced(na *NodeArenas, p *Platform, tc ModuleToolchai
 
 	cmdArgs := na.anys.alloc(bound)[:0]
 
-	cmdArgs = append(cmdArgs, tc.CC.any(), p.TargetArg.any())
-	cmdArgs = appendAnyLists(cmdArgs, bundle.ArchArgs)
+	cmdArgs = append(cmdArgs, tc.CC.any())
+	cmdArgs = appendAnyLists(cmdArgs, p.TargetArgs, bundle.ArchArgs)
 	cmdArgs = append(cmdArgs, p.SysrootArgs...)
 	cmdArgs = append(cmdArgs, extraCFlags...)
 
@@ -541,8 +541,7 @@ func composeLDCmdLinkExe(na *NodeArenas, p *Platform, tc ModuleToolchain, output
 
 	bundle := compileFlagBundleFor(p)
 
-	cmdArgs = append(cmdArgs, p.TargetArg.any())
-	cmdArgs = appendAnyLists(cmdArgs, bundle.ArchArgs)
+	cmdArgs = appendAnyLists(cmdArgs, p.TargetArgs, bundle.ArchArgs)
 	cmdArgs = append(cmdArgs, p.SysrootArgs...)
 	cmdArgs = appendAnyLists(cmdArgs, p.Linker.BeforePeers, p.Linker.StartGroup)
 

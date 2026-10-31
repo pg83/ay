@@ -63,8 +63,8 @@ func composeASModuleArgs(na *NodeArenas, instance ModuleInstance, in ModuleCCInp
 
 	cmdArgs := na.anys.alloc(fixed)[:0]
 
-	cmdArgs = append(cmdArgs, in.TC.CC.any(), instance.Platform.TargetArg.any())
-	cmdArgs = appendAnyLists(cmdArgs, bundle.ArchArgs)
+	cmdArgs = append(cmdArgs, in.TC.CC.any())
+	cmdArgs = appendAnyLists(cmdArgs, instance.Platform.TargetArgs, bundle.ArchArgs)
 	cmdArgs = append(cmdArgs, instance.Platform.SysrootArgs...)
 
 	if in.ForceConsistentDebug {

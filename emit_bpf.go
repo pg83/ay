@@ -11,7 +11,7 @@ func (e *EmitContext) bpfCompileNode(stmt LlvmCompileStmt, out VFS) NodeSpec {
 	platformFlags := resolveResourceGlobalArgs(p.CCHead, e.peers.ResourceGlobals)
 	windows := "no"
 
-	if p.OS == OSWindows {
+	if p.windows() {
 		windows = "yes"
 	}
 

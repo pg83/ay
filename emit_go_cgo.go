@@ -366,7 +366,8 @@ func (e *EmitContext) emitGoCgo1Stmt() {
 			goCgo1ToolChunk,
 			na.anyList(build(dir).any(), strImportpath.any(), internStr(e.goCgoImportPath()).any()),
 			goCgoImportPathFlags(instance.Platform.Go, dir),
-			na.anyList(str3.any(), instance.Platform.TargetArg.any()),
+			na.anyList(str3.any()),
+			instance.Platform.TargetArgs,
 			instance.Platform.SysrootArgs,
 			inclArgs,
 			cflagsStr,
@@ -530,14 +531,16 @@ func (e *EmitContext) flushGoCgo2() {
 	node := NodeSpec{Node: Node{Platform: instance.Platform,
 		Cmds: na.cmdList(
 			Cmd{CmdArgs: na.chunkList(
-				na.anyList(d.tc.CC.any(), p.TargetArg.any()),
+				na.anyList(d.tc.CC.any()),
+				p.TargetArgs,
 				p.SysrootArgs,
 				inclArgs,
 				cflagsStr,
 				na.anyList(mainC.any(), strC2.any(), strO.any(), mainO.any()),
 			), Env: goVcsEnv},
 			Cmd{CmdArgs: na.chunkList(
-				na.anyList(wrapccPython3STR.any(), linkOScriptVFS.any(), d.tc.CC.any(), p.TargetArg.any()),
+				na.anyList(wrapccPython3STR.any(), linkOScriptVFS.any(), d.tc.CC.any()),
+				p.TargetArgs,
 				p.SysrootArgs,
 				inclArgs,
 				na.anyList(strO.any(), cgoO.any()),

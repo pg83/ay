@@ -106,6 +106,7 @@ func (e *EmitContext) emitRodataCpp(srcVFS VFS, tc ModuleToolchain) {
 	out := build(srcVFS.relString(), ".cpp")
 	name := strings.TrimSuffix(path.Base(srcVFS.relString()), path.Ext(srcVFS.relString()))
 	inputs := na.rootInputList(na.vfsList(rodataCppScriptVFS, srcVFS))
+
 	ref := e.emitNode(NodeSpec{Node: Node{Platform: e.instance.Platform,
 		Cmds: na.cmdList(Cmd{CmdArgs: na.chunkList(na.anyList(tc.Python3.any(), rodataCppScriptVFS.any(), internStr(name).any(), srcVFS.any(), out.any())), Env: envVarsVCS}),
 		Env:  envVarsVCS, Inputs: inputs, Outputs: na.vfsList(out), KV: &rodataKV, Resources: usesPython3}, input: InputSpec{roots: inputs},

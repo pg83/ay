@@ -49,7 +49,7 @@ type Platform struct {
 	Triple                string
 	March                 string
 	MultiarchLibPathSTR   STR
-	TargetArg             STR
+	TargetArgs            []ANY
 	MarchArgs             []ANY
 	CFlags                []ANY
 	CXXFlags              []ANY
@@ -83,6 +83,18 @@ type Platform struct {
 
 func platformUsesSDKRoot(os OS, flags map[string]string) bool {
 	return os == OSLinux && flags["OS_SDK"] != "local" && flags["OPENSOURCE"] != "yes"
+}
+
+func platformHeadArgs(os OS, flags map[string]string) (target, sysroot []ANY) {
+	for _, word := range strings.Fields(flags["C_FLAGS_PLATFORM"]) {
+		if value, ok := strings.CutPrefix(word, "--target="); ok {
+			target = []ANY{internV("--target=", value).any()}
+		} else if strings.HasPrefix(word, "-B") || strings.HasPrefix(word, "--sysroot") {
+			sysroot = sysrootArgsFor(os, flags)
+		}
+	}
+
+	return target, sysroot
 }
 
 func sysrootArgsFor(os OS, flags map[string]string) []ANY {
@@ -165,7 +177,7 @@ func newPlatform(os OS, isa ISA, buildType string, tc *Toolchain, flags map[stri
 		},
 	}
 
-	p.TargetArg = internV("--target=", p.Triple)
+	p.TargetArgs, p.SysrootArgs = platformHeadArgs(os, flags)
 	p.MultiarchLibPathSTR = internStr(p.multiarchLibPath(flags["OPENSOURCE"] == "yes"))
 	p.WrapccHead, p.WrapccTail = wrapccPrefixFor(flags)
 	p.WrapUnshare = len(p.WrapccHead) > 0 && (flags["ENABLE_UNSHARE_WRAPPER"] != "" && flags["ENABLE_UNSHARE_WRAPPER"] != "no" || flags["SDC_PLATFORM"] != "" && flags["SDC_PLATFORM"] != "no")
@@ -185,7 +197,6 @@ func newPlatform(os OS, isa ISA, buildType string, tc *Toolchain, flags map[stri
 	p.UsesPython3Clang = []STR{strYMakePython3Name, clangRes}
 	p.UsesLinkResources = []STR{clangRes, strLLDRootName, strYMakePython3Name}
 	p.UsesClangOnly = []STR{clangRes}
-	p.SysrootArgs = sysrootArgsFor(os, flags)
 	p.UsesSDKRoot = platformUsesSDKRoot(os, flags)
 
 	if p.UsesSDKRoot {
@@ -200,7 +211,7 @@ func newPlatform(os OS, isa ISA, buildType string, tc *Toolchain, flags map[stri
 		p.MarchArgs = []ANY{internArg("-march=" + p.March).any()}
 	}
 
-	p.CCHead = append(appendAnyLists([]ANY{p.TargetArg.any()}, p.MarchArgs), p.SysrootArgs...)
+	p.CCHead = appendAnyLists(nil, p.TargetArgs, p.MarchArgs, p.SysrootArgs)
 
 	p.ToolEnvVars = EnvVars{
 		{Name: envARCADIA_ROOT_DISTBUILD, Value: strS.any()},
@@ -226,6 +237,10 @@ func newPlatform(os OS, isa ISA, buildType string, tc *Toolchain, flags map[stri
 	p.DebugInfoFlags = debugInfoFlags(p.ifEnv, flags)
 	p.CompileCFlags = composeCompileCFlags(p.ifEnv, flags, p.DebugInfoFlags)
 	p.NoLibcBlock = noLibcBlock(p)
+
+	if p.ifEnv.bool(envARCH_I386) && !p.ifEnv.bool(envARCH_I686) {
+		p.CFlags = append([]ANY{argMarchPentiumpro.any(), argMtunePentiumpro.any()}, p.CFlags...)
+	}
 
 	bundle := compileFlagBundleFor(p)
 
@@ -425,6 +440,10 @@ func (p *Platform) objectSuffix() string {
 	}
 
 	return ".o"
+}
+
+func (p *Platform) windows() bool {
+	return p.ifEnv.bool(envWIN32)
 }
 
 func parsePlatformID(s string) (OS, ISA) {

@@ -136,9 +136,12 @@ func catboostOpenSourceDefineFor(p *Platform) []ANY {
 	return nil
 }
 
-func sseBaseCFlags(x8664 bool) []ANY {
-	if x8664 {
+func sseBaseCFlags(x8664, i386 bool) []ANY {
+	switch {
+	case x8664:
 		return hostSseFeatures
+	case i386:
+		return hostSseFeatures[:len(hostSseFeatures)-1]
 	}
 
 	return nil
@@ -226,6 +229,12 @@ func optimizeFlags(env Environment) []ANY {
 
 func compileFlagBundleFor(p *Platform) CompileFlagBundle {
 	switch p.ISA {
+	case ISAI386, ISAI686:
+		return CompileFlagBundle{
+			CFlags:      p.CompileCFlags,
+			Defines:     commonDefines,
+			NoLibcBlock: p.NoLibcBlock,
+		}
 	case ISAX8664:
 		return CompileFlagBundle{
 			CFlags:      p.CompileCFlags,

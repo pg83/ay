@@ -621,7 +621,7 @@ func (e *EmitContext) resourcesLibraryPeerClosure(own []ResourceDecl) ResourcesL
 }
 
 func prebuiltModuleSuffix(p *Platform) string {
-	if p.OS == OSWindows {
+	if p.windows() {
 		return ".exe"
 	}
 

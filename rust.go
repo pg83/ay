@@ -179,8 +179,20 @@ func applyRustMacro(stmt UnknownStmt, modulePath string, env Environment, d *Mod
 func rustTarget(p *Platform, host bool) string {
 	arch := string(p.ISA)
 
+	if p.ISA != ISAX8664 && p.ISA != ISAAArch64 && p.ISA != ISAArm64 {
+		return "unsupported"
+	}
+
 	if p.ISA == ISAArm64 {
 		arch = "aarch64"
+	}
+
+	if p.windows() {
+		if p.ISA == ISAX8664 {
+			return arch + "-pc-windows-msvc"
+		}
+
+		return "unsupported"
 	}
 
 	switch p.OS {
@@ -194,10 +206,6 @@ func rustTarget(p *Platform, host bool) string {
 		return arch + "-unknown-linux-" + libc
 	case OSDarwin:
 		return arch + "-apple-darwin"
-	case OSWindows:
-		if p.ISA == ISAX8664 {
-			return arch + "-pc-windows-msvc"
-		}
 	}
 
 	return "unsupported"

@@ -935,13 +935,7 @@ func programBinaryName(instance ModuleInstance, moduleStmt *ModuleStmt) string {
 }
 
 func prebuiltProgramName(instance ModuleInstance, moduleStmt *ModuleStmt) string {
-	name := programBinaryName(instance, moduleStmt)
-
-	if instance.Platform.ifEnv.bool(envWIN32) {
-		name += ".exe"
-	}
-
-	return name
+	return programBinaryName(instance, moduleStmt) + prebuiltModuleSuffix(instance.Platform)
 }
 
 func moduleRealPrjName(dir string, stmt *ModuleStmt, unit ModuleUnit) string {
