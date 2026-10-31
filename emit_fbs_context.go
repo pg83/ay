@@ -50,10 +50,6 @@ func (e *EmitContext) bindFbsNativeSource(src, out VFS, in ModuleCCInputs, reser
 	info := e.codegen.lookup(out)
 
 	if info == nil {
-		if reserved == 0 {
-			reserved = ctx.emit.reserve()
-		}
-
 		info = e.register(GeneratedFileSpec{OutputPath: out, SourcePath: src, ProducerRef: reserved, FbsNative: &FbsNativeRecipe{}})
 	}
 
