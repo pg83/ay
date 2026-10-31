@@ -112,6 +112,27 @@ class ExecutorTest(MakeTest):
             self.assertEqual(artifact.read_text(), "first\n")
         self.assertEqual(self.requests, ["/runtime.tar", "/runtime.tar"])
 
+    def test_keep_going_reports_an_unused_generator_failure_after_successful_roots(self):
+        self.write("ya.make", "UNION(answer)\nCOMPILE_LUA(unused.lua)\nCOPY_FILE(value.txt value.out)\nEXPLICIT_OUTPUTS(${BINDIR}/value.out)\nEND()\n")
+        self.write("unused.lua", "return 42;\n")
+        self.write("compiler.sh", "#!/bin/sh\nexit 17\n")
+        (self.project / "compiler.sh").chmod(0o755)
+        self.write_tree("contrib/libs/luajit/ya.make", "RESOURCES_LIBRARY()\nEND()\n")
+        self.write_tree("contrib/libs/luajit/compiler/ya.make", f"YQL_PREBUILT_TOOL(compiler)\nPRIMARY_OUTPUT(${{ARCADIA_ROOT}}/{PROJECT}/compiler.sh)\nEND()\n")
+        self.write("value.txt", "survives\n")
+        result = self.execute("--keep-going", ninja=False, sandboxing=False)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("exit status 17", result.stderr)
+        self.assertIn("build failed: 1 nodes failed", result.stderr)
+        outputs = {}
+        for manifest in (self.cache / "uid").rglob("*"):
+            if manifest.is_file():
+                outputs.update(json.loads(manifest.read_text()))
+        self.assertIn(f"$(B)/{PROJECT}/answer.pkg.fake", outputs)
+        copied = outputs[f"$(B)/{PROJECT}/value.out"]["cas"]
+        self.assertEqual((self.cache / "cas" / copied[:2] / copied).read_text(), "survives\n")
+        self.assertNotIn(f"$(B)/{PROJECT}/unused.lua.o", outputs)
+
     def test_native_executor_hashes_large_source_inputs(self):
         artifact = self.copy_project()
         payload = "x" * (2 * 1024 * 1024)
