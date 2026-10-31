@@ -182,7 +182,6 @@ type ModuleEmitResult struct {
 	TestSuites                      []*TestSuite
 	testProject                     VFS
 	testPeers                       []*ModuleEmitResult
-	testsEmitted                    bool
 }
 
 func protoResultWholeArchiveCmdPaths(res *ProtoSrcsResult) []VFS {
@@ -776,12 +775,6 @@ func (ctx *GenCtx) moduleTestSuites(results ...*ModuleEmitResult) []*TestSuite {
 	var suites []*TestSuite
 
 	for _, r := range results {
-		if r.testsEmitted {
-			continue
-		}
-
-		r.testsEmitted = true
-
 		for _, s := range r.TestSuites {
 			if merged := mergeCheckSuite(suites, s); !merged {
 				suites = append(suites, s)

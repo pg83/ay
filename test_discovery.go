@@ -99,8 +99,6 @@ func (ctx *GenCtx) prepareDiscoveredModuleTests(discovered []DiscoveredTargets) 
 			var suites []*TestSuite
 
 			if result.java != nil {
-				result.testsEmitted = true
-
 				for _, suite := range ctx.javaTestSuites(result.java) {
 					if !mergeCheckSuite(javaSuites[javaStart:], suite) {
 						javaSuites = append(javaSuites, suite)
