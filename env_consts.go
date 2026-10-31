@@ -37,6 +37,7 @@ var (
 	envBUILD_TYPE                             = internEnv("BUILD_TYPE")
 	envBisonFlexSetDefaults                   = internEnv("_BISON_FLEX_SET_DEFAULTS")
 	envBtMinsizerel                           = internEnv("BT_MINSIZEREL")
+	envBuildPython3Bin                        = internEnv("BUILD_PYTHON3_BIN")
 	envBuildRelease                           = internEnv("_BUILD_RELEASE")
 	envBuildSizeOptimized                     = internEnv("_BUILD_SIZE_OPTIMIZED")
 	envBuildYqlFromSources                    = internEnv("BUILD_YQL_FROM_SOURCES")

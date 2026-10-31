@@ -548,9 +548,16 @@ func (r *YmakeConfRun) wait(parsers *IncludeParserManager) (map[string]string, *
 func parseYmakeConf(out []byte) map[string]string {
 	vars := map[string]string{}
 	depth := 0
+	lines := strings.Split(string(out), "\n")
 
-	for _, raw := range strings.Split(string(out), "\n") {
-		line := strings.TrimRight(raw, "\r")
+	for i := 0; i < len(lines); i++ {
+		line := strings.TrimRight(lines[i], "\r")
+
+		for strings.HasSuffix(line, "\\") && i+1 < len(lines) {
+			i++
+			line += "\n" + strings.TrimRight(lines[i], "\r")
+		}
+
 		trimmed := strings.TrimSpace(line)
 
 		if depth == 0 {

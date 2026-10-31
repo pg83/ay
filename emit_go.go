@@ -1361,7 +1361,7 @@ func (e *EmitContext) emitGoExe(resolved []ResolvedPeer, objRefs []NodeRef, objO
 	if isDll {
 		header := build(dir, "/", strings.TrimSuffix(outName, ".so"), ".h")
 
-		copyHeaderCmd = Cmd{CmdArgs: na.chunkList(na.anyList(d.tc.Python3.any(), copyFsToolsVFS.any(), strFsToolsCopy.any(), build(dir, "/_cgo_export.h").any(), header.any())), Env: goVcsEnv}
+		copyHeaderCmd = Cmd{CmdArgs: na.chunkList(na.anyList(d.tc.Python3, copyFsToolsVFS.any(), strFsToolsCopy.any(), build(dir, "/_cgo_export.h").any(), header.any())), Env: goVcsEnv}
 		outputs = na.vfsList(outPath, build(dir, "/", outName, ".vet.txt"), header)
 	}
 

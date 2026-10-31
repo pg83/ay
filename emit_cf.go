@@ -63,7 +63,7 @@ func (e *EmitContext) emitConfigureFile(srcVFS, outVFS VFS) NodeRef {
 	pe := func() {
 		cmdArgs := na.anys.alloc(4 + len(cfgVars))[:0]
 
-		cmdArgs = append(cmdArgs, python3.any(), configureFilePyVFS.any(), srcVFS.any(), outVFS.any())
+		cmdArgs = append(cmdArgs, python3, configureFilePyVFS.any(), srcVFS.any(), outVFS.any())
 		cmdArgs = appendInternAnys(cmdArgs, cfgVars)
 		na.anys.commit(len(cmdArgs))
 

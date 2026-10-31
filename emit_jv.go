@@ -94,7 +94,7 @@ func (e *EmitContext) emitJVGeneralReserved(
 	cmdArgs := make([]ANY, 0, 5+len(args))
 
 	cmdArgs = append(cmdArgs,
-		tc.Python3.any(),
+		tc.Python3,
 		internStr(stdout2stderrPath).any(),
 		internStr(jdkResourcePath).any(),
 		argJar.any(),

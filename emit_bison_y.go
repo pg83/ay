@@ -129,7 +129,7 @@ func (e *EmitContext) emitBisonProducer(meta SrcMeta) {
 
 		if preprocessHeader {
 			cmds = append(cmds, Cmd{
-				CmdArgs: na.chunkList(na.anyList(python3.any(),
+				CmdArgs: na.chunkList(na.anyList(python3,
 					bisonPreprocessPyVFS.any(),
 					headerVFS.any())),
 				Env: preprocessEnv,

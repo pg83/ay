@@ -123,7 +123,7 @@ func (e *EmitContext) emitRustModule(result *ModuleEmitResult, peers []ResolvedP
 		sanitizer = ""
 	}
 
-	args := []ANY{d.tc.Python3.any(), script.any()}
+	args := []ANY{d.tc.Python3, script.any()}
 	add := func(words ...string) { args = append(args, internAnys(words)...) }
 
 	paths := func(files []VFS) {

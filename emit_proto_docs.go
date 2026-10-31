@@ -62,7 +62,7 @@ func (e *EmitContext) emitDocsProtoSubmodule() *ModuleEmitResult {
 		out := build(strings.TrimSuffix(rel, ".proto"), ".md")
 
 		args := []ANY{
-			d.tc.Python3.any(), wrapper.any(), strDocsOutput.any(), out.any(),
+			d.tc.Python3, wrapper.any(), strDocsOutput.any(), out.any(),
 			strTemplate.any(), template.any(), arg2.any(), protoc.any(),
 			internV("-I=./", namespace).any(), internV("-I=$(S)/", namespace).any(), argIB2.any(), argIS3.any(),
 		}

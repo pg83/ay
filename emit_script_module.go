@@ -4,7 +4,7 @@ import "strings"
 
 func (e *EmitContext) pythonScriptCmd(script string, args ...string) Cmd {
 	na := e.ctx.na
-	head := []ANY{e.d.tc.Python3.any(), source("build/scripts/", script).any()}
+	head := []ANY{e.d.tc.Python3, source("build/scripts/", script).any()}
 
 	for _, arg := range args {
 		head = append(head, internStr(arg).any())
@@ -116,10 +116,10 @@ func (e *EmitContext) scriptModuleResources(globals []ResourceDecl, peers ...str
 
 	e.frame.peerCtx = PeerContext{ResourceGlobals: globals}
 	e.peers = &e.frame.peerCtx
-	e.d.tc = resolveModuleToolchain(e.ctx, globals, e.instance.Platform.ClangVer)
+	e.d.tc = resolveModuleToolchain(e.ctx, globals, e.instance.Platform)
 
 	if e.d.tc.Python3 == 0 {
-		e.d.tc.Python3 = build("resources/", resourcePatternYMakePython3, "/bin/python3")
+		e.d.tc.Python3 = build("resources/", resourcePatternYMakePython3, "/bin/python3").any()
 	}
 
 	e.d.cc.TC = e.d.tc

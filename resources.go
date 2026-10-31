@@ -130,6 +130,10 @@ func resolveResourceURIFromBundle(bundle map[string]ResourceBundleEntry, env Env
 
 	for _, k := range keys {
 		if canonizePlatformKey(k) == want {
+			if entry := bundle[k]; entry.StripPrefix != 0 {
+				return entry.URI + " STRIP_PREFIX " + strconv.FormatUint(uint64(entry.StripPrefix), 10), true
+			}
+
 			return bundle[k].URI, true
 		}
 	}
@@ -343,7 +347,7 @@ type ModuleToolchain struct {
 	LLDRoot       VFS
 	ARCmdHead     []ANY
 	LLD           VFS
-	Python3       VFS
+	Python3       ANY
 }
 
 func isClangToolResourceName(name, clangVer string) bool {
@@ -354,11 +358,13 @@ func isClangToolResourceName(name, clangVer string) bool {
 
 type ToolchainKey struct {
 	clangVer string
+	python3  STR
 	bits     uint8
 }
 
-func resolveModuleToolchain(ctx *GenCtx, globals []ResourceDecl, clangVer string) ModuleToolchain {
-	key := ToolchainKey{clangVer: clangVer}
+func resolveModuleToolchain(ctx *GenCtx, globals []ResourceDecl, p *Platform) ModuleToolchain {
+	clangVer := p.ClangVer
+	key := ToolchainKey{clangVer: clangVer, python3: p.Flags[envBuildPython3Bin]}
 
 	for _, decl := range globals {
 		switch {
@@ -398,12 +404,16 @@ func resolveModuleToolchain(ctx *GenCtx, globals []ResourceDecl, clangVer string
 			tc.LLDRoot = build(pfx, resourcePatternLLDRoot)
 			tc.LLD = build(pfx, resourcePatternLLDRoot, "/bin/ld.lld")
 		case strYMakePython3Name:
-			tc.Python3 = build("resources/", resourcePatternYMakePython3, "/bin/python3")
+			tc.Python3 = build("resources/", resourcePatternYMakePython3, "/bin/python3").any()
 		}
 	}
 
+	if key.python3 != 0 {
+		tc.Python3 = key.python3.any()
+	}
+
 	tc.ARCmdHead = []ANY{
-		tc.Python3.any(),
+		tc.Python3,
 		buildScriptsLinkLibPy.any(),
 		tc.AR.any(),
 		internStr(arTypeLLVM).any(),
@@ -460,7 +470,7 @@ func (e *EmitContext) genResourcesLibrary() *ModuleEmitResult {
 	e.frame.peerCtx = PeerContext{ResourceGlobals: closure.resourceGlobals}
 	e.peers = &e.frame.peerCtx
 
-	d.tc = resolveModuleToolchain(ctx, closure.resourceGlobals, instance.Platform.ClangVer)
+	d.tc = resolveModuleToolchain(ctx, closure.resourceGlobals, instance.Platform)
 	d.cc.TC = d.tc
 	e.bindCompilerFlagResources(closure.resourceGlobals)
 	e.emit()

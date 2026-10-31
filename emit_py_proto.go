@@ -223,7 +223,7 @@ func (e *EmitContext) newPyPBModuleEmission(event bool) *PyPBModuleEmission {
 	head := na.anys.alloc(6 + len(suffixes))[:0]
 
 	head = append(head,
-		d.tc.Python3.any(),
+		d.tc.Python3,
 		pbPyWrapperVFS.any(),
 		argPyVer.any(), internStr(protoPythonVersion(d)).any(),
 		argSuffixes.any(),

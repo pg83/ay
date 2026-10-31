@@ -12,7 +12,7 @@ func composeCPNode(instance ModuleInstance, src VFS, dst VFS, extraInputs []VFS,
 	fsTools := copyFsToolsVFS
 
 	cmdArgs := na.anyList(
-		tc.Python3.any(),
+		tc.Python3,
 		fsTools.any(),
 		argCopy.any(),
 		src.any(),

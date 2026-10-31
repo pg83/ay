@@ -1232,7 +1232,7 @@ func loadConf(pm *IncludeParserManager, root *ConfFile, platformEnv Environment)
 	}
 
 	for _, r := range stmts {
-		if key := r.stmt.name; r.stmt.name != 0 && !platformEnv.hasBindingID(key) && all.hasBindingID(key) {
+		if key := r.stmt.name; r.stmt.name != 0 && (r.file == root && r.stmt.branch != 0 || !platformEnv.hasBindingID(key)) && all.hasBindingID(key) {
 			confStringBinding(all, key).apply(platformEnv, key)
 		}
 	}

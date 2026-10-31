@@ -184,7 +184,7 @@ func (e *EmitContext) emitRosEmpty() {
 	script := buildScriptsWriterPy
 	ref := e.ctx.emit.reserve()
 	inputs := append([]VFS{script}, e.ctx.scripts[script.rel()]...)
-	node := NodeSpec{Node: Node{Platform: e.instance.Platform, Env: envVarsVCS, KV: &rosKV, Resources: usesPython3, Inputs: na.rootInputList(na.vfsList(inputs...)), Outputs: na.vfsList(out), Cmds: na.cmdList(Cmd{CmdArgs: na.chunkList(na.anyList(e.d.tc.Python3.any(), script.any(), strFile.any(), out.any(), strContent.any(), strPackageGenerated.any())), Env: envVarsVCS})}}
+	node := NodeSpec{Node: Node{Platform: e.instance.Platform, Env: envVarsVCS, KV: &rosKV, Resources: usesPython3, Inputs: na.rootInputList(na.vfsList(inputs...)), Outputs: na.vfsList(out), Cmds: na.cmdList(Cmd{CmdArgs: na.chunkList(na.anyList(e.d.tc.Python3, script.any(), strFile.any(), out.any(), strContent.any(), strPackageGenerated.any())), Env: envVarsVCS})}}
 	pending := e.pendingEmit(func() { e.emitReservedNode(node, ref) })
 
 	e.register(GeneratedFileSpec{OutputPath: out, ProducerRef: ref, OnUse: pending})

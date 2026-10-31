@@ -136,7 +136,7 @@ func (e *EmitContext) emitGoProtoCmd(protoRel string, goOpts *string, plugins []
 	}
 
 	cmd := na.chunkList(
-		na.anyList(d.tc.Python3.any()),
+		na.anyList(d.tc.Python3),
 		goProtoHead,
 		na.anyList(internV("./", ns).any(), strProto.any(), internStr(protoRel).any(), arg2.any(), protoc.any()),
 		na.anyList(args...),

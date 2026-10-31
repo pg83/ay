@@ -147,7 +147,7 @@ func (e *EmitContext) emitRunPython(stmt *RunPythonStmt, resourceUses []STR) []A
 	e.collectCPPStyleInputs(scriptVFS)
 	e.collectCPPStyleInputs(inVFSs...)
 
-	interp := d.cc.TC.Python3.any()
+	interp := d.cc.TC.Python3
 	kv := &pyRunKV
 	resources := resourceKeyUnion(usesPython3, resourceUses)
 

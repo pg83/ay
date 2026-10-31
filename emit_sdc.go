@@ -89,7 +89,7 @@ func (e *EmitContext) emitSdcMetas(archived bool) []VFS {
 
 		if entry.CopyGlobal {
 			outputs = append(outputs, global)
-			cmds = append(cmds, Cmd{CmdArgs: na.chunkList(na.anyList(e.d.tc.Python3.any(), copyFsToolsVFS.any(), strCopy.any(), out.any(), global.any())), Env: envVarsVCS})
+			cmds = append(cmds, Cmd{CmdArgs: na.chunkList(na.anyList(e.d.tc.Python3, copyFsToolsVFS.any(), strCopy.any(), out.any(), global.any())), Env: envVarsVCS})
 			scripts = e.ctx.scripts[copyFsToolsVFS.rel()]
 		}
 
@@ -123,7 +123,7 @@ func (e *EmitContext) appendSdcMeta(node *NodeSpec, name string) bool {
 	na := e.ctx.na
 	script := buildInternalScriptsMergeSdcmetaPy
 	out := build(e.instance.Path.relString(), "/", name, ".sdcmeta")
-	args := []ANY{e.d.tc.Python3.any(), script.any(), bldRootDirVFS.any(), out.any()}
+	args := []ANY{e.d.tc.Python3, script.any(), bldRootDirVFS.any(), out.any()}
 
 	var inputs []VFS
 

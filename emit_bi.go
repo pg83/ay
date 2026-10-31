@@ -20,7 +20,7 @@ func (e *EmitContext) emitBIReserved(
 	env := envVarsVCS
 
 	cmd0Args := na.anyList(
-		tc.Python3.any(),
+		tc.Python3,
 		yieldLinePyVFS.any(),
 		arg2.any(),
 		argsFileVFS.any(),
@@ -30,7 +30,7 @@ func (e *EmitContext) emitBIReserved(
 	cmd1Args := na.anys.alloc(4 + len(cxxFlags))[:0]
 
 	cmd1Args = append(cmd1Args,
-		tc.Python3.any(),
+		tc.Python3,
 		yieldLinePyVFS.any(),
 		arg2.any(),
 		argsFileVFS.any(),
@@ -42,11 +42,11 @@ func (e *EmitContext) emitBIReserved(
 	cmd1Args = cmd1Args[:len(cmd1Args):len(cmd1Args)]
 
 	cmd2Args := na.anyList(
-		tc.Python3.any(),
+		tc.Python3,
 		xargsPyVFS.any(),
 		arg2.any(),
 		argsFileVFS.any(),
-		tc.Python3.any(),
+		tc.Python3,
 		buildInfoGenPyVFS.any(),
 		outVFS.any(),
 	)

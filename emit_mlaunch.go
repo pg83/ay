@@ -15,7 +15,7 @@ func (e *EmitContext) emitMlaunch(resolved []ResolvedPeer, peerArchivePaths []VF
 
 	if e.d.mlaunch.Generate == "composite" {
 		script := buildInternalScriptsGenCompositeGo
-		args := append([]ANY{e.d.tc.Python3.any(), script.any(), strLocalPeers.any()}, e.d.mlaunch.Components...)
+		args := append([]ANY{e.d.tc.Python3, script.any(), strLocalPeers.any()}, e.d.mlaunch.Components...)
 
 		e.emitGolaunchSource(&golaunchKV, script, args, build(e.instance.Path.relString(), "/main.go"))
 
@@ -27,7 +27,7 @@ func (e *EmitContext) emitMlaunch(resolved []ResolvedPeer, peerArchivePaths []VF
 	}
 
 	script := buildInternalScriptsGenMlaunchPy
-	args := []ANY{e.d.tc.Python3.any(), script.any(), strType.any(), internStr(e.d.mlaunch.Generate).any(), strLocalPeers.any()}
+	args := []ANY{e.d.tc.Python3, script.any(), strType.any(), internStr(e.d.mlaunch.Generate).any(), strLocalPeers.any()}
 
 	dedupers.with(func(deduper *DeDuper) {
 		for _, peer := range resolved {
@@ -155,7 +155,7 @@ func (e *EmitContext) genPackageFinal() *ModuleEmitResult {
 	inputs = append(inputs, construction...)
 	inputs = append(inputs, e.outs...)
 
-	args := []ANY{e.d.tc.Python3.any(), copyScript.any(), strYaStartCommandFile.any(), strDestDir.any(), build(module).any(), strBuildRoot2.any(), bldRootDirVFS.any()}
+	args := []ANY{e.d.tc.Python3, copyScript.any(), strYaStartCommandFile.any(), strDestDir.any(), build(module).any(), strBuildRoot2.any(), bldRootDirVFS.any()}
 	outputs := []VFS{out}
 
 	if env := (Environment{s: &e.frame.ifEnv}); env.string(envPackedPackageExt) != "" {

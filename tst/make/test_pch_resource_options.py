@@ -16,7 +16,7 @@ class PchResourceOptionsTest(MakeTest):
         self.fixture()
         args = [arg for command in self.node(self.graph("-DLLVM_TOOLS_ROOT=/ay_e2e_llvm"), "answer.h.pch")["cmds"] for arg in command["cmd_args"]]
         self.assertNotIn("/ay_e2e_llvm", args)
-        self.assertTrue(any(arg.startswith("$(CLANG") for arg in args), args)
+        self.assertTrue(any(arg.startswith("$(") and "CLANG" in arg for arg in args), args)
 
     def test_undefined_llvm_resource_globals_do_not_prevent_pch_generation(self):
         self.fixture("SET(LLVM_TOOLS_ROOT $E2E_MISSING_RESOURCE_GLOBAL)")

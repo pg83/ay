@@ -105,8 +105,8 @@ func (e *EmitContext) pchLLVMRoot() ANY {
 		return internStr(resolveResourceGlobalRef(value.string(), e.peers.ResourceGlobals)).any()
 	}
 
-	if value, ok := e.instance.Platform.Flags[envLlvmToolsRoot]; ok {
-		return internStr(resolveResourceGlobalRef(value.string(), e.peers.ResourceGlobals)).any()
+	if value := (Environment{s: &e.frame.ifEnv}).string(envLlvmToolsRoot); value != "" {
+		return internStr(resolveResourceGlobalRef(value, e.peers.ResourceGlobals)).any()
 	}
 
 	for _, resource := range e.peers.ResourceGlobals {

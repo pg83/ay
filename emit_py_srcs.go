@@ -836,7 +836,7 @@ func (e *EmitContext) emitPyRegistration(registration PyRegistration) {
 	env := envVarsVCS
 
 	pyCmdArgs := na.anyList(
-		d.tc.Python3.any(),
+		d.tc.Python3,
 		script.any(),
 		arg.any(),
 		regCppVFS.any(),

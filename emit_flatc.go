@@ -124,7 +124,7 @@ func (e *EmitContext) emitFLReserved(srcRel string, srcVFS VFS, flatcLDRef NodeR
 		flatcFlagsChunk = na.anyConcat(flatcFlags)
 	}
 
-	headChunk := na.anyList(tc.Python3.any(), flatcWrapperVFS.any(), flatcBinary.any())
+	headChunk := na.anyList(tc.Python3, flatcWrapperVFS.any(), flatcBinary.any())
 	tailChunk := na.anyList(headerVFS.any(), srcVFS.any())
 	includeArgs := e.peers.FlatcIncludeArgs
 

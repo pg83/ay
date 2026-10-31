@@ -105,7 +105,7 @@ func (e *EmitContext) emitPyFbsGroup(files []PyFbsSource) {
 	node := NodeSpec{Node: Node{Platform: instance.Platform, Env: envVarsVCS,
 		Cmds: na.cmdList(
 			Cmd{CmdArgs: na.chunkList(args, d.flatcFlags, flatcIOLeadArgs[:len(flatcIOLeadArgs)-1], e.peers.FlatcIncludeArgs, tail), Cwd: bldRootDirVFS.cwd(), Env: envVarsVCS},
-			Cmd{CmdArgs: na.chunkList(na.anyList(d.tc.Python3.any(), tar.any(), strExts.any(), strPy.any(), strInput.any(), build(dir).any(), strOutput.any(), out.any())), Env: envVarsVCS},
+			Cmd{CmdArgs: na.chunkList(na.anyList(d.tc.Python3, tar.any(), strExts.any(), strPy.any(), strInput.any(), build(dir).any(), strOutput.any(), out.any())), Env: envVarsVCS},
 		), Inputs: na.rootInputList(inputs, ctx.scripts[tar.rel()]), Outputs: na.vfsList(out), ForeignDepRefs: na.refList(toolRef), KV: &pyFbsKV, KVExts: []KVExt{{Key: "tared_kind", Val: "nodir"}}, Resources: usesPython3},
 	}
 
@@ -120,7 +120,7 @@ func (e *EmitContext) emitPyFbsGroup(files []PyFbsSource) {
 	script := buildScriptsCompilePysrcPy
 	resRef, res := ctx.tool(argToolsRescompiler)
 	pycc := e.pyccTool()
-	compileArgs := []ANY{d.tc.Python3.any(), script.any(), strInput.any(), out.any(), strOutput.any(), cc.any(), strRescompiler.any(), res.any(), version.any(), strPycc.any(), pycc.binaries[0].any()}
+	compileArgs := []ANY{d.tc.Python3, script.any(), strInput.any(), out.any(), strOutput.any(), cc.any(), strRescompiler.any(), res.any(), version.any(), strPycc.any(), pycc.binaries[0].any()}
 
 	if !d.usePython2 {
 		compileArgs = append(compileArgs, strSlowPycc.any(), pycc.binaries[1].any())

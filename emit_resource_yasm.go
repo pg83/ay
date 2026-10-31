@@ -148,11 +148,11 @@ func (e *EmitContext) emitResourceJoin(files []string, suffix string, tag STR, f
 	name := "join_" + e.resourceHash(files, tag) + suffix
 	out := build(e.instance.Path.relString(), "/", name)
 	script := buildScriptsGenJoinSrcsPy
-	args := []ANY{e.d.tc.Python3.any(), script.any(), out.any(), argYaStartCommandFile.any()}
+	args := []ANY{e.d.tc.Python3, script.any(), out.any(), argYaStartCommandFile.any()}
 
 	if flat {
 		script = copyFsToolsVFS
-		args = []ANY{e.d.tc.Python3.any(), script.any(), strCat.any(), out.any(), argYaStartCommandFile.any()}
+		args = []ANY{e.d.tc.Python3, script.any(), strCat.any(), out.any(), argYaStartCommandFile.any()}
 	}
 
 	var inputs []VFS

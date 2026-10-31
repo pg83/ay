@@ -269,7 +269,7 @@ func (e *EmitContext) emitGoCodegenStmt(st GoCodegenStmt) {
 		}
 	case goCodegenSource:
 		arcadia := build(dir, "/.arcadia")
-		fsTools := na.anyList(d.tc.Python3.any(), copyFsToolsVFS.any())
+		fsTools := na.anyList(d.tc.Python3, copyFsToolsVFS.any())
 		src := source(st.file)
 
 		env = e.goToolEnv(true)

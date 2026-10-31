@@ -62,8 +62,8 @@ func (e *EmitContext) emitGoFlatcSource(meta SrcMeta) {
 	tarSources := buildScriptsTarSourcesPy
 	head := na.anyList(tool.any(), strGo2.any(), argGenMutable.any(), strGoNamespace.any(), internStr(goPackageName(module, d)).any())
 	tail := na.anyList(argDashO.any(), generated.any(), src.any())
-	post := na.anyList(d.tc.Python3.any(), postprocess.any(), strArcadiaPrefix.any(), internStr(goArcPrefix).any(), strInputDir.any(), bindir.any(), strMap.any())
-	tar := na.anyList(d.tc.Python3.any(), tarSources.any(), strFlat.any(), strInput.any(), generated.any(), strOutput.any(), out.any(), strExts.any(), strGo3.any())
+	post := na.anyList(d.tc.Python3, postprocess.any(), strArcadiaPrefix.any(), internStr(goArcPrefix).any(), strInputDir.any(), bindir.any(), strMap.any())
+	tar := na.anyList(d.tc.Python3, tarSources.any(), strFlat.any(), strInput.any(), generated.any(), strOutput.any(), out.any(), strExts.any(), strGo3.any())
 
 	node := NodeSpec{Node: Node{Platform: instance.Platform, Env: envVarsVCS,
 		Cmds: na.cmdList(

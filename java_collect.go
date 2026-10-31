@@ -236,7 +236,7 @@ func collectJavaData(ctx *GenCtx, jm *JavaModule, stmts []Stmt, env Environment)
 	d.javaProtoCommonVersion = env.string(envJavaProtoCommonVersion)
 	d.embedSbom = d.embedSbom || ctx.sbomEnabled && env.bool(envEmbedSbom)
 	d.needSbomInfo = env.bool(envNeedSbomInfo)
-	d.modver = strings.Join(strings.Fields(env.string(envModver)), ".")
+	d.modver = sbomModuleVersion(env)
 	d.protoNamespace = env.string(envProtoNamespace)
 
 	for _, name := range javaUberjarFlagVars {

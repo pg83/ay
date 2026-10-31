@@ -390,7 +390,7 @@ func nextConfigMacroVariable(s string, from int) (int, int) {
 				if s[j] == '\\' {
 					j++
 
-					if j == len(s) || s[j] == '\n' {
+					if j == len(s) {
 						break
 					}
 				}

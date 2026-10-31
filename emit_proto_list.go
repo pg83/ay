@@ -36,7 +36,7 @@ func (e *EmitContext) emitListProto(stmt ListProtoStmt) {
 
 	ref, headerRef := e.ctx.emit.reserve(), e.ctx.emit.reserve()
 	listScript, touchScript := buildScriptsListPy, buildScriptsTouchPy
-	args := na.anyList(append([]ANY{e.d.tc.Python3.any(), listScript.any()}, stmt.Files...)...)
+	args := na.anyList(append([]ANY{e.d.tc.Python3, listScript.any()}, stmt.Files...)...)
 
 	pending := e.pendingEmit(func() {
 		e.emitReservedNode(NodeSpec{Node: Node{Platform: e.instance.Platform,
@@ -54,7 +54,7 @@ func (e *EmitContext) emitListProto(stmt ListProtoStmt) {
 
 	touch := e.pendingEmit(func() {
 		e.emitReservedNode(NodeSpec{Node: Node{Platform: e.instance.Platform,
-			Cmds: na.cmdList(Cmd{CmdArgs: na.chunkList(na.anyList(e.d.tc.Python3.any(), touchScript.any(), header.any())), Env: envVarsVCS}),
+			Cmds: na.cmdList(Cmd{CmdArgs: na.chunkList(na.anyList(e.d.tc.Python3, touchScript.any(), header.any())), Env: envVarsVCS}),
 			Env:  envVarsVCS, Inputs: na.inputList(na.vfsList(touchScript), na.vfsList(output)), Outputs: na.vfsList(header),
 			KV: &pbKV, Resources: usesPython3},
 		}, headerRef)

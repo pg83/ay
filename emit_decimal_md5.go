@@ -39,7 +39,7 @@ func (e *EmitContext) emitDecimalMD5(stmt *DecimalMD5Lower32BitsStmt) NodeRef {
 		cmdArgs := na.anys.alloc(7 + len(optArena))[:0]
 
 		cmdArgs = append(cmdArgs,
-			python3.any(),
+			python3,
 			decimalMD5PyVFS.any(),
 			strFixedOutput.any(),
 			internV("--func-name=", stmt.FuncName).any(),

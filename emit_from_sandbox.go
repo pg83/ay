@@ -17,7 +17,7 @@ type SandboxRecipe struct {
 	Stmt    *FromSandboxStmt
 	Outputs []VFS
 	Auto    int
-	Python3 VFS
+	Python3 ANY
 }
 
 func sameSandboxStmt(a, b *FromSandboxStmt) bool {
@@ -77,7 +77,7 @@ func (e *EmitContext) emitFromSandbox(stmt *FromSandboxStmt) (memberRefs []NodeR
 	}
 
 	ctx := e.ctx
-	node, outVFSs, auto := fromSandboxNode(ctx.emit.nodeArenas(), e.instance, e.d.tc.Python3.any(), stmt)
+	node, outVFSs, auto := fromSandboxNode(ctx.emit.nodeArenas(), e.instance, e.d.tc.Python3, stmt)
 	ref := ctx.emit.reserve()
 	pending := e.pendingEmit(func() { e.emitReservedNode(node, ref) })
 	parsed := extractionOutputIncludes(ctx.na, stmt.OutputIncludes)

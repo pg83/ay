@@ -2061,7 +2061,7 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 			resourceGlobalsClosure = ctx.declSlices.intern(declBlock[:k])
 		}
 
-		d.tc = resolveModuleToolchain(ctx, resourceGlobalsClosure, instance.Platform.ClangVer)
+		d.tc = resolveModuleToolchain(ctx, resourceGlobalsClosure, instance.Platform)
 
 		if d.yqlPrebuiltResource != "" && d.tc.Python3 == 0 {
 			resourceGlobalsClosure = e.scriptModuleResources(resourceGlobalsClosure, "build/platform/python/ymake_python3")

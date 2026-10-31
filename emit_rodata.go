@@ -45,7 +45,7 @@ func (e *EmitContext) emitRD(srcRel string, srcVFS VFS, yasmLD NodeRef, extraInp
 	inputs = inputs[:len(inputs):len(inputs)]
 
 	node := NodeSpec{Node: Node{Platform: instance.Platform,
-		Cmds: na.cmdList(Cmd{CmdArgs: na.chunkList(na.anyList(tc.Python3.any()), rodataConstArgs, na.anyList(internStr(toolName).any(), srcVFS.any(), asmVFS.any())),
+		Cmds: na.cmdList(Cmd{CmdArgs: na.chunkList(na.anyList(tc.Python3), rodataConstArgs, na.anyList(internStr(toolName).any(), srcVFS.any(), asmVFS.any())),
 			Env: pythonEnv}, Cmd{CmdArgs: na.chunkList(yasmConstHead, na.anyList(argD.any(), internV("_", string(instance.Platform.ISA), "_").any()), rodataYasmConstArgs, na.anyList(outVFS.any(), asmVFS.any())),
 			Env: yasmEnv}),
 		Env: yasmEnv, Inputs: inputs, KV: &rodataKV,
@@ -108,7 +108,7 @@ func (e *EmitContext) emitRodataCpp(srcVFS VFS, tc ModuleToolchain) {
 	inputs := na.rootInputList(na.vfsList(rodataCppScriptVFS, srcVFS))
 
 	ref := e.emitNode(NodeSpec{Node: Node{Platform: e.instance.Platform,
-		Cmds: na.cmdList(Cmd{CmdArgs: na.chunkList(na.anyList(tc.Python3.any(), rodataCppScriptVFS.any(), internStr(name).any(), srcVFS.any(), out.any())), Env: envVarsVCS}),
+		Cmds: na.cmdList(Cmd{CmdArgs: na.chunkList(na.anyList(tc.Python3, rodataCppScriptVFS.any(), internStr(name).any(), srcVFS.any(), out.any())), Env: envVarsVCS}),
 		Env:  envVarsVCS, Inputs: inputs, Outputs: na.vfsList(out), KV: &rodataKV, Resources: usesPython3}, input: InputSpec{roots: inputs},
 	})
 

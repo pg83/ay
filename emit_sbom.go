@@ -1,5 +1,7 @@
 package main
 
+import "strings"
+
 var sbomKV = KV{P: pkDX, PC: pcYellow}
 
 const (
@@ -82,17 +84,30 @@ func (e *EmitContext) registeredSbomComponent(output VFS) *GeneratedFileInfo {
 	return info
 }
 
+func sbomModuleVersion(env Environment) string {
+	value, ok := env.lookup("MODVER")
+
+	if !ok {
+		return "unknown"
+	}
+
+	return strings.Join(strings.Fields(value), ".")
+}
+
+func sbomVersionArg(version string) []ANY {
+	if version == "" {
+		return nil
+	}
+
+	return []ANY{internStr(version).any()}
+}
+
 func (e *EmitContext) emitSbomComponent(realPrjName string) (*NodeRef, *VFS) {
 	ctx, instance, d := e.ctx, e.instance, e.d
 	na := ctx.na
 	moddir := instance.Path.relString()
 	lang := sbomComponentLang(d.moduleStmt.Name)
-	modver := d.modver
-
-	if modver == "" {
-		modver = "unknown"
-	}
-
+	modver := sbomModuleVersion(Environment{s: &e.frame.ifEnv})
 	out := build(moddir, "/", realPrjName, ".", lang, ".component.sbom")
 
 	if info := e.registeredSbomComponent(out); info != nil {
@@ -109,7 +124,7 @@ func (e *EmitContext) emitSbomComponent(realPrjName string) (*NodeRef, *VFS) {
 			strOutput.any(), out.any(),
 			strType.any(), strLibrary.any(),
 			strPath.any(), internStr(moddir).any(),
-			strVer.any(), internStr(modver).any(),
+			strVer.any()), na.anyList(sbomVersionArg(modver)...), na.anyList(
 			strLang.any(), internStr(lang).any())), Env: env}),
 		Env: env, Inputs: na.inputList(na.vfsList(scriptVFS)), KV: &sbomKV,
 		Outputs:   na.vfsList(out),

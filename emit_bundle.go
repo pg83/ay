@@ -20,7 +20,7 @@ func (e *EmitContext) emitBundle(b BundleEntry) {
 
 	if b.Output != "" {
 		script := buildScriptsBundleOutputPy
-		args := ctx.na.anyList(d.tc.Python3.any(), script.any(), argResult.any(), src.any(), argName.any(), internStr(b.Output).any(), strOutput.any(), dst.any())
+		args := ctx.na.anyList(d.tc.Python3, script.any(), argResult.any(), src.any(), argName.any(), internStr(b.Output).any(), strOutput.any(), dst.any())
 
 		e.emitReservedNode(NodeSpec{Node: Node{Platform: instance.Platform, Cmds: ctx.na.cmdList(Cmd{CmdArgs: ctx.na.chunkList(args), Env: envVarsVCS}), Env: envVarsVCS, Inputs: ctx.na.rootInputList(ctx.na.vfsList(src, script)), Outputs: ctx.na.vfsList(dst), DepRefs: ctx.na.refList(srcRef), KV: &bundleKV, Resources: usesPython3}, input: InputSpec{roots: ctx.na.inputList(ctx.na.vfsList(script))}}, ref)
 	} else {
@@ -58,13 +58,13 @@ func (e *EmitContext) resolveBundleSource(target string) (VFS, NodeRef, bool) {
 	return 0, 0, false
 }
 
-func (e *EmitContext) emitBundleNode(python3 VFS, src, dst VFS, suffix string, srcRef NodeRef, resolved bool, id NodeRef) {
+func (e *EmitContext) emitBundleNode(python3 ANY, src, dst VFS, suffix string, srcRef NodeRef, resolved bool, id NodeRef) {
 	ctx, instance := e.ctx, e.instance
 	na := ctx.na
 	fsTools := copyFsToolsVFS
 	cmdArgs := na.anys.alloc(5)[:0]
 
-	cmdArgs = append(cmdArgs, python3.any(), fsTools.any(), argRename.any())
+	cmdArgs = append(cmdArgs, python3, fsTools.any(), argRename.any())
 
 	if resolved {
 		cmdArgs = append(cmdArgs, internV(src.prefix(), src.relString(), suffix).any())

@@ -8,11 +8,11 @@ import (
 
 var swigJNIKV = KV{P: pkSW, PC: pcYellow}
 
-func swigJNIHead(python3, swigBin, src VFS, srcRel string) []ANY {
+func swigJNIHead(python3 ANY, swigBin, src VFS, srcRel string) []ANY {
 	stem := strings.TrimSuffix(srcRel, path.Ext(srcRel))
 
 	return []ANY{
-		python3.any(), swigJNIScriptVFS.any(),
+		python3, swigJNIScriptVFS.any(),
 		argSwig.any(), swigBin.any(),
 		argDefaultModule.any(), internStr(path.Base(stem)).any(),
 		argSrc.any(), src.any(),
@@ -173,7 +173,7 @@ func (ctx *GenCtx) javaEmitSwigJsrc(jm *JavaModule, src string, srcVFS, jsrc VFS
 
 	scanCtx.swigInclude = ctx.na.vfsList(jm.swigInclude()...)
 
-	args := swigJNIHead(javaPython3, swigBin, srcVFS, src)
+	args := swigJNIHead(javaPython3.any(), swigBin, srcVFS, src)
 
 	b.useResource("YMAKE_PYTHON3")
 	args = append(args, swigJNIPackageArgs(srcVFS)...)

@@ -118,7 +118,13 @@ func wrapccPrefixFor(flags map[string]string) (head, tail []ANY) {
 		return nil, nil
 	}
 
-	head = []ANY{wrapccPython3STR.any(), wrapccPyVFS.any(), wrapccArgSrcFile.any()}
+	python3 := wrapccPython3STR
+
+	if bin := flags["BUILD_PYTHON3_BIN"]; bin != "" {
+		python3 = internStr(bin)
+	}
+
+	head = []ANY{python3.any(), wrapccPyVFS.any(), wrapccArgSrcFile.any()}
 	tail = []ANY{argSourceRoot.any(), strS.any(), argBuildRoot.any(), strB.any(), wrapccArgEnd.any()}
 
 	return head, tail

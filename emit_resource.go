@@ -136,7 +136,7 @@ func composeObjcopyArgBlocks(na *NodeArenas, tc ModuleToolchain, p *Platform, la
 
 	return ObjcopyArgBlocks{
 		pre: na.anyList(
-			tc.Python3.any(),
+			tc.Python3,
 			objcopyScriptVFS.any(),
 			argCompiler.any(), tc.CXX.any(),
 			argObjcopy.any(), tc.Objcopy.any(),

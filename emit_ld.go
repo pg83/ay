@@ -410,7 +410,7 @@ func emitVCSNode(emit *StreamingEmitter, host *Platform) NodeRef {
 
 func composeLDCmdVcsInfo(na *NodeArenas, tc ModuleToolchain, vcsC VFS) []ANY {
 	return na.anyList(
-		tc.Python3.any(),
+		tc.Python3,
 		ldVcsInfoVFS.any(),
 		argVcsVcsJson.any(),
 		vcsC.any(),
@@ -474,9 +474,9 @@ func composeLDCmdLinkExe(na *NodeArenas, p *Platform, tc ModuleToolchain, output
 	cmdArgs := na.anys.alloc(argCap)[:0]
 
 	if dyn != nil {
-		cmdArgs = append(cmdArgs, tc.Python3.any(), ldLinkDynLibVFS.any(), argTarget.any(), output.any())
+		cmdArgs = append(cmdArgs, tc.Python3, ldLinkDynLibVFS.any(), argTarget.any(), output.any())
 	} else {
-		cmdArgs = append(cmdArgs, tc.Python3.any(), ldLinkExeVFS.any())
+		cmdArgs = append(cmdArgs, tc.Python3, ldLinkExeVFS.any())
 	}
 
 	cmdArgs = append(cmdArgs, argStartPlugins.any())
@@ -592,7 +592,7 @@ func composeLDCmdLinkSbom(na *NodeArenas, tc ModuleToolchain, lang, moddir STR, 
 	cmd := na.anys.alloc(10 + len(sbomPaths))[:0]
 
 	cmd = append(cmd,
-		tc.Python3.any(),
+		tc.Python3,
 		linkSbomScriptVFS.any(),
 		strLang.any(), lang.any(),
 		strModPath.any(), moddir.any(),
@@ -622,7 +622,7 @@ func composeLDCmdLinkOrCopy(na *NodeArenas, tc ModuleToolchain, modulePath strin
 	cmd := na.anys.alloc(5 + len(dynamicPaths))[:0]
 
 	cmd = append(cmd,
-		tc.Python3.any(),
+		tc.Python3,
 		ldFsToolsVFS.any(),
 		argLinkOrCopyToDir.any(),
 		argNoCheck.any(),

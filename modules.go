@@ -3,6 +3,7 @@ package main
 import (
 	"cmp"
 	"fmt"
+	"os"
 	"path"
 	"path/filepath"
 	"slices"
@@ -3731,6 +3732,7 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 
 		env.setString(internEnv(importMaskVariable), value)
 		setPythonImportMask(value, d)
+		d.setVars.set(internStr(importMaskVariable), internStr(value))
 	case tokCppProtoPlugin0, tokCppProtoPlugin, tokCppProtoPlugin2, tokCppEvProtoPlugin:
 		addCPPProtoPlugin(d, parseCPPProtoPlugin(v))
 	case tokTasklet:
@@ -5136,6 +5138,10 @@ func expandTokenTracked(s string, env Environment, phase TokenExpansion, track *
 		s = strings.ReplaceAll(s, "\\$", "$")
 	}
 
+	if strings.Contains(s, "$ENV{") {
+		s = expandProcessEnvRefs(s)
+	}
+
 	if s == "$S" {
 		return "$(S)"
 	}
@@ -5170,6 +5176,32 @@ func expandTokenTracked(s string, env Environment, phase TokenExpansion, track *
 	}
 
 	return s
+}
+
+func expandProcessEnvRefs(s string) string {
+	var out strings.Builder
+
+	for {
+		start := strings.Index(s, "$ENV{")
+
+		if start < 0 {
+			break
+		}
+
+		end := strings.IndexByte(s[start+5:], '}')
+
+		if end < 0 {
+			break
+		}
+
+		out.WriteString(s[:start])
+		out.WriteString(os.Getenv(s[start+5 : start+5+end]))
+		s = s[start+5+end+1:]
+	}
+
+	out.WriteString(s)
+
+	return out.String()
 }
 
 func expandBracedVars(s string, env Environment, phase TokenExpansion, track *SourceTextTracker) string {

@@ -24,7 +24,7 @@ func (e *EmitContext) emitBuildMnStmt(stmt *BuildMnStmt) {
 	pe := func() {
 		node := NodeSpec{Node: Node{Platform: instance.Platform,
 			Cmds: na.cmdList(Cmd{CmdArgs: na.chunkList(na.anyList(
-				python3.any(),
+				python3,
 				buildMnScriptVFS.any(),
 				strBuildmnf.any(),
 				strS.any(),

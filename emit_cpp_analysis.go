@@ -78,7 +78,7 @@ func (e *EmitContext) cppStaticAnalyzer(globals []ResourceDecl) *CppStaticAnalyz
 
 	return &CppStaticAnalyzer{
 		config:       config,
-		beforeSource: na.anyList(d.tc.Python3.any(), clangSAScript.any(), strTestingSrc.any()),
+		beforeSource: na.anyList(d.tc.Python3, clangSAScript.any(), strTestingSrc.any()),
 		afterSource:  afterSource[:len(afterSource):len(afterSource)],
 		inputs:       na.vfsList(clangSAScript, config),
 		resources:    na.strs.list(dedup(resources)...),

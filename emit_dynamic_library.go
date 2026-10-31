@@ -249,7 +249,7 @@ func (e *EmitContext) emitDynamicLibrary() *ModuleEmitResult {
 		}
 	})
 
-	d.tc = resolveModuleToolchain(ctx, resourceGlobals, instance.Platform.ClangVer)
+	d.tc = resolveModuleToolchain(ctx, resourceGlobals, instance.Platform)
 	var modulePeers []VFS
 
 	for _, peer := range resolved {
@@ -360,7 +360,7 @@ func composeDynLibCmd(na *NodeArenas, p *Platform, tc ModuleToolchain, modulePat
 	cmdArgs := na.anys.alloc(bound)[:0]
 
 	cmdArgs = append(cmdArgs,
-		tc.Python3.any(),
+		tc.Python3,
 		ldLinkDynLibVFS.any(),
 		argTarget.any(), output.any(),
 	)

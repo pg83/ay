@@ -1033,7 +1033,7 @@ func composePBArgBlocks(na *NodeArenas, tc ModuleToolchain, protocBinary, cppSty
 	grpc bool, cppOutRoot string, liteHeaders bool,
 	extraProtocFlags []ANY, extraPlugins []ResolvedCPPProtoPlugin) PbArgBlocks {
 	head := na.anyList(
-		tc.Python3.any(),
+		tc.Python3,
 		pbWrapperVFS.any(),
 		argOutputs.any(),
 	)

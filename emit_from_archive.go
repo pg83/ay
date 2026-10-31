@@ -20,7 +20,7 @@ func (e *EmitContext) emitFromArchive(stmt FromArchiveEntry) {
 	}
 
 	args := []ANY{
-		e.d.tc.Python3.any(), script.any(), strArchive.any(), src.any(),
+		e.d.tc.Python3, script.any(), strArchive.any(), src.any(),
 		strFileName.any(), internStr(stmt.Source.string() + "-").any(),
 		strUntarTo.any(), internStr(stmt.Prefix).any(),
 	}

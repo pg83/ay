@@ -327,7 +327,7 @@ func (ctx *GenCtx) javaRegisterFiles(jm *JavaModule) {
 		ref := ctx.emit.reserve()
 
 		pending := ctx.javaPendingEmit(func() {
-			node := composeCPNode(jm.instance, src, dst, nil, ModuleToolchain{Python3: javaPython3}, ctx.scripts, ctx.na)
+			node := composeCPNode(jm.instance, src, dst, nil, ModuleToolchain{Python3: javaPython3.any()}, ctx.scripts, ctx.na)
 
 			ctx.emit.emitReservedNodePtr(&node.Node, ref)
 		})
@@ -360,7 +360,7 @@ func (ctx *GenCtx) javaRegisterProducers(jm *JavaModule, frame *ModuleFrame) {
 	d.runPrograms = append(d.runPrograms, jm.data.runPrograms...)
 	d.bundles = append(d.bundles, jm.data.bundles...)
 	d.srcDirs = append(d.srcDirs, jm.data.srcDirs...)
-	d.tc = ModuleToolchain{Python3: javaPython3}
+	d.tc = ModuleToolchain{Python3: javaPython3.any()}
 	d.cc.TC = d.tc
 	d.scanCtx = newModuleScanContext(ctx, jm.instance, d, nil, nil, nil, nil)
 
@@ -594,15 +594,14 @@ func (ctx *GenCtx) javaEmitContrib(jm *JavaModule) {
 	}
 
 	if d.sbomComponent {
-		version := d.modver
+		args := append(b.python(sbomGenScriptRel), strOutput.any(), build(jm.dir, "/", jm.name, ".component.sbom").any(),
+			strType.any(), strLibrary.any(), strPath.any(), internStr(jm.dir).any(), strVer.any())
 
-		if version == "" {
-			version = "unknown"
+		if d.modver != "" {
+			args = append(args, internStr(d.modver).any())
 		}
 
-		args := append(b.python(sbomGenScriptRel), strOutput.any(), build(jm.dir, "/", jm.name, ".component.sbom").any(),
-			strType.any(), strLibrary.any(), strPath.any(), internStr(jm.dir).any(),
-			strVer.any(), internStr(version).any(), strLang.any(), strJava4.any())
+		args = append(args, strLang.any(), strJava4.any())
 
 		b.cmd(args, 0)
 	}

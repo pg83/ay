@@ -16,7 +16,7 @@ func (e *EmitContext) emitJSReserved(allName string, sources []string, srcVFSs [
 	cmdArgs := na.anys.alloc(5 + len(sources))[:0]
 
 	cmdArgs = append(cmdArgs,
-		tc.Python3.any(),
+		tc.Python3,
 		joinSrcs.any(),
 		outVFS.any(),
 		argYaStartCommandFile.any(),

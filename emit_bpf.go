@@ -16,7 +16,7 @@ func (e *EmitContext) bpfCompileNode(stmt LlvmCompileStmt, out VFS) NodeSpec {
 	}
 
 	args := na.chunkList(
-		na.anyList(d.tc.Python3.any(), buildScriptsClangWrapperPy.any(), internStr(windows).any(), internStr(compiler).any()),
+		na.anyList(d.tc.Python3, buildScriptsClangWrapperPy.any(), internStr(windows).any(), internStr(compiler).any()),
 		d.cc.CCBlocks.includes, platformFlags,
 		na.anyList(argTarget2.any(), argBpf.any(), argDashC.any(), input.any(), argDashO.any(), out.any()),
 		stmt.Options,
