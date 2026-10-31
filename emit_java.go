@@ -618,7 +618,7 @@ func (ctx *GenCtx) javaEmitExternal(jm *JavaModule) {
 	autoInputs := append([]VFS{}, jm.macroOuts...)
 
 	if jm.unit.proto {
-		scanCtx := newScanContext(ctx.na, ctx.parsers, nil, nil, nil, includeScannerBasePaths())
+		scanCtx := newScanContext(ctx.na, ctx.parsers, nil, nil, nil, includeScannerBasePaths(jm.instance.Platform))
 
 		scanCtx.protoInclude = ctx.na.vfsList(jm.protoInclude...)
 
@@ -813,7 +813,7 @@ func (ctx *GenCtx) javaEmitProtoPB(jm *JavaModule, globals map[string]VFS, scanC
 			continue
 		}
 
-		ref, bin := ctx.tool(internArg(plugin.tool))
+		ref, bin := ctx.toolRef(jm.instance.Platform, internArg(plugin.tool))
 
 		b.deps = append(b.deps, ref)
 		b.input(bin)

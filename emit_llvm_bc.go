@@ -235,7 +235,7 @@ func (e *EmitContext) emitLlvmBcStmt(stmt *LlvmBcStmt) {
 	}
 
 	if stmt.GenerateMachineCode {
-		toolRef, toolBin := ctx.tool(internArg(stmt.LLCTool))
+		toolRef, toolBin := e.tool(internArg(stmt.LLCTool))
 		object := build(optOut.relString(), ".o")
 
 		node := NodeSpec{Node: Node{Platform: instance.Platform,

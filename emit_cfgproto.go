@@ -5,9 +5,9 @@ var cfgprotoKV = KV{P: pkPB, PC: pcYellow}
 func (e *EmitContext) emitLibraryCfgProtoSource(meta SrcMeta) {
 	src := meta.Source
 	ctx, d := e.ctx, e.d
-	protocLDRef, _ := ctx.tool(argContribToolsProtoc)
-	cppStyleguideLDRef, _ := ctx.tool(argContribToolsProtocPluginsCppStyleguide)
-	configPluginLDRef, configPluginBinary := ctx.tool(argLibraryCppProtoConfigPlugin)
+	protocLDRef, _ := e.tool(argContribToolsProtoc)
+	cppStyleguideLDRef, _ := e.tool(argContribToolsProtocPluginsCppStyleguide)
+	configPluginLDRef, configPluginBinary := e.tool(argLibraryCppProtoConfigPlugin)
 	cfgRel := e.protoSourceRel(e.moduleSourceName(src))
 	cfgRelPath := cfgRel.string()
 	cfgSource := cfgRel.source()

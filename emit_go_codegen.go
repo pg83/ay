@@ -239,7 +239,7 @@ func (e *EmitContext) emitGoCodegenStmt(st GoCodegenStmt) {
 	dir := instance.Path.relString()
 	bindir := build(dir)
 	out := build(dir, "/", st.out)
-	toolRef, tool := ctx.tool(internArg(st.tool))
+	toolRef, tool := e.tool(internArg(st.tool))
 	inputs := []VFS{tool}
 	toolEnd := len(inputs)
 	toolRefs := []NodeRef{toolRef}
@@ -257,7 +257,7 @@ func (e *EmitContext) emitGoCodegenStmt(st GoCodegenStmt) {
 	case goCodegenReflect:
 		cmds = []Cmd{{CmdArgs: na.chunkList(na.anyList(tool.any(), internStr(d.mockgen.module).any(), internStr(d.mockgen.types).any())), Cwd: bindir.cwd(), Env: envVarsVCS, Stdout: out}}
 	case goCodegenMocks:
-		mockgenRef, mockgen := ctx.tool(internArg(goMockgenTool))
+		mockgenRef, mockgen := e.tool(internArg(goMockgenTool))
 
 		env = e.goToolEnv(true)
 		inputs = append(inputs, mockgen)

@@ -13,7 +13,7 @@ func (e *EmitContext) emitProto2Fbs(stmt Proto2FbsStmt, output VFS) {
 	ctx, d := e.ctx, e.d
 	na := ctx.na
 	input := e.runProgramInputVFS(stmt.Source.string())
-	toolRef, tool := ctx.tool(argContribLibsFlatbuffersFlatc)
+	toolRef, tool := e.tool(argContribLibsFlatbuffersFlatc)
 	bindir := e.instance.Path.rel().build()
 	temporary := build(e.instance.Path.relString(), "/", path.Base(output.relString()))
 	fsTools := copyFsToolsVFS

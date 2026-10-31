@@ -15,7 +15,7 @@ func (e *EmitContext) foreignToolResult(path ARG) *ModuleEmitResult {
 	ctx := e.ctx
 
 	if e.instance.Platform == ctx.host || e.instance.Platform == ctx.host.picVariant || isJavaModuleType(ctx.moduleName(path.string())) {
-		return ctx.toolResult(path)
+		return e.toolResult(path)
 	}
 
 	instance := ctx.rootInstance(path.string(), demandLinked)
@@ -322,16 +322,61 @@ func (ctx *GenCtx) foreignToolRef(target *ModuleEmitResult) NodeRef {
 		return tool.host.LDRef
 	}
 
-	from, to := *tool.host.LDPath, *target.LDPath
-
-	tool.boundRef = ctx.emit.emitNode(NodeSpec{Node: Node{Platform: ctx.host,
-		Cmds: ctx.na.cmdList(Cmd{
-			CmdArgs: ctx.na.chunkList(ctx.na.anyList(strBinMv.any(), from.any(), to.any())),
-			Cwd:     bldRootDirVFS.cwd(),
-		}), Inputs: ctx.na.inputList(ctx.na.vfsList(from)), Outputs: ctx.na.vfsList(to),
-		DepRefs: ctx.na.refList(tool.host.LDRef),
-		KV:      &KV{P: pkCP, PC: pcLightBlue}},
-	})
+	tool.boundRef = ctx.emitToolMove(tool.host, *target.LDPath)
 
 	return tool.boundRef
+}
+
+func (ctx *GenCtx) emitToolMove(host *ModuleEmitResult, to VFS) NodeRef {
+	from := *host.LDPath
+
+	return ctx.emit.emitNode(NodeSpec{Node: Node{Platform: ctx.host,
+		Cmds:   ctx.na.cmdList(Cmd{CmdArgs: ctx.na.chunkList(ctx.na.anyList(strBinMv.any(), from.any(), to.any()))}),
+		Inputs: ctx.na.inputList(ctx.na.vfsList(from)), Outputs: ctx.na.vfsList(to),
+		DepRefs: ctx.na.refList(host.LDRef),
+		KV:      &KV{P: pkCP, PC: pcLightBlue}},
+	})
+}
+
+func (ctx *GenCtx) toolFor(p *Platform, path ARG) *ModuleEmitResult {
+	host := ctx.toolResult(path)
+	suffix := p.programSuffix()
+
+	if !host.isPROGRAM || suffix == ctx.host.programSuffix() {
+		return host
+	}
+
+	if res, ok := ctx.targetTools.get(path); ok {
+		return res
+	}
+
+	res := *host
+	to := build(host.LDPath.relString(), suffix)
+
+	ctx.emit.deferPublication++
+	res.LDRef = ctx.emitToolMove(host, to)
+	ctx.emit.deferPublication--
+	res.LDPath = &to
+	ctx.moduleByRef.put(res.LDRef, &res)
+	ctx.targetTools.put(path, &res)
+
+	return &res
+}
+
+func (ctx *GenCtx) toolRef(p *Platform, path ARG) (NodeRef, VFS) {
+	res := ctx.toolFor(p, path)
+
+	if res.LDPath == nil {
+		throwFmt("gen: tool %s has no linkable output", path.string())
+	}
+
+	return res.LDRef, *res.LDPath
+}
+
+func (e *EmitContext) tool(path ARG) (NodeRef, VFS) {
+	return e.ctx.toolRef(e.instance.Platform, path)
+}
+
+func (e *EmitContext) toolResult(path ARG) *ModuleEmitResult {
+	return e.ctx.toolFor(e.instance.Platform, path)
 }

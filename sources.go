@@ -230,7 +230,11 @@ func (scanner *IncludeScanner) getFileScanCtx(vfsPath VFS, ctx *ScanContext, dom
 	return scanner.getScanCtx(ctx, domain, parser)
 }
 
-func includeScannerBasePaths() []VFS {
+func includeScannerBasePaths(p *Platform) []VFS {
+	if p.OS != OSLinux {
+		return includeScannerBasePathsSlice[:2]
+	}
+
 	return includeScannerBasePathsSlice
 }
 

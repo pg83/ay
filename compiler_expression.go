@@ -351,6 +351,14 @@ func compilerCommandBlocks(raw *CcModuleArgBlocks, cxx bool) *CcModuleArgBlocks 
 	blocks.extraCFlags = extra.Args
 	blocks.resources = resourceKeyUnion(resources, extra.Resources)
 
+	if binding.platform.MSVC {
+		var uses []STR
+
+		blocks.msvcIncludes = msvcIncludeArgs(binding.arena, raw.includes)
+		blocks.msvcFlags, uses = msvcCompilerFlags(&in, cxx)
+		blocks.resources = resourceKeyUnion(blocks.resources, uses)
+	}
+
 	binding.built[language] = true
 
 	return blocks

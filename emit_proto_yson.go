@@ -34,8 +34,8 @@ func applyYtOrmProtoYson(modulePath string, args []ANY, d *ModuleData, env Envir
 func (e *EmitContext) emitYtOrmProtoYson(st GoCodegenStmt) {
 	ctx, d := e.ctx, e.d
 	na := ctx.na
-	protocRef, protoc := ctx.tool(argContribToolsProtoc)
-	pluginRef, plugin := ctx.tool(internArg(ytProtoYsonTool))
+	protocRef, protoc := e.tool(argContribToolsProtoc)
+	pluginRef, plugin := e.tool(internArg(ytProtoYsonTool))
 
 	args := []ANY{
 		protoc.any(), internV("--plugin=protoc-gen-custom=", plugin.string()).any(),

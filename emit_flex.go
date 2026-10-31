@@ -68,7 +68,7 @@ func (e *EmitContext) flexTool() (args []ANY, bins []VFS, refs []NodeRef) {
 		}
 
 		dir, suffix, _ := strings.Cut(tool, `"}`)
-		ref, bin := e.ctx.tool(internArg(dir))
+		ref, bin := e.tool(internArg(dir))
 
 		if prefix == "" && suffix == "" {
 			args = append(args, bin.any())

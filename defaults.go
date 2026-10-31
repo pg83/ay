@@ -39,7 +39,7 @@ var programImplicitPeers = []ImplicitPeerRule{
 		name: "glibcasm",
 		peer: "contrib/libs/glibcasm",
 		predicate: func(rc ImplicitPeerCtx) bool {
-			return rc.useAsmlib && !rc.pic && !rc.noPlatform &&
+			return rc.useAsmlib && !rc.msvc && !rc.pic && !rc.noPlatform &&
 				rc.osLinux && rc.archX8664 && !rc.muslOn && !rc.sanitizer && rc.useSSE4
 		},
 	},
@@ -49,7 +49,7 @@ var programImplicitPeers = []ImplicitPeerRule{
 		predicate: func(rc ImplicitPeerCtx) bool {
 			glibcasm := rc.osLinux && rc.archX8664 && !rc.muslOn && !rc.sanitizer && rc.useSSE4
 
-			return rc.useAsmlib && !rc.pic && !rc.noPlatform && rc.archX8664 && !glibcasm
+			return rc.useAsmlib && !rc.msvc && !rc.pic && !rc.noPlatform && rc.archX8664 && !glibcasm
 		},
 	},
 	{
@@ -81,6 +81,13 @@ var programAllocatorDefaults = []ImplicitPeerRule{
 		peer: "contrib/libs/tcmalloc/no_percpu_cache",
 		predicate: func(rc ImplicitPeerCtx) bool {
 			return !rc.hadAllocator && rc.osLinux && (rc.muslOn || rc.archX8664)
+		},
+	},
+	{
+		name: "system (J default on WIN32)",
+		peer: "library/cpp/malloc/system",
+		predicate: func(rc ImplicitPeerCtx) bool {
+			return !rc.hadAllocator && rc.win32
 		},
 	},
 }
@@ -115,7 +122,7 @@ func (e *EmitContext) defaultPeerdirsForWithState(instance ModuleInstance) []str
 	flags := d.flags
 	noPlatform := effectiveNoPlatform(flags)
 
-	addLinuxHeaders := d.setVars.get(strNeedPlatformPeerdirs) != strNo &&
+	addLinuxHeaders := instance.Platform.OS == OSLinux && d.setVars.get(strNeedPlatformPeerdirs) != strNo &&
 		instance.Path.relString() != "contrib/libs/linux-headers" &&
 		!strings.HasPrefix(instance.Path.relString(), "contrib/libs/linux-headers/")
 
@@ -168,12 +175,14 @@ func (e *EmitContext) defaultPeerdirsForWithState(instance ModuleInstance) []str
 			peers = append(peers, "contrib/libs/cxxsupp/libcxx")
 		}
 
-		if instance.Path.relString() != "contrib/libs/cxxsupp/libcxxrt" {
-			peers = append(peers, "contrib/libs/cxxsupp/libcxxrt")
-		}
+		if !instance.Platform.windows() {
+			if instance.Path.relString() != "contrib/libs/cxxsupp/libcxxrt" {
+				peers = append(peers, "contrib/libs/cxxsupp/libcxxrt")
+			}
 
-		if instance.Path.relString() != "contrib/libs/libunwind" {
-			peers = append(peers, "contrib/libs/libunwind")
+			if instance.Path.relString() != "contrib/libs/libunwind" {
+				peers = append(peers, "contrib/libs/libunwind")
+			}
 		}
 	}
 
@@ -185,7 +194,7 @@ func (e *EmitContext) defaultPeerdirsForWithState(instance ModuleInstance) []str
 
 	peers = appendImplicitPeers(peers, unitImplicitPeers, rc)
 
-	if !flags.NoRuntime && !noPlatform && useArcadiaCompilerRuntime(ctx, instance) && instance.Path.relString() != "library/cpp/sanitizer/include" {
+	if !flags.NoRuntime && !noPlatform && !instance.Platform.windows() && useArcadiaCompilerRuntime(ctx, instance) && instance.Path.relString() != "library/cpp/sanitizer/include" {
 		peers = append(peers, "library/cpp/sanitizer/include")
 	}
 
@@ -216,6 +225,8 @@ type ImplicitPeerCtx struct {
 	muslOn        bool
 	muslLite      bool
 	osLinux       bool
+	win32         bool
+	msvc          bool
 	archX8664     bool
 	pic           bool
 	sanitizer     bool
@@ -271,6 +282,8 @@ func (e *EmitContext) defaultProgramPeerdirsForWithState(postUser bool) []string
 		muslOn:        d.muslEnabled && !effectiveNoPlatform(flags),
 		muslLite:      muslLite,
 		osLinux:       env.bool(envOS_LINUX),
+		win32:         env.bool(envWIN32),
+		msvc:          instance.Platform.MSVC,
 		archX8664:     env.bool(envARCH_X86_64),
 		pic:           instance.Platform.PIC,
 		sanitizer:     instance.Platform.BuildSanitized,
@@ -320,11 +333,7 @@ func (e *EmitContext) appendPlatformPeerdirs(peers []string, instance ModuleInst
 
 	peers = append(peers, "build/platform/python/ymake_python3")
 
-	if instance.Platform.UsesSDKRoot {
-		peers = append(peers, "build/platform/linux_sdk")
-	}
-
-	return peers
+	return append(peers, instance.Platform.CompilerPlatform...)
 }
 
 func (e *EmitContext) defaultCommonLinkPeerdirs() []string {

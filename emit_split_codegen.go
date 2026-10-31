@@ -21,7 +21,7 @@ func (e *EmitContext) emitSplitCodegen(sc *SplitCodegenStmt) (NodeRef, []string)
 	na := ctx.emit.nodeArenas()
 	moduleDir := instance.Path.relString()
 	prefix := sc.Prefix.string()
-	toolRes := ctx.toolResult(internArg(filepath.Clean(sc.ToolPath.string())))
+	toolRes := e.toolResult(internArg(filepath.Clean(sc.ToolPath.string())))
 	toolLDRef := toolRes.LDRef
 	toolBin := *toolRes.LDPath
 

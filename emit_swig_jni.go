@@ -70,7 +70,7 @@ func (e *EmitContext) emitLibrarySwigSource(meta SrcMeta) {
 	srcRel := e.moduleSourceRel(src)
 	srcVFS := e.sourceForEmission(meta)
 	hdr, cpp := swigWrapOutputs(instance.Path.relString(), srcRel)
-	swigRef, swigBin := ctx.tool(argContribToolsSwig)
+	swigRef, swigBin := e.tool(argContribToolsSwig)
 	swRef := ctx.emit.reserve()
 	include := d.cc.SwigInclude
 	python3 := d.tc.Python3
@@ -168,8 +168,8 @@ func (ctx *GenCtx) javaRegisterSwigJsrcs(jm *JavaModule) {
 
 func (ctx *GenCtx) javaEmitSwigJsrc(jm *JavaModule, src string, srcVFS, jsrc VFS, ref NodeRef) {
 	b := ctx.javaBuilder(jm)
-	swigRef, swigBin := ctx.tool(argContribToolsSwig)
-	scanCtx := newScanContext(ctx.na, ctx.parsers, nil, nil, nil, includeScannerBasePaths())
+	swigRef, swigBin := ctx.toolRef(jm.instance.Platform, argContribToolsSwig)
+	scanCtx := newScanContext(ctx.na, ctx.parsers, nil, nil, nil, includeScannerBasePaths(jm.instance.Platform))
 
 	scanCtx.swigInclude = ctx.na.vfsList(jm.swigInclude()...)
 

@@ -24,7 +24,7 @@ func (e *EmitContext) emitSsqlsSource(meta SrcMeta) {
 	}
 
 	cpp := build(strings.TrimSuffix(header.relString(), ".h"), ".cpp")
-	toolRef, tool := e.ctx.tool(argMetrikaCoreToolsSsqls)
+	toolRef, tool := e.tool(argMetrikaCoreToolsSsqls)
 	ref := e.ctx.emit.reserve()
 
 	pending := e.pendingEmit(func() {

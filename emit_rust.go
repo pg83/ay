@@ -160,7 +160,7 @@ func (e *EmitContext) emitRustModule(result *ModuleEmitResult, peers []ResolvedP
 	var toolRefs []NodeRef
 
 	tool := func(dir string) VFS {
-		ref, file := ctx.tool(internArg(dir))
+		ref, file := e.tool(internArg(dir))
 
 		toolRefs = append(toolRefs, ref)
 		inputs = append(inputs, file)

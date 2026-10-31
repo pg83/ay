@@ -39,7 +39,7 @@ func appendEvWitnessExtras(dst []IncludeDirective, evRel STR) []IncludeDirective
 func (e *EmitContext) emitLibraryEvSource(meta SrcMeta) {
 	src := meta.Source
 	ctx, d := e.ctx, e.d
-	event2cppLDRef, event2cppBinary := ctx.tool(argToolsEvent2cpp)
+	event2cppLDRef, event2cppBinary := e.tool(argToolsEvent2cpp)
 	evRel := e.protoSourceRel(e.moduleSourceName(src))
 	evRelPath := evRel.string()
 	evSource := e.sourceForEmission(meta)

@@ -266,7 +266,7 @@ func (e *EmitContext) emitDynamicLibrary() *ModuleEmitResult {
 	e.collectPeerModuleGlobals()
 	pluginPaths = e.globalPlugins()
 
-	fixElfRef, fixElfPath := ctx.tool(argToolsFixElf)
+	fixElfRef, fixElfPath := e.tool(argToolsFixElf)
 	outputName := dllOutputName(instance, d.moduleStmt)
 	outputVFS := build(instance.Path.relString(), "/", outputName)
 	vcsCVFS := build(instance.Path.relString(), "/__vcs_version__.c")

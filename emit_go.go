@@ -1206,7 +1206,7 @@ func (e *EmitContext) emitGoExe(resolved []ResolvedPeer, objRefs []NodeRef, objO
 		var minerPath VFS
 
 		head, kv = instance.Platform.Go.HeadTest, &goKV
-		minerRef, minerPath = ctx.tool(argToolsGoTestMiner)
+		minerRef, minerPath = e.tool(argToolsGoTestMiner)
 		testArgs = []ANY{strTestMiner.any(), minerPath.any(), strTestImportPath.any()}
 
 		if imp := d.setVars.get(strGO_TEST_IMPORT_PATH); imp != 0 {

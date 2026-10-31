@@ -117,9 +117,7 @@ func (ctx *GenCtx) genMultimoduleTargets(target DiscoveredModule, variants uint1
 			}
 		}
 
-		if result.GlobalRef != nil {
-			ctx.emit.result(*result.GlobalRef)
-		}
+		ctx.emitGlobalResults(result)
 
 		results = append(results, result)
 	}

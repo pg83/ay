@@ -181,7 +181,7 @@ func (e *EmitContext) emitFLReserved(srcRel string, srcVFS VFS, flatcLDRef NodeR
 
 func (e *EmitContext) emitFlatcProducer(srcVFS VFS, v *FlatcVariant) {
 	ctx, d := e.ctx, e.d
-	flatcRes := ctx.toolResult(v.toolArg)
+	flatcRes := e.toolResult(v.toolArg)
 	flatcLDRef, flatcBinary := flatcRes.LDRef, *flatcRes.LDPath
 	transitiveImports := e.scanner.walkClosure(srcVFS, d.scanCtx, scanDomainFlatc)
 	srcRel := srcVFS.relString()

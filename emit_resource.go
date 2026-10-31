@@ -114,8 +114,8 @@ func (e *EmitContext) objcopyEmitCtx() *ObjcopyEmitCtx {
 	oc := &e.objcopyCtx
 
 	*oc = ObjcopyEmitCtx{na: ctx.na}
-	oc.rescompilerLDRef, _ = ctx.tool(argToolsRescompiler)
-	oc.rescompressorLDRef, _ = ctx.tool(argToolsRescompressor)
+	oc.rescompilerLDRef, _ = e.tool(argToolsRescompiler)
+	oc.rescompressorLDRef, _ = e.tool(argToolsRescompressor)
 	oc.unitElem = internJoined("$S", cleanRel(e.instance.Path.relString()))
 	oc.deps = ctx.na.refList(oc.rescompilerLDRef, oc.rescompressorLDRef)
 	oc.blocks = composeObjcopyArgBlocks(ctx.na, d.tc, instancePlatform(e), Environment{s: &e.frame.ifEnv}.string(envYmakeObjcopyLargeResourceThr))
@@ -380,7 +380,7 @@ func (e *EmitContext) packResources(p ResourcePack) ([]NodeRef, []VFS) {
 			outs = append(outs, o...)
 		} else {
 			if !p.RawCompile.ForceCxx {
-				p.RawCompile = CompileSpec{ForceCxx: true, CFlags: resourceCxxFlags}
+				p.RawCompile = CompileSpec{ForceCxx: true, CFlags: e.instance.Platform.ForceCppFlags}
 			}
 
 			ref, out := e.packRawResourceChunk(rawItems, p)
@@ -400,7 +400,7 @@ func (e *EmitContext) packResources(p ResourcePack) ([]NodeRef, []VFS) {
 			it.ExpandedCmd.Args = e.ctx.na.anyList(internAnys(splitShellWords(it.Cmd.string()))...)
 		}
 
-		if resourceCanObjcopy(it.Path, it.Key) {
+		if e.instance.Platform.UseObjcopy && resourceCanObjcopy(it.Path, it.Key) {
 			objItems = append(objItems, it)
 			objSize.add(&it)
 			objLen += resourceItemCmdLen(it, true)
@@ -583,7 +583,7 @@ func (e *EmitContext) packObjcopyResourceChunk(chunk []ResourceItem, p ResourceP
 func (e *EmitContext) packRawResourceChunk(chunk []ResourceItem, p ResourcePack) (NodeRef, VFS) {
 	ctx, instance := e.ctx, e.instance
 	na := ctx.na
-	rescompilerRef, _ := ctx.tool(argToolsRescompiler)
+	rescompilerRef, _ := e.tool(argToolsRescompiler)
 	unitElem := internJoined("$S", cleanRel(instance.Path.relString())).string()
 	dash := str2
 	tag := ""

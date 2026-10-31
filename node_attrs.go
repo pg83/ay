@@ -251,6 +251,7 @@ type KV struct {
 	PC               PColor
 	ShowOut          bool
 	ShowOutBool      bool
+	Soe              bool
 	Name             string
 	Path             string
 	DisableCache     bool
@@ -387,6 +388,10 @@ func appendKV(buf []byte, kv KV, exts []KVExt) []byte {
 		o.forceStr("show_out", "yes")
 	} else {
 		o.boolTrue("show_out", kv.ShowOutBool)
+	}
+
+	if kv.Soe {
+		o.forceStr("soe", "yes")
 	}
 
 	if kv.HasSpecialRunner {

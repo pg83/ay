@@ -192,7 +192,7 @@ func (e *EmitContext) newPyPBModuleEmission(event bool) *PyPBModuleEmission {
 		protoc = argContribToolsProtocOld
 	}
 
-	protocLDRef, protocBinary := ctx.tool(protoc)
+	protocLDRef, protocBinary := e.tool(protoc)
 	plugins := d.pyProtoPlugins
 	mypy := d.pyProtoMypy && !event
 
@@ -201,14 +201,14 @@ func (e *EmitContext) newPyPBModuleEmission(event bool) *PyPBModuleEmission {
 	}
 
 	for _, plugin := range plugins {
-		ref, binary := ctx.tool(internArg(plugin.ToolPath))
+		ref, binary := e.tool(internArg(plugin.ToolPath))
 
 		pe.pluginRefs = append(pe.pluginRefs, ref)
 		pe.pluginBinaries = append(pe.pluginBinaries, binary)
 	}
 
 	if mypy {
-		pe.mypyRef, pe.mypyBinary = ctx.tool(argContribPythonMypyProtobufBinProtocGenMypy)
+		pe.mypyRef, pe.mypyBinary = e.tool(argContribPythonMypyProtobufBinProtocGenMypy)
 	}
 
 	suffixes := pyProtoSuffixes(d, event)

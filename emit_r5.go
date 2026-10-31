@@ -52,8 +52,8 @@ func (e *EmitContext) emitLibraryRagel5Source(meta SrcMeta) {
 	ctx, instance := e.ctx, e.instance
 	src := meta.Source
 	srcRel := e.moduleSourceRel(src)
-	ragel5LDRef, ragel5BinVFS := ctx.tool(argContribToolsRagel5Ragel)
-	rlgenCdLDRef, rlgenCdBinVFS := ctx.tool(argContribToolsRagel5RlgenCd)
+	ragel5LDRef, ragel5BinVFS := e.tool(argContribToolsRagel5Ragel)
+	rlgenCdLDRef, rlgenCdBinVFS := e.tool(argContribToolsRagel5RlgenCd)
 	r5Ref := ctx.emit.reserve()
 	r5TmpOut := build(instance.Path.relString(), "/", srcRel, ".tmp")
 	r5CppOut := build(instance.Path.relString(), "/", strings.TrimSuffix(srcRel, filepath.Ext(srcRel)), ".rl5.cpp")

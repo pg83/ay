@@ -12,7 +12,7 @@ func (e *EmitContext) emitBuildMnStmt(stmt *BuildMnStmt) {
 	ctx, instance, d := e.ctx, e.instance, e.d
 	na := ctx.na
 	module := instance.Path.relString()
-	archiverRef, archiverBin := ctx.tool(argToolsArchiver)
+	archiverRef, archiverBin := e.tool(argToolsArchiver)
 	infoVFS := resolveSourceVFS(ctx, instance, stmt.Info.string(), d.srcDirs)
 	cppVFS := build(module, "/mn.", stmt.Name, ".cpp")
 	rodataVFS := build(module, "/MN_External_", stmt.Name, ".rodata")

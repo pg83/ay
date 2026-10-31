@@ -8,7 +8,7 @@ func (e *EmitContext) emitLibraryAspSource(meta SrcMeta) {
 	na := ctx.na
 	module := instance.Path.relString()
 	srcRel := e.moduleSourceRel(src)
-	toolRef, toolBin := ctx.tool(argToolsHtml2cpp)
+	toolRef, toolBin := e.tool(argToolsHtml2cpp)
 	srcVFS := e.sourceForEmission(meta)
 	outVFS := build(module, "/", srcRel, ".cpp")
 	ref := ctx.emit.reserve()

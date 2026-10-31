@@ -41,6 +41,12 @@ type Platform struct {
 	Target                PlatformID
 	Flags                 map[ENV]STR
 	PIC                   bool
+	MSVC                  bool
+	UseObjcopy            bool
+	YasmDebugInfo         bool
+	ForceCppFlags         []ANY
+	MSVCTools             *MSVCTools
+	CompilerPlatform      []string
 	BuildType             string
 	BuildRelease          bool
 	BuildSanitized        bool
@@ -163,6 +169,7 @@ func newPlatform(os OS, isa ISA, buildType string, tc *Toolchain, flags map[stri
 		Target:                makePlatformID(os, isa),
 		Flags:                 internFlags(flags),
 		PIC:                   flags["PIC"] == "yes",
+		MSVC:                  flags["MSVC"] == "yes",
 		BuildType:             strings.ToLower(buildType),
 		BuildRelease:          flags["_BUILD_RELEASE"] == "yes",
 		BuildSanitized:        flags["_BUILD_SANITIZED"] == "yes",
@@ -203,6 +210,7 @@ func newPlatform(os OS, isa ISA, buildType string, tc *Toolchain, flags map[stri
 	p.UsesLinkResources = []STR{clangRes, strLLDRootName, strYMakePython3Name}
 	p.UsesClangOnly = []STR{clangRes}
 	p.UsesSDKRoot = platformUsesSDKRoot(os, flags)
+	p.CompilerPlatform = strings.Fields(flags["COMPILER_PLATFORM"])
 
 	if p.UsesSDKRoot {
 		osSDKRoot := internStr(resourcePatternOSSDKRoot)
@@ -249,6 +257,16 @@ func newPlatform(os OS, isa ISA, buildType string, tc *Toolchain, flags map[stri
 	if p.ifEnv.bool(envARCH_I386) && !p.ifEnv.bool(envARCH_I686) {
 		p.CFlags = append([]ANY{argMarchPentiumpro.any(), argMtunePentiumpro.any()}, p.CFlags...)
 	}
+
+	p.ForceCppFlags = resourceCxxFlags
+
+	if p.MSVC {
+		p.MSVCTools = newMSVCTools(p.ifEnv)
+		p.ForceCppFlags = msvcConfWords(p.ifEnv, "$_FORCE_CPP_FLAGS")
+	}
+
+	p.UseObjcopy = p.ifEnv.string(envYmakeUseObjcopy) == "yes"
+	p.YasmDebugInfo = p.ifEnv.string(envYasmDebugInfo) != "" || p.ifEnv.string(envYasmDebugInfoDisableCacheNoUid) != ""
 
 	bundle := compileFlagBundleFor(p)
 
@@ -443,11 +461,30 @@ func (p *Platform) pic() *Platform {
 }
 
 func (p *Platform) objectSuffix() string {
-	if p.PIC {
+	switch {
+	case p.MSVC:
+		return ".obj"
+	case p.PIC:
 		return ".pic.o"
 	}
 
 	return ".o"
+}
+
+func (p *Platform) archiveNaming(prefix string) (string, string) {
+	if p.MSVC {
+		return strings.TrimPrefix(prefix, "lib"), ".lib"
+	}
+
+	return prefix, ".a"
+}
+
+func (p *Platform) programSuffix() string {
+	if p.windows() {
+		return ".exe"
+	}
+
+	return ""
 }
 
 func (p *Platform) windows() bool {
@@ -491,4 +528,5 @@ func registerPlatformOwned(p *Platform) {
 	registerOwnedSlice(p.Defines)
 	registerOwnedSlice(p.NoLibcBlock)
 	registerOwnedSlice(p.CLDebugInfo)
+	registerOwnedSlice(p.ForceCppFlags)
 }

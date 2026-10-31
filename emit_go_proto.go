@@ -82,7 +82,7 @@ func (e *EmitContext) goProtoNamespace() string {
 func (e *EmitContext) emitGoProtoCmd(protoRel string, goOpts *string, plugins []GoProtoOpt, outs []VFS, seq int) {
 	ctx, instance, d := e.ctx, e.instance, e.d
 	na := ctx.na
-	protocRef, protoc := ctx.tool(argContribToolsProtoc)
+	protocRef, protoc := e.tool(argContribToolsProtoc)
 	ns := e.goProtoNamespace()
 	tools := []NodeRef{protocRef}
 	toolPaths := []VFS{protoc}
@@ -97,7 +97,7 @@ func (e *EmitContext) emitGoProtoCmd(protoRel string, goOpts *string, plugins []
 	args = append(args, d.protocFlags...)
 
 	if goOpts != nil {
-		ref, gen := ctx.tool(argVendorProtocGenGo)
+		ref, gen := e.tool(argVendorProtocGenGo)
 
 		tools = append(tools, ref)
 		toolPaths = append(toolPaths, gen)
@@ -120,7 +120,7 @@ func (e *EmitContext) emitGoProtoCmd(protoRel string, goOpts *string, plugins []
 			env = e.goToolEnv(false)
 		}
 
-		ref, tool := ctx.tool(internArg(opt.tool))
+		ref, tool := e.tool(internArg(opt.tool))
 
 		tools = append(tools, ref)
 		toolPaths = append(toolPaths, tool)

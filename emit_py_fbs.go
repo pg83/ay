@@ -76,7 +76,7 @@ func (e *EmitContext) emitPyFbsGroup(files []PyFbsSource) {
 		return
 	}
 
-	toolRef, tool := ctx.tool(toolPath)
+	toolRef, tool := e.tool(toolPath)
 	tar := buildScriptsTarSourcesPy
 	args := []ANY{tool.any(), strPython.any()}
 
@@ -118,7 +118,7 @@ func (e *EmitContext) emitPyFbsGroup(files []PyFbsSource) {
 
 	cc := build(dir, "/", name, ".", version.string(), "_raw.cpp")
 	script := buildScriptsCompilePysrcPy
-	resRef, res := ctx.tool(argToolsRescompiler)
+	resRef, res := e.tool(argToolsRescompiler)
 	pycc := e.pyccTool()
 	compileArgs := []ANY{d.tc.Python3, script.any(), strInput.any(), out.any(), strOutput.any(), cc.any(), strRescompiler.any(), res.any(), version.any(), strPycc.any(), pycc.binaries[0].any()}
 

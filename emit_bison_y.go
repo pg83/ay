@@ -184,9 +184,9 @@ func (e *EmitContext) emitBisonY(meta SrcMeta) {
 }
 
 func bisonTool(ctx *GenCtx, instance ModuleInstance) (NodeRef, VFS) {
-	return ctx.tool(argContribToolsBison)
+	return ctx.toolRef(instance.Platform, argContribToolsBison)
 }
 
 func m4Tool(ctx *GenCtx, instance ModuleInstance) (NodeRef, VFS) {
-	return ctx.tool(argContribToolsM4)
+	return ctx.toolRef(instance.Platform, argContribToolsM4)
 }

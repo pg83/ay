@@ -260,11 +260,11 @@ func (e *EmitContext) pbModuleEmission(cfg ProtoPBConfig, spec *ProtoSpec) *PbMo
 		grpcOutputsBeforeBase: d.grpcOutputsBeforeBase || headerEpilogue,
 	}
 
-	pe.protocLDRef, pe.protocBinary = ctx.tool(argContribToolsProtoc)
-	pe.cppStyleguideLDRef, pe.cppStyleguideBinary = ctx.tool(argContribToolsProtocPluginsCppStyleguide)
+	pe.protocLDRef, pe.protocBinary = e.tool(argContribToolsProtoc)
+	pe.cppStyleguideLDRef, pe.cppStyleguideBinary = e.tool(argContribToolsProtocPluginsCppStyleguide)
 
 	if cfg.grpc {
-		pe.grpcCppLDRef, pe.grpcCppBinary = ctx.tool(argContribToolsProtocPluginsGrpcCpp)
+		pe.grpcCppLDRef, pe.grpcCppBinary = e.tool(argContribToolsProtocPluginsGrpcCpp)
 	}
 
 	if spec.modulePlugins || spec.eventPlugins {
@@ -275,7 +275,7 @@ func (e *EmitContext) pbModuleEmission(cfg ProtoPBConfig, spec *ProtoSpec) *PbMo
 				continue
 			}
 
-			ldRef, binary := ctx.tool(internArg(plugin.ToolPath))
+			ldRef, binary := e.tool(internArg(plugin.ToolPath))
 
 			plugin.OutputsBeforeBase = plugin.OutputsBeforeBase || headerEpilogue
 
@@ -764,7 +764,7 @@ func (e *EmitContext) emitPyProtoLibraryResult(resources *ObjcopyEmitResult) *Pr
 		protoLibName = d.moduleStmt.Args[0].string()
 	}
 
-	globalBaseName := globalArchiveNameWithPrefixOrName(instance.Path.relString(), d.unit.ARPrefix, protoLibName)
+	globalBaseName := globalArchiveNameWithPrefixOrName(instance.Platform, instance.Path.relString(), d.unit.ARPrefix, protoLibName)
 	gRef := e.emitARGlobalNamedTagged(instance, globalBaseName, d.unit.GlobalARTag, genRefs, genOuts, d.tc, ctx.host, ctx.emit)
 	globalPath := buildJoined(instance.Path.relString(), globalBaseName)
 	result := &ProtoSrcsResult{GlobalRef: &gRef, GlobalPath: &globalPath}

@@ -12,7 +12,7 @@ func (e *EmitContext) emitLibrarySfdlSource(meta SrcMeta) {
 	ctx, instance, d := e.ctx, e.instance, e.d
 	na := ctx.na
 	srcRel := e.moduleSourceRel(src)
-	toolRef, toolBin := ctx.tool(argToolsCalcstaticopt)
+	toolRef, toolBin := e.tool(argToolsCalcstaticopt)
 	srcVFS := e.sourceForEmission(meta)
 	tmpVFS := build(instance.Path.relString(), "/", srcRel, ".tmp")
 	incVFS := build(instance.Path.relString(), "/", strings.TrimSuffix(srcRel, filepath.Ext(srcRel)))

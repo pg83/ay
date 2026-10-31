@@ -377,7 +377,9 @@ func splitGlobalObjects(na *NodeArenas, globalRefs []NodeRef, globalPaths []VFS,
 }
 
 func isGlobalObject(p VFS) bool {
-	return strings.HasSuffix(p.relString(), ".o")
+	rel := p.relString()
+
+	return strings.HasSuffix(rel, ".o") || strings.HasSuffix(rel, ".obj")
 }
 
 func lDOutputPath(instance ModuleInstance, binaryName string) VFS {

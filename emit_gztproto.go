@@ -35,7 +35,7 @@ func (ctx *GenCtx) gztProtoSource(instance ModuleInstance, gztSource VFS, scanCt
 		return genProto
 	}
 
-	converterRef, converterBin := ctx.tool(argDictGazetteerConverter)
+	converterRef, converterBin := ctx.toolRef(instance.Platform, argDictGazetteerConverter)
 	inducedProtos := gztConverterInducedProtos(ctx)
 	na := ctx.emit.nodeArenas()
 	env := envVarsVCS

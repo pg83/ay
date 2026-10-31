@@ -7,7 +7,7 @@ func (e *EmitContext) emitLibraryFmlSource(meta SrcMeta) {
 	ctx, instance := e.ctx, e.instance
 	na := ctx.na
 	srcRel := e.moduleSourceRel(src)
-	toolRef, toolBin := ctx.tool(argToolsRelevFmlCodegen)
+	toolRef, toolBin := e.tool(argToolsRelevFmlCodegen)
 	srcVFS := e.sourceForEmission(meta)
 	outVFS := build(instance.Path.relString(), "/", srcRel, ".inc")
 	env := envVarsVCS

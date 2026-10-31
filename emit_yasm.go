@@ -71,7 +71,7 @@ func (e *EmitContext) asmOutputFor(srcVFS VFS) VFS {
 	return build(instance.Path.relString(), "/", strings.TrimSuffix(rel, filepath.Ext(rel)), suffix)
 }
 
-func (e *EmitContext) emitASAsm(srcVFS VFS, in ModuleCCInputs, yasmLD NodeRef, nasm bool, reserved NodeRef) (NodeRef, VFS) {
+func (e *EmitContext) emitASAsm(srcVFS VFS, in ModuleCCInputs, yasmLD NodeRef, yasmBin VFS, nasm bool, reserved NodeRef) (NodeRef, VFS) {
 	instance := e.instance
 	na := e.ctx.na
 	outVFS := e.asmOutputFor(srcVFS)
@@ -100,9 +100,12 @@ func (e *EmitContext) emitASAsm(srcVFS VFS, in ModuleCCInputs, yasmLD NodeRef, n
 
 		cmdArgs = append(cmdArgs, e.d.nasmFlags...)
 	} else {
-		cmdArgs = append(cmdArgs, yasmBinaryVFS.any(), argF.any(), e.d.asmFormat.any())
+		cmdArgs = append(cmdArgs, yasmBin.any(), argF.any(), e.d.asmFormat.any())
 		cmdArgs = append(cmdArgs, e.d.yasmPlatformFlags...)
-		cmdArgs = append(cmdArgs, argReplaceBB.any(), argReplaceSS.any(), argReplaceToolRootT.any())
+
+		if instance.Platform.YasmDebugInfo {
+			cmdArgs = append(cmdArgs, argReplaceBB.any(), argReplaceSS.any(), argReplaceToolRootT.any())
+		}
 
 		cmdArgs = append(cmdArgs,
 			argD.any(), internV("_", string(instance.Platform.ISA), "_").any(),
@@ -136,7 +139,7 @@ func (e *EmitContext) emitASAsm(srcVFS VFS, in ModuleCCInputs, yasmLD NodeRef, n
 
 	env := envVarsVCS
 
-	if !nasm {
+	if !nasm && instance.Platform.YasmDebugInfo {
 		env = envVarsVCSYasm
 	}
 
@@ -144,7 +147,7 @@ func (e *EmitContext) emitASAsm(srcVFS VFS, in ModuleCCInputs, yasmLD NodeRef, n
 	inputs := buildFrom
 
 	if !nasm {
-		inputs = na.inputList(na.vfsList(yasmBinaryVFS), roots)
+		inputs = na.inputList(na.vfsList(yasmBin), roots)
 	}
 
 	node := NodeSpec{Node: Node{Platform: instance.Platform,
@@ -171,7 +174,7 @@ func (e *EmitContext) emitASAsm(srcVFS VFS, in ModuleCCInputs, yasmLD NodeRef, n
 
 func (e *EmitContext) emitLibraryYasmSource(meta SrcMeta, in ModuleCCInputs) {
 	src := meta.Source
-	ctx, d := e.ctx, e.d
+	d := e.d
 	srcVFS := src.vfs()
 
 	if srcVFS == 0 {
@@ -186,12 +189,13 @@ func (e *EmitContext) emitLibraryYasmSource(meta SrcMeta, in ModuleCCInputs) {
 	nasm := d.useNasm && filepath.Ext(srcVFS.relString()) == ".asm"
 
 	var yasmLD NodeRef
+	var yasmBin VFS
 
 	if !nasm {
-		yasmLD, _ = ctx.tool(argContribToolsYasm)
+		yasmLD, yasmBin = e.tool(argContribToolsYasm)
 	}
 
-	ref, outPath := e.emitASAsm(srcVFS, asIn, yasmLD, nasm, meta.CompileRef)
+	ref, outPath := e.emitASAsm(srcVFS, asIn, yasmLD, yasmBin, nasm, meta.CompileRef)
 
 	e.collectObj(ref, outPath, meta)
 }

@@ -20,7 +20,7 @@ func (e *EmitContext) emitPchFile(stmt PchFileStmt) {
 	na := e.ctx.na
 	out := copyFileOutputVFS(e.instance.Path.relString(), stmt.Output.string())
 	header := e.moduleSourceVFS(stmt.Header)
-	toolRef, tool := e.ctx.tool(argSdgTier0ToolsMakePchWrapper)
+	toolRef, tool := e.tool(argSdgTier0ToolsMakePchWrapper)
 	ref := e.ctx.emit.reserve()
 	pch := &pchCommand{emit: e, header: header, out: out, tool: tool, ref: ref}
 

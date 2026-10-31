@@ -16,7 +16,7 @@ func (ctx *GenCtx) javaRegisterFbsSources(jm *JavaModule) {
 		ref := ctx.emit.reserve()
 
 		pending := ctx.javaPendingEmit(func() {
-			tool := ctx.toolResult(argContribLibsFlatbuffersFlatc)
+			tool := ctx.toolFor(jm.instance.Platform, argContribLibsFlatbuffersFlatc)
 			b := ctx.javaBuilder(jm)
 			binary := *tool.LDPath
 
@@ -39,7 +39,7 @@ func (ctx *GenCtx) javaRegisterFbsSources(jm *JavaModule) {
 			args = append(args, argDashO.any(), build(jm.dir).any(), source.any())
 			b.cmd(args, bldRootDirVFS)
 
-			scan := newScanContext(ctx.na, ctx.parsers, nil, nil, nil, includeScannerBasePaths())
+			scan := newScanContext(ctx.na, ctx.parsers, nil, nil, nil, includeScannerBasePaths(jm.instance.Platform))
 
 			scan.flatcInclude = ctx.na.vfsList(jm.protoInclude...)
 

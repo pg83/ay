@@ -44,8 +44,8 @@ func (e *EmitContext) emitDocsProtoSubmodule() *ModuleEmitResult {
 	e.scriptModuleResources(nil, "build/platform/python/ymake_python3")
 	d.scanCtx = newModuleScanContext(ctx, instance, d, nil, nil, nil, protoIncludes)
 
-	protocRef, protoc := ctx.tool(argContribToolsProtoc)
-	docRef, docTool := ctx.tool(argVendorGithubComPseudomutoProtocGenDocCmdProtocGenDoc)
+	protocRef, protoc := e.tool(argContribToolsProtoc)
+	docRef, docTool := e.tool(argVendorGithubComPseudomutoProtocGenDocCmdProtocGenDoc)
 	wrapper := buildScriptsDocsProtoWrapperPy
 	template := buildScriptsDocsProtoMarkdownTmpl
 	namespace := protoCPPOutRoot(d)

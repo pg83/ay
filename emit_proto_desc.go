@@ -182,7 +182,7 @@ func (e *EmitContext) emitDescProtoSubmodule() *ModuleEmitResult {
 		}
 
 		if protocBinary == 0 {
-			protocLDRef, protocBinary = ctx.tool(argContribToolsProtoc)
+			protocLDRef, protocBinary = e.tool(argContribToolsProtoc)
 		}
 
 		srcRel := src.string()

@@ -92,7 +92,7 @@ func (e *EmitContext) emitRagel6Source(meta SrcMeta, options, constArgs []ANY) {
 	ctx, instance, d := e.ctx, e.instance, e.d
 	src := meta.Source
 	srcRel := e.moduleSourceRel(src)
-	ragelLDRef, ragelBinaryVFS := ctx.tool(argContribToolsRagel6)
+	ragelLDRef, ragelBinaryVFS := e.tool(argContribToolsRagel6)
 	rl6SourceVFS := e.sourceForEmission(meta)
 	r6Out := ragel6OutVFS(instance, srcRel)
 	r6Parsed := e.scanner.parsedBucketForInput(rl6SourceVFS, parsedIncludesCpp, nil)

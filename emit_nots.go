@@ -633,7 +633,7 @@ func (e *EmitContext) notsPrepare() notsPreparation {
 	peerRefs = dedupRefs(peerRefs)
 	peerInputs = dedup(peerInputs)
 
-	toolRef, toolPath := ctx.tool(internArg(notsBuilderDir))
+	toolRef, toolPath := e.tool(internArg(notsBuilderDir))
 	prepToolIndex := len(prepInputs)
 
 	prepInputs = append(prepInputs, toolPath)

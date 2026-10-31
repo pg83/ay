@@ -17,7 +17,7 @@ func (e *EmitContext) emitLuaCompile(stmt LuaCompileStmt) {
 	src := stmt.Resolved.withGenerated(e.codegen, stmt.Source, e.d.srcDirs)
 	out := copyFileOutputVFS(e.instance.Path.relString(), stmt.Source+".o")
 	ref := e.ctx.emit.reserve()
-	compilerRef, compiler := e.ctx.tool(internArg(stmt.Runtime + "/compiler"))
+	compilerRef, compiler := e.tool(internArg(stmt.Runtime + "/compiler"))
 
 	pending := e.pendingEmit(func() {
 		e.emitLJReserved(src, out, compiler, compilerRef, source(stmt.Runtime), stmt.Name, ref)
@@ -58,7 +58,7 @@ func (e *EmitContext) emitLJReserved(luaSrc, rawOut, compilerBin VFS, compilerLD
 
 func (e *EmitContext) emitLuaJit21() {
 	ctx, instance, d := e.ctx, e.instance, e.d
-	compilerLDRef, compilerBin := ctx.tool(argLuajit21Compiler)
+	compilerLDRef, compilerBin := e.tool(argLuajit21Compiler)
 	cwd := source(luajit21CwdRel)
 
 	for _, lua := range d.lj21.Luas {

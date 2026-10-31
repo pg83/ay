@@ -225,7 +225,7 @@ func (e *EmitContext) docsRender(out VFS, peers []VFS, book bool) NodeRef {
 		toolModule := "contrib/tools/plantuml"
 
 		if peerYaMakeExists(e.ctx.fs, source(toolModule)) {
-			toolRef, toolPath = e.ctx.tool(internArg(toolModule))
+			toolRef, toolPath = e.tool(internArg(toolModule))
 			e.ctx.scannerForPlatform(e.ctx.host).codegen.use(toolPath)
 		}
 	}

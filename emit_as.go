@@ -20,16 +20,27 @@ func (e *EmitContext) emitAS(srcVFS VFS, in ModuleCCInputs, hostP *Platform) (No
 	blocks := in.CCBlocks
 
 	if blocks.asHead == nil {
-		flags := commonCompilerFlagValue(in, instance.Platform)
+		if instance.Platform.MSVC {
+			c := compilerCommandBlocks(blocks, false)
 
-		blocks.asHead = composeASModuleArgs(na, instance, in, flags.Args)
-		blocks.asResources = flags.Resources
+			blocks.asHead = na.anyConcat([]ANY{instance.Platform.MSVCTools.C}, instance.Platform.TargetArgs, c.msvcFlags, in.SFlags)
+			blocks.asResources = c.resources
+		} else {
+			flags := commonCompilerFlagValue(in, instance.Platform)
+
+			blocks.asHead = composeASModuleArgs(na, instance, in, flags.Args)
+			blocks.asResources = flags.Resources
+		}
 	}
 
 	cmdArgs := na.chunkList(blocks.asHead, in.PerSourceCFlags,
 		na.anyList(argDashC.any(), argDashO.any(), outVFS.any(), inVFS.any()), blocks.includes)
 
 	env := hostP.toolEnv()
+
+	if instance.Platform.MSVC {
+		env = envVarsVCS
+	}
 
 	node := NodeSpec{Node: Node{Platform: instance.Platform,
 		Cmds: na.cmdList(Cmd{CmdArgs: cmdArgs,

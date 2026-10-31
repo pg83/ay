@@ -189,14 +189,14 @@ func (e *EmitContext) emitUserverProtos(batch UserverProtoBatch) {
 
 	ctx := e.ctx
 	na := ctx.na
-	protocRef, protoc := ctx.tool(argContribToolsProtoc)
+	protocRef, protoc := e.tool(argContribToolsProtoc)
 	toolPath := userverStructsTool
 
 	if batch.mode != "" {
 		toolPath = "taxi/uservices/userver-arc-utils/scripts/grpc/arc-generate-" + batch.mode
 	}
 
-	toolRef, tool := ctx.tool(internArg(toolPath))
+	toolRef, tool := e.tool(internArg(toolPath))
 
 	for _, file := range batch.files {
 		file := file

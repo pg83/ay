@@ -534,7 +534,7 @@ func (e *EmitContext) inputClosure(input VFS) Closure {
 
 func (e *EmitContext) moduleScanCtx() *ScanContext {
 	if e.d.scanCtx == nil {
-		e.d.scanCtx = newScanContext(e.ctx.na, e.ctx.parsers, nil, nil, nil, includeScannerBasePaths())
+		e.d.scanCtx = newScanContext(e.ctx.na, e.ctx.parsers, nil, nil, nil, includeScannerBasePaths(e.instance.Platform))
 		e.d.scanCtx.dontResolveIncludes = e.d.dontResolveIncludes
 	}
 

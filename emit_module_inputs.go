@@ -186,6 +186,15 @@ func (e *EmitContext) collectModuleGlobalSource(src ANY) bool {
 	return true
 }
 
+func (d *ModuleData) useGlobalCmd(p *Platform) bool {
+	switch d.unit.Type {
+	case tokPy2Library, tokPy3Library, tokPy23Library:
+		return true
+	}
+
+	return !p.windows() || isPythonProtoModule(d)
+}
+
 func (d *ModuleData) fakeModuleSet() bool {
 	value, ok := d.setVars.get(strFakeModule), d.setVars.has(strFakeModule)
 

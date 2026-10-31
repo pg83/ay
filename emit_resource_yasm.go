@@ -78,13 +78,19 @@ func (e *EmitContext) packYasmResourceChunks(items []ResourceItem, p ResourcePac
 			compressArgs = append(compressArgs, strPrefix.any())
 		}
 
-		compressArgs = append(compressArgs, argReplaceBB.any(), argReplaceSS.any(), argReplaceToolRootT.any())
+		var envPairs []ANY
+
+		if e.instance.Platform.YasmDebugInfo {
+			compressArgs = append(compressArgs, argReplaceBB.any(), argReplaceSS.any(), argReplaceToolRootT.any())
+			envPairs = []ANY{strYasmTestSuite1.any()}
+		}
+
 		compressArgs = append(compressArgs, args...)
 
 		e.emitRunProgram(&RunProgramStmt{
 			ToolPath: strToolsRescompressor.any(), Args: compressArgs, INFiles: append(inputs, opaque...), INNoParse: len(opaque),
 			OUTNoAutoFiles: append([]ANY{internStr(asm).any()}, outputs...),
-			EnvPairs:       []ANY{strYasmTestSuite1.any()},
+			EnvPairs:       envPairs,
 		})
 
 		srcgen = append(srcgen, internStr(cpp).any())
@@ -104,7 +110,7 @@ func (e *EmitContext) packYasmResourceChunks(items []ResourceItem, p ResourcePac
 
 	asmName, cppName := asmFiles[0], cppFiles[0]
 	globalAsm := len(asmFiles) > 1
-	spec := CompileSpec{ForceCxx: true, CFlags: resourceCxxFlags}
+	spec := CompileSpec{ForceCxx: true, CFlags: e.instance.Platform.ForceCppFlags}
 	ccRef := e.ctx.emit.reserve()
 
 	if globalAsm {
@@ -130,8 +136,8 @@ func (e *EmitContext) packYasmResourceChunks(items []ResourceItem, p ResourcePac
 	asmIn.AddIncl = e.d.asmAddIncl
 	asmIn.IncludeView = e.scanner.walkClosure(asmPath, e.d.scanCtx, scanDomainAsm)
 
-	yasmRef, _ := e.ctx.tool(argContribToolsYasm)
-	asmRef, asmOut := e.emitASAsm(asmPath, asmIn, yasmRef, false, 0)
+	yasmRef, yasmBin := e.tool(argContribToolsYasm)
+	asmRef, asmOut := e.emitASAsm(asmPath, asmIn, yasmRef, yasmBin, false, 0)
 
 	e.collectObj(asmRef, asmOut, SrcMeta{})
 

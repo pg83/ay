@@ -53,7 +53,7 @@ func (e *EmitContext) emitGoFlatcSource(meta SrcMeta) {
 	ctx, instance, d := e.ctx, e.instance, e.d
 	na := ctx.na
 	src := e.sourceForEmission(meta)
-	toolRef, tool := ctx.tool(argContribLibsFlatbuffersFlatc)
+	toolRef, tool := e.tool(argContribLibsFlatbuffersFlatc)
 	module := instance.Path.relString()
 	out := build(module, "/", strings.TrimSuffix(e.moduleSourceName(meta.Source), ".fbs"), ".fbs.gosrc")
 	bindir := build(module)

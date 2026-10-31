@@ -28,7 +28,7 @@ type SwigSrc struct {
 func (e *EmitContext) emitSwigC() {
 	ctx, instance, d := e.ctx, e.instance, e.d
 	na := ctx.na
-	swigRef, swigBin := ctx.tool(argContribToolsSwig)
+	swigRef, swigBin := e.tool(argContribToolsSwig)
 
 	for _, stmt := range d.swigC {
 		prefix := swigOutputPrefix(stmt.Src, stmt.Module)

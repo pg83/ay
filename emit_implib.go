@@ -52,7 +52,7 @@ func implibOutputs(module, path string) []VFS {
 
 func (e *EmitContext) emitImplib(stmt ImplibStmt) {
 	na := e.ctx.na
-	toolRef, toolPath := e.ctx.tool(argContribToolsImplib)
+	toolRef, toolPath := e.tool(argContribToolsImplib)
 	outs := na.vfsList(implibOutputs(e.instance.Path.relString(), stmt.Path)...)
 	args := []ANY{toolPath.any(), strTarget2.any(), internStr(string(e.instance.Platform.ISA)).any(), strDlopenCallback.any(), internStr(stmt.Callback).any(), strOutdir.any(), e.instance.Path.rel().build().any()}
 

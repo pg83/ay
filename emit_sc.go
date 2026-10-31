@@ -60,7 +60,7 @@ func (e *EmitContext) emitSCReserved(srcVFS, headerVFS, domschemecBinary VFS, do
 
 func (e *EmitContext) emitLibrarySCSource(meta SrcMeta) {
 	ctx := e.ctx
-	domRes := ctx.toolResult(argToolsDomschemec)
+	domRes := e.toolResult(argToolsDomschemec)
 	domLDRef, domBinary := domRes.LDRef, *domRes.LDPath
 	srcVFS := e.sourceForEmission(meta)
 	headerVFS := build(srcVFS.relString(), ".h")

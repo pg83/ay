@@ -34,7 +34,7 @@ func (e *EmitContext) emitOneSource(meta SrcMeta) {
 			if py.Kind == pySourceGenerated && !e.producersOnly() {
 				e.packResources(ResourcePack{DontCompress: true,
 					Tag: e.d.unit.HashTag, Items: e.pySrcResourceItems(e.appendPyResEntries(e.resEntries[:0], ps)),
-					RawCompile: CompileSpec{ForceCxx: true, CFlags: resourceCxxFlags},
+					RawCompile: CompileSpec{ForceCxx: true, CFlags: e.instance.Platform.ForceCppFlags},
 				})
 			}
 		}

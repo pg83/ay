@@ -52,8 +52,8 @@ func (e *EmitContext) emitLibraryCudaSource(meta SrcMeta, in ModuleCCInputs) {
 	e.collectCPPStyleInputs(srcVFS, cudaCompileScriptVFS, cudaRuntimeIncludeVFS)
 
 	outVFS, inVFS := composeCCPaths(instance, e.moduleSourceRel(meta.Source), srcVFS, in, d.cc.objSufDot()+e.cudaSettings().ObjectSuffix)
-	mtimeRef, mtime := ctx.tool(cudaMtimeArg)
-	pidRef, pid := ctx.tool(cudaCustomPidArg)
+	mtimeRef, mtime := e.tool(cudaMtimeArg)
+	pidRef, pid := e.tool(cudaCustomPidArg)
 	env := e.cudaEnv()
 	args := e.cudaCompileArgs(in, mtime, pid, na.anyList(argDashC.any(), inVFS.any(), argDashO.any(), outVFS.any()), false)
 	inputs := appendInputChunks(na, na.inputList(na.vfsList(cudaCompileScriptVFS), na.vfsList(mtime, pid)), na.rootInputList(na.vfsList(srcVFS, cudaRuntimeIncludeVFS)))
@@ -123,8 +123,8 @@ func (e *EmitContext) emitSplitCudaSource(src ANY, arches []string, embedPTX boo
 
 	archList += "0"
 
-	mtimeRef, mtime := e.ctx.tool(cudaMtimeArg)
-	pidRef, pid := e.ctx.tool(cudaCustomPidArg)
+	mtimeRef, mtime := e.tool(cudaMtimeArg)
+	pidRef, pid := e.tool(cudaCustomPidArg)
 	in := e.ccInputsFor(CompileSpec{})
 	env := e.cudaEnv()
 	sourceRoots := na.vfsList(srcVFS)

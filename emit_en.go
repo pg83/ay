@@ -89,7 +89,7 @@ func (e *EmitContext) emitEnumSrcStmt(stmt *GenerateEnumSerializationStmt) {
 	e.enqueueSrc(SrcMeta{Source: serializedCPPPath.any(), Prio: stmtPrioDefault, Seq: stmt.DeclSeq})
 
 	pe := e.pendingEmit(func() {
-		enumParserLD, enumParserBin := ctx.tool(argToolsEnumParserEnumParser)
+		enumParserLD, enumParserBin := e.tool(argToolsEnumParserEnumParser)
 		generatorRefs := ctx.na.refList(enumParserLD)
 		cppInfo := codegen.lookup(serializedCPPPath)
 
@@ -144,7 +144,7 @@ func (e *EmitContext) emitAliceEnumSrcStmt(stmt *GenerateEnumSerializationStmt) 
 	var info *GeneratedFileInfo
 
 	pending := e.pendingEmit(func() {
-		toolRef, toolBin := ctx.tool(argYandexIoToolsEnumSerializerGenerator)
+		toolRef, toolBin := e.tool(argYandexIoToolsEnumSerializerGenerator)
 		inputs := na.inputList(na.vfsList(toolBin), na.vfsList(header))
 
 		args := na.anyList(toolBin.any(), strInputPath.any(), header.any(),

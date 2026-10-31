@@ -22,7 +22,7 @@ func (e *EmitContext) notsProtoInputs() (args []string, inputs []VFS, refs []Nod
 	d.scanCtx = newModuleScanContext(ctx, e.instance, d, nil, nil, nil, protoInclude)
 	d.srcDirs = append([]VFS{e.instance.Path}, d.srcDirs...)
 
-	protocRef, protocPath := ctx.tool(argContribToolsProtoc)
+	protocRef, protocPath := e.tool(argContribToolsProtoc)
 
 	inputs = append(inputs, protocPath)
 	toolRef = protocRef

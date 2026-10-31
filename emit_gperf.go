@@ -50,7 +50,7 @@ func (e *EmitContext) emitLibraryGperfSource(meta SrcMeta) {
 	ctx, instance := e.ctx, e.instance
 	src := meta.Source
 	srcRel := e.moduleSourceRel(src)
-	gperfLDRef, gperfBinVFS := ctx.tool(argContribToolsGperf)
+	gperfLDRef, gperfBinVFS := e.tool(argContribToolsGperf)
 	srcVFS := e.sourceForEmission(meta)
 	genVFS := build(instance.Path.relString(), "/", gperfGeneratedRel(srcRel))
 	gpRef := ctx.emit.reserve()

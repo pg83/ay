@@ -478,7 +478,7 @@ func (ctx *GenCtx) javaEmitIJar(jm *JavaModule) {
 	full := jm.selfPeers[0]
 	d := full.data
 	b := ctx.javaBuilder(jm)
-	ref, ijar := ctx.tool(argContribToolsIjar)
+	ref, ijar := ctx.toolRef(jm.instance.Platform, argContribToolsIjar)
 	abi := d.abiJar && d.withKotlin && !d.uberjar
 	args := []ANY{ijar.any()}
 	input := full.target

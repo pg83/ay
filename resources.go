@@ -597,6 +597,13 @@ func (e *EmitContext) resourcesLibraryPeerClosure(own []ResourceDecl) ResourcesL
 				c.globalRefs = append(c.globalRefs, *pr.GlobalRef)
 				c.globalPaths = append(c.globalPaths, *pr.GlobalPath)
 			}
+
+			for i, p := range pr.GlobalObjectPaths {
+				if dd.addStable(p.strID()) {
+					c.globalRefs = append(c.globalRefs, pr.GlobalObjectRefs[i])
+					c.globalPaths = append(c.globalPaths, p)
+				}
+			}
 		}
 
 		if e.ctx.sbomEnabled {
@@ -627,14 +634,6 @@ func (e *EmitContext) resourcesLibraryPeerClosure(own []ResourceDecl) ResourcesL
 	})
 
 	return c
-}
-
-func prebuiltModuleSuffix(p *Platform) string {
-	if p.windows() {
-		return ".exe"
-	}
-
-	return ""
 }
 
 func (e *EmitContext) genPrebuiltProgram() *ModuleEmitResult {

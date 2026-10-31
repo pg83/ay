@@ -19,6 +19,12 @@ func (ctx *GenCtx) moduleResultRefs(instance ModuleInstance, result *ModuleEmitR
 		refs = append(refs, *result.GlobalRef)
 	}
 
+	for _, ref := range result.GlobalObjectRefs {
+		if ref != 0 {
+			refs = append(refs, ref)
+		}
+	}
+
 	if result.java != nil || result.testDependencyModule.complete || result.testDependencyModule.bundle {
 		return refs
 	}

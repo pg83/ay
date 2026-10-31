@@ -336,6 +336,12 @@ func (e *EmitContext) composeCCNodeAt(srcVFS, outVFS VFS, in ModuleCCInputs, hos
 
 	cmdArgs := ArgChunks(chunks[:k])
 	env := hostP.toolEnv()
+	kv := &ccKV
+
+	if instance.Platform.MSVC {
+		cmdArgs, env, kv, wrapcc = msvcCompileArgs(na, instance.Platform.MSVCTools, blocks, isCxx, inVFS, outVFS, in.PerSourceCFlags, langFlags), envVarsVCS, &msvcCCKV, false
+	}
+
 	includeSelf := in.IncludeView.self
 	includeBuckets := in.IncludeView.bucketList()
 	nInputs := len(includeBuckets)
@@ -390,7 +396,7 @@ func (e *EmitContext) composeCCNodeAt(srcVFS, outVFS VFS, in ModuleCCInputs, hos
 	node := NodeSpec{Node: Node{Platform: instance.Platform,
 		Cmds: cmds,
 		Env:  env, Inputs: allInputs, Outputs: na.vfsList(outVFS),
-		KV:        &ccKV,
+		KV:        kv,
 		Resources: resources}, input: InputSpec{root: in.IncludeView.self, existingSource: in.ExistingSource},
 	}
 
@@ -412,18 +418,10 @@ func (env *ModuleCompileEnv) objSufDot() string {
 }
 
 func ccObjectSuffix(instance ModuleInstance, in ModuleCCInputs) string {
-	suffix := ".o"
-
-	if instance.Platform.PIC {
-		suffix = ".pic.o"
-	}
+	suffix := instance.Platform.objectSuffix()
 
 	if in.ObjectSuffixStem != nil {
-		if instance.Platform.PIC {
-			suffix = "." + *in.ObjectSuffixStem + ".pic.o"
-		} else {
-			suffix = "." + *in.ObjectSuffixStem + ".o"
-		}
+		suffix = "." + *in.ObjectSuffixStem + suffix
 	} else if in.ObjSuf != 0 {
 		suffix = "." + in.ObjSuf.string() + suffix
 	}
@@ -660,6 +658,8 @@ type CcModuleArgBlocks struct {
 	flags         []ANY
 	cxxTail       []ANY
 	cPost         []ANY
+	msvcIncludes  []ANY
+	msvcFlags     []ANY
 }
 
 func cWarningChunk(na *NodeArenas, noCompilerWarnings, noWShadow bool) []ANY {

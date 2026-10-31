@@ -3,8 +3,8 @@ package main
 var archiveAsmKV = KV{P: pkAR, PC: pcLightCyan}
 
 func (e *EmitContext) emitArchiveAsmForAR(a ArchiveAsmEntry) {
-	ctx, _, d := e.ctx, e.instance, e.d
-	toolLDRef, toolBinPath := ctx.tool(argToolsArchiver)
+	d := e.d
+	toolLDRef, toolBinPath := e.tool(argToolsArchiver)
 	reg := e.codegen
 	rodataRel := a.Name + d.cc.objSufDot() + ".rodata"
 	rodataPath := build(e.instance.Path.relString(), "/", rodataRel)

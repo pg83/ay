@@ -23,7 +23,7 @@ type YmapsSprotoPending struct {
 func (e *EmitContext) emitYmapsSprotoStmt(srcTok ANY) {
 	ctx, d := e.ctx, e.d
 	outRoot := protoCPPOutRoot(d)
-	sprotocRes := ctx.toolResult(argMapsLibsSprotoSprotoc)
+	sprotocRes := e.toolResult(argMapsLibsSprotoSprotoc)
 	sprotocLDRef, sprotocBinary := sprotocRes.LDRef, *sprotocRes.LDPath
 	scanCtx := d.scanCtx
 	protoRel := e.protoSourceRel(srcTok.string())

@@ -12,7 +12,7 @@ func (e *EmitContext) emitBaseCodegen(bc *BaseCodegenStmt) {
 	na := ctx.emit.nodeArenas()
 	moduleDir := instance.Path.relString()
 	prefix := bc.Prefix.string()
-	toolRes := ctx.toolResult(internArg(filepath.Clean(bc.ToolPath.string())))
+	toolRes := e.toolResult(internArg(filepath.Clean(bc.ToolPath.string())))
 	toolLDRef := toolRes.LDRef
 	toolBin := *toolRes.LDPath
 	inputIn := sourceJoinClean(moduleDir, prefix+".in")

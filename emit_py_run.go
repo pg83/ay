@@ -159,7 +159,7 @@ func (e *EmitContext) emitRunPython(stmt *RunPythonStmt, resourceUses []STR) []A
 	var toolRefs []NodeRef
 
 	if stmt.Lua {
-		luaLDRef, luaBinVFS := ctx.tool(argToolsLua)
+		luaLDRef, luaBinVFS := e.tool(argToolsLua)
 
 		interp = luaBinVFS.any()
 		interpInput = &luaBinVFS

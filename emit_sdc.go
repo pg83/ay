@@ -75,7 +75,7 @@ func (e *EmitContext) emitSdcMetas(archived bool) []VFS {
 		return nil
 	}
 
-	toolRef, tool := e.ctx.tool(argSdgTier0ToolsBipWriter)
+	toolRef, tool := e.tool(argSdgTier0ToolsBipWriter)
 	na := e.ctx.na
 
 	var globals []VFS

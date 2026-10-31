@@ -50,7 +50,7 @@ func (e *EmitContext) emitRosSource(meta SrcMeta, outputs []VFS) {
 	}
 
 	src := e.sourceForEmission(meta)
-	toolRef, tool := ctx.tool(internArg(rosGenerator))
+	toolRef, tool := e.tool(internArg(rosGenerator))
 
 	if outputs == nil {
 		outputs = e.rosOutputPaths(src.relString(), meta.RosZeroCopy)

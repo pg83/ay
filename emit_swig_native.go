@@ -19,7 +19,7 @@ func (e *EmitContext) emitNativeSwigSource(meta SrcMeta, python bool) {
 	}
 
 	moduleOutput := build(instance.Path.relString(), "/", name, extension)
-	swigRef, swigBin := ctx.tool(argContribToolsSwig)
+	swigRef, swigBin := e.tool(argContribToolsSwig)
 	ref := ctx.emit.reserve()
 
 	meta.Source = cpp.any()

@@ -135,6 +135,8 @@ type ModuleEmitResult struct {
 	ArchiveFile                     VFS
 	GlobalRef                       *NodeRef
 	GlobalPath                      *VFS
+	GlobalObjectRefs                []NodeRef
+	GlobalObjectPaths               []VFS
 	WholeArchiveRefs                []NodeRef
 	WholeArchivePaths               []VFS
 	WholeArchiveCmdPaths            []VFS
@@ -236,6 +238,7 @@ type GenCtx struct {
 	buckets             *BucketCache
 	moduleByRef         DenseMap[NodeRef, *ModuleEmitResult]
 	tools               DenseMap[ARG, *ModuleEmitResult]
+	targetTools         DenseMap[ARG, *ModuleEmitResult]
 	frames              []*ModuleFrame
 	frameDepth          int
 	exportLog           PageVec[ExportEntry]
@@ -697,13 +700,23 @@ func (ctx *GenCtx) genStartTarget(dir string) {
 			ctx.emit.result(root.LDRef)
 		}
 
-		if root.GlobalRef != nil {
-			ctx.emit.result(*root.GlobalRef)
-		}
+		ctx.emitGlobalResults(root)
 
 		variants := ctx.genMultimoduleTargets(DiscoveredModule{Path: dir, Declaration: &ModuleStmt{Name: name}}, root.ModuleVariants, demandSelf)
 
 		ctx.collectConfiguredSubmoduleTests(dir, append(variants, root)...)
+	}
+}
+
+func (ctx *GenCtx) emitGlobalResults(result *ModuleEmitResult) {
+	if result.GlobalRef != nil {
+		ctx.emit.result(*result.GlobalRef)
+	}
+
+	for _, ref := range result.GlobalObjectRefs {
+		if ref != 0 {
+			ctx.emit.result(ref)
+		}
 	}
 }
 
@@ -941,7 +954,7 @@ func programBinaryName(instance ModuleInstance, moduleStmt *ModuleStmt) string {
 }
 
 func prebuiltProgramName(instance ModuleInstance, moduleStmt *ModuleStmt) string {
-	return programBinaryName(instance, moduleStmt) + prebuiltModuleSuffix(instance.Platform)
+	return programBinaryName(instance, moduleStmt) + instance.Platform.programSuffix()
 }
 
 func moduleRealPrjName(dir string, stmt *ModuleStmt, unit ModuleUnit) string {
@@ -1230,7 +1243,7 @@ type ResolvedPeer struct {
 }
 
 func newModuleScanContext(ctx *GenCtx, instance ModuleInstance, d *ModuleData, ccOwn, ccPeer, fullPeer, protoInclude []VFS) *ScanContext {
-	scanCtx := newScanContext(ctx.na, ctx.parsers, ccOwn, ccPeer, fullPeer, includeScannerBasePaths())
+	scanCtx := newScanContext(ctx.na, ctx.parsers, ccOwn, ccPeer, fullPeer, includeScannerBasePaths(instance.Platform))
 
 	scanCtx.dontResolveIncludes = d.dontResolveIncludes
 	scanCtx.asmAddIncl = ctx.na.vfsList(d.asmAddIncl...)
@@ -1677,7 +1690,7 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 	}
 
 	if d.moduleStmt.Name == tokPrebuiltProgram {
-		env.setString(envMODULE_SUFFIX, prebuiltModuleSuffix(instance.Platform))
+		env.setString(envMODULE_SUFFIX, instance.Platform.programSuffix())
 
 		if e.bindResourceGlobalVars(env) {
 			d = collectModuleInto(ctx, instance, stmts, env, ctx.onWarn, &frame.d, slices.Clone(d.ifTaken))
@@ -2010,6 +2023,8 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 			globalCap++
 		}
 
+		globalCap += len(pr.GlobalObjectPaths)
+
 		if pr.ModuleStmtName == tokDynamicLibrary && pr.LDPath != nil {
 			dynCap++
 		}
@@ -2128,6 +2143,14 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 					globalBlockR[k] = *pr.GlobalRef
 					globalBlockP[k] = *pr.GlobalPath
 					k++
+				}
+
+				for i, p := range pr.GlobalObjectPaths {
+					if deduper.addStable(p.strID()) {
+						globalBlockR[k] = pr.GlobalObjectRefs[i]
+						globalBlockP[k] = p
+						k++
+					}
 				}
 			}
 
@@ -2500,7 +2523,7 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 		return result
 	}
 
-	if !effectiveNoPlatform(d.flags) && runtimeAncestorCxxConsumers[instance.Path.relString()] {
+	if !effectiveNoPlatform(d.flags) && !instance.Platform.MSVC && runtimeAncestorCxxConsumers[instance.Path.relString()] {
 		hasNostdinc := false
 
 		for _, a := range peerCXXFlagsGlobal {
@@ -2775,7 +2798,7 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 	}
 
 	if isProgramModuleType(d.moduleStmt.Name) || isDllModuleType(d.moduleStmt.Name) {
-		binaryName := programBinaryName(instance, d.moduleStmt)
+		binaryName := programBinaryName(instance, d.moduleStmt) + instance.Platform.programSuffix()
 
 		var exportsScript VFS
 
@@ -2802,11 +2825,11 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 
 			if instance.Platform.OS == OSLinux && instance.Platform.ISA == ISAX8664 && !d.noFixElf &&
 				(!isPythonDllModule(d.moduleStmt.Name) || dllModuleVersion(d.moduleStmt) == "") {
-				dyn.fixElfRef, dyn.fixElf = ctx.tool(argToolsFixElf)
+				dyn.fixElfRef, dyn.fixElf = ctx.toolRef(instance.Platform, argToolsFixElf)
 			}
 
 			if d.yqlUdfProbe {
-				dyn.probeRef, dyn.probe = ctx.tool(argYqlUdfProbe)
+				dyn.probeRef, dyn.probe = ctx.toolRef(instance.Platform, argYqlUdfProbe)
 			}
 		}
 
@@ -2851,43 +2874,50 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 			ldSbomPaths = nil
 		}
 
-		ldRef := e.emitLD(
-			ldInstance,
-			binaryName,
-			ldCCRefs, ldCCOutputs,
-			ldPeerArchiveRefs, ldPeerArchivePaths,
-			ldPeerLinkCmdPaths,
-			peerGlobalRefs, peerGlobalPaths,
-			peerWholeArchiveRefs, peerWholeArchivePaths,
-			peerWholeArchiveCmdPaths,
-			peerDynamicRefs, peerDynamicPaths,
-			ldObjcopyRefs, ldObjcopyPaths,
-			ldSbomRefs, ldSbomPaths,
-			ownCFlags,
-			peerCFlagsGlobal,
-			d.moduleScopeCFlags,
-			resourceGlobalArgumentValue(peerLDFlagsGlobal, resourceGlobalsClosure),
-			resourceGlobalArgumentValue(ownLDFlags, resourceGlobalsClosure),
-			peerRPathFlagsGlobal,
-			peerObjAddLibsGlobal,
-			linkExcludeLibraries,
-			exportsScript,
-			linkerScripts,
-			d.flags.NoExportDynSymbols,
-			d.flags.NoCompilerWarnings,
-			d.noOptimize,
-			wantsStrip,
-			d.useArcadiaLibm,
-			d.splitDwarf,
-			programModuleTag,
-			d.unit.SbomLang,
-			d.tc,
-			ctx.host,
-			ctx.scripts,
-			ctx.emit,
-			ctx.vcsRef,
-			dyn,
-		)
+		var ldRef NodeRef
+
+		if instance.Platform.MSVC && dyn == nil {
+			ldRef = e.emitMSVCLink(instance, binaryName, ldCCRefs, ldCCOutputs, ldPeerArchiveRefs, ldPeerArchivePaths, ldPeerLinkCmdPaths, peerGlobalRefs, peerGlobalPaths, peerWholeArchiveCmdPaths,
+				concat(resourceGlobalArgumentValue(ownLDFlags, resourceGlobalsClosure).Args, resourceGlobalArgumentValue(peerLDFlagsGlobal, resourceGlobalsClosure).Args, peerObjAddLibsGlobal), d.tc, ctx.emit, ctx.vcsRef)
+		} else {
+			ldRef = e.emitLD(
+				ldInstance,
+				binaryName,
+				ldCCRefs, ldCCOutputs,
+				ldPeerArchiveRefs, ldPeerArchivePaths,
+				ldPeerLinkCmdPaths,
+				peerGlobalRefs, peerGlobalPaths,
+				peerWholeArchiveRefs, peerWholeArchivePaths,
+				peerWholeArchiveCmdPaths,
+				peerDynamicRefs, peerDynamicPaths,
+				ldObjcopyRefs, ldObjcopyPaths,
+				ldSbomRefs, ldSbomPaths,
+				ownCFlags,
+				peerCFlagsGlobal,
+				d.moduleScopeCFlags,
+				resourceGlobalArgumentValue(peerLDFlagsGlobal, resourceGlobalsClosure),
+				resourceGlobalArgumentValue(ownLDFlags, resourceGlobalsClosure),
+				peerRPathFlagsGlobal,
+				peerObjAddLibsGlobal,
+				linkExcludeLibraries,
+				exportsScript,
+				linkerScripts,
+				d.flags.NoExportDynSymbols,
+				d.flags.NoCompilerWarnings,
+				d.noOptimize,
+				wantsStrip,
+				d.useArcadiaLibm,
+				d.splitDwarf,
+				programModuleTag,
+				d.unit.SbomLang,
+				d.tc,
+				ctx.host,
+				ctx.scripts,
+				ctx.emit,
+				ctx.vcsRef,
+				dyn,
+			)
+		}
 
 		ldPath := lDOutputPath(instance, binaryName)
 		result := newResult()
@@ -2956,7 +2986,8 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 	}
 
 	if sbomActive(ctx, instance) && sbomQualifies(d) && d.unit.Tag != unitTagPy3BinLib && !isGoModuleType(d.moduleStmt.Name) {
-		realPrjName := strings.TrimSuffix(e.arName(instance.Path.relString(), "", archiveName), ".a")
+		_, arSuffix := instance.Platform.archiveNaming("")
+		realPrjName := strings.TrimSuffix(e.arName(instance.Path.relString(), "", archiveName), arSuffix)
 
 		ownSbomRef, ownSbomPath = e.emitSbomComponent(realPrjName)
 	}
@@ -2975,7 +3006,9 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 		result.TestSuites = append(result.TestSuites, e.goTestSuites(arRef, build(arPath.relString(), ".vet.txt"), resourceGlobalsClosure)...)
 	}
 
-	if len(globalRefs) > 0 {
+	if len(globalRefs) > 0 && !d.useGlobalCmd(instance.Platform) {
+		result.GlobalObjectRefs, result.GlobalObjectPaths = globalRefs, globalOutputs
+	} else if len(globalRefs) > 0 {
 		globalBaseName := globalArNameFn(instance.Path.relString())
 		globalTag := d.unit.GlobalARTag
 		globalRef := e.emitARGlobalNamedTagged(arInstance, globalBaseName, globalTag, globalRefs, globalOutputs, d.tc, ctx.host, ctx.emit)
@@ -3036,16 +3069,6 @@ func filterBuildRootSelfPaths(instancePath string, peer, own []VFS) []VFS {
 	})
 
 	return out
-}
-
-func (ctx *GenCtx) tool(modulePath ARG) (NodeRef, VFS) {
-	res := ctx.toolResult(modulePath)
-
-	if res.LDPath == nil {
-		throwFmt("gen: tool %s has no linkable output", modulePath.string())
-	}
-
-	return res.LDRef, *res.LDPath
 }
 
 func (ctx *GenCtx) toolResult(modulePath ARG) *ModuleEmitResult {

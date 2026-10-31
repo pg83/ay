@@ -389,13 +389,13 @@ func (e *EmitContext) newPyccTool() PyccTool {
 			path = argToolsPy2ccStage0
 		}
 
-		ref, binary := ctx.tool(path)
+		ref, binary := e.tool(path)
 
 		return PyccTool{refs: na.refList(ref), head: na.anyList(binary.any()), binaries: na.vfsList(binary)}
 	}
 
-	py3ccLDRef, py3ccBinary := ctx.tool(argToolsPy3cc)
-	py3ccSlowLDRef, py3ccSlowBin := ctx.tool(argToolsPy3ccSlow)
+	py3ccLDRef, py3ccBinary := e.tool(argToolsPy3cc)
+	py3ccSlowLDRef, py3ccSlowBin := e.tool(argToolsPy3ccSlow)
 
 	return PyccTool{
 		refs:      na.refList(py3ccLDRef, py3ccSlowLDRef),
@@ -622,7 +622,7 @@ func (e *EmitContext) packPyProtoResEntries(entries []PyGenResEntry) ([]NodeRef,
 		RawCompile: CompileSpec{
 			ForceCxx: true,
 			ObjSuf:   pyProtoAuxObjSuf(e.d),
-			CFlags:   resourceCxxFlags,
+			CFlags:   e.instance.Platform.ForceCppFlags,
 		},
 	})
 }

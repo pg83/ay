@@ -1,5 +1,7 @@
 package main
 
+import "strings"
+
 var (
 	arKV               = KV{P: pkAR, PC: pcLightRed, ShowOut: true}
 	archiveNameScratch []byte
@@ -121,6 +123,7 @@ func (e *EmitContext) appendArchiveTail(moduleDir string) {
 }
 
 func (e *EmitContext) arName(moduleDir, prefix, name string) string {
+	prefix, suffix := e.instance.Platform.archiveNaming(prefix)
 	start := len(e.resStrBuf)
 
 	if name != "" {
@@ -131,33 +134,38 @@ func (e *EmitContext) arName(moduleDir, prefix, name string) string {
 		e.appendArchiveTail(moduleDir)
 	}
 
-	e.resStrBuf = append(e.resStrBuf, ".a"...)
+	e.resStrBuf = append(e.resStrBuf, suffix...)
 
 	return bytesString(e.resStrBuf[start:])
 }
 
 func (e *EmitContext) globalArName(moduleDir, prefix, name string) string {
 	base := e.arName(moduleDir, prefix, name)
+	_, suffix := e.instance.Platform.archiveNaming(prefix)
 	start := len(e.resStrBuf)
 
-	e.resStrBuf = append(e.resStrBuf, base[:len(base)-2]...)
-	e.resStrBuf = append(e.resStrBuf, ".global.a"...)
+	e.resStrBuf = append(e.resStrBuf, base[:len(base)-len(suffix)]...)
+	e.resStrBuf = append(e.resStrBuf, ".global"...)
+	e.resStrBuf = append(e.resStrBuf, suffix...)
 
 	return bytesString(e.resStrBuf[start:])
 }
 
-func archiveNameWithPrefixOrName(moduleDir, prefix, name string) string {
+func archiveNameWithPrefixOrName(p *Platform, moduleDir, prefix, name string) string {
+	prefix, suffix := p.archiveNaming(prefix)
+
 	if name != "" {
-		return prefix + name + ".a"
+		return prefix + name + suffix
 	}
 
-	return archiveNameWithPrefix(moduleDir, prefix)
+	return strings.TrimSuffix(archiveNameWithPrefix(moduleDir, prefix), ".a") + suffix
 }
 
-func globalArchiveNameWithPrefixOrName(moduleDir, prefix, name string) string {
-	base := archiveNameWithPrefixOrName(moduleDir, prefix, name)
+func globalArchiveNameWithPrefixOrName(p *Platform, moduleDir, prefix, name string) string {
+	base := archiveNameWithPrefixOrName(p, moduleDir, prefix, name)
+	_, suffix := p.archiveNaming(prefix)
 
-	return base[:len(base)-2] + ".global.a"
+	return base[:len(base)-len(suffix)] + ".global" + suffix
 }
 
 func (e *EmitContext) emitARNode(
@@ -185,6 +193,10 @@ func (e *EmitContext) emitARNode(
 }
 
 func composeARNode(instance ModuleInstance, archivePath VFS, objRefs []NodeRef, objPaths []VFS, arPluginPath *VFS, tc ModuleToolchain, hostP *Platform, na *NodeArenas) NodeSpec {
+	if instance.Platform.MSVC {
+		return composeMSVCLibNode(instance, archivePath, objRefs, objPaths, tc, na)
+	}
+
 	cmdEnv := hostP.toolEnv()
 	tail := na.anys.alloc(4 + len(objPaths))[:0]
 
