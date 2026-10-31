@@ -1,5 +1,9 @@
 package main
 
+import "bytes"
+
+var yasmCommentSign = []byte("//")
+
 type YasmIncludeDirectiveParser struct{}
 
 func (YasmIncludeDirectiveParser) parse(_ string, data [][]byte, a *BumpAllocator[IncludeDirective]) ParsedIncludeSet {
@@ -17,66 +21,44 @@ func (YasmIncludeDirectiveParser) parse(_ string, data [][]byte, a *BumpAllocato
 
 func parseYasmIncludes(data [][]byte, block []IncludeDirective, k int) int {
 	eachLine(data, func(line []byte) {
-		line = trimParserSpace(line)
+		if comment := bytes.Index(line, yasmCommentSign); comment >= 0 {
+			line = line[:comment]
+		}
 
-		if len(line) == 0 || line[0] != '%' {
+		parts := bytes.FieldsFunc(line, func(r rune) bool { return r == ' ' || r == '\t' })
+
+		if len(parts) < 2 || string(parts[0]) != "%include" && string(parts[0]) != "%INCLUDE" {
 			return
 		}
 
-		line = line[1:]
+		target, ok := yasmIncludeTarget(parts[1])
 
-		for len(line) > 0 && isParserSpace(line[0]) {
-			line = line[1:]
+		if !ok && len(parts) > 2 {
+			target, ok = yasmIncludeTarget(parts[2])
 		}
 
-		const keyword = "include"
-
-		if len(line) < len(keyword) || !equalFoldASCII(line[:len(keyword)], keyword) {
+		if !ok {
 			return
 		}
 
-		line = line[len(keyword):]
+		kind := includeQuoted
 
-		for len(line) > 0 && isParserSpace(line[0]) {
-			line = line[1:]
+		if target[0] == '<' {
+			kind = includeSystem
 		}
 
-		if len(line) < 3 || (line[0] != '<' && line[0] != '"') {
-			return
-		}
-
-		end := 1
-
-		for end < len(line) && line[end] != '>' && line[end] != '"' {
-			end++
-		}
-
-		if end == 1 || end == len(line) {
-			return
-		}
-
-		kind := includeSystem
-
-		if line[0] == '"' {
-			kind = includeQuoted
-		}
-
-		k = addDirective(block, k, IncludeDirective{kind: kind, target: includeTarget(internBytes(line[1:end]).any())})
+		k = addDirective(block, k, IncludeDirective{kind: kind, target: includeTarget(internBytes(target[1 : len(target)-1]).any())})
 	})
 
 	return k
 }
 
-func equalFoldASCII(b []byte, s string) bool {
-	for i, c := range b {
-		if c >= 'A' && c <= 'Z' {
-			c += 'a' - 'A'
-		}
+func yasmIncludeTarget(inc []byte) ([]byte, bool) {
+	inc = bytes.TrimSuffix(inc, []byte(";"))
 
-		if c != s[i] {
-			return false
-		}
+	if len(inc) < 3 || inc[0] != '"' && inc[0] != '\'' && inc[0] != '<' {
+		return nil, false
 	}
 
-	return true
+	return inc, inc[0] == inc[len(inc)-1] || inc[0] == '<' && inc[len(inc)-1] == '>'
 }

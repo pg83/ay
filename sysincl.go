@@ -98,6 +98,10 @@ type SourceFilter struct {
 
 type FilterAlt struct {
 	excludePrefixes []string
+	excludeRes      []*regexp.Regexp
+	residual        *regexp.Regexp
+	lookPrefix      string
+	lookahead       bool
 	literalPrefix   string
 	containsLit     string
 	reGuard         string
@@ -122,6 +126,24 @@ func (a *FilterAlt) matches(sourcePath string) bool {
 	for _, p := range a.excludePrefixes {
 		if strings.HasPrefix(sourcePath, p) {
 			return false
+		}
+	}
+
+	if a.lookahead {
+		tail, ok := strings.CutPrefix(sourcePath, a.lookPrefix)
+
+		if !ok {
+			return false
+		}
+
+		for _, re := range a.excludeRes {
+			if re.MatchString(tail) {
+				return false
+			}
+		}
+
+		if a.residual != nil {
+			return a.residual.MatchString(tail)
 		}
 	}
 
@@ -286,39 +308,11 @@ func compileSourceFilter(name string, lineno int, pat string, onWarn func(Warn))
 		altStrs := splitTopLevelOr(pat)
 
 		for _, altStr := range altStrs {
-			excludes, residual, isExclude := extractNegativeLookahead(altStr)
 			alt := FilterAlt{}
 
-			if isExclude {
-				alt.excludePrefixes = excludes
-
-				if residual != "" {
-					if strings.Contains(residual, "(?!") {
-						throwFmt("sysincl: %s:%d: unsupported negative lookahead position in %q (residual after ^(?!): %q)", name, lineno, altStr, residual)
-					}
-
-					if residual == ".*" {
-					} else if lit := extractLiteralAnchoredPrefix(residual); lit != "" {
-						alt.literalPrefix = lit
-					} else {
-						alt.setPositive(name, lineno, residual)
-					}
-				}
-			} else if lit, ex, res, okP := extractPrefixedNegativeLookahead(altStr); okP {
-				alt.literalPrefix = lit
-
-				for _, e := range ex {
-					alt.excludePrefixes = append(alt.excludePrefixes, lit+e)
-				}
-
-				if res != "" && res != ".*" {
-					throwFmt("sysincl: %s:%d: unsupported residual %q after prefixed negative lookahead in %q", name, lineno, res, altStr)
-				}
+			if strings.Contains(altStr, "(?!") {
+				alt.setLookahead(name, lineno, altStr)
 			} else {
-				if strings.Contains(altStr, "(?!") {
-					throwFmt("sysincl: %s:%d: unsupported negative lookahead position in %q", name, lineno, altStr)
-				}
-
 				if lit := extractLiteralAnchoredPrefix(altStr); lit != "" {
 					alt.literalPrefix = lit
 				} else if prefixes, ok := literalAltsFromRegex(altStr); ok {
@@ -379,97 +373,113 @@ func splitTopLevelOr(pat string) []string {
 	return out
 }
 
-func extractPrefixedNegativeLookahead(pat string) (literal string, excludes []string, residual string, ok bool) {
-	if !strings.HasPrefix(pat, "^") {
-		return "", nil, "", false
+func (alt *FilterAlt) setLookahead(name string, lineno int, pat string) {
+	body, ok := strings.CutPrefix(pat, "^")
+
+	if !ok {
+		throwFmt("sysincl: %s:%d: unsupported negative lookahead position in %q", name, lineno, pat)
 	}
 
-	body := pat[1:]
-	i := strings.Index(body, "(?!")
+	prefix, body := cutLiteralFilterPrefix(body)
 
-	if i <= 0 {
-		return "", nil, "", false
+	alt.lookahead, alt.lookPrefix = true, prefix
+
+	for strings.HasPrefix(body, "(?!") {
+		end := closingRegexParen(body)
+
+		if end < 0 {
+			throwFmt("sysincl: malformed negative lookahead in %q", pat)
+		}
+
+		if literals, ok := lookaheadLiterals(body[3:end]); ok {
+			for _, l := range literals {
+				alt.excludePrefixes = append(alt.excludePrefixes, prefix+l)
+			}
+		} else {
+			alt.excludeRes = append(alt.excludeRes, compileSysinclRegex(name, lineno, "^(?:"+body[3:end]+")"))
+		}
+
+		body = body[end+1:]
 	}
 
-	literal = body[:i]
-
-	if containsRegexMeta(literal) {
-		return "", nil, "", false
+	switch {
+	case len(alt.excludePrefixes)+len(alt.excludeRes) == 0 || strings.Contains(body, "(?!"):
+		throwFmt("sysincl: %s:%d: unsupported negative lookahead position in %q", name, lineno, pat)
+	case body == "" || body == ".*":
+		alt.literalPrefix = prefix
+	case !containsRegexMeta(body):
+		alt.literalPrefix = prefix + body
+	default:
+		alt.residual = compileSysinclRegex(name, lineno, "^(?:"+body+")")
 	}
-
-	ex, res, _ := extractNegativeLookahead("^" + body[i:])
-
-	return literal, ex, res, true
 }
 
-func extractNegativeLookahead(pat string) ([]string, string, bool) {
-	const prefix = "^(?!"
+func compileSysinclRegex(name string, lineno int, pat string) *regexp.Regexp {
+	re, err := regexp.Compile(pat)
 
-	if !strings.HasPrefix(pat, prefix) {
-		return nil, "", false
+	if err != nil {
+		throwFmt("sysincl: %s:%d: cannot compile %q: %v", name, lineno, pat, err)
 	}
 
-	rest := pat[len(prefix):]
-	depth := 1
-	end := -1
+	return re
+}
 
-	for i := 0; i < len(rest); i++ {
-		c := rest[i]
+func cutLiteralFilterPrefix(body string) (string, string) {
+	if strings.HasPrefix(body, "(?:") {
+		if end := closingRegexParen(body); end > 0 && !containsRegexMeta(body[3:end]) {
+			return body[3:end], body[end+1:]
+		}
 
-		switch c {
-		case '\\':
+		return "", body
+	}
+
+	i := 0
+
+	for i < len(body) && !containsRegexMeta(body[i:i+1]) {
+		i++
+	}
+
+	return body[:i], body[i:]
+}
+
+func closingRegexParen(s string) int {
+	depth := 0
+	bracket := false
+
+	for i := 0; i < len(s); i++ {
+		switch c := s[i]; {
+		case c == '\\':
 			i++
-		case '(':
+		case bracket:
+			bracket = c != ']'
+		case c == '[':
+			bracket = true
+		case c == '(':
 			depth++
-		case ')':
-			depth--
-
-			if depth == 0 {
-				end = i
+		case c == ')':
+			if depth--; depth == 0 {
+				return i
 			}
 		}
-
-		if end >= 0 {
-			break
-		}
 	}
 
-	if end < 0 {
-		throwFmt("sysincl: malformed negative lookahead in %q", pat)
-	}
-
-	inner := rest[:end]
-	residual := rest[end+1:]
-	excludes := parseLookaheadAlts(inner)
-
-	return excludes, residual, true
+	return -1
 }
 
-func parseLookaheadAlts(body string) []string {
-	body = strings.TrimSpace(body)
-
-	if strings.HasPrefix(body, "(") && strings.HasSuffix(body, ")") {
+func lookaheadLiterals(body string) ([]string, bool) {
+	if strings.HasPrefix(body, "(") && closingRegexParen(body) == len(body)-1 {
 		body = body[1 : len(body)-1]
 	}
 
 	parts := splitTopLevelOr(body)
-	out := make([]string, 0, len(parts))
 
 	for _, p := range parts {
-		p = strings.TrimSpace(p)
-
-		if p == "" {
-			continue
+		if p == "" || containsRegexMeta(p) {
+			return nil, false
 		}
-
-		if containsRegexMeta(p) {
-			throwFmt("sysincl: negative-lookahead alt %q has regex metacharacters; only literal prefixes are supported", p)
-		}
-
-		out = append(out, p)
 	}
 
-	return out
+	return parts, true
 }
 
 func extractLiteralAnchoredPrefix(pat string) string {

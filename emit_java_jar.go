@@ -64,6 +64,8 @@ func (ctx *GenCtx) javaSrcsGlobs(jm *JavaModule) []javaSrcsGlob {
 
 				if strings.HasPrefix(spec.srcDir, "$(S)/") {
 					pattern = spec.srcDir + "/" + glob
+				} else if strings.HasPrefix(glob, "$") {
+					continue
 				}
 
 				for _, f := range ctx.javaGlob(jm.dir, pattern, ex) {

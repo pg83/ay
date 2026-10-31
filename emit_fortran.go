@@ -2,15 +2,15 @@ package main
 
 var fortranKV = KV{P: pkFL, PC: pcLightGreen}
 
-func hasFortranGeneratedSource(d *ModuleData) bool {
+func hasGeneratedSourceClass(d *ModuleData, class SrcExtClass) bool {
 	hasOutput := func(outputs []ANY, stdout *ANY, noAuto bool) bool {
 		for _, out := range outputs {
-			if srcExtClassOf(out) == srcExtFortran {
+			if srcExtClassOf(out) == class {
 				return true
 			}
 		}
 
-		return stdout != nil && !noAuto && srcExtClassOf(*stdout) == srcExtFortran
+		return stdout != nil && !noAuto && srcExtClassOf(*stdout) == class
 	}
 
 	for _, stmt := range d.runPrograms {

@@ -182,6 +182,29 @@ func (r *IncludeDirectiveParserRegistry) scansIncludes(rel string) bool {
 	return p != nil
 }
 
+func countDirective(block []IncludeDirective, k int, d IncludeDirective) int {
+	if k < len(block) {
+		block[k] = d
+	}
+
+	return k + 1
+}
+
+func countedDirectives(a *BumpAllocator[IncludeDirective], fill func([]IncludeDirective) int) []IncludeDirective {
+	block := a.alloc(directiveBlockHint)
+	k := fill(block)
+
+	if k > len(block) {
+		a.commit(0)
+		block = a.alloc(k)
+		k = fill(block)
+	}
+
+	a.commit(k)
+
+	return block[:k:k]
+}
+
 func addDirective(block []IncludeDirective, k int, d IncludeDirective) int {
 	if k == len(block) {
 		throwFmt("directive block overflowed %d entries — raise directiveBlockHint", len(block))

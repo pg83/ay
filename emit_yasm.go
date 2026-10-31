@@ -78,24 +78,6 @@ func (e *EmitContext) emitASAsm(srcVFS VFS, in ModuleCCInputs, yasmLD NodeRef, n
 	inVFS := srcVFS
 	preincludes := e.d.asmPreincludes
 	sourceFlags := in.PerSourceCFlags
-
-	for i, flag := range sourceFlags {
-		if flag.string() == "PREINCLUDES" {
-			preincludes = nil
-
-			for _, include := range sourceFlags[i+1:] {
-				if include.string() != "PREINCLUDES" {
-					preincludes = append(preincludes, include)
-				}
-			}
-
-			preincludes = append(preincludes, e.d.asmPreincludes...)
-			sourceFlags = sourceFlags[:i]
-
-			break
-		}
-	}
-
 	roots := na.vfs.alloc(1 + len(preincludes))[:0]
 
 	roots = append(roots, inVFS)

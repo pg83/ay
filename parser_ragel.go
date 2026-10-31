@@ -8,11 +8,7 @@ import (
 type RagelIncludeDirectiveParser struct{}
 
 func (RagelIncludeDirectiveParser) parse(rel string, data [][]byte, a *BumpAllocator[IncludeDirective]) ParsedIncludeSet {
-	block := a.alloc(directiveBlockHint)
-	local := block[:parseCIncludesChunks(data, block, 0)]
-
-	a.commit(len(local))
-
+	local := countedDirectives(a, func(block []IncludeDirective) int { return parseCIncludesChunks(data, block, 0) })
 	nblock := a.alloc(directiveBlockHint)
 	nk := 0
 	inSpecification := false

@@ -7,22 +7,13 @@ import (
 type CIncludeDirectiveParser struct{}
 
 func (CIncludeDirectiveParser) parse(rel string, data [][]byte, a *BumpAllocator[IncludeDirective]) ParsedIncludeSet {
-	block := a.alloc(directiveBlockHint)
-	k := 0
+	local := countedDirectives(a, func(block []IncludeDirective) int { return parseCIncludesChunks(data, block, 0) })
 
-	if len(data) == 1 {
-		k = parseCIncludes(data[0], block, k)
-	} else {
-		k = parseCIncludesChunks(data, block, k)
-	}
-
-	a.commit(k)
-
-	if k == 0 {
+	if len(local) == 0 {
 		return ParsedIncludeSet{}
 	}
 
-	return ParsedIncludeSet{parsedIncludesLocal: block[:k]}
+	return ParsedIncludeSet{parsedIncludesLocal: local}
 }
 
 type cChunkState struct {
@@ -143,7 +134,7 @@ func parseCIncludesBlock(data []byte, block []IncludeDirective, k int, trackTrai
 		d, ok, next := parseDirectiveInline(data, hi)
 
 		if ok {
-			k = addDirective(block, k, d)
+			k = countDirective(block, k, d)
 		}
 
 		p, clean = next, next

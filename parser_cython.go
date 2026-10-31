@@ -80,8 +80,8 @@ func (CythonIncludeDirectiveParser) parse(rel string, data [][]byte, a *BumpAllo
 		}
 
 		if rest, ok := cutParserKeyword(t, "include"); ok && (rest[0] == '"' || rest[0] == '\'') {
-			if target, kind, ok := parseDelimitedIncludeTarget(rest); ok {
-				add(IncludeDirective{kind: kind, target: includeTarget(internBytes(target).any())})
+			if target, ok := parseCythonIncludeTarget(rest); ok {
+				add(IncludeDirective{kind: includeQuoted, target: includeTarget(internBytes(target).any())})
 			}
 
 			continue
@@ -433,4 +433,15 @@ func cythonSkipContinued(b []byte, i int) int {
 	}
 
 	return i
+}
+
+func parseCythonIncludeTarget(b []byte) ([]byte, bool) {
+	quote := b[0]
+	end := bytes.IndexByte(b[1:], quote)
+
+	if end <= 0 || bytes.IndexByte(b[1:1+end], '\n') >= 0 {
+		return nil, false
+	}
+
+	return b[1 : 1+end], true
 }

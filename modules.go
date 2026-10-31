@@ -1060,7 +1060,15 @@ func collectModuleInto(ctx *GenCtx, instance ModuleInstance, stmts []Stmt, env E
 		}
 	}
 
-	evInduced, protoInduced, cudaInduced := false, false, false
+	generatedProto := hasGeneratedSourceClass(d, srcExtProto)
+
+	hasProto = hasProto || generatedProto
+
+	evInduced, protoInduced, cudaInduced := false, generatedProto, false
+
+	if generatedProto {
+		induceProtoPeer(d, env)
+	}
 
 	for _, meta := range d.srcs {
 		src := meta.Source
@@ -1086,17 +1094,12 @@ func collectModuleInto(ctx *GenCtx, instance ModuleInstance, stmts []Stmt, env E
 		case srcExtProto:
 			if !protoInduced {
 				protoInduced = true
-
-				isProtoLibrary := d.moduleStmt != nil && d.moduleStmt.Name == tokProtoLibrary
-
-				if !isGoModuleType(d.unit.Type) && (!isProtoLibrary || !env.bool(envPY3_PROTO) && !env.bool(envPyProto)) {
-					d.peerdirs = append(d.peerdirs, strContribLibsProtobuf.any())
-				}
+				induceProtoPeer(d, env)
 			}
 		}
 	}
 
-	if hasFortran || hasFortranGeneratedSource(d) {
+	if hasFortran || hasGeneratedSourceClass(d, srcExtFortran) {
 		d.peerdirs = append(d.peerdirs, strBuildPlatformFlang.any(), strContribLibsLlvmFlangRt.any())
 	}
 
@@ -1131,6 +1134,14 @@ func collectModuleInto(ctx *GenCtx, instance ModuleInstance, stmts []Stmt, env E
 	}
 
 	return d
+}
+
+func induceProtoPeer(d *ModuleData, env Environment) {
+	isProtoLibrary := d.moduleStmt != nil && d.moduleStmt.Name == tokProtoLibrary
+
+	if !isGoModuleType(d.unit.Type) && (!isProtoLibrary || !env.bool(envPY3_PROTO) && !env.bool(envPyProto)) {
+		d.peerdirs = append(d.peerdirs, strContribLibsProtobuf.any())
+	}
 }
 
 func applyResourceFiles(fs FS, modulePath string, args []string, line int, d *ModuleData) {
@@ -3440,6 +3451,10 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 
 		if len(v.Args) > 1 {
 			extras = v.Args[1:]
+
+			for _, flag := range extras {
+				markUserArg(flag)
+			}
 		}
 
 		d.srcs = append(d.srcs, SrcMeta{Source: filename, Prio: stmtPrioDefault, Seq: d.nextDeclSeq(), Compile: CompileSpec{

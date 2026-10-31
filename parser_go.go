@@ -148,20 +148,21 @@ func (GoCgoIncludeDirectiveParser) parse(rel string, data [][]byte, a *BumpAlloc
 		return ParsedIncludeSet{}
 	}
 
-	block := a.alloc(directiveBlockHint)
-	k := 0
+	local := countedDirectives(a, func(block []IncludeDirective) int {
+		k := 0
 
-	for _, c := range comments {
-		k = parseCIncludes(c, block, k)
-	}
+		for _, c := range comments {
+			k = parseCIncludes(c, block, k)
+		}
 
-	a.commit(k)
+		return k
+	})
 
-	if k == 0 {
+	if len(local) == 0 {
 		return ParsedIncludeSet{}
 	}
 
-	return ParsedIncludeSet{parsedIncludesLocal: block[:k]}
+	return ParsedIncludeSet{parsedIncludesLocal: local}
 }
 
 func goCommentBodies(data []byte) [][]byte {
@@ -185,8 +186,6 @@ func goCommentBodies(data []byte) [][]byte {
 			end := bytes.Index(data[start:], blockCommentClose)
 
 			if end < 0 {
-				out = append(out, data[start:])
-
 				return out
 			}
 
