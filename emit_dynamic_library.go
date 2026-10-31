@@ -112,17 +112,10 @@ func dllExportsArg(stmt *ModuleStmt) *ANY {
 func (e *EmitContext) emitDynamicLibrary() *ModuleEmitResult {
 	ctx, instance, d := e.ctx, e.instance, e.d
 	na := ctx.na
+	exportsScript := ""
 
-	if len(d.moduleStmt.Args) == 0 {
-		throwFmt("gen: %s DYNAMIC_LIBRARY requires a basename argument", instance.Path.relString())
-	}
-
-	if len(d.dynamicLibraryFrom) == 0 {
-		throwFmt("gen: %s DYNAMIC_LIBRARY requires DYNAMIC_LIBRARY_FROM(...)", instance.Path.relString())
-	}
-
-	if d.exportsScript == nil {
-		throwFmt("gen: %s DYNAMIC_LIBRARY requires EXPORTS_SCRIPT(...)", instance.Path.relString())
+	if d.exportsScript != nil {
+		exportsScript = d.exportsScript.string()
 	}
 
 	dynLibRPathHelperPeers := []string{"build/platform/local_so"}
@@ -274,7 +267,7 @@ func (e *EmitContext) emitDynamicLibrary() *ModuleEmitResult {
 	pluginPaths = e.globalPlugins()
 
 	fixElfRef, fixElfPath := ctx.tool(argToolsFixElf)
-	outputName := "lib" + d.moduleStmt.Args[0].string() + ".so"
+	outputName := dllOutputName(instance, d.moduleStmt)
 	outputVFS := build(instance.Path.relString(), "/", outputName)
 	vcsCVFS := build(instance.Path.relString(), "/__vcs_version__.c")
 	vcsOVFS := build(instance.Path.relString(), "/__vcs_version__.c.pic.o")
@@ -304,7 +297,7 @@ func (e *EmitContext) emitDynamicLibrary() *ModuleEmitResult {
 		linkRpath = concat(peerLinkRpath, d.rpathFlagsGlobal)
 	}
 
-	cmd2 := composeDynLibCmd(na, instance.Platform, d.tc, instance.Path.relString(), outputVFS, outputName, vcsOVFS, peerArchivePaths, pluginPaths, anyStrs(d.dynamicLibraryFrom), d.exportsScript.string(), fixElfPath, linkRpath)
+	cmd2 := composeDynLibCmd(na, instance.Platform, d.tc, instance.Path.relString(), outputVFS, outputName, vcsOVFS, peerArchivePaths, pluginPaths, anyStrs(d.dynamicLibraryFrom), exportsScript, fixElfPath, linkRpath)
 	cmds := na.cmds.alloc(4)[:0]
 
 	cmds = append(cmds, Cmd{CmdArgs: na.chunkList(cmd0), Env: envVcsOnly}, Cmd{CmdArgs: na.chunkList(cmd1), Env: envFull, Resources: resourceKeyUnion(vcsResources, peerCompilerResourceKeys(cOnlyFlagsGlobal, len(d.cOnlyFlagsGlobal) > 0))}, Cmd{CmdArgs: na.chunkList(cmd2), Cwd: bldRootDirVFS, Env: envFull})
@@ -315,7 +308,7 @@ func (e *EmitContext) emitDynamicLibrary() *ModuleEmitResult {
 
 	na.cmds.commit(len(cmds))
 
-	inputs := composeDynLibInputs(na, peerArchivePaths, pluginPaths, fixElfPath, instance.Path.relString(), d.exportsScript.string(), ctx.scripts, copySO)
+	inputs := composeDynLibInputs(na, peerArchivePaths, pluginPaths, fixElfPath, instance.Path.relString(), exportsScript, ctx.scripts, copySO)
 	deps := na.noderefs.alloc(len(peerArchiveRefs) + 1)[:0]
 
 	deps = append(deps, peerArchiveRefs...)
@@ -407,7 +400,14 @@ func composeDynLibCmd(na *NodeArenas, p *Platform, tc ModuleToolchain, modulePat
 	}
 
 	cmdArgs = appendAnyLists(cmdArgs, p.Linker.EndGroup, p.Linker.AfterPeers)
-	cmdArgs = appendLinkerTemplate(cmdArgs, p.Linker.Exports, "${input:EXPORTS_FILE}", "$(S)/"+modulePath+"/"+exportsScript)
+
+	exportsInput := ""
+
+	if exportsScript != "" {
+		exportsInput = "$(S)/" + modulePath + "/" + exportsScript
+	}
+
+	cmdArgs = appendLinkerTemplate(cmdArgs, p.Linker.Exports, "${input:EXPORTS_FILE}", exportsInput)
 	cmdArgs = append(cmdArgs, linkRpath...)
 
 	if p.CompressDebugSections {
@@ -448,13 +448,14 @@ func composeDynLibCmd(na *NodeArenas, p *Platform, tc ModuleToolchain, modulePat
 func composeDynLibInputs(na *NodeArenas, peerLibPaths, pluginPaths []VFS, fixElfPath VFS, modulePath, exportsScript string, scripts ScriptDeps, copySO bool) InputChunks {
 	peerChunk := na.vfsList(peerLibPaths...)
 	pluginChunk := na.vfsList(pluginPaths...)
+	tail := [3]VFS{ldSvnInterfaceVFS, ldSvnversionHVFS}
+	n := 2
 
-	tailChunk := na.vfsList(
-		ldSvnInterfaceVFS,
-		ldSvnversionHVFS,
-		source(modulePath, "/", exportsScript),
-	)
+	if exportsScript != "" {
+		tail[2], n = source(modulePath, "/", exportsScript), 3
+	}
 
+	tailChunk := na.vfsList(tail[:n]...)
 	chunks := na.inputs.alloc(7)[:0]
 
 	chunks = append(chunks, peerChunk, pluginChunk, na.srcChunk(fixElfPath))

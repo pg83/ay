@@ -41,36 +41,41 @@ func (e *EmitContext) prepareFortran() {
 		return
 	}
 
+	var root string
+	var name STR
+
 	for _, resource := range e.peers.ResourceGlobals {
-		if resource.GlobalVar.string() != "FLANG_RESOURCE_GLOBAL" {
-			continue
+		if resource.GlobalVar.string() == "FLANG_RESOURCE_GLOBAL" {
+			root, name = resource.Value.string(), resource.Name
+
+			break
 		}
-
-		flags := expandCommandTokens(e.ctx.na.anyList(strCFlagsPlatform.any()), e.instance.Platform.ifEnv)
-		value := resourceGlobalArgumentValue(flags, e.peers.ResourceGlobals)
-
-		flags = value.Args
-
-		n := 1 + len(flags)
-
-		cc.FortranHead = e.ctx.na.anys.alloc(n)[:n:n]
-		cc.FortranHead[0] = internV(resource.Value.string(), "/bin/flang-new").any()
-		copy(cc.FortranHead[1:], flags)
-		e.ctx.na.anys.commit(len(cc.FortranHead))
-		cc.FortranResources = e.ctx.na.strs.alloc(2)[:0]
-		cc.FortranResources = append(cc.FortranResources, resource.Name)
-		cc.FortranResourceUses = value.Resources
-
-		if e.instance.Platform.UsesSDKRoot {
-			cc.FortranResources = append(cc.FortranResources, internStr(resourcePatternOSSDKRoot))
-		}
-
-		e.ctx.na.strs.commit(len(cc.FortranResources))
-
-		return
 	}
 
-	throwFmt("Fortran compiler resource missing from module peer closure")
+	flags := expandCommandTokens(e.ctx.na.anyList(strCFlagsPlatform.any()), e.instance.Platform.ifEnv)
+	value := resourceGlobalArgumentValue(flags, e.peers.ResourceGlobals)
+
+	flags = value.Args
+
+	n := 1 + len(flags)
+
+	cc.FortranHead = e.ctx.na.anys.alloc(n)[:n:n]
+	cc.FortranHead[0] = internV(root, "/bin/flang-new").any()
+	copy(cc.FortranHead[1:], flags)
+	e.ctx.na.anys.commit(len(cc.FortranHead))
+	cc.FortranResources = e.ctx.na.strs.alloc(2)[:0]
+
+	if name != 0 {
+		cc.FortranResources = append(cc.FortranResources, name)
+	}
+
+	cc.FortranResourceUses = value.Resources
+
+	if e.instance.Platform.UsesSDKRoot {
+		cc.FortranResources = append(cc.FortranResources, internStr(resourcePatternOSSDKRoot))
+	}
+
+	e.ctx.na.strs.commit(len(cc.FortranResources))
 }
 
 func (e *EmitContext) emitFortranSource(meta SrcMeta) {

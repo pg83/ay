@@ -49,7 +49,7 @@ func (e *EmitContext) genUnion() *ModuleEmitResult {
 	e.d.scanCtx.ccPeer = e.ctx.na.vfsList(dedup(peerIncludes)...)
 	e.d.scanCtx.protoInclude = e.ctx.na.vfsList(dedup(e.d.scanCtx.protoInclude, peerProtoIncludes)...)
 
-	own := e.emitSdcMetas()
+	own := e.emitSdcMetas(false)
 
 	e.globalSources = dedup(e.globalSources, own)
 	e.emitDeclaredProducers(nil)

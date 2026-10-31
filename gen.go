@@ -934,6 +934,16 @@ func programBinaryName(instance ModuleInstance, moduleStmt *ModuleStmt) string {
 	return baseName(instance.Path.relString())
 }
 
+func prebuiltProgramName(instance ModuleInstance, moduleStmt *ModuleStmt) string {
+	name := programBinaryName(instance, moduleStmt)
+
+	if instance.Platform.ifEnv.bool(envWIN32) {
+		name += ".exe"
+	}
+
+	return name
+}
+
 func moduleRealPrjName(dir string, stmt *ModuleStmt, unit ModuleUnit) string {
 	args := stmt.Args
 
@@ -2730,7 +2740,16 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 		goRef, goPath := e.emitGoExe(resolved, local.refs, local.outs, peerObjAddLibsGlobal, peerArchiveRefs, peerArchivePaths, peerGlobalRefs, peerGlobalPaths, ldSbomRefs, ldSbomPaths, resourceGlobalsClosure)
 		result := newResult()
 
-		result.isPROGRAM = true
+		if d.moduleStmt.Name == tokGoDll {
+			result.PeerArchiveClosureRefs, result.PeerArchiveClosurePaths = nil, nil
+			result.PeerGlobalClosureRefs, result.PeerGlobalClosurePaths = nil, nil
+			result.PeerWholeArchiveClosureRefs, result.PeerWholeArchiveClosurePaths, result.PeerWholeArchiveCmdClosurePaths = nil, nil, nil
+			result.PeerDynamicClosureRefs, result.PeerDynamicClosurePaths = nil, nil
+			result.PeerSbomClosureRefs, result.PeerSbomClosurePaths = nil, nil
+		} else {
+			result.isPROGRAM = true
+		}
+
 		result.LDRef = goRef
 		result.LDPath = ptr(goPath)
 		result.ARRef = goRef
@@ -2748,7 +2767,7 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 	if d.yqlPrebuiltResource != "" {
 		out := yqlPrebuiltOutput(instance, d)
 
-		return e.genYqlPrebuiltCopy(build(out.relString(), ".prebuilt"), out, resourceGlobalsClosure)
+		return e.genYqlPrebuiltCopy(build(out.relString(), ".prebuilt"), out, resourceGlobalsClosure, false)
 	}
 
 	if isProgramModuleType(d.moduleStmt.Name) || isDllModuleType(d.moduleStmt.Name) {

@@ -415,11 +415,23 @@ func (ctx *GenCtx) javaTool(dir string) *JavaModule {
 	return nil
 }
 
+func (ctx *GenCtx) javaJarTool(dir string) *JavaModule {
+	for _, u := range javaModuleUnits[ctx.moduleName(dir)] {
+		if u.kind == juJar {
+			return genModule(ctx, ModuleInstance{Path: source(dir), Kind: u.sub, Language: LangJava, Platform: ctx.host, Demand: demandSelf}).java
+		}
+	}
+
+	throwFmt("gen: tool %s is not a Java program", dir)
+
+	return nil
+}
+
 func (ctx *GenCtx) javaToolResult(dir string) *ModuleEmitResult {
 	jm := ctx.javaTool(dir)
 
 	if jm == nil {
-		throwFmt("gen: tool %s is not a Java program", dir)
+		jm = ctx.javaJarTool(dir)
 	}
 
 	res := *jm.result

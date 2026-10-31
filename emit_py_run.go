@@ -411,7 +411,8 @@ func (e *EmitContext) emitPYRun(
 		env = EnvVars(block[:len(block):len(block)])
 	}
 
-	cmdArgs := na.anys.alloc(2 + len(stmt.Args))[:0]
+	induced := inducedDepsArgs(stmt.InducedDeps)
+	cmdArgs := na.anys.alloc(2 + len(stmt.Args) + len(induced))[:0]
 
 	cmdArgs = append(cmdArgs, interp, scriptVFS.any())
 
@@ -451,6 +452,7 @@ func (e *EmitContext) emitPYRun(
 		cmdArgs = append(cmdArgs, aTok)
 	}
 
+	cmdArgs = append(cmdArgs, induced...)
 	na.anys.commit(len(cmdArgs))
 
 	cmdArgs = cmdArgs[:len(cmdArgs):len(cmdArgs)]

@@ -84,7 +84,6 @@ func evalIfAtomString(nodes []CondNode, i int32, env Environment) string {
 		return evalIfExpr(n.Name, env)
 	}
 
-	// IfCondCompiler only emits DEFINED and ISNUM as other comparator operands.
 	if evalCondAt(nodes, i, env) {
 		return "yes"
 	}

@@ -1339,10 +1339,6 @@ func buildStmtForID(nameID STR, args []ANY, line int, fail func(format string, a
 	case "LDFLAGS":
 		return &LDFlagsStmt{Flags: append([]ANY(nil), args...), Line: line}
 	case "SRCDIR":
-		if len(args) == 0 {
-			fail("SRCDIR expects at least 1 argument, got %d", len(args))
-		}
-
 		return &SrcDirStmt{Dirs: append([]ANY(nil), args...), Line: line}
 	case "GLOBAL_SRCS":
 		return &GlobalSrcsStmt{Sources: append([]ANY(nil), args...), Line: line}

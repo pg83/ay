@@ -163,7 +163,7 @@ func selectYqlPrebuiltResource(modulePath string, env Environment, d *ModuleData
 }
 
 func yqlPrebuiltOutput(instance ModuleInstance, d *ModuleData) VFS {
-	name := programBinaryName(instance, d.moduleStmt)
+	name := prebuiltProgramName(instance, d.moduleStmt)
 
 	if d.yqlUdfShared {
 		name = dllOutputName(instance, d.moduleStmt)
@@ -173,7 +173,7 @@ func yqlPrebuiltOutput(instance ModuleInstance, d *ModuleData) VFS {
 }
 
 func (e *EmitContext) genYqlPrebuiltTool() *ModuleEmitResult {
-	if e.d.primaryOutput == "" || strings.Contains(e.d.primaryOutput, "${") {
+	if strings.Contains(e.d.primaryOutput, "${") {
 		throwFmt("gen: %s: YQL_PREBUILT_TOOL requires a resolved PRIMARY_OUTPUT", e.instance.Path.relString())
 	}
 
@@ -181,25 +181,51 @@ func (e *EmitContext) genYqlPrebuiltTool() *ModuleEmitResult {
 
 	e.emitDeclaredProducers(nil)
 
-	src := e.resolveModuleSourceVFS(internStr(e.d.primaryOutput).any(), e.d.srcDirs)
-	out := lDOutputPath(e.instance, programBinaryName(e.instance, e.d.moduleStmt))
+	var src VFS
 
-	return e.genYqlPrebuiltCopy(src, out, globals)
+	if e.d.primaryOutput != "" {
+		src = e.resolveModuleSourceVFS(internStr(e.d.primaryOutput).any(), e.d.srcDirs)
+	}
+
+	out := lDOutputPath(e.instance, prebuiltProgramName(e.instance, e.d.moduleStmt))
+
+	return e.genYqlPrebuiltCopy(src, out, globals, true)
 }
 
-func (e *EmitContext) genYqlPrebuiltCopy(src, out VFS, globals []ResourceDecl) *ModuleEmitResult {
+func (e *EmitContext) genYqlPrebuiltCopy(src, out VFS, globals []ResourceDecl, toolchainSbom bool) *ModuleEmitResult {
 	ctx, d, na := e.ctx, e.d, e.ctx.na
 
 	var refs []NodeRef
 
-	if info := e.codegen.use(src); info != nil {
-		refs = na.refList(info.ProducerRef)
+	copyArgs := []string{"copy", out.string()}
+	chunks := make(InputChunks, 0, 3)
+
+	if src != 0 {
+		if info := e.codegen.use(src); info != nil {
+			refs = append(refs, info.ProducerRef)
+		}
+
+		copyArgs = []string{"copy", src.string(), out.string()}
+		chunks = append(chunks, na.vfsList(src))
 	}
+
+	chunks = append(chunks, ctx.scripts[copyFsToolsVFS.rel()])
+
+	if toolchainSbom && sbomActive(ctx, e.instance) {
+		if ref, path := pythonToolchainSbomComponent(ctx, e.instance.Platform); ref != nil {
+			chunks = append(chunks, na.vfsList(*path))
+			refs = append(refs, *ref)
+		}
+	}
+
+	inputs := na.inputList(chunks[0], chunks[1:]...)
+
+	refs = na.refList(refs...)
 
 	node := Node{
 		Platform: e.instance.Platform,
-		Cmds:     na.cmdList(e.pythonScriptCmd("fs_tools.py", "copy", src.string(), out.string())),
-		Env:      envVarsVCS, KV: &resourcesKV, Outputs: na.vfsList(out), Inputs: na.inputList(na.vfsList(src), ctx.scripts[copyFsToolsVFS.rel()]), DepRefs: refs, Resources: usesPython3,
+		Cmds:     na.cmdList(e.pythonScriptCmd("fs_tools.py", copyArgs...)),
+		Env:      envVarsVCS, KV: &resourcesKV, Outputs: na.vfsList(out), Inputs: inputs, DepRefs: refs, Resources: usesPython3,
 	}
 
 	ref := e.emitModuleNode(NodeSpec{Node: node}, true)

@@ -23,7 +23,7 @@ func (ctx *GenCtx) emitDockerImage(image string) NodeRef {
 	address, digest, ok := strings.Cut(strings.TrimPrefix(link, "docker://"), "@sha")
 	_, digest, valid := strings.Cut(digest, ":")
 
-	if !ok || !valid || len(digest) < 12 || !strings.HasPrefix(link, "docker://") {
+	if !ok || !valid || !strings.HasPrefix(link, "docker://") {
 		throwFmt("DOCKER_IMAGE: invalid Docker digest URL %s", link)
 	}
 
@@ -41,7 +41,7 @@ func (ctx *GenCtx) emitDockerImage(image string) NodeRef {
 		testYMakePython3, "$(S)/build/scripts/fetch_from_docker_repo.py",
 		"--link", link, "--tag", tag, "--output-image-path", out.string(),
 		"--output-info-path", info.string(), "--preloaded-path",
-		"$(RESOURCE_ROOT)/docker/" + host + "-" + digest[:12] + "/resource",
+		"$(RESOURCE_ROOT)/docker/" + host + "-" + digest[:min(12, len(digest))] + "/resource",
 	}
 
 	if ctx.target.Flags[envUSE_ARCADIA_PYTHON] == strNo {

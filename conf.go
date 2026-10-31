@@ -1363,7 +1363,6 @@ func (c *Conf) initModule(env Environment, name STR, tag string, originals *SetV
 	}
 
 	plan := c.tables.plan(module)
-
 	base := env.s.confBase
 	clean := base != nil && base.confBase == base
 

@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/base64"
 	"path"
+	"slices"
 	"strings"
 )
 
@@ -113,6 +114,7 @@ func (e *EmitContext) emitLD(
 	globalInputs := e.moduleGlobals
 	pluginPaths := e.globalPlugins()
 	peerWholeArchiveCount := len(wholeArchivePaths)
+	ownScripts := len(linkerScripts)
 
 	for _, input := range globalInputs {
 		switch path.Ext(input.relString()) {
@@ -127,6 +129,12 @@ func (e *EmitContext) emitLD(
 
 	assert(len(objcopyRefs) == len(objcopyPaths), "emitLD: objcopyRefs/objcopyPaths length mismatch")
 
+	cmdScripts := linkerScripts
+
+	if ownScripts > 0 && len(linkerScripts) > ownScripts {
+		cmdScripts = append(slices.Clone(linkerScripts[ownScripts:]), linkerScripts[:ownScripts]...)
+	}
+
 	binaryDir := instance.Path.relString()
 	binPrefix := binaryDir + "/"
 	outputVFS := build(binPrefix, binaryName)
@@ -139,7 +147,7 @@ func (e *EmitContext) emitLD(
 
 	commandEnv := Environment{s: &e.frame.ifEnv, resourceUses: &vcsResources}
 	cmd1 := composeLDCmdVcsCompile(na, instance.Platform, tc, vcsCVFS, vcsOVFS, compilerCommandFlags(moduleCFlags, commandEnv).Args, concat(peerCFlagsGlobal, e.d.cc.OwnCFlagsGlobal), moduleScopeCFlags, compilerCommandFlags(concat(e.d.cc.COnlyFlags, e.d.cc.PeerCOnlyFlagsGlobal, e.d.cc.OwnCOnlyFlagsGlobal), commandEnv).Args, commandEnv, noCompilerWarnings, e.d.flags.NoWShadow, noOptimize)
-	cmd2 := composeLDCmdLinkExe(na, instance.Platform, tc, outputVFS, vcsOVFS, ccPaths, peerLinkCmdPaths, pluginPaths, globalPaths, wholeArchivePaths[peerWholeArchiveCount:], wholeArchiveCmdPaths, objcopyPaths, peerLDFlagsGlobal, ownLDFlags, localLDValue.Args, objAddLibsGlobal, linkExcludeLibraries, exportsScript, linkerScripts, noExportDynSymbols, wantsStrip, useArcadiaLibm, e.d.useDynamicCuda, dyn)
+	cmd2 := composeLDCmdLinkExe(na, instance.Platform, tc, outputVFS, vcsOVFS, ccPaths, peerLinkCmdPaths, pluginPaths, globalPaths, wholeArchivePaths[peerWholeArchiveCount:], wholeArchiveCmdPaths, objcopyPaths, peerLDFlagsGlobal, ownLDFlags, localLDValue.Args, objAddLibsGlobal, linkExcludeLibraries, exportsScript, cmdScripts, noExportDynSymbols, wantsStrip, useArcadiaLibm, e.d.useDynamicCuda, dyn)
 	splitDwarfCmds := composeLDSplitDwarfCmds(na, tc, outputVFS, wantsSplitDwarf)
 	envVcsOnly := envVarsVCS
 	envFull := hostP.toolEnv()

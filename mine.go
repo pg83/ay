@@ -1,6 +1,8 @@
 package main
 
 import (
+	"fmt"
+	"os"
 	"runtime"
 	"strconv"
 
@@ -15,7 +17,9 @@ func readYaConf(fs FS, rel string) map[string]any {
 	var root map[string]any
 
 	if _, err := toml.Decode(string(concatChunks(fs.read(rel))), &root); err != nil {
-		throwFmt("ya.conf %s: %v", rel, err)
+		fmt.Fprintf(os.Stderr, "\x1b[33mWarn: Failed to load %s: %v\x1b[0m\n", rel, err)
+
+		return nil
 	}
 
 	return root

@@ -2,7 +2,6 @@ package main
 
 import (
 	"path"
-	"slices"
 	"strconv"
 	"strings"
 )
@@ -24,17 +23,30 @@ func (d *ModuleData) collectCustomStyle(module string, args []ANY, env Environme
 		return
 	}
 
-	keywords := []string{"NAME", "WRAPPER_SCRIPT", "FILES", "DEPENDS", "CONFIG_TYPE", "FILE_PROCESSING_TIME", "EXTRA_PARAMS", "DEFAULT_CONFIGS", "GLOBAL_RESOURCES"}
+	limits := map[string]int{
+		"NAME": 1, "WRAPPER_SCRIPT": 1, "FILES": -1, "DEPENDS": -1, "CONFIG_TYPE": -1,
+		"FILE_PROCESSING_TIME": 1, "EXTRA_PARAMS": -1, "DEFAULT_CONFIGS": 1, "GLOBAL_RESOURCES": -1,
+	}
+
 	fields := map[string][]string{}
-	key := ""
+	key, limit := "", -1
 
 	for _, arg := range args {
 		value := arg.string()
 
-		if slices.Contains(keywords, value) {
-			key = value
-		} else {
+		if n, ok := limits[value]; ok {
+			key, limit = value, n
+
+			continue
+		}
+
+		if limit == 0 {
+			key, limit = "", -1
+		}
+
+		if key != "" {
 			fields[key] = append(fields[key], value)
+			limit--
 		}
 	}
 
@@ -42,7 +54,7 @@ func (d *ModuleData) collectCustomStyle(module string, args []ANY, env Environme
 		return
 	}
 
-	if len(fields["NAME"]) != 1 || len(fields["WRAPPER_SCRIPT"]) != 1 {
+	if len(fields["NAME"]) == 0 || len(fields["WRAPPER_SCRIPT"]) == 0 {
 		throwFmt("custom lint: NAME and WRAPPER_SCRIPT require one value each")
 	}
 

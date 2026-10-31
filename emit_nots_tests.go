@@ -38,6 +38,11 @@ func (e *EmitContext) notsTestGlobals(globals []ResourceDecl) []ResourceDecl {
 
 func (e *EmitContext) notsAllFiles(dir string) []VFS {
 	info := e.codegen.lookup(build(dir, "/package.json"))
+
+	if info == nil {
+		return notsAllSourceFiles(e.ctx.fs, dir)
+	}
+
 	state := info.nots()
 
 	if !state.SourcesLoaded {
@@ -163,7 +168,7 @@ func (e *EmitContext) notsRecipes(target string, head []string, globals []Resour
 	return testRecipes(recipes)
 }
 
-func (e *EmitContext) notsCheckSuites(target string, globals []ResourceDecl, files []VFS, head []string, node ResourceDecl) []*TestSuite {
+func (e *EmitContext) notsCheckSuites(target string, globals []ResourceDecl, files []VFS, head []string, node string) []*TestSuite {
 	if !e.ctx.testMode || len(files) == 0 || len(e.d.nots.Checks) == 0 {
 		return nil
 	}
@@ -230,7 +235,7 @@ func (e *EmitContext) notsCheckSuites(target string, globals []ResourceDecl, fil
 		s.relatedPaths = append(slices.Clone(related), sortedUnique(s.relatedPaths)...)
 		s.recipes = e.notsRecipes(target, head, globals, e.d.nots.Hermetic, true, true)
 		s.runCmd = func(work string, _ TestChunk) []ANY {
-			args := []string{testToolHostPath, "run_ts_check", "--source-root", testSourceRoot, "--build-root", testBuildRoot, "--output-dir", work + "/testing_out_stuff", "--tracefile", work + "/ytest.report.trace", "--log-path", work + "/testing_out_stuff/ts-check.log", "--target_path", target, "--nodejs", node.Value.string(), "--script-name", check.Script}
+			args := []string{testToolHostPath, "run_ts_check", "--source-root", testSourceRoot, "--build-root", testBuildRoot, "--output-dir", work + "/testing_out_stuff", "--tracefile", work + "/ytest.report.trace", "--log-path", work + "/testing_out_stuff/ts-check.log", "--target_path", target, "--nodejs", node, "--script-name", check.Script}
 
 			if check.Command != "" {
 				args = append(args, "--command", check.Command)
@@ -324,7 +329,7 @@ func (e *EmitContext) notsForSuites(target string, ref NodeRef, globals []Resour
 
 	dataDirs = sortedUnique(dataDirs)
 	s.runCmd = func(work string, _ TestChunk) []ANY {
-		args := []string{testToolHostPath, "run_" + name, "--source-root", testSourceRoot, "--build-root", testBuildRoot, "--project-path", s.projectPath, "--test-work-dir", work, "--output-dir", work + "/testing_out_stuff", "--tracefile", work + "/ytest.report.trace", "--test-for-path", build(target).string(), "--node-path", build(target, "/node_modules").string(), "--nodejs", node.Value.string()}
+		args := []string{testToolHostPath, "run_" + name, "--source-root", testSourceRoot, "--build-root", testBuildRoot, "--project-path", s.projectPath, "--test-work-dir", work, "--output-dir", work + "/testing_out_stuff", "--tracefile", work + "/ytest.report.trace", "--test-for-path", build(target).string(), "--node-path", build(target, "/node_modules").string(), "--nodejs", node}
 
 		if len(dataDirs) > 0 {
 			args = append(args, "--test-data-dirs")
@@ -415,9 +420,9 @@ func (e *EmitContext) notsLegacyStyles(dir string, state *NotsPrepared, head []s
 
 			switch check.name {
 			case "eslint":
-				args = append(args, "--source-folder-path", dir, "--nodejs", node.Value.string(), "--eslint-config-path", check.config, "--ts-config-path", c.Configs[0], "--tracefile", work+"/ytest.report.trace")
+				args = append(args, "--source-folder-path", dir, "--nodejs", node, "--eslint-config-path", check.config, "--ts-config-path", c.Configs[0], "--tracefile", work+"/ytest.report.trace")
 			case "tsc_typecheck":
-				args = append(args, "--source-folder-path", dir, "--nodejs", node.Value.string(), "--ts-config-path", check.config, "--tracefile", work+"/ytest.report.trace", "--log-path", work+"/testing_out_stuff/run_tsc_typecheck.log")
+				args = append(args, "--source-folder-path", dir, "--nodejs", node, "--ts-config-path", check.config, "--tracefile", work+"/ytest.report.trace", "--log-path", work+"/testing_out_stuff/run_tsc_typecheck.log")
 			default:
 				args[1] = "run_biome"
 
@@ -425,7 +430,7 @@ func (e *EmitContext) notsLegacyStyles(dir string, state *NotsPrepared, head []s
 					args[1] = "run_stylelint"
 				}
 
-				args = append(args, "--project-path", dir, "--nodejs-dir", node.Value.string(), "--test-config", check.config, "--trace", work+"/ytest.report.trace")
+				args = append(args, "--project-path", dir, "--nodejs-dir", node, "--test-config", check.config, "--trace", work+"/ytest.report.trace")
 			}
 
 			for _, file := range files {

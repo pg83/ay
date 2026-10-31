@@ -489,7 +489,13 @@ func (ctx *GenCtx) emitTestSuite(s *TestSuite) []NodeRef {
 	s.sandboxResources = append(s.sandboxResources, externalResources...)
 
 	if s.corpus != "" {
-		s.corpusResources, s.corpusPartsExceeded = ctx.fuzzCorpusResources(s.corpus)
+		var ok bool
+
+		if s.corpusResources, s.corpusPartsExceeded, ok = ctx.fuzzCorpusResources(s.corpus); !ok {
+			ctx.onWarn(Warn{Kind: WarnTestDependency, Message: "Broken suite: <Test [type=" + s.testType + ", project=" + s.projectPath + ", name=" + s.name + "]>: corpus description " + s.corpus + " is not a JSON object"})
+
+			return nil
+		}
 	}
 
 	for _, resource := range s.sandboxResources {

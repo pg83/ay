@@ -563,7 +563,8 @@ func (e *EmitContext) emitPR(spec RunProgramNodeSpec, id NodeRef) {
 		args = expandTokens(stmt.Args, dirs, false, tokenExpandFinal)
 	}
 
-	cmdArgs := na.anys.alloc(1 + len(args))[:0]
+	induced := inducedDepsArgs(stmt.InducedDeps)
+	cmdArgs := na.anys.alloc(1 + len(args) + len(induced))[:0]
 
 	cmdArgs = append(cmdArgs, spec.toolBinPath.any())
 
@@ -593,6 +594,7 @@ func (e *EmitContext) emitPR(spec RunProgramNodeSpec, id NodeRef) {
 		cmdArgs = append(cmdArgs, key)
 	}
 
+	cmdArgs = append(cmdArgs, induced...)
 	na.anys.commit(len(cmdArgs))
 
 	cmdArgs = cmdArgs[:len(cmdArgs):len(cmdArgs)]

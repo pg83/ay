@@ -48,7 +48,6 @@ func (e *EmitContext) registerCopyFile(entry CopyFileEntry) (CopyEmitState, *Gen
 	ctx, instance := e.ctx, e.instance
 	reg := e.codegen
 	resolved := entry.Resolved
-
 	srcVFS := resolved.withGeneratedDirs(reg, entry.Src, e.d.srcDirs)
 
 	if _, rooted := moduleRootedVFS(instance.Path.relString(), entry.Src); !rooted && srcVFS.isSource() {

@@ -64,7 +64,15 @@ func (p *pchCommand) cmds(scope *CommandScope) []Cmd {
 	na, d := e.ctx.na, e.d
 	blocks := compilerCommandBlocks(e.pchCCBlocks(scope), true)
 
-	args := na.chunkList(na.anyList(p.tool.any(), e.pchLLVMRoot(), p.header.any(), p.out.any(), bldRootDirVFS.any(), srcRootDirVFS.any()),
+	var head []ANY
+
+	if root := e.pchLLVMRoot(); root != strEmpty.any() {
+		head = na.anyList(p.tool.any(), root, p.header.any(), p.out.any(), bldRootDirVFS.any(), srcRootDirVFS.any())
+	} else {
+		head = na.anyList(p.tool.any(), p.header.any(), p.out.any(), bldRootDirVFS.any(), srcRootDirVFS.any())
+	}
+
+	args := na.chunkList(head,
 		e.instance.Platform.CCHead, blocks.includes, blocks.flags[len(d.cc.ClangWarnings):], blocks.cxxTail, builtinMacroDateTime, macroPrefixMapFlags)
 
 	return na.cmdList(Cmd{Resources: blocks.resources, CmdArgs: args, Env: envVarsVCS})

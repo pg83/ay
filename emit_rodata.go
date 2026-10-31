@@ -73,14 +73,20 @@ func (e *EmitContext) emitLibraryRodataSource(meta SrcMeta, in ModuleCCInputs) {
 	srcRel := e.moduleSourceRel(src)
 	srcVFS := src.vfs()
 
-	if instance.Platform.ISA != ISAX8664 {
-		ctx.onWarn(Warn{Kind: WarnUnsupportedSource, Message: fmt.Sprintf("unsupported .rodata platform %s for %q; source skipped", instance.Platform.ISA, srcRel)})
+	if srcVFS == 0 {
+		srcVFS = e.sourceForEmission(meta)
+	}
+
+	if env := (Environment{s: &e.frame.ifEnv}); env.bool(envARCH_AARCH64) || env.bool(envARCH_ARM) || env.bool(envARCH_PPC64LE) || env.bool(envARCH_RISCV32) || env.bool(envARCH_RISCV64) {
+		e.emitRodataCpp(srcVFS, in.TC)
 
 		return
 	}
 
-	if srcVFS == 0 {
-		srcVFS = e.sourceForEmission(meta)
+	if instance.Platform.ISA != ISAX8664 {
+		ctx.onWarn(Warn{Kind: WarnUnsupportedSource, Message: fmt.Sprintf("unsupported .rodata platform %s for %q; source skipped", instance.Platform.ISA, srcRel)})
+
+		return
 	}
 
 	yasmLDRef, _ := ctx.tool(argContribToolsYasm)
@@ -93,4 +99,18 @@ func (e *EmitContext) emitLibraryRodataSource(meta SrcMeta, in ModuleCCInputs) {
 	ref, _, outPath := e.emitRD(srcRel, srcVFS, yasmLDRef, cv, in.TC)
 
 	e.collectObj(ref, outPath, meta)
+}
+
+func (e *EmitContext) emitRodataCpp(srcVFS VFS, tc ModuleToolchain) {
+	na := e.ctx.na
+	out := build(srcVFS.relString(), ".cpp")
+	name := strings.TrimSuffix(path.Base(srcVFS.relString()), path.Ext(srcVFS.relString()))
+	inputs := na.rootInputList(na.vfsList(rodataCppScriptVFS, srcVFS))
+	ref := e.emitNode(NodeSpec{Node: Node{Platform: e.instance.Platform,
+		Cmds: na.cmdList(Cmd{CmdArgs: na.chunkList(na.anyList(tc.Python3.any(), rodataCppScriptVFS.any(), internStr(name).any(), srcVFS.any(), out.any())), Env: envVarsVCS}),
+		Env:  envVarsVCS, Inputs: inputs, Outputs: na.vfsList(out), KV: &rodataKV, Resources: usesPython3}, input: InputSpec{roots: inputs},
+	})
+
+	e.register(GeneratedFileSpec{OutputPath: out, ProducerRef: ref, ProducerMainOut: out})
+	e.enqueueSrc(SrcMeta{Source: out.any(), Prio: stmtPrioDefault})
 }

@@ -875,6 +875,10 @@ func (e *EmitContext) producerPositions(cythonPlans []CythonStmtPlan) ([]Produce
 	}
 
 	for i, a := range d.archives {
+		if a.Name == "" {
+			continue
+		}
+
 		outsMark := len(e.prodVFS)
 
 		e.prodVFS = append(e.prodVFS, copyFileOutputVFS(module, a.Name))

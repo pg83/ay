@@ -75,29 +75,29 @@ func (ctx *GenCtx) resourceValidationSuite(project, name string, ids, env []stri
 	return s
 }
 
-func (ctx *GenCtx) fuzzCorpusResources(corpus string) ([]string, int) {
+func (ctx *GenCtx) fuzzCorpusResources(corpus string) ([]string, int, bool) {
 	var data []byte
 
 	if path.IsAbs(corpus) {
 		var err error
 
 		if data, err = os.ReadFile(corpus); err != nil {
-			return nil, 0
+			return nil, 0, true
 		}
 	} else if ctx.fs.isFile(srcRootRel, corpus) {
 		data = concatChunks(ctx.fs.read(corpus))
 	} else {
-		return nil, 0
+		return nil, 0, true
 	}
 
 	if !json.Valid(data) {
-		return nil, 0
+		return nil, 0, true
 	}
 
 	dec := json.NewDecoder(bytes.NewReader(data))
 
 	if throw2(dec.Token()) != json.Delim('{') {
-		throwFmt("%s: corpus description is not a JSON object", corpus)
+		return nil, 0, false
 	}
 
 	var resources []string
@@ -120,7 +120,7 @@ func (ctx *GenCtx) fuzzCorpusResources(corpus string) ([]string, int) {
 		}
 	}
 
-	return resources, exceeded
+	return resources, exceeded, true
 }
 
 func (ctx *GenCtx) emitTestData(uri string) NodeRef {

@@ -27,20 +27,21 @@ var tokName = [...]STR{
 	tokNoCow:                     internStr("NO_COW"),
 	tokNoNeedCheck:               internStr("NO_NEED_CHECK"),
 
-	tokPireInline:             internStr("PIRE_INLINE"),
-	tokPireInlineCmd:          internStr("PIRE_INLINE_CMD"),
-	tokGenerateYtRecord:       internStr("GENERATE_YT_RECORD"),
-	tokYtRecordDisablePeerdir: internStr("YT_RECORD_DISABLE_PEERDIR"),
-	tokProtoToNamespace:       internStr("PROTO_TO_NAMESPACE"),
-	tokPyProtoPlugin:          internStr("PY_PROTO_PLUGIN"),
-	tokPyProtoPlugin2:         internStr("PY_PROTO_PLUGIN2"),
-	tokYqlPrebuiltTool:        internStr("YQL_PREBUILT_TOOL"),
-	tokYqlUdf:                 internStr("YQL_UDF"),
-	tokUdfBase:                internStr("UDF_BASE"),
-	tokYqlPythonUdf:           internStr("YQL_PYTHON_UDF"),
-	tokYqlPython3Udf:          internStr("YQL_PYTHON3_UDF"),
-	tokRegisterYqlPythonUdf:   internStr("REGISTER_YQL_PYTHON_UDF"),
-	tokUdfNoProbe:             internStr("UDF_NO_PROBE"),
+	tokPireInline:                           internStr("PIRE_INLINE"),
+	tokPireInlineCmd:                        internStr("PIRE_INLINE_CMD"),
+	tokGenerateYtRecord:                     internStr("GENERATE_YT_RECORD"),
+	tokYtRecordDisablePeerdir:               internStr("YT_RECORD_DISABLE_PEERDIR"),
+	tokRunJavascriptAfterBuildProcessInputs: internStr("_RUN_JAVASCRIPT_AFTER_BUILD_PROCESS_INPUTS"),
+	tokProtoToNamespace:                     internStr("PROTO_TO_NAMESPACE"),
+	tokPyProtoPlugin:                        internStr("PY_PROTO_PLUGIN"),
+	tokPyProtoPlugin2:                       internStr("PY_PROTO_PLUGIN2"),
+	tokYqlPrebuiltTool:                      internStr("YQL_PREBUILT_TOOL"),
+	tokYqlUdf:                               internStr("YQL_UDF"),
+	tokUdfBase:                              internStr("UDF_BASE"),
+	tokYqlPythonUdf:                         internStr("YQL_PYTHON_UDF"),
+	tokYqlPython3Udf:                        internStr("YQL_PYTHON3_UDF"),
+	tokRegisterYqlPythonUdf:                 internStr("REGISTER_YQL_PYTHON_UDF"),
+	tokUdfNoProbe:                           internStr("UDF_NO_PROBE"),
 
 	tokCythonFlags: internStr("CYTHON_FLAGS"),
 	tokFlexFlags:   internStr("FLEX_FLAGS"),
@@ -981,6 +982,7 @@ const (
 	tokYqlPrebuiltTool
 	tokGenerateYtRecord
 	tokYtRecordDisablePeerdir
+	tokRunJavascriptAfterBuildProcessInputs
 	tokPireInline
 	tokPireInlineCmd
 	tokValidateDataRestart

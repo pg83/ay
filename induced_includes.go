@@ -8,7 +8,20 @@ type TypedInclude struct {
 }
 
 func preparedInducedIncludes(args []ANY) []TypedInclude {
+	includes, _ := splitInducedDeps(args)
+
+	return includes
+}
+
+func inducedDepsArgs(args []ANY) []ANY {
+	_, plain := splitInducedDeps(args)
+
+	return plain
+}
+
+func splitInducedDeps(args []ANY) ([]TypedInclude, []ANY) {
 	var includes []TypedInclude
+	var plain []ANY
 
 	text := strings.Join(anyStrs(args), " ")
 
@@ -16,7 +29,12 @@ func preparedInducedIncludes(args []ANY) []TypedInclude {
 		body, ok := strings.CutPrefix(text, "$_FMT_INDUCED_DEPS(")
 
 		if !ok {
-			throwFmt("INDUCED_DEPS expects a value produced by PREPARE_INDUCED_DEPS: %s", text)
+			word, rest, _ := strings.Cut(text, " ")
+
+			plain = append(plain, internAny(word))
+			text = rest
+
+			continue
 		}
 
 		end, depth := 0, 1
@@ -51,7 +69,7 @@ func preparedInducedIncludes(args []ANY) []TypedInclude {
 		text = body[end:]
 	}
 
-	return includes
+	return includes, plain
 }
 
 func (s *IncludeScanner) usesInducedType(file VFS, kind STR) bool {

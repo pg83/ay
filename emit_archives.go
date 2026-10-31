@@ -63,7 +63,11 @@ func (e *EmitContext) emitArchive(
 	}
 
 	if a.Keys != nil {
-		cmdArgs = append(cmdArgs, argDashK.any(), internStr(strings.Join(a.Keys, ":")).any())
+		cmdArgs = append(cmdArgs, argDashK.any())
+
+		if len(a.Keys) > 0 {
+			cmdArgs = append(cmdArgs, internStr(strings.Join(a.Keys, ":")).any())
+		}
 	}
 
 	cmdArgs = append(cmdArgs, argDashO.any(), internV(archiveVFS.prefix(), archiveVFS.relString()).any())

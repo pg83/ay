@@ -10,11 +10,6 @@ func (e *EmitContext) emitArchiveAsmForAR(a ArchiveAsmEntry) {
 	rodataPath := build(e.instance.Path.relString(), "/", rodataRel)
 
 	e.emitArchiveAsmNode(a, rodataPath, toolBinPath, toolLDRef, reg)
-
-	if e.instance.Platform.ISA != ISAX8664 {
-		throwFmt("gen: unsupported .rodata platform %s for ARCHIVE_ASM %q", e.instance.Platform.ISA, rodataRel)
-	}
-
 	e.enqueueSrc(SrcMeta{Source: rodataPath.any(), Prio: stmtPrioDefault, Seq: a.DeclSeq})
 }
 

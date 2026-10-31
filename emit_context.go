@@ -25,6 +25,7 @@ type EmitContext struct {
 	moduleGlobals      []VFS
 	moduleGlobalInputs []VFS
 	globalSources      []VFS
+	unknownSources     []VFS
 	ctx                *GenCtx
 	frame              *ModuleFrame
 	scope              *CommandScope
@@ -643,8 +644,10 @@ func (e *EmitContext) pendingEmitter(emitter pendingEmitter) *PendingEmit {
 
 func (e *EmitContext) emit() {
 	d := e.d
+	name := d.moduleStmt.Name
+	archived := !e.producersOnly() && !isLinkingModuleType(name) && !isGoModuleType(name)
 
-	e.globalSources = dedup(e.peers.GlobalSources, e.emitSdcMetas())
+	e.globalSources = dedup(e.peers.GlobalSources, e.emitSdcMetas(archived))
 	e.deferCC = true
 
 	cythonPlans := e.planCythonCpp()

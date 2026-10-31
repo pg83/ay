@@ -59,8 +59,6 @@ func (NlgIncludeDirectiveParser) parse(_ string, data [][]byte, a *BumpAllocator
 
 		external := strings.HasPrefix(command, "ext_")
 
-		// The statement matcher validated every quoted path. Aliases and
-		// context clauses contain no quotes, so only delimiters remain to scan.
 		for pos := 0; ; {
 			quote := strings.IndexAny(command[pos:], `"'`)
 
@@ -71,8 +69,8 @@ func (NlgIncludeDirectiveParser) parse(_ string, data [][]byte, a *BumpAllocator
 			ps := pos + quote + 1
 			pe := ps + strings.IndexByte(command[ps:], command[ps-1])
 			target := command[ps:pe]
-			pos = pe + 1
 
+			pos = pe + 1
 			headers = append(headers, IncludeDirective{kind: includeSystem, target: includeTarget(internV(target, ".h").any())})
 
 			if external {

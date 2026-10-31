@@ -1,7 +1,9 @@
 package main
 
 import (
+	"fmt"
 	"path/filepath"
+	"slices"
 	"strings"
 )
 
@@ -146,7 +148,14 @@ func (r ResolvedSource) withGenerated(registry *CodegenRegistry, token string, d
 
 func (e *EmitContext) resolveDeclaredSource(token ANY) ResolvedSource {
 	if v := token.vfs(); v != 0 {
-		return ResolvedSource{Path: v, Existing: v.isSource() && e.ctx.fs.isFileVFS(v), Fixed: true}
+		existing := v.isSource() && e.ctx.fs.isFileVFS(v)
+
+		if v.isSource() && !existing && !slices.Contains(e.unknownSources, v) {
+			e.unknownSources = append(e.unknownSources, v)
+			e.ctx.onWarn(Warn{Kind: WarnUnknownLocation, Message: fmt.Sprintf("File location still unknown: %s; resolving it in current source dir $(S)/%s", v.string(), e.instance.Path.relString())})
+		}
+
+		return ResolvedSource{Path: v, Existing: existing, Fixed: true}
 	}
 
 	return resolveSource(e.ctx, e.instance, token.string(), e.d.srcDirs)

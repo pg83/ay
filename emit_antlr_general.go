@@ -97,10 +97,7 @@ func (e *EmitContext) emitAntlrRunStmt(run AntlrRunInfo) {
 			continue
 		}
 
-		outVFS := outVFSByToken[outTok.string()]
-		cppRel := antlrOutputModuleRel(instance.Path.relString(), outVFS)
-
-		e.enqueueSrc(SrcMeta{Source: copyFileOutputVFS(instance.Path.relString(), cppRel).any(), Prio: stmtPrioDefault})
+		e.enqueueSrc(SrcMeta{Source: outVFSByToken[outTok.string()].any(), Prio: stmtPrioDefault})
 	}
 }
 
@@ -145,14 +142,4 @@ func antlrParsedIncludes(modulePath string, run AntlrRunInfo) []IncludeDirective
 	}
 
 	return parsed
-}
-
-func antlrOutputModuleRel(modulePath string, outVFS VFS) string {
-	prefix := modulePath + "/"
-
-	if strings.HasPrefix(outVFS.relString(), prefix) {
-		return strings.TrimPrefix(outVFS.relString(), prefix)
-	}
-
-	panic(exceptionf("gen: antlr output %q is outside module %q", outVFS.relString(), modulePath))
 }

@@ -100,6 +100,7 @@ var (
 	rescompilerBinVFS                        = build("tools/rescompiler/rescompiler")
 	rescompressorBinVFS                      = build("tools/rescompressor/rescompressor")
 	rodataScriptVFS                          = source("build/scripts/rodata2asm.py")
+	rodataCppScriptVFS                       = source("build/scripts/rodata2cpp.py")
 	sdgSdc                                   = source("sdg/sdc")
 	srcRootDirVFS                            = source("")
 	srcRootVFS                               = source("")

@@ -268,7 +268,6 @@ func cythonCimport(b []byte) (end int, module, names []byte, ok bool) {
 
 	if bytes.HasPrefix(b[i:], []byte("from")) {
 		j := cythonSkipSpace(b, i+4)
-
 		k := cythonNameEnd(b, j)
 
 		if k == j {

@@ -15,26 +15,36 @@ type SdcMetaEntry struct {
 }
 
 func parseSdcMeta(macro TOK, args []string) SdcMetaEntry {
-	unpack := slices.Contains(args, "UNPACK")
 	value := "false"
+	pos := args
 
-	if unpack {
-		value = "true"
+	if macro == tokSdcResourceInfo || macro == tokSdcSbResourceInfo {
+		pos = slices.DeleteFunc(slices.Clone(args), func(a string) bool { return a == "UNPACK" })
+
+		if len(pos) < len(args) {
+			value = "true"
+		}
 	}
 
 	switch macro {
 	case tokSdcResourceInfo:
-		if len(args) < 3 {
+		if len(pos) < 2 || len(pos) > 3 {
 			throwFmt("SDC_RESOURCE_INFO expects category, name and URL")
 		}
 
-		return SdcMetaEntry{Name: args[1], CopyGlobal: true, Args: []string{"resource", "--key=" + args[0] + "/" + args[1], "--url=" + args[2], "--destination=" + args[1], "--unpack=" + value}}
+		url := ""
+
+		if len(pos) == 3 {
+			url = pos[2]
+		}
+
+		return SdcMetaEntry{Name: pos[1], CopyGlobal: true, Args: []string{"resource", "--key=" + pos[0] + "/" + pos[1], "--url=" + url, "--destination=" + pos[1], "--unpack=" + value}}
 	case tokSdcSbResourceInfo:
-		if len(args) < 2 {
+		if len(pos) != 2 {
 			throwFmt("SDC_SB_RESOURCE_INFO expects id and name")
 		}
 
-		return SdcMetaEntry{Name: args[1], CopyGlobal: true, Args: []string{"sb-resource", "--sb-id=" + args[0], "--name=" + args[1], "--unpack=" + value}}
+		return SdcMetaEntry{Name: pos[1], CopyGlobal: true, Args: []string{"sb-resource", "--sb-id=" + pos[0], "--name=" + pos[1], "--unpack=" + value}}
 	case tokSdcRosnodeInfo:
 		if len(args) != 1 {
 			throwFmt("SDC_ROSNODE_INFO expects one node path")
@@ -50,7 +60,17 @@ func parseSdcMeta(macro TOK, args []string) SdcMetaEntry {
 	}
 }
 
-func (e *EmitContext) emitSdcMetas() []VFS {
+func (e *EmitContext) sdcMetaPaths(entry SdcMetaEntry) (out, global VFS) {
+	out = build(e.instance.Path.relString(), "/", entry.Name, ".sdcmeta")
+
+	if !entry.CopyGlobal {
+		return out, out
+	}
+
+	return out, build(e.instance.Path.relString(), "/", entry.Name, ".global.sdcmeta")
+}
+
+func (e *EmitContext) emitSdcMetas(archived bool) []VFS {
 	if len(e.d.sdcMetas) == 0 {
 		return nil
 	}
@@ -61,15 +81,13 @@ func (e *EmitContext) emitSdcMetas() []VFS {
 	var globals []VFS
 
 	for _, entry := range e.d.sdcMetas {
-		out := build(e.instance.Path.relString(), "/", entry.Name, ".sdcmeta")
-		global := out
+		out, global := e.sdcMetaPaths(entry)
 		outputs := []VFS{out}
 		cmds := []Cmd{{CmdArgs: na.chunkList(appendInternAnys([]ANY{tool.any()}, entry.Args)), Stdout: out, Env: envVarsVCS}}
 
 		var scripts []VFS
 
 		if entry.CopyGlobal {
-			global = build(e.instance.Path.relString(), "/", entry.Name, ".global.sdcmeta")
 			outputs = append(outputs, global)
 			cmds = append(cmds, Cmd{CmdArgs: na.chunkList(na.anyList(e.d.tc.Python3.any(), copyFsToolsVFS.any(), strCopy.any(), out.any(), global.any())), Env: envVarsVCS})
 			scripts = e.ctx.scripts[copyFsToolsVFS.rel()]
@@ -85,6 +103,10 @@ func (e *EmitContext) emitSdcMetas() []VFS {
 
 		for _, output := range outputs {
 			e.register(GeneratedFileSpec{OutputPath: output, ProducerRef: ref, ProducerMainOut: out, GeneratorRefs: na.refList(toolRef), OnUse: pending})
+		}
+
+		if archived && entry.CopyGlobal {
+			e.collectObj(ref, out, SrcMeta{Source: out.any(), Prio: stmtPrioDefault})
 		}
 
 		globals = append(globals, global)
@@ -106,7 +128,7 @@ func (e *EmitContext) appendSdcMeta(node *NodeSpec, name string) bool {
 	var inputs []VFS
 
 	for _, input := range e.globalSources {
-		if strings.HasSuffix(input.relString(), ".sdcmeta") {
+		if strings.HasSuffix(input.relString(), ".sdcmeta") && !e.ownSdcGlobal(input) {
 			args = append(args, input.any())
 			inputs = append(inputs, input)
 		}
@@ -118,6 +140,20 @@ func (e *EmitContext) appendSdcMeta(node *NodeSpec, name string) bool {
 	e.resolveNodeCodegenDeps(node)
 
 	return true
+}
+
+func (e *EmitContext) ownSdcGlobal(input VFS) bool {
+	if name := e.d.moduleStmt.Name; !isLinkingModuleType(name) && !isGoModuleType(name) {
+		return false
+	}
+
+	for _, entry := range e.d.sdcMetas {
+		if _, global := e.sdcMetaPaths(entry); global == input {
+			return true
+		}
+	}
+
+	return false
 }
 
 func sdcInstallLocation(packageName, kind, file string) string {

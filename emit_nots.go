@@ -105,6 +105,40 @@ func (c *NotsModule) setTSCCommand() {
 	c.BuildCommand = strings.Join(commands, " && ")
 }
 
+func applyRunJavascriptAfterBuildProcessInputs(args []ANY, env Environment) {
+	var inputs []string
+
+	for _, input := range strings.Fields(env.string(envRunJavascriptAfterBuildInputs)) {
+		if name, ok := notsVarName(input); ok {
+			inputs = append(inputs, "${hide;input:"+name+"}")
+		} else {
+			inputs = append(inputs, `${hide;input:"`+input+`"}`)
+		}
+	}
+
+	if script := path.Clean(args[0].string()); !strings.HasPrefix(script, "node_modules/") {
+		inputs = append(inputs, `${hide;input:"`+script+`"}`)
+	}
+
+	env.setString(envRunJavascriptAfterBuildInputs, strings.Join(inputs, " "))
+}
+
+func notsVarName(s string) (string, bool) {
+	word := func(w string) bool {
+		return w != "" && !strings.ContainsFunc(w, func(r rune) bool { return r >= 128 || !isIdentByte(byte(r)) })
+	}
+
+	if strings.HasPrefix(s, "${") && strings.HasSuffix(s, "}") && word(s[2:len(s)-1]) {
+		return s[2 : len(s)-1], true
+	}
+
+	if strings.HasPrefix(s, "$") && word(s[1:]) {
+		return s[1:], true
+	}
+
+	return "", false
+}
+
 func applyNotsStmt(v UnknownStmt, c *NotsModule, env Environment) bool {
 	name := v.Raw.string()
 
@@ -317,15 +351,25 @@ func notsBuildEnvFor(env Environment) bool {
 }
 
 func (e *EmitContext) notsResource(dir, name string) ResourceDecl {
+	decl, ok := e.notsResourceLookup(dir, name)
+
+	if !ok {
+		panic(exceptionf("nots: %s did not declare resource %s", dir, name))
+	}
+
+	return decl
+}
+
+func (e *EmitContext) notsResourceLookup(dir, name string) (ResourceDecl, bool) {
 	result := genModule(e.ctx, e.derivePeerInstance(dir))
 
 	for _, decl := range result.ResourceGlobalClosure {
 		if decl.Name.string() == name {
-			return decl
+			return decl, true
 		}
 	}
 
-	panic(exceptionf("nots: %s did not declare resource %s", dir, name))
+	return ResourceDecl{}, false
 }
 
 func (e *EmitContext) notsPeerInstance(dir string) ModuleInstance {
@@ -336,11 +380,11 @@ func (e *EmitContext) notsPeerInstance(dir string) ModuleInstance {
 	return instance
 }
 
-func (e *EmitContext) notsBaseArgs(pj map[string]any) ([]string, []ResourceDecl, ResourceDecl) {
+func (e *EmitContext) notsBaseArgs(pj map[string]any) ([]string, []ResourceDecl, string) {
 	return e.notsBaseArgsFor(pj, e.d.nots)
 }
 
-func (e *EmitContext) notsBaseArgsFor(pj map[string]any, c *NotsModule) ([]string, []ResourceDecl, ResourceDecl) {
+func (e *EmitContext) notsBaseArgsFor(pj map[string]any, c *NotsModule) ([]string, []ResourceDecl, string) {
 	pm := e.ctx.parsers
 	version := pm.notsVersion("nodejs", notsString(notsObject(pj["engines"])["node"]))
 	parts := notsVersionParts(version)
@@ -349,7 +393,12 @@ func (e *EmitContext) notsBaseArgsFor(pj map[string]any, c *NotsModule) ([]strin
 		throwFmt("nots: Node.js %s is unsupported", version)
 	}
 
-	node := e.notsResource("build/platform/nodejs/"+version, "NODEJS_"+strings.ReplaceAll(version, ".", "_"))
+	node := ""
+
+	if decl, ok := e.notsResourceLookup("build/platform/nodejs/"+version, "NODEJS_"+strings.ReplaceAll(version, ".", "_")); ok {
+		node = decl.Value.string()
+	}
+
 	pnpm := e.notsResource("build/external_resources/pnpm", "PNPM")
 	nodeResources := genModule(e.ctx, e.derivePeerInstance("build/platform/nodejs/"+version))
 	globals := append(slices.Clone(nodeResources.ResourceGlobalClosure), pnpm)
@@ -364,7 +413,7 @@ func (e *EmitContext) notsBaseArgsFor(pj map[string]any, c *NotsModule) ([]strin
 	env.setString(envPnpmRoot, pnpm.Value.string())
 
 	pmScript := env.expand(env.string(envPmScript))
-	args := []string{"--arcadia-root", "$(S)", "--arcadia-build-root", "$(B)", "--moddir", e.instance.Path.relString(), "--local-cli", local, "--nodejs-bin", node.Value.string() + "/node", "--pm-script", pmScript, "--pm-type", "pnpm"}
+	args := []string{"--arcadia-root", "$(S)", "--arcadia-build-root", "$(B)", "--moddir", e.instance.Path.relString(), "--local-cli", local, "--nodejs-bin", node + "/node", "--pm-script", pmScript, "--pm-type", "pnpm"}
 
 	if parts[0] >= 25 && e.instance.Platform.OS == OSLinux {
 		atomic := e.notsResource("build/platform/nodejs/libatomic", "LIBATOMIC_1_2_0")
@@ -449,7 +498,7 @@ func (e *EmitContext) emitNotsNode(n NodeSpec) NodeRef {
 type NotsPrepared struct {
 	Head            []string
 	Globals         []ResourceDecl
-	Nodejs          ResourceDecl
+	Nodejs          string
 	ResourceNames   []STR
 	ToolRef         NodeRef
 	ToolPath        VFS
@@ -483,13 +532,37 @@ func (e *EmitContext) emitNotsModule() *ModuleEmitResult {
 }
 
 func (e *EmitContext) emitNotsPrepare() *ModuleEmitResult {
-	ctx, dir, c := e.ctx, e.instance.Path.relString(), e.d.nots
-	pm, na := ctx.parsers, ctx.na
-	output := build(dir, "/package.json")
+	c := e.d.nots
+	output := build(e.instance.Path.relString(), "/package.json")
 
 	if info := e.codegen.use(output); info != nil {
 		return notsResult(output, info.ProducerRef, c, info.nots().Globals)
 	}
+
+	p := e.notsPrepare()
+	prepRef := e.emitNotsNode(p.node)
+
+	p.state.Globals = e.notsTestGlobals(p.state.Globals)
+
+	info := e.codegen.lookup(output)
+
+	info.attributes.nots.put(info.id, &p.state)
+	info.GeneratorRefs = p.peerRefs
+	info.attributes.notsInputs.put(info.id, p.peerInputs)
+
+	return notsResult(output, prepRef, c, p.state.Globals)
+}
+
+type notsPreparation struct {
+	state      NotsPrepared
+	peerRefs   []NodeRef
+	peerInputs []VFS
+	node       NodeSpec
+}
+
+func (e *EmitContext) notsPrepare() notsPreparation {
+	ctx, dir, c := e.ctx, e.instance.Path.relString(), e.d.nots
+	pm, na := ctx.parsers, ctx.na
 
 	var pj map[string]any
 
@@ -655,18 +728,10 @@ func (e *EmitContext) emitNotsPrepare() *ModuleEmitResult {
 		prep.DepRefs = na.refList(peerRefs...)
 	}
 
-	prepRef := e.emitNotsNode(prep)
-
-	globals = e.notsTestGlobals(globals)
-
-	state := &NotsPrepared{Head: head, Globals: globals, Nodejs: nodejs, ResourceNames: resourceNames, ToolRef: toolRef, ToolPath: toolPath, HasDependencies: hasDeps, Schema: e.d.moduleStmt.Schema}
-	info := e.codegen.lookup(output)
-
-	info.attributes.nots.put(info.id, state)
-	info.GeneratorRefs = peerRefs
-	info.attributes.notsInputs.put(info.id, peerInputs)
-
-	return notsResult(output, prepRef, c, globals)
+	return notsPreparation{
+		state:    NotsPrepared{Head: head, Globals: globals, Nodejs: nodejs, ResourceNames: resourceNames, ToolRef: toolRef, ToolPath: toolPath, HasDependencies: hasDeps, Schema: e.d.moduleStmt.Schema},
+		peerRefs: peerRefs, peerInputs: peerInputs, node: prep,
+	}
 }
 
 func (e *EmitContext) emitNotsBuild() *ModuleEmitResult {
@@ -679,10 +744,6 @@ func (e *EmitContext) emitNotsBuild() *ModuleEmitResult {
 
 	prepare := e.genPeerModule(instance)
 
-	if prepare.ARPath == nil {
-		throwFmt("nots: %s requires the TS_PREPARE_DEPS variant", dir)
-	}
-
 	if info := e.codegen.use(output); info != nil {
 		result := notsResult(output, info.ProducerRef, c, info.nots().Globals)
 
@@ -691,17 +752,31 @@ func (e *EmitContext) emitNotsBuild() *ModuleEmitResult {
 		return result
 	}
 
-	prepRef := prepare.ARRef
-	state := e.codegen.lookup(*prepare.ARPath).nots()
-	head, globals, resourceNames, peerRefs, toolRef, hasDeps := state.Head, state.Globals, state.ResourceNames, e.codegen.lookup(*prepare.ARPath).GeneratorRefs, state.ToolRef, state.HasDependencies
+	var state *NotsPrepared
+	var peerRefs, prepRefs []NodeRef
+	var peerInputs, prepOutputs []VFS
+
+	if prepare.ARPath != nil {
+		info := e.codegen.lookup(*prepare.ARPath)
+
+		state, peerRefs, peerInputs = info.nots(), info.GeneratorRefs, info.notsInputs()
+		prepRefs, prepOutputs = []NodeRef{prepare.ARRef}, []VFS{*prepare.ARPath}
+	} else {
+		p := e.notsPrepare()
+
+		p.state.Globals = e.notsTestGlobals(p.state.Globals)
+		state, peerRefs, peerInputs = &p.state, p.peerRefs, p.peerInputs
+	}
+
+	head, globals, resourceNames, toolRef, hasDeps := state.Head, state.Globals, state.ResourceNames, state.ToolRef, state.HasDependencies
 	autotar := buildScriptsAutotarGendirsPy
 	cmds := []Cmd{{CmdArgs: na.chunkList(na.anyList(wrapccPython3STR.any(), autotar.any(), strUnpack.any(), strExt.any(), strGentar.any())), Env: envVarsVCS, Cwd: build(dir)}}
-	inputs := []VFS{autotar, state.ToolPath, *prepare.ARPath}
+	inputs := append([]VFS{autotar, state.ToolPath}, prepOutputs...)
 
-	inputs = append(inputs, e.codegen.lookup(*prepare.ARPath).notsInputs()...)
+	inputs = append(inputs, peerInputs...)
 
 	buildFrom := append([]VFS{autotar}, inputs[2:]...)
-	buildLeaves := append(slices.Clone(e.codegen.lookup(*prepare.ARPath).notsInputs()), *prepare.ARPath)
+	buildLeaves := append(slices.Clone(peerInputs), prepOutputs...)
 	outputs := []VFS{output}
 
 	if c.VCSInfo != "" && c.Kind != tokTsPackage {
@@ -809,7 +884,7 @@ func (e *EmitContext) emitNotsBuild() *ModuleEmitResult {
 
 	cmds = append(cmds, Cmd{CmdArgs: na.chunkList(na.anyList(appendInternAnys(nil, args)...)), Env: envVarsVCS})
 
-	refs := append(slices.Clone(peerRefs), prepRef)
+	refs := append(slices.Clone(peerRefs), prepRefs...)
 
 	if c.VCSInfo != "" {
 		refs = append(refs, ctx.vcsRef)
@@ -820,7 +895,7 @@ func (e *EmitContext) emitNotsBuild() *ModuleEmitResult {
 	info := e.codegen.lookup(output)
 
 	info.attributes.nots.put(info.id, state)
-	info.GeneratorRefs = dedupRefs(append(slices.Clone(peerRefs), prepRef))
+	info.GeneratorRefs = dedupRefs(append(slices.Clone(peerRefs), prepRefs...))
 	info.attributes.notsInputs.put(info.id, dedup(buildLeaves))
 
 	result := notsResult(output, ref, c, globals)

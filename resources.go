@@ -272,7 +272,7 @@ func resolveResourceGlobalRef(s string, globals []ResourceDecl) string {
 		}
 	}
 
-	panic(exceptionf("resources: %q references resource global not in the PEERDIR closure", s))
+	return ""
 }
 
 func resolveResourceGlobalArgs(args []ANY, globals []ResourceDecl) []ANY {
@@ -644,7 +644,7 @@ func (e *EmitContext) genPrebuiltProgram() *ModuleEmitResult {
 		}
 	}
 
-	dst := lDOutputPath(instance, programBinaryName(instance, d.moduleStmt))
+	dst := lDOutputPath(instance, prebuiltProgramName(instance, d.moduleStmt))
 	env := envVarsVCS
 
 	var ownSbomRef *NodeRef
@@ -656,7 +656,7 @@ func (e *EmitContext) genPrebuiltProgram() *ModuleEmitResult {
 
 	pyRef, pyPath := (*NodeRef)(nil), (*VFS)(nil)
 
-	if sbomActive(ctx, instance) && instance.Platform.BuildRelease {
+	if sbomActive(ctx, instance) {
 		pyRef, pyPath = pythonToolchainSbomComponent(ctx, instance.Platform)
 	}
 

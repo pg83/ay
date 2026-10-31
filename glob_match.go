@@ -63,9 +63,7 @@ func newGlobMatcher(expr string) *globMatcher {
 		}
 	}
 
-	// Compile returns a program or panics; its error result is always nil.
 	m.prog, _ = syntax.Compile(re.Simplify())
-
 	m.seen = make([]uint32, len(m.prog.Inst))
 	m.current = make([]uint32, 0, len(m.prog.Inst))
 	m.next = make([]uint32, 0, len(m.prog.Inst))

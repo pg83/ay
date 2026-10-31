@@ -18,6 +18,8 @@ var warnKindStr = [...]string{
 	WarnDupSrc:            "dup-src",
 	WarnMissingSource:     "missing-source",
 	WarnMisconfiguration:  "misconfiguration",
+	WarnBadSrc:            "bad-src",
+	WarnUnknownLocation:   "unknown-location",
 }
 
 const (
@@ -50,6 +52,10 @@ const (
 	WarnMissingSource
 
 	WarnMisconfiguration
+
+	WarnBadSrc
+
+	WarnUnknownLocation
 )
 
 type Warn struct {

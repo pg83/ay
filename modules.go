@@ -2598,6 +2598,8 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 		}
 
 		env.setString(envYtRecordPeerdir, "")
+	case tokRunJavascriptAfterBuildProcessInputs:
+		applyRunJavascriptAfterBuildProcessInputs(v.Args, env)
 	case tokGolaunchSrcs, tokGolaunchSrcdir, tokRuntimePeerdir, tokResourcePeerdir, tokGolaunchFunction, tokGolaunchOverride, tokNoGolaunchSrcs, tokGenerateGolaunchCallbacks, tokGolaunchCompositeComps:
 		applyMlaunchStmt(modulePath, v, env, d)
 	case tokGlob:
@@ -3508,16 +3510,16 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 
 		d.exportsScript = ptr(v.Args[0])
 	case tokLinkerScript:
-		if !isProgramModuleType(d.moduleStmt.Name) {
-			throwFmt("%s: LINKER_SCRIPT outside a PROGRAM is not modelled", modulePath)
-		}
-
 		for _, arg := range expandStmtTokens(v.Args, env) {
 			if !strings.HasSuffix(arg.string(), ".ld") {
 				throwFmt("%s: LINKER_SCRIPT %s: only .ld scripts are modelled", modulePath, arg.string())
 			}
 
-			d.linkerScripts = append(d.linkerScripts, arg)
+			if isProgramModuleType(d.moduleStmt.Name) {
+				d.linkerScripts = append(d.linkerScripts, arg)
+			} else {
+				d.srcs = append(d.srcs, SrcMeta{Source: arg, Prio: stmtPrioSrcs, Seq: d.nextDeclSeq(), Global: true})
+			}
 		}
 	case tokExtralibs:
 		libs := ""
@@ -4817,7 +4819,6 @@ func applyProtoAddIncl(d *ModuleData, args []ANY) {
 func applyArchiveStmt(v UnknownStmt, d *ModuleData) {
 	var (
 		entry      ArchiveEntry
-		seenName   bool
 		inNameSlot bool
 	)
 
@@ -4828,7 +4829,6 @@ func applyArchiveStmt(v UnknownStmt, d *ModuleData) {
 		case inNameSlot:
 			entry.Name = a
 			inNameSlot = false
-			seenName = true
 		case a == "NAME":
 			inNameSlot = true
 		case a == "DONTCOMPRESS":
@@ -4842,21 +4842,12 @@ func applyArchiveStmt(v UnknownStmt, d *ModuleData) {
 		throwFmt("gen: ARCHIVE(NAME ...) missing value after NAME (line %d)", v.Line)
 	}
 
-	if !seenName || entry.Name == "" {
-		throwFmt("gen: ARCHIVE expects `NAME <output>` (line %d)", v.Line)
-	}
-
-	if len(entry.Files) == 0 {
-		throwFmt("gen: ARCHIVE(NAME %s) has no input files (line %d)", entry.Name, v.Line)
-	}
-
 	d.archives = append(d.archives, entry)
 }
 
 func applyArchiveByKeysStmt(v UnknownStmt, d *ModuleData) {
 	var (
 		entry      ArchiveEntry
-		seenName   bool
 		inNameSlot bool
 		inKeysSlot bool
 	)
@@ -4870,7 +4861,6 @@ func applyArchiveByKeysStmt(v UnknownStmt, d *ModuleData) {
 		case inNameSlot:
 			entry.Name = a
 			inNameSlot = false
-			seenName = true
 		case inKeysSlot:
 			entry.Keys = []string{a}
 			inKeysSlot = false
@@ -4887,18 +4877,6 @@ func applyArchiveByKeysStmt(v UnknownStmt, d *ModuleData) {
 
 	if inNameSlot {
 		throwFmt("gen: ARCHIVE_BY_KEYS(NAME ...) missing value after NAME (line %d)", v.Line)
-	}
-
-	if inKeysSlot {
-		throwFmt("gen: ARCHIVE_BY_KEYS(KEYS ...) missing value after KEYS (line %d)", v.Line)
-	}
-
-	if !seenName || entry.Name == "" {
-		throwFmt("gen: ARCHIVE_BY_KEYS expects `NAME <output>` (line %d)", v.Line)
-	}
-
-	if len(entry.Files) == 0 {
-		throwFmt("gen: ARCHIVE_BY_KEYS(NAME %s) has no input files (line %d)", entry.Name, v.Line)
 	}
 
 	d.archives = append(d.archives, entry)
@@ -4927,10 +4905,6 @@ func applyArchiveAsmStmt(v UnknownStmt, d *ModuleData) {
 			entry.Name = v.Args[i].string()
 			seenName = true
 		case "DONTCOMPRESS":
-			if entry.DontCompress {
-				throwFmt("gen: ARCHIVE_ASM at line %d: Keyword 'DONTCOMPRESS' appears more than once and is not an array.", v.Line)
-			}
-
 			entry.DontCompress = true
 		default:
 			entry.Files = append(entry.Files, a)
@@ -4952,11 +4926,9 @@ func applyLj21ArchiveStmt(v UnknownStmt, d *ModuleData) {
 		}
 	}
 
-	if len(luas) == 0 {
-		throwFmt("gen: LJ_21_ARCHIVE has no .lua files (line %d)", v.Line)
+	if len(luas) > 0 {
+		d.lj21 = &Lj21Archive{Luas: luas}
 	}
-
-	d.lj21 = &Lj21Archive{Luas: luas}
 
 	raws := make([]string, len(luas))
 
@@ -4965,8 +4937,8 @@ func applyLj21ArchiveStmt(v UnknownStmt, d *ModuleData) {
 	}
 
 	d.archives = append(d.archives,
-		ArchiveEntry{Name: "LuaScripts.inc", DontCompress: true, Files: raws, Keys: luas},
-		ArchiveEntry{Name: "LuaSources.inc", DontCompress: true, Files: append([]string(nil), luas...), Keys: luas},
+		ArchiveEntry{Name: "LuaScripts.inc", DontCompress: true, Files: raws, Keys: []string{strings.Join(luas, ":")}},
+		ArchiveEntry{Name: "LuaSources.inc", DontCompress: true, Files: append([]string(nil), luas...), Keys: []string{strings.Join(luas, ":")}},
 	)
 }
 
