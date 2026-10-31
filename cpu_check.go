@@ -3,7 +3,7 @@ package main
 func (d *ModuleData) recalcCpuCheck(env Environment) {
 	value := d.cpuCheckBase
 
-	if (!env.bool(envARCH_X86_64) && !env.bool(envARCH_I386)) || env.string(envDISABLE_INSTRUCTION_SETS) == "yes" || env.string(envUSE_SSE4) != "yes" || d.flags.NoUtil || env.string(envNoutil) == "yes" || env.string(envALLOCATOR) == "FAKE" {
+	if (!env.bool(envARCH_X86_64) && !env.bool(envARCH_I386)) || env.string(envDISABLE_INSTRUCTION_SETS) == "yes" || env.string(envUSE_SSE4) != "yes" || env.string(envNoutil) == "yes" || env.string(envALLOCATOR) == "FAKE" {
 		value = strNo
 	}
 
@@ -18,10 +18,7 @@ func (d *ModuleData) captureCpuCheckVariable(name ENV, env Environment) {
 	switch name {
 	case envCpuCheck:
 		d.cpuCheckBase = internStr(env.string(envCpuCheck))
-	case envNoutil:
-		d.flags.NoUtil = env.string(name) == "yes"
-		d.recalcCpuCheck(env)
-	case envUSE_SSE4, envALLOCATOR, envDISABLE_INSTRUCTION_SETS:
+	case envNoutil, envUSE_SSE4, envALLOCATOR, envDISABLE_INSTRUCTION_SETS:
 		d.recalcCpuCheck(env)
 	}
 }
@@ -41,9 +38,6 @@ func (d *ModuleData) captureCpuCheckMacro(v UnknownStmt, env Environment) {
 			d.captureCpuCheckVariable(internEnv(arg.string()), env)
 		}
 	case tokAllocator:
-		d.recalcCpuCheck(env)
-	case tokNoUtil, tokNoRuntime, tokNoLibc, tokNoPlatform:
-		env.setStringID(envNoutil, strYes)
 		d.recalcCpuCheck(env)
 	}
 }

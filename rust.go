@@ -39,9 +39,6 @@ func setupRustModule(name TOK, language Language, env Environment, d *ModuleData
 		return
 	}
 
-	d.flags.NoPlatform = true
-	d.flags.NoUtil = true
-	d.flags.NoRuntime = true
 	d.peerdirs = append(d.peerdirs, internAny("build/platform/rust"), internAny("build/platform/clang"))
 	env.setDefaultString(envRustRoot, "src/lib.rs")
 	env.setDefaultString(envRustVersion, "0.0.0")

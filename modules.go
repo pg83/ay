@@ -998,8 +998,14 @@ func collectModuleInto(ctx *GenCtx, instance ModuleInstance, stmts []Stmt, env E
 	d.collectAssemblerConfig(env)
 
 	if d.muslLite {
-		d.flags.NoUtil = true
+		env.setBool(envNoutil, true)
+		instance.Platform.conf.set(env, envNoutil, &d.setVars)
 	}
+
+	d.flags.NoUtil = env.bool(envNoutil)
+	d.flags.NoRuntime = env.bool(envNoruntime)
+	d.flags.NoLibc = env.bool(envNolibc)
+	d.flags.NoPlatform = env.bool(envNoplatform)
 
 	if env.bool(envPY3_PROTO) && instance.Language == LangPy {
 		d.usePython3 = true
@@ -1660,8 +1666,6 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 
 			if isGoModuleType(d.unit.Type) {
 				initGoModuleName(modulePath, env, d, onWarn)
-				d.flags.NoRuntime = true
-				d.flags.NoUtil = true
 			}
 
 			if d.moduleStmt.Name == tokProtoDescriptions || v.Name == tokProtoRegistry {
@@ -1680,6 +1684,10 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 			setupSdcDiagsModule(v, language, env, d)
 			setupRustModule(v.Name, language, env, d)
 
+			if isRustModule(v.Name) {
+				collectStmts(ctx, modulePath, kind, language, []Stmt{&UnknownStmt{Name: tokNoPlatform, Raw: tokNoPlatform.str()}}, env, d, onWarn, platform)
+			}
+
 			if v.Name == tokFbsLibrary {
 				d.multimodule = v.Name
 				d.moduleVariants = 1<<LangCPP | 1<<LangGo | 1<<LangJava | 1<<LangPy
@@ -1688,8 +1696,7 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 				env.setBool(envJavaFbs, language == LangJava || language == LangFbsJavaNative)
 
 				if language == LangFbsJavaNative {
-					d.flags.NoUtil = true
-					d.flags.NoRuntime = true
+					collectStmts(ctx, modulePath, kind, language, []Stmt{&UnknownStmt{Name: tokNoRuntime, Raw: tokNoRuntime.str()}}, env, d, onWarn, platform)
 				}
 
 				if language == LangPy {
@@ -2868,13 +2875,6 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 		if len(v.Args) >= 1 {
 			d.primaryOutput = v.Args[0].string()
 		}
-	case tokNoLibc:
-
-		d.flags.NoLibc = true
-		d.flags.NoRuntime = true
-		d.flags.NoUtil = true
-	case tokNoUtil:
-		d.flags.NoUtil = true
 	case tokUseCxx, tokUseUtil:
 		if !isGoModuleType(d.unit.Type) {
 			throwFmt("%s is not allowed for %s modules", v.Name.string(), d.unit.Type.string())
@@ -2884,21 +2884,9 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 			throwFmt("%s expects no arguments", v.Name.string())
 		}
 
-		d.flags.NoRuntime = false
+		handled = false
 
-		if v.Name == tokUseUtil {
-			d.flags.NoUtil = false
-		}
-	case tokNoRuntime:
-
-		d.flags.NoRuntime = true
-		d.flags.NoUtil = true
-	case tokNoPlatform:
-
-		d.flags.NoPlatform = true
-		d.flags.NoLibc = true
-		d.flags.NoRuntime = true
-		d.flags.NoUtil = true
+		return false
 	case tokCompileCAsCxx:
 		env.setString(envExtraCFlags, env.expand("$C_AS_CXX_FLAGS"))
 	case tokNoWshadow:

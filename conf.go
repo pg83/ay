@@ -656,6 +656,23 @@ func (c *ConfFile) holds(b int32, env Environment) bool {
 	return true
 }
 
+func (c *ConfFile) condInputs(b int32, add func(ENV), literal *bool) {
+	for _, at := range c.conditionChain(b) {
+		if at < 0 {
+			at = -at
+		}
+
+		for _, node := range c.cond(at) {
+			switch node.Kind {
+			case ckConfIdent, ckIdent, ckDefined, ckIsNum:
+				add(node.Env)
+			case ckString:
+				*literal = *literal || strings.IndexByte(node.Name, '$') >= 0
+			}
+		}
+	}
+}
+
 func (c *ConfFile) condVars(b int32, add func(ENV)) {
 	for _, at := range c.conditionChain(b) {
 		if at < 0 {
@@ -800,6 +817,7 @@ type confModule struct {
 	parent    STR
 	variable  ENV
 	builder   []ENV
+	calls     []string
 	steps     []confInitStep
 	outputs   []ENV
 	originals []ENV
@@ -810,6 +828,7 @@ type confModule struct {
 type confInitStep struct {
 	variable ENV
 	source   ENV
+	value    STR
 }
 
 type ConfAssignment struct {
@@ -825,10 +844,12 @@ type confProgram struct {
 
 type confTables struct {
 	state       *ConfState
+	macros      map[STR]*ConfMacro
 	source      []ConfStmtRef
 	byVariable  DenseMap[ENV, []ENV]
 	byTarget    DenseMap[ENV, []ConfStmtRef]
 	targetReads DenseMap[ENV, []ENV]
+	recalcReads DenseMap[ENV, []ENV]
 	modules     DenseMap[STR, *confModule]
 	variants    DenseMap[STR, []ConfVariant]
 	moduleCount int
@@ -854,14 +875,16 @@ func (t *confTables) matches(stmts []ConfStmtRef) bool {
 	return i == len(t.source)
 }
 
-func (s *ConfState) tablesFor(stmts []ConfStmtRef) *confTables {
+func (s *ConfState) tablesFor(program *confProgram) *confTables {
+	stmts := program.stmts
+
 	for _, t := range s.tables {
 		if t.matches(stmts) {
 			return t
 		}
 	}
 
-	t := &confTables{state: s}
+	t := &confTables{state: s, macros: program.macros}
 
 	for _, r := range stmts {
 		if confTableInput(r) {
@@ -1053,11 +1076,75 @@ func (t *confTables) build() {
 		t.targetReads.put(ENV(key), reads[start:len(reads):len(reads)])
 	})
 
+	t.byTarget.idx.each(func(key, slot uint32) {
+		target := ENV(key)
+
+		var all []ENV
+
+		literal := false
+
+		for _, r := range t.byTarget.vals.s[slot] {
+			r.file.condInputs(r.stmt.branch, func(variable ENV) {
+				if variable != target && !slices.Contains(all, variable) {
+					all = append(all, variable)
+				}
+			}, &literal)
+		}
+
+		if !literal {
+			t.recalcReads.put(target, all)
+		}
+	})
+
 	for _, module := range t.modules.vals.s {
 		if module != nil {
 			module.builder = t.builderMacros(calls, module.variable.string(), map[string]bool{}, nil)
+			module.calls = calls[module.variable.string()]
 		}
 	}
+}
+
+func (t *confTables) flagMacroSteps(name STR, out []confInitStep, depth int) ([]confInitStep, bool) {
+	macro := t.macros[name]
+
+	if macro == nil || depth > 8 || len(macro.sig.positional) != 0 || len(macro.sig.keywords) != 0 || macro.sig.vararg != 0 {
+		return out, false
+	}
+
+	mark := len(out)
+
+	for _, call := range macro.calls {
+		words := strings.Fields(call.args.string())
+
+		switch call.name {
+		case tokEnable.str(), tokDisable.str():
+			if len(words) != 1 {
+				return out[:mark], false
+			}
+
+			value := strYes
+
+			if call.name == tokDisable.str() {
+				value = strNo
+			}
+
+			out = append(out, confInitStep{variable: internEnv(words[0]), value: value})
+		case kwSET:
+			if len(words) < 2 || strings.ContainsAny(call.args.string(), "$\"") {
+				return out[:mark], false
+			}
+
+			out = append(out, confInitStep{variable: internEnv(words[0]), value: internStr(strings.Join(words[1:], " "))})
+		default:
+			var ok bool
+
+			if out, ok = t.flagMacroSteps(call.name, out, depth+1); !ok {
+				return out[:mark], false
+			}
+		}
+	}
+
+	return out, true
 }
 
 func (t *confTables) builderMacros(calls map[string][]string, guard string, seen map[string]bool, out []ENV) []ENV {
@@ -1114,6 +1201,10 @@ func (t *confTables) plan(module *confModule) *confModule {
 		module.steps = append(module.steps, confInitStep{variable: envBisonFlexSetDefaults})
 	case "env_LINK_UNIT", "envGO_PROGRAM":
 		module.steps = append(module.steps, confInitStep{variable: envLinkerId, source: envDefaultLinkerId}, confInitStep{variable: envCommonLinkSettings})
+	}
+
+	for _, call := range module.calls {
+		module.steps, _ = t.flagMacroSteps(internStr(strings.TrimPrefix(call, "env")), module.steps, 0)
 	}
 
 	n := int(envTable.count)
@@ -1178,6 +1269,15 @@ type Conf struct {
 	base        *EnvStore
 	bases       [][]ConfAssignment
 	sysinclList []string
+	recalcs     map[uint64][]confRecalc
+	inputs      []uint64
+}
+
+type confRecalc struct {
+	target   ENV
+	original STR
+	inputs   []uint64
+	value    ConfValue
 }
 
 func loadConf(pm *IncludeParserManager, root *ConfFile, platformEnv Environment) *Conf {
@@ -1275,7 +1375,7 @@ func loadConf(pm *IncludeParserManager, root *ConfFile, platformEnv Environment)
 		bindConfCommandVariable(key, env, platformEnv, &scratch.seen)
 	}
 
-	tables := pm.cache.conf.tablesFor(program.stmts)
+	tables := pm.cache.conf.tablesFor(program)
 	c := &Conf{state: pm.cache.conf, program: program, tables: tables, platformEnv: platformEnv, bases: make([][]ConfAssignment, tables.moduleCount)}
 
 	c.sysinclList = strings.Fields(env.expand(env.string(envSYSINCL)))
@@ -1362,12 +1462,32 @@ func (c *Conf) recalcInto(env Environment, variable ENV, originals *SetVars, rec
 	targets, _ := c.tables.byVariable.get(variable)
 
 	for _, target := range targets {
+		original := originals.get(target.str())
+		reads, memo := c.tables.recalcReads.get(target)
+
+		var key uint64
+
+		if memo {
+			key = c.recalcKey(env, target, original, reads)
+
+			if value, ok := c.recalcHit(key, target, original); ok {
+				env.unbind(target)
+				value.apply(env, target)
+
+				if recording != nil {
+					recordConfAssignment(recording, target, env)
+				}
+
+				continue
+			}
+		}
+
 		env.unbind(target)
 
 		stmts, _ := c.tables.byTarget.get(target)
 		base, _ := c.inherited.get(target)
 
-		if original := originals.get(target.str()); original != 0 {
+		if original != 0 {
 			if inherited := c.platformEnv.string(target); base.kind != envAbsent && inherited != "" {
 				confStringValueID(internV(inherited, " ", original.string())).apply(env, target)
 			} else {
@@ -1383,10 +1503,54 @@ func (c *Conf) recalcInto(env Environment, variable ENV, originals *SetVars, rec
 			}
 		}
 
+		if memo {
+			c.recalcPut(key, target, original, confEnvValue(env, target))
+		}
+
 		if recording != nil {
 			recordConfAssignment(recording, target, env)
 		}
 	}
+}
+
+func (c *Conf) recalcKey(env Environment, target ENV, original STR, reads []ENV) uint64 {
+	c.inputs = c.inputs[:0]
+
+	for _, variable := range reads {
+		kind, value := env.s.lookup(variable)
+
+		if kind == envAbsent {
+			value = 0
+		}
+
+		c.inputs = append(c.inputs, uint64(kind)<<32|uint64(value))
+	}
+
+	h := uint64(14695981039346656037)
+
+	for _, x := range append(c.inputs, uint64(target)<<32|uint64(original)) {
+		h = (h ^ x) * 1099511628211
+	}
+
+	return h
+}
+
+func (c *Conf) recalcHit(key uint64, target ENV, original STR) (ConfValue, bool) {
+	for _, r := range c.recalcs[key] {
+		if r.target == target && r.original == original && slices.Equal(r.inputs, c.inputs) {
+			return r.value, true
+		}
+	}
+
+	return ConfValue{}, false
+}
+
+func (c *Conf) recalcPut(key uint64, target ENV, original STR, value ConfValue) {
+	if c.recalcs == nil {
+		c.recalcs = map[uint64][]confRecalc{}
+	}
+
+	c.recalcs[key] = append(c.recalcs[key], confRecalc{target: target, original: original, inputs: slices.Clone(c.inputs), value: value})
 }
 
 func (c *Conf) initModule(env Environment, name STR, tag string, originals *SetVars) {
@@ -1462,9 +1626,12 @@ func (c *Conf) initModule(env Environment, name STR, tag string, originals *SetV
 
 func (c *Conf) runInit(plan *confModule, env Environment, originals *SetVars, recording []ConfAssignment) {
 	for _, step := range plan.steps {
-		if step.source != 0 {
+		switch {
+		case step.value != 0:
+			env.setStringID(step.variable, step.value)
+		case step.source != 0:
 			env.setString(step.variable, env.string(step.source))
-		} else {
+		default:
 			env.setBool(step.variable, true)
 		}
 
