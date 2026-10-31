@@ -441,7 +441,7 @@ func (b *javaNodeBuilder) nativeGlobals(jm *JavaModule) {
 
 	add := func(peers []javaForeignPeer) {
 		for _, p := range peers {
-			if seen[p.res] {
+			if seen[p.res] || isLinkingModuleType(p.res.ModuleStmtName) {
 				continue
 			}
 

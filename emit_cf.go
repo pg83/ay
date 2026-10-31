@@ -148,6 +148,10 @@ func cfgVarValue(env Environment, name string) string {
 	value := env.expand("$" + name)
 
 	if strings.ContainsAny(value, " \t") {
+		if words := splitShellWords(value); len(words) == 1 {
+			return words[0]
+		}
+
 		return ""
 	}
 
