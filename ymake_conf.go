@@ -553,7 +553,7 @@ func parseYmakeConf(out []byte) map[string]string {
 	for i := 0; i < len(lines); i++ {
 		line := strings.TrimRight(lines[i], "\r")
 
-		for strings.HasSuffix(line, "\\") && i+1 < len(lines) {
+		for strings.HasSuffix(line, "\\") && i+1 < len(lines) && confContinues(lines[i+1]) {
 			i++
 			line += "\n" + strings.TrimRight(lines[i], "\r")
 		}

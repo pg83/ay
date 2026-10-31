@@ -137,156 +137,164 @@ func (s *ConfState) readFile(rel, text string) *ConfFile {
 	}()
 
 	for raw := range strings.SplitSeq(text, "\n") {
-		line := strings.TrimSpace(raw)
+		lines := [2]string{1: strings.TrimSpace(raw)}
+		first := 1
 
-		if len(pending) == 0 && (line == "" || strings.HasPrefix(line, "#")) {
-			continue
-		}
-
-		if strings.HasSuffix(line, "\\") {
-			pending = append(pending, strings.TrimSuffix(line, "\\")...)
-			pending = append(pending, ' ')
-
-			continue
-		}
-
-		if len(pending) != 0 {
-			pending = append(pending, line...)
-			line = internOwnedCopy(pending)
+		if len(pending) != 0 && !confContinues(lines[1]) {
+			lines[0], first = internOwnedCopy(pending[:len(pending)-1]), 0
 			pending = pending[:0]
 		}
 
-		if frame := &stack[len(stack)-1]; frame.macro && !strings.HasPrefix(line, "}") {
-			frame.body.addLine(line)
-		}
-
-		for strings.HasPrefix(line, "}") {
-			if len(stack) == 1 {
-				throwFmt("conf: unmatched } in %s", rel)
+		for _, line := range lines[first:] {
+			if len(pending) == 0 && (line == "" || strings.HasPrefix(line, "#")) {
+				continue
 			}
 
-			frame := &stack[len(stack)-1]
+			if strings.HasSuffix(line, "\\") {
+				pending = append(pending, strings.TrimSuffix(line, "\\")...)
+				pending = append(pending, ' ')
 
-			previous = frame.branch
-
-			if frame.macro {
-				conf.addMacro(frame.body.header, frame.body.calls)
+				continue
 			}
 
-			*frame = confParseFrame{}
-			stack = stack[:len(stack)-1]
-			line = strings.TrimSpace(line[1:])
-		}
-
-		if strings.HasPrefix(line, "@import") {
-			conf.stmts = append(conf.stmts, ConfStmt{value: confImportPath(rel, line)})
-
-			continue
-		}
-
-		top := &stack[len(stack)-1]
-
-		if name, value, op, ok := confStmtAssignment(line); ok {
-			if !top.skipped && top.block != "macro" {
-				conf.stmts = append(conf.stmts, ConfStmt{branch: top.branch, name: internEnv(name), scalar: confStringValue(value), value: value, op: op})
+			if len(pending) != 0 {
+				pending = append(pending, line...)
+				line = internOwnedCopy(pending)
+				pending = pending[:0]
 			}
 
-			continue
-		}
+			if frame := &stack[len(stack)-1]; frame.macro && !strings.HasPrefix(line, "}") {
+				frame.body.addLine(line)
+			}
 
-		if !strings.HasSuffix(line, "{") {
-			if name, _, ok := strings.Cut(line, "("); ok && top.guard != "" && !top.skipped && isIdentShapedName(strings.TrimSpace(name)) {
-				if top.guard != conf.callsGuard {
-					conf.flushCalls()
-					conf.callsGuard = top.guard
+			for strings.HasPrefix(line, "}") {
+				if len(stack) == 1 {
+					throwFmt("conf: unmatched } in %s", rel)
 				}
 
-				conf.callNames = append(conf.callNames, internV("env", strings.TrimSpace(name)).string())
-			}
+				frame := &stack[len(stack)-1]
 
-			continue
-		}
+				previous = frame.branch
 
-		header := strings.TrimSpace(strings.TrimSuffix(line, "{"))
-		branch := ConfBranch{parent: top.branch, cond: condFalse}
-		selectVar := ""
-		block := ""
-		guard := ""
-		owner := top.owner
-
-		switch {
-		case strings.HasPrefix(header, "multimodule "):
-			owner = strings.TrimSpace(strings.TrimPrefix(header, "multimodule "))
-			branch.cond = nil
-		case strings.HasPrefix(header, "module "):
-			name, parent, _ := strings.Cut(strings.TrimSpace(strings.TrimPrefix(header, "module ")), ":")
-
-			name, parent = strings.TrimSpace(name), strings.TrimSpace(parent)
-
-			if conf.modules == nil {
-				conf.modules = map[string]string{}
-			}
-
-			if owner != "" {
-				if conf.variants == nil {
-					conf.variants = map[string][]string{}
+				if frame.macro {
+					conf.addMacro(frame.body.header, frame.body.calls)
 				}
 
-				fullName := name + "__from__" + owner
-
-				conf.variants[owner] = append(conf.variants[owner], fullName)
-				name = fullName
+				*frame = confParseFrame{}
+				stack = stack[:len(stack)-1]
+				line = strings.TrimSpace(line[1:])
 			}
 
-			conf.modules[name] = parent
-			branch.expr = internV(`($env`, name, ` == "yes")`).string()
-			block = "module"
-			guard = internV("env", name).string()
-		case strings.HasPrefix(header, "macro "):
-			name, _, _ := strings.Cut(strings.TrimPrefix(header, "macro "), "(")
+			if strings.HasPrefix(line, "@import") {
+				conf.stmts = append(conf.stmts, ConfStmt{value: confImportPath(rel, line)})
 
-			name = strings.TrimSpace(name)
-			conf.declared = append(conf.declared, internStr(name))
-			branch.expr = internV(`($env`, name, ` == "yes")`).string()
-			block = "macro"
-			guard = internV("env", name).string()
-		case strings.HasPrefix(header, "when "), strings.HasPrefix(header, "when("):
-			branch.expr = strings.TrimSpace(strings.TrimPrefix(header, "when"))
-		case strings.HasPrefix(header, "elsewhen "), strings.HasPrefix(header, "elsewhen("):
-			branch.previous = previous
-			branch.expr = strings.TrimSpace(strings.TrimPrefix(header, "elsewhen"))
-		case header == "otherwise":
-			branch.previous = previous
-			branch.cond = nil
-		case strings.HasPrefix(header, "select "), strings.HasPrefix(header, "select("):
-			selectVar = strings.Trim(strings.TrimSpace(strings.TrimPrefix(header, "select")), "()$ ")
-			branch.cond = nil
-		case top.selectVar != "" && strings.HasSuffix(header, "?"):
-			branch.previous = previous
-			branch.cond = nil
-
-			if alternatives := strings.TrimSpace(strings.TrimSuffix(header, "?")); alternatives != "default" {
-				branch.expr = confSelectCondition(top.selectVar, alternatives)
+				continue
 			}
+
+			top := &stack[len(stack)-1]
+
+			if name, value, op, ok := confStmtAssignment(line); ok {
+				if !top.skipped && top.block != "macro" {
+					conf.stmts = append(conf.stmts, ConfStmt{branch: top.branch, name: internEnv(name), scalar: confStringValue(value), value: value, op: op})
+				}
+
+				continue
+			}
+
+			if !strings.HasSuffix(line, "{") {
+				if name, _, ok := strings.Cut(line, "("); ok && top.guard != "" && !top.skipped && isIdentShapedName(strings.TrimSpace(name)) {
+					if top.guard != conf.callsGuard {
+						conf.flushCalls()
+						conf.callsGuard = top.guard
+					}
+
+					conf.callNames = append(conf.callNames, internV("env", strings.TrimSpace(name)).string())
+				}
+
+				continue
+			}
+
+			header := strings.TrimSpace(strings.TrimSuffix(line, "{"))
+			branch := ConfBranch{parent: top.branch, cond: condFalse}
+			selectVar := ""
+			block := ""
+			guard := ""
+			owner := top.owner
+
+			switch {
+			case strings.HasPrefix(header, "multimodule "):
+				owner = strings.TrimSpace(strings.TrimPrefix(header, "multimodule "))
+				branch.cond = nil
+			case strings.HasPrefix(header, "module "):
+				name, parent, _ := strings.Cut(strings.TrimSpace(strings.TrimPrefix(header, "module ")), ":")
+
+				name, parent = strings.TrimSpace(name), strings.TrimSpace(parent)
+
+				if conf.modules == nil {
+					conf.modules = map[string]string{}
+				}
+
+				if owner != "" {
+					if conf.variants == nil {
+						conf.variants = map[string][]string{}
+					}
+
+					fullName := name + "__from__" + owner
+
+					conf.variants[owner] = append(conf.variants[owner], fullName)
+					name = fullName
+				}
+
+				conf.modules[name] = parent
+				branch.expr = internV(`($env`, name, ` == "yes")`).string()
+				block = "module"
+				guard = internV("env", name).string()
+			case strings.HasPrefix(header, "macro "):
+				name, _, _ := strings.Cut(strings.TrimPrefix(header, "macro "), "(")
+
+				name = strings.TrimSpace(name)
+				conf.declared = append(conf.declared, internStr(name))
+				branch.expr = internV(`($env`, name, ` == "yes")`).string()
+				block = "macro"
+				guard = internV("env", name).string()
+			case strings.HasPrefix(header, "when "), strings.HasPrefix(header, "when("):
+				branch.expr = strings.TrimSpace(strings.TrimPrefix(header, "when"))
+			case strings.HasPrefix(header, "elsewhen "), strings.HasPrefix(header, "elsewhen("):
+				branch.previous = previous
+				branch.expr = strings.TrimSpace(strings.TrimPrefix(header, "elsewhen"))
+			case header == "otherwise":
+				branch.previous = previous
+				branch.cond = nil
+			case strings.HasPrefix(header, "select "), strings.HasPrefix(header, "select("):
+				selectVar = strings.Trim(strings.TrimSpace(strings.TrimPrefix(header, "select")), "()$ ")
+				branch.cond = nil
+			case top.selectVar != "" && strings.HasSuffix(header, "?"):
+				branch.previous = previous
+				branch.cond = nil
+
+				if alternatives := strings.TrimSpace(strings.TrimSuffix(header, "?")); alternatives != "default" {
+					branch.expr = confSelectCondition(top.selectVar, alternatives)
+				}
+			}
+
+			skip := top.skipped || branch.expr == "" && branch.cond != nil
+
+			if branch.expr != "" {
+				branch.cond = nil
+			}
+
+			conf.branches = append(conf.branches, branch)
+
+			frame := confParseFrame{branch: int32(len(conf.branches) - 1), selectVar: selectVar, skipped: skip, block: block, owner: owner, guard: guard}
+
+			if strings.HasPrefix(header, "macro ") {
+				frame.macro = true
+				frame.body.header = header
+			}
+
+			stack = append(stack, frame)
+			previous = 0
 		}
-
-		skip := top.skipped || branch.expr == "" && branch.cond != nil
-
-		if branch.expr != "" {
-			branch.cond = nil
-		}
-
-		conf.branches = append(conf.branches, branch)
-
-		frame := confParseFrame{branch: int32(len(conf.branches) - 1), selectVar: selectVar, skipped: skip, block: block, owner: owner, guard: guard}
-
-		if strings.HasPrefix(header, "macro ") {
-			frame.macro = true
-			frame.body.header = header
-		}
-
-		stack = append(stack, frame)
-		previous = 0
 	}
 
 	if len(stack) != 1 || len(pending) != 0 {
@@ -297,6 +305,31 @@ func (s *ConfState) readFile(rel, text string) *ConfFile {
 	conf.linkChains()
 
 	return conf
+}
+
+func confContinues(next string) bool {
+	next = strings.TrimLeft(next, " \t\r")
+
+	if next == "" || next[0] == '#' || next[0] == '}' || strings.HasPrefix(next, "@import") {
+		return false
+	}
+
+	rest := strings.TrimPrefix(next, ".")
+	n := confVarNameLen(rest)
+
+	if n == 0 {
+		return true
+	}
+
+	rest = strings.TrimLeft(rest[n:], " \t")
+
+	for _, op := range [...]string{"=", ":=", "+=", "-=", "(", "{"} {
+		if strings.HasPrefix(rest, op) {
+			return false
+		}
+	}
+
+	return true
 }
 
 func confSelectCondition(variable, alternatives string) string {
