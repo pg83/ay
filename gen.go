@@ -2611,6 +2611,7 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 		PeerCXXFlagsGlobal:   peerCXXFlagsGlobal,
 		PeerCOnlyFlagsGlobal: peerCOnlyFlagsGlobal,
 		ModuleScopeCFlags:    d.moduleScopeCFlags,
+		NoBaseUnit:           instance.Language == LangFbsJavaNative,
 		SFlags:               d.sFlags,
 		SrcDirs:              d.srcDirs,
 		FS:                   ctx.fs,

@@ -337,6 +337,7 @@ type JavaData struct {
 	embedSbom              bool
 	needSbomInfo           bool
 	sbomComponent          bool
+	cppToolchainPeer       bool
 	modver                 string
 	noYmakePython3         bool
 	validateData           bool

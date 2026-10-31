@@ -13,6 +13,7 @@ type FbsNativeRecipe struct {
 
 type fbsNativeContext struct {
 	serial             uint32
+	env                *ModuleCompileEnv
 	compilerEnv        Environment
 	cFlags             []ANY
 	cxxFlags           []ANY
@@ -45,6 +46,13 @@ func (e *EmitContext) fbsNativeContext(in ModuleCCInputs) fbsNativeContext {
 	}
 }
 
+func (e *EmitContext) touchFbsNativeInput(info *GeneratedFileInfo) {
+	if recipe := info.fbsNative(); recipe != nil {
+		recipe.local.serial = e.frame.serial
+		recipe.local.env = &e.d.cc
+	}
+}
+
 func (e *EmitContext) bindFbsNativeSource(src, out VFS, in ModuleCCInputs, reserved NodeRef) (NodeRef, VFS) {
 	ctx := e.ctx
 	info := e.codegen.lookup(out)
@@ -61,23 +69,31 @@ func (e *EmitContext) bindFbsNativeSource(src, out VFS, in ModuleCCInputs, reser
 		recipe.owned = true
 
 		owner := e.frame.serial
+		scanner, scanCtx := e.scanner, e.d.scanCtx
 
 		info.OnUse = e.pendingEmit(func() {
 			command := in
 
+			command.IncludeView = scanner.walkClosure(src, scanCtx, scanDomainCC)
+
 			if local := &recipe.local; local.serial != owner {
 				env := *in.ModuleCompileEnv
 
-				env.CompilerEnv = local.compilerEnv
-				env.CFlags = local.cFlags
-				env.CXXFlags = local.cxxFlags
-				env.COnlyFlags = local.cOnlyFlags
-				env.ClangWarnings = local.clangWarnings
-				env.NoOptimize = local.noOptimize
-				env.ModuleScopeCFlags = local.moduleScopeCFlags
-				env.Flags.NoCompilerWarnings = local.noCompilerWarnings
-				env.Flags.NoWShadow = local.noWShadow
-				env.NoBaseUnit = local.noBaseUnit
+				if local.env != nil {
+					env.AddIncl = local.env.AddIncl
+					env.PeerAddInclGlobal = local.env.PeerAddInclGlobal
+				} else {
+					env.CompilerEnv = local.compilerEnv
+					env.CFlags = local.cFlags
+					env.CXXFlags = local.cxxFlags
+					env.COnlyFlags = local.cOnlyFlags
+					env.ClangWarnings = local.clangWarnings
+					env.NoOptimize = local.noOptimize
+					env.ModuleScopeCFlags = local.moduleScopeCFlags
+					env.Flags.NoCompilerWarnings = local.noCompilerWarnings
+					env.Flags.NoWShadow = local.noWShadow
+					env.NoBaseUnit = local.noBaseUnit
+				}
 
 				blocks := composeCCModuleArgBlocks(ctx.na, e.instance.Platform, &env)
 

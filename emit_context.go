@@ -438,7 +438,17 @@ func (e *EmitContext) includeNodeInputs(node *NodeSpec) {
 				}
 			}
 
-			if input.isBuild() && e.codegen.lookup(input) != nil || input.isSource() && !text {
+			var info *GeneratedFileInfo
+
+			if input.isBuild() {
+				info = e.codegen.lookup(input)
+
+				if info != nil && info.OnUse != nil {
+					e.touchFbsNativeInput(info)
+				}
+			}
+
+			if info != nil || input.isSource() && !text {
 				cl := e.inputClosure(input)
 
 				if !e.d.dontResolveIncludes {

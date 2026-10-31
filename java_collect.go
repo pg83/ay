@@ -386,6 +386,11 @@ func collectJavaStmts(ctx *GenCtx, jm *JavaModule, d *JavaData, stmts []Stmt, en
 					continue
 				}
 
+				if !d.cppToolchainPeer && srcExtClassOf(internStr(ss).any()) == srcExtCSource && sbomActive(ctx, jm.instance) && env.bool(envCLANG) {
+					d.cppToolchainPeer = true
+					d.peerStmts = append(d.peerStmts, JavaPeerSpec{dir: clangToolchainInfoRel})
+				}
+
 				switch {
 				case jm.unit.proto && (extIsProto(ss) || extIsGztproto(ss)):
 					d.protoSrcs = append(d.protoSrcs, ss)
