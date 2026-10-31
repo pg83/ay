@@ -121,10 +121,6 @@ type compilerFlagResourceOrigin struct {
 }
 
 func literalCompilerFlag(arg ANY) bool {
-	if arg.vfs() != 0 {
-		return false
-	}
-
 	id := arg.str()
 
 	if state := literalCompilerFlagMemo.get(uint32(id)); state != 0 {
