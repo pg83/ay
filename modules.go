@@ -248,6 +248,8 @@ type ModuleData struct {
 	protoAddIncl            []VFS
 	protoIncludeLocal       []VFS
 	dontResolveIncludes     bool
+	ifTaken                 []bool
+	ifReplay                []bool
 	swigAddIncl             []VFS
 	swigAddInclGlobal       []VFS
 	scAddIncl               []VFS
@@ -652,6 +654,10 @@ func sourceInputVFS(fs FS, moduleDir VFS, path string) (VFS, bool) {
 				return source(filepath.ToSlash(filepath.Clean(modulePath + "/" + clean))), true
 			}
 
+			if modulePath == "." {
+				return source(clean), true
+			}
+
 			return source(modulePath, "/", clean), true
 		}
 
@@ -788,7 +794,7 @@ func expandRunPythonStmt(stmt *RunPythonStmt, env Environment) *RunPythonStmt {
 	return &expanded
 }
 
-func collectModuleInto(ctx *GenCtx, instance ModuleInstance, stmts []Stmt, env Environment, onWarn func(Warn), d *ModuleData) *ModuleData {
+func collectModuleInto(ctx *GenCtx, instance ModuleInstance, stmts []Stmt, env Environment, onWarn func(Warn), d *ModuleData, replay []bool) *ModuleData {
 	pm := ctx.parsers
 	fs := ctx.fs
 	modulePath := instance.Path.relString()
@@ -804,6 +810,7 @@ func collectModuleInto(ctx *GenCtx, instance ModuleInstance, stmts []Stmt, env E
 
 	d.reset()
 
+	d.ifReplay = replay
 	d.pythonSQLite3 = true
 	d.useAsmlib = true
 	d.bisonGenExt = strCpp
@@ -2116,10 +2123,25 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 
 			expanded.Args = expandStmtTokens(v.Args, env)
 			d.resourceDeclStmts = append(d.resourceDeclStmts, &expanded)
+
+			if d.moduleStmt != nil && (d.moduleStmt.Name == tokResourcesLibrary || d.moduleStmt.Name == tokPrebuiltProgram) {
+				for _, decl := range resolveResourceDecls(fs, ctx.host, modulePath, &expanded) {
+					env.setResource(decl)
+				}
+			}
 		case *IfStmt:
 			taken := v.Then
+			cond := false
 
-			if !evalCond(v.Cond, env) {
+			if len(d.ifReplay) > 0 {
+				cond, d.ifReplay = d.ifReplay[0], d.ifReplay[1:]
+			} else {
+				cond = evalCond(v.Cond, env)
+			}
+
+			d.ifTaken = append(d.ifTaken, cond)
+
+			if !cond {
 				taken = v.Else
 			}
 
@@ -4362,7 +4384,7 @@ func collectPythonSourceEntry(d *ModuleData, env Environment, peers *[]ANY) {
 }
 
 func collectPySrcGroup(fs FS, modulePath string, v UnknownStmt, d *ModuleData, env Environment, onWarn func(Warn), group int) {
-	if env.bool(envGO_PROTO) {
+	if d.multimodule == tokProtoLibrary && env.bool(envGO_PROTO) {
 		return
 	}
 

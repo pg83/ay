@@ -107,6 +107,11 @@ func (e *EmitContext) emitSbomComponent(realPrjName string) (*NodeRef, *VFS) {
 	na := ctx.na
 	moddir := instance.Path.relString()
 	lang := sbomComponentLang(d.moduleStmt.Name)
+
+	if d.usePython2 && isPythonModuleType(d.moduleStmt.Name) && d.moduleStmt.Name != tokPy23NativeLibrary {
+		lang = moduleLangTokenPy2
+	}
+
 	modver := sbomModuleVersion(Environment{s: &e.frame.ifEnv})
 	out := build(moddir, "/", realPrjName, ".", lang, ".component.sbom")
 

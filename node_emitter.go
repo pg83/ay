@@ -21,6 +21,8 @@ type Graph struct {
 type StreamingEmitter struct {
 	addModulesToResults      bool
 	stripPackagesFromResults bool
+	keepGoing                bool
+	onWarn                   func(Warn)
 	nodes                    Vec[*Node]
 	modules                  BitSet
 	resolved                 BitSet
@@ -218,7 +220,7 @@ func (e *StreamingEmitter) finish() []NodeRef {
 
 					unres := ""
 
-					for _, d := range n.DepRefs {
+					for d := range n.buildDeps(e.fetchRefs) {
 						if !e.resolved.has(uint32(d)) {
 							unres += " " + fmt.Sprint(uint32(d))
 
@@ -232,7 +234,13 @@ func (e *StreamingEmitter) finish() []NodeRef {
 				}
 			}
 
-			throwFmt("finish: %d pending node(s) form a dependency cycle", len(next))
+			if !e.keepGoing {
+				throwFmt("finish: %d pending node(s) form a dependency cycle", len(next))
+			}
+
+			e.dropUnresolvable(next)
+
+			break
 		}
 
 		pending = next
@@ -247,6 +255,28 @@ func (e *StreamingEmitter) finish() []NodeRef {
 	}
 
 	return dedupResultRefs(e.results)
+}
+
+func (e *StreamingEmitter) dropUnresolvable(stuck []NodeRef) {
+	for _, id := range stuck {
+		n := e.nodes.s[id]
+
+		if len(n.Outputs) > 0 {
+			e.onWarn(Warn{Kind: WarnMissingProducer, Message: "finish: " + n.Outputs[0].string() + " depends on a producer that was never emitted; dropped"})
+		}
+
+		e.exportEligible.remove(uint32(id))
+	}
+
+	results := e.results[:0]
+
+	for _, ref := range e.results {
+		if e.resolved.has(uint32(ref)) {
+			results = append(results, ref)
+		}
+	}
+
+	e.results = results
 }
 
 func (e *StreamingEmitter) stripPackageResults() {

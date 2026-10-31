@@ -510,7 +510,6 @@ func (e *EmitContext) genResourcesLibrary() *ModuleEmitResult {
 		CFlagsGlobal:            e.ownCompilerFlagValues(d.cFlagsGlobal, compilerFlagsCommon),
 		CXXFlagsGlobal:          e.ownCompilerFlagValues(d.cxxFlagsGlobal, compilerFlagsCxx),
 		COnlyFlagsGlobal:        e.ownCompilerFlagValues(d.cOnlyFlagsGlobal, compilerFlagsCOnly),
-		LinkExcludeLibraries:    d.linkExcludeLibraries,
 		ObjAddLibsGlobal:        d.objAddLibsGlobal,
 		AddInclGlobal:           closure.addInclGlobal,
 		OwnAddInclGlobal:        d.addInclGlobal,

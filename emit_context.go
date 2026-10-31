@@ -532,11 +532,17 @@ func (e *EmitContext) inputClosure(input VFS) Closure {
 	return cl
 }
 
-func (e *EmitContext) includeClosure(input VFS) Closure {
+func (e *EmitContext) moduleScanCtx() *ScanContext {
 	if e.d.scanCtx == nil {
 		e.d.scanCtx = newScanContext(e.ctx.na, e.ctx.parsers, nil, nil, nil, includeScannerBasePaths())
 		e.d.scanCtx.dontResolveIncludes = e.d.dontResolveIncludes
 	}
+
+	return e.d.scanCtx
+}
+
+func (e *EmitContext) includeClosure(input VFS) Closure {
+	e.moduleScanCtx()
 
 	cl, cached := e.scanner.closure(input)
 	deferredSource := false

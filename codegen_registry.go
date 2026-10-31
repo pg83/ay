@@ -107,6 +107,14 @@ type PendingEmit struct {
 	publication *StreamingEmitter
 }
 
+func (p *PendingEmit) pendingEmitter() pendingEmitter {
+	if p == nil {
+		return nil
+	}
+
+	return p.emitter
+}
+
 func (p *PendingEmit) fire() {
 	if p == nil || p.fn == nil && p.emitter == nil {
 		return

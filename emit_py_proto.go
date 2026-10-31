@@ -2,6 +2,7 @@ package main
 
 import (
 	"path/filepath"
+	"slices"
 	"strings"
 )
 
@@ -343,7 +344,9 @@ func (e *EmitContext) emitPyProtoSource(srcTok ANY, protoSrcVFS VFS, srcGroup in
 	na.vfs.commit(len(outputs))
 	outputs = outputs[:len(outputs):len(outputs)]
 
-	if e.codegen.lookup(pyOut) != nil {
+	shared := e.codegen.lookup(pyOut)
+
+	if shared != nil && !slices.ContainsFunc(outputs, func(out VFS) bool { return e.codegen.lookup(out) == nil }) {
 		e.emitPyProtoOutputs(src, srcGroup, outputs, protoSrcVFS.isBuild(), logicalModule)
 
 		return
@@ -404,16 +407,26 @@ func (e *EmitContext) emitPyProtoSource(srcTok ANY, protoSrcVFS VFS, srcGroup in
 	na.exts.commit(len(outputs))
 	extOut = extOut[:len(outputs):len(outputs)]
 
-	pyPBRef := ctx.emit.reserve()
-	pending := na.pyPB.one()
-
-	*pending = pyPBPending{
+	next := pyPBPending{
 		emit: e, ctx: ctx, instance: instance, scanner: e.scanner, scanCtx: scanCtx,
 		cmdArgs: cmdArgs, protoCwd: protoCwd,
 		toolInputs: pe.toolInputs, sourceInputs: sourceInputsHead, protoInput: protoSrcVFS,
 		outputs: outputs, extOut: extOut,
-		toolRefs: pe.toolRefs, pyPBRef: pyPBRef,
+		toolRefs: pe.toolRefs,
 	}
+
+	if shared != nil {
+		e.extendSharedPyProto(shared, next)
+		e.emitPyProtoOutputs(src, srcGroup, outputs, generatedProto, logicalModule)
+
+		return
+	}
+
+	pyPBRef := ctx.emit.reserve()
+	pending := na.pyPB.one()
+
+	next.pyPBRef = pyPBRef
+	*pending = next
 
 	pyPBPE := e.pendingEmitter(pending)
 
@@ -424,6 +437,60 @@ func (e *EmitContext) emitPyProtoSource(srcTok ANY, protoSrcVFS VFS, srcGroup in
 	e.codegen.setMainOut(pyPBRef, outputs)
 
 	e.emitPyProtoOutputs(src, srcGroup, outputs, generatedProto, logicalModule)
+}
+
+func (e *EmitContext) extendSharedPyProto(shared *GeneratedFileInfo, next pyPBPending) {
+	ref := shared.ProducerRef
+	old, waiting := shared.OnUse.pendingEmitter().(*pyPBPending)
+	outputs, extOut := next.outputs, next.extOut
+
+	if node := e.ctx.emit.nodes.s[ref]; !waiting && node != nil {
+		outputs, extOut = mergePyProtoOutputs(outputs, extOut, node.Outputs, node.KVExts)
+	} else if waiting {
+		outputs, extOut = mergePyProtoOutputs(outputs, extOut, old.outputs, old.extOut)
+	}
+
+	next.outputs, next.extOut, next.pyPBRef = outputs, extOut, ref
+
+	use := shared.OnUse
+
+	if waiting {
+		*old = next
+	} else {
+		pending := e.ctx.na.pyPB.one()
+
+		*pending = next
+		use = e.pendingEmitter(pending)
+	}
+
+	for _, out := range outputs {
+		if e.codegen.lookup(out) == nil {
+			e.register(GeneratedFileSpec{OutputPath: out, ProducerRef: ref, OnUse: use})
+		}
+	}
+
+	e.codegen.setMainOut(ref, outputs)
+
+	if !waiting {
+		use.fire()
+	}
+}
+
+func mergePyProtoOutputs(outputs []VFS, extOut []KVExt, previous []VFS, previousExt []KVExt) ([]VFS, []KVExt) {
+	merged := slices.Clone(outputs)
+	mergedExt := slices.Clone(extOut)
+
+	for i, out := range previous {
+		if !slices.Contains(merged, out) {
+			merged = append(merged, out)
+
+			if i < len(previousExt) {
+				mergedExt = append(mergedExt, previousExt[i])
+			}
+		}
+	}
+
+	return merged, mergedExt
 }
 
 func protoPythonOutputRoot(d *ModuleData) string {

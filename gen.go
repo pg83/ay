@@ -917,6 +917,7 @@ func genDumpGraphWithResources(fs FS, parsers *IncludeParserManager, targets []s
 
 	emitter.addModulesToResults = addModulesToResults
 	emitter.stripPackagesFromResults = stripPackagesFromResults
+	emitter.keepGoing, emitter.onWarn = keepGoing, onWarn
 
 	runGenIntoWithResources(fs, parsers, targets, hostP, targetP, emitter, onWarn, tests, keepGoing, rootDemand)
 
@@ -1476,7 +1477,7 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 		return genJavaModule(ctx, instance, moduleName, stmts, env)
 	}
 
-	d := collectModuleInto(ctx, instance, stmts, env, ctx.onWarn, &frame.d)
+	d := collectModuleInto(ctx, instance, stmts, env, ctx.onWarn, &frame.d, nil)
 	e := newEmitContextIn(frame, ctx, instance, d, nil)
 
 	if d.discarded {
@@ -1668,7 +1669,7 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 
 	if d.moduleStmt.Name == tokResourcesLibrary {
 		if e.bindResourceGlobalVars(env) {
-			d = collectModuleInto(ctx, instance, stmts, env, ctx.onWarn, &frame.d)
+			d = collectModuleInto(ctx, instance, stmts, env, ctx.onWarn, &frame.d, slices.Clone(d.ifTaken))
 			e = newEmitContextIn(frame, ctx, instance, d, nil)
 		}
 
@@ -1679,7 +1680,7 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 		env.setString(envMODULE_SUFFIX, prebuiltModuleSuffix(instance.Platform))
 
 		if e.bindResourceGlobalVars(env) {
-			d = collectModuleInto(ctx, instance, stmts, env, ctx.onWarn, &frame.d)
+			d = collectModuleInto(ctx, instance, stmts, env, ctx.onWarn, &frame.d, slices.Clone(d.ifTaken))
 			e = newEmitContextIn(frame, ctx, instance, d, nil)
 		}
 

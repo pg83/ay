@@ -759,7 +759,7 @@ func (e *EmitContext) emitKvOnlyResource(tag STR, kvsHash []string, kvsCmd []STR
 }
 
 func (e *EmitContext) emitResourceFile(entries []ResourceEntry, moduleTag STR) (refs []NodeRef, outs []VFS) {
-	ctx, instance, d := e.ctx, e.instance, e.d
+	ctx, instance := e.ctx, e.instance
 	na := ctx.na
 	batch := e.resItems[:0]
 	dontCompress := false
@@ -838,7 +838,7 @@ func (e *EmitContext) emitResourceFile(entries []ResourceEntry, moduleTag STR) (
 			it.setInput(r.Input)
 
 			if r.ProducerRef != 0 {
-				cv := e.scanner.walkClosure(r.Input, d.scanCtx, scanDomainCC)
+				cv := e.scanner.walkClosure(r.Input, e.moduleScanCtx(), scanDomainCC)
 				auxBuilds := na.vfs.alloc(cv.len() + 1)[:0]
 
 				for _, bucket := range cv.bucketList() {

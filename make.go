@@ -344,6 +344,7 @@ func genStream(fs FS, parsers *IncludeParserManager, targets []string, hostP, ta
 
 	emitter.addModulesToResults = addModulesToResults
 	emitter.stripPackagesFromResults = stripPackagesFromResults
+	emitter.keepGoing, emitter.onWarn = keepGoing, onWarn
 
 	runGenIntoWithResources(fs, parsers, targets, hostP, targetP, emitter, onWarn, tests, keepGoing, demandSelf)
 

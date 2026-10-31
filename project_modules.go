@@ -13,6 +13,10 @@ func (ctx *GenCtx) setModuleOutput(reg *CodegenRegistry, owner, output VFS, ref 
 		reg.byRel.put(output.rel(), info)
 	}
 
+	if info.ModuleType != 0 && info.OwnerModule != 0 && info.OwnerModule != owner {
+		return
+	}
+
 	if moduleType != 0 {
 		info.ModuleType = moduleType
 	}

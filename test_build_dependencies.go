@@ -89,7 +89,7 @@ func (ctx *GenCtx) selectDependencyInstances(dir string) []ModuleInstance {
 	}
 
 	env := buildIfEnvInto(&frame.ifEnv, first)
-	d := collectModuleInto(ctx, first, moduleStmts(ctx, dir), env, ctx.onWarn, &frame.d)
+	d := collectModuleInto(ctx, first, moduleStmts(ctx, dir), env, ctx.onWarn, &frame.d, nil)
 
 	if declaration.Schema {
 		var instances []ModuleInstance

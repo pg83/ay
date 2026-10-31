@@ -57,7 +57,7 @@ func (e *EmitContext) bindFbsNativeSource(src, out VFS, in ModuleCCInputs, reser
 
 	recipe.local = e.fbsNativeContext(in)
 
-	if e.instance.Language != LangFbsJavaNative && !recipe.owned {
+	if !recipe.owned {
 		recipe.owned = true
 
 		owner := e.frame.serial
