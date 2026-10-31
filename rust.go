@@ -179,10 +179,6 @@ func applyRustMacro(stmt UnknownStmt, modulePath string, env Environment, d *Mod
 func rustTarget(p *Platform, host bool) string {
 	arch := string(p.ISA)
 
-	if p.ISA != ISAX8664 && p.ISA != ISAAArch64 && p.ISA != ISAArm64 {
-		return "unsupported"
-	}
-
 	if p.ISA == ISAArm64 {
 		arch = "aarch64"
 	}
