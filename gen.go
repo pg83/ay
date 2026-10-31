@@ -416,6 +416,8 @@ func newGenCtx(fs FS, parsers *IncludeParserManager, hostP, targetP *Platform, e
 
 	targetScanner.fixer = newIncludeFixer()
 	targetScanner.codegen = targetReg
+
+	targetReg.moduleOutputDeps = ctx.moduleOutputIncludedDeps
 	targetScanner.moduleByRef = &ctx.moduleByRef
 
 	hostSysincl := targetSysincl
@@ -428,6 +430,8 @@ func newGenCtx(fs FS, parsers *IncludeParserManager, hostP, targetP *Platform, e
 
 	hostScanner.fixer = targetScanner.fixer
 	hostScanner.codegen = hostReg
+
+	hostReg.moduleOutputDeps = ctx.moduleOutputIncludedDeps
 	hostScanner.moduleByRef = &ctx.moduleByRef
 
 	ctx.scannerTarget = targetScanner
@@ -3176,6 +3180,7 @@ func (ctx *GenCtx) targetPICScanner() *IncludeScanner {
 		s.sysincl = ctx.scannerTarget.sysincl
 		s.fixer = ctx.scannerTarget.fixer
 		s.codegen = newCodegenRegistry(ctx.na)
+		s.codegen.moduleOutputDeps = ctx.moduleOutputIncludedDeps
 		s.moduleByRef = &ctx.moduleByRef
 
 		ctx.scannerTargetPIC = s

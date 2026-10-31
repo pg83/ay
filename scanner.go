@@ -488,7 +488,9 @@ func (s *IncludeScanner) parsedIncludes(vfsPath VFS, ctxParser IncludeDirectiveP
 		info = s.codegen.lookup(vfsPath)
 
 		if info == nil {
-			return nil, nil, nil, parsedIncludesLocal
+			own, _ = s.codegen.moduleOutputIncludes(vfsPath)
+
+			return own, nil, nil, parsedIncludesLocal
 		}
 
 		parser, registered := s.parsers.registry.registeredParserFor(vfsPath.relString())
@@ -1196,9 +1198,9 @@ func (sc *ScanCtx) resolveContextSearchTier(targetID STR) VFS {
 		var info *GeneratedFileInfo
 
 		if prefix == bldRootDirVFS {
-			info = s.codegen.lookupSTR(buildSuffix)
+			info = s.codegen.lookupIncludeSTR(buildSuffix)
 		} else {
-			info = s.codegen.lookupSplit(prefix.rel().source(), buildSuffix)
+			info = s.codegen.lookupIncludeSplit(prefix.rel().source(), buildSuffix)
 		}
 
 		if info == nil {
@@ -1219,7 +1221,7 @@ func (sc *ScanCtx) resolveContextSearchTier(targetID STR) VFS {
 	}
 
 	if buildSuffix != 0 {
-		if info := s.codegen.lookupSTR(buildSuffix); info != nil {
+		if info := s.codegen.lookupIncludeSTR(buildSuffix); info != nil {
 			return sc.cacheSearchTier(targetID, info.OutputPath)
 		}
 	}
@@ -1265,7 +1267,7 @@ func (sc *ScanCtx) resolveContextSearchTier(targetID STR) VFS {
 						continue
 					}
 
-					info := s.codegen.lookupSplit(b.prefixSrc, buildSuffix)
+					info := s.codegen.lookupIncludeSplit(b.prefixSrc, buildSuffix)
 
 					if info == nil {
 						continue
@@ -1337,7 +1339,7 @@ func (sc *ScanCtx) resolveSearchPath(out []VFS, includerAbs, incDir VFS, d Inclu
 	searchPathFound := false
 
 	if includerAbs.isBuild() {
-		if info := s.codegen.lookupSTR(targetID); info != nil && !outHas(info.OutputPath) {
+		if info := s.codegen.lookupIncludeSTR(targetID); info != nil && !outHas(info.OutputPath) {
 			out = append(out, info.OutputPath)
 			searchPathFound = true
 		}
@@ -1350,7 +1352,7 @@ func (sc *ScanCtx) resolveSearchPath(out []VFS, includerAbs, incDir VFS, d Inclu
 			out = append(out, sv.source())
 			searchPathFound = true
 		} else if includerAbs.isBuild() {
-			if info := s.codegen.lookupSplit(incDir, targetID); info != nil {
+			if info := s.codegen.lookupIncludeSplit(incDir, targetID); info != nil {
 				if !outHas(info.OutputPath) {
 					out = append(out, info.OutputPath)
 					searchPathFound = true

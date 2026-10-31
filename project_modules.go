@@ -134,3 +134,33 @@ func (ctx *GenCtx) projectModuleIndex(suites []*TestSuite) (map[VFS][]NodeRef, m
 
 	return projects, mainProjects
 }
+
+func (ctx *GenCtx) moduleOutputIncludedDeps(info *GeneratedFileInfo) []IncludeDirective {
+	for entry := ctx.memo.heads.getSafe(uint32(info.OwnerModule.rel())); entry != nil; entry = entry.next {
+		r := entry.result
+
+		if moduleOutputPath(r) != info.OutputPath {
+			continue
+		}
+
+		if isProgramModuleType(r.ModuleStmtName) || isDllModuleType(r.ModuleStmtName) || r.ModuleStmtName == tokDynamicLibrary {
+			return []IncludeDirective{}
+		}
+
+		out := make([]IncludeDirective, 0, 1+len(r.PeerArchiveClosurePaths)+len(r.PeerSbomClosurePaths))
+
+		if r.SbomComponentPath != nil {
+			out = append(out, IncludeDirective{kind: includeQuoted, target: r.SbomComponentPath.any()})
+		}
+
+		for _, paths := range [...][]VFS{r.PeerArchiveClosurePaths, r.PeerSbomClosurePaths} {
+			for _, p := range paths {
+				out = append(out, IncludeDirective{kind: includeQuoted, target: p.any()})
+			}
+		}
+
+		return out
+	}
+
+	return []IncludeDirective{}
+}

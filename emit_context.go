@@ -223,10 +223,10 @@ func (e *EmitContext) resolveNodeCodegenRefs(node *NodeSpec) {
 		node.ResourceGlobals = e.ctx.declSlices.internCopy(e.peers.ResourceGlobals)
 	}
 
-	resolveCodegenInputRefs(&node.Node, node.Inputs, e.codegen, e.ctx.na)
+	resolveCodegenInputRefs(&node.Node, node.Inputs, e.codegen, e.ctx.na, node.input.root != 0)
 }
 
-func resolveCodegenInputRefs(node *Node, inputs InputChunks, reg *CodegenRegistry, na *NodeArenas) {
+func resolveCodegenInputRefs(node *Node, inputs InputChunks, reg *CodegenRegistry, na *NodeArenas, includes bool) {
 	if ownershipOn {
 		inputs.checkRoots()
 	}
@@ -240,7 +240,13 @@ func resolveCodegenInputRefs(node *Node, inputs InputChunks, reg *CodegenRegistr
 		}
 
 		for _, input := range chunk {
-			info := reg.lookupSTR(input.rel())
+			var info *GeneratedFileInfo
+
+			if includes {
+				info = reg.lookupIncludeSTR(input.rel())
+			} else {
+				info = reg.lookupSTR(input.rel())
+			}
 
 			if info == nil {
 				continue

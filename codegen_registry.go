@@ -156,6 +156,8 @@ type CodegenRegistry struct {
 	textTemplates   DenseMap[VFS, []VFS]
 	splitGeneration uint32
 	na              *NodeArenas
+
+	moduleOutputDeps func(*GeneratedFileInfo) []IncludeDirective
 }
 
 type splitLookup struct {
@@ -431,6 +433,57 @@ func (r *CodegenRegistry) lookupSTR(id STR) *GeneratedFileInfo {
 }
 
 func (r *CodegenRegistry) lookupSplit(prefix VFS, suffixID STR) *GeneratedFileInfo {
+	info := r.lookupSplitAny(prefix, suffixID)
+
+	if info != nil && info.InputsOnly {
+		return nil
+	}
+
+	return info
+}
+
+func (info *GeneratedFileInfo) includable() bool {
+	return !info.InputsOnly || info.ModuleType != 0
+}
+
+func (r *CodegenRegistry) lookupIncludeSTR(id STR) *GeneratedFileInfo {
+	info, _ := r.byRel.get(id)
+
+	if info != nil && !info.includable() {
+		return nil
+	}
+
+	return info
+}
+
+func (r *CodegenRegistry) lookupIncludeSplit(prefix VFS, suffixID STR) *GeneratedFileInfo {
+	info := r.lookupSplitAny(prefix, suffixID)
+
+	if info != nil && !info.includable() {
+		return nil
+	}
+
+	return info
+}
+
+func (r *CodegenRegistry) moduleOutputIncludes(path VFS) ([]IncludeDirective, bool) {
+	info, _ := r.byRel.get(path.rel())
+
+	if info == nil || !info.InputsOnly || info.ModuleType == 0 || r.moduleOutputDeps == nil {
+		return nil, false
+	}
+
+	set := info.parsedIncludes()
+
+	if set[parsedIncludesLocal] == nil {
+		set[parsedIncludesLocal] = r.moduleOutputDeps(info)
+		info.attributes.parsedIncludes.put(info.id, set)
+	}
+
+	return set[parsedIncludesLocal], true
+}
+
+func (r *CodegenRegistry) lookupSplitAny(prefix VFS, suffixID STR) *GeneratedFileInfo {
 	key := splitMix64(uint32(prefix.rel()), uint32(suffixID))
 
 	if r.bySplit != nil {
@@ -456,13 +509,9 @@ func (r *CodegenRegistry) lookupSplit(prefix VFS, suffixID STR) *GeneratedFileIn
 
 	if rel != 0 {
 		info, _ = r.byRel.get(rel)
-
-		if info != nil && info.InputsOnly {
-			info = nil
-		}
 	}
 
-	if info == nil && suffixID.string() != "" && !suffixID.cleanPath() {
+	if (info == nil || info.InputsOnly) && suffixID.string() != "" && !suffixID.cleanPath() {
 		joined := suffixID.string()
 
 		if prefixRel != "" {
@@ -470,7 +519,9 @@ func (r *CodegenRegistry) lookupSplit(prefix VFS, suffixID STR) *GeneratedFileIn
 		}
 
 		if normalized := interned(cleanRel(joined)); normalized != 0 {
-			info = r.lookupSTR(normalized)
+			if alt, _ := r.byRel.get(normalized); alt != nil && (info == nil || !alt.InputsOnly) {
+				info = alt
+			}
 		}
 	}
 
