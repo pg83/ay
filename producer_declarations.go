@@ -110,8 +110,6 @@ func (d *ModuleData) producerDeclarationSequence(decl producerDeclaration) int {
 		return d.pyMainDeclSeq
 	case prodRagel6:
 		return d.ragel6Builds[decl.index].DeclSeq
-	case prodDocsCopy:
-		return d.docs.copies[decl.index].declSeq
 	}
 
 	return d.declSeq + 1
