@@ -1364,13 +1364,6 @@ func (c *Conf) initModule(env Environment, name STR, tag string, originals *SetV
 
 	plan := c.tables.plan(module)
 
-	if env.resourceUses != nil {
-		env.s.confBase = nil
-		c.runInit(plan, env, originals, nil)
-
-		return
-	}
-
 	base := env.s.confBase
 	clean := base != nil && base.confBase == base
 
