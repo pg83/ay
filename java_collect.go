@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"path"
 	"slices"
 	"strings"
@@ -867,7 +868,15 @@ func applyJavaMacro(ctx *GenCtx, jm *JavaModule, d *JavaData, name string, args,
 			d.javaSrcs = append(d.javaSrcs, spec)
 		}
 	case "RUN_JAVA_PROGRAM":
-		d.runJavaPrograms = append(d.runJavaPrograms, JavaRunProgram{args: args, raw: javaRunProgramRawArgs(raw, env, d.rawVars)})
+		expanded := javaRunProgramRawArgs(raw, env, d.rawVars)
+
+		if bad := malformedCommandReference(expanded); bad != "" {
+			ctx.onWarn(Warn{Kind: WarnSyntax, Message: fmt.Sprintf("in %s: RUN_JAVA_PROGRAM(%s) was not processed properly: could not parse command at %q. Skip RUN_JAVA_PROGRAM", jm.dir, strings.Join(raw, " "), bad)})
+
+			return
+		}
+
+		d.runJavaPrograms = append(d.runJavaPrograms, JavaRunProgram{args: args, raw: expanded})
 	case "GENERATE_SCRIPT":
 		d.generateScripts = append(d.generateScripts, args)
 	case "WITH_JDK":
@@ -1296,6 +1305,28 @@ func (d *JavaData) javaRawArgs(raw []string) []string {
 	}
 
 	return out
+}
+
+func malformedCommandReference(args []string) string {
+	for _, arg := range args {
+		for i := strings.Index(arg, "${"); i >= 0; {
+			end := strings.IndexByte(arg[i+2:], '}')
+
+			if end <= 0 || strings.ContainsFunc(arg[i+2:i+2+end], func(r rune) bool { return r < ' ' || r == '$' || r == '{' }) {
+				return arg[i:]
+			}
+
+			next := strings.Index(arg[i+2+end:], "${")
+
+			if next < 0 {
+				break
+			}
+
+			i += 2 + end + next
+		}
+	}
+
+	return ""
 }
 
 func javaRunProgramRawArgs(raw []string, env Environment, rawVars map[string]string) []string {

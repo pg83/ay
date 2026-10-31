@@ -20,6 +20,7 @@ var warnKindStr = [...]string{
 	WarnMisconfiguration:  "misconfiguration",
 	WarnBadSrc:            "bad-src",
 	WarnUnknownLocation:   "unknown-location",
+	WarnSyntax:            "syntax",
 }
 
 const (
@@ -56,6 +57,8 @@ const (
 	WarnBadSrc
 
 	WarnUnknownLocation
+
+	WarnSyntax
 )
 
 type Warn struct {

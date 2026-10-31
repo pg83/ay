@@ -2172,9 +2172,17 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 					raw = v.LexicalArgs
 				}
 
+				expanded := javaRunProgramRawArgs(anyStrs(raw), env, nil)
+
+				if bad := malformedCommandReference(expanded); bad != "" {
+					onWarn(Warn{Kind: WarnSyntax, Message: fmt.Sprintf("in %s: RUN_JAVA_PROGRAM(%s) was not processed properly: could not parse command at %q. Skip RUN_JAVA_PROGRAM", modulePath, joinAnys(raw, " "), bad)})
+
+					continue
+				}
+
 				args := splitJavaCommandWords(expandStmtToken(joinAnys(raw, " "), env))
 
-				d.runJavaPrograms = append(d.runJavaPrograms, NativeJavaProgram{Call: JavaRunProgram{args: args, raw: javaRunProgramRawArgs(anyStrs(raw), env, nil)}, DeclSeq: d.nextDeclSeq()})
+				d.runJavaPrograms = append(d.runJavaPrograms, NativeJavaProgram{Call: JavaRunProgram{args: args, raw: expanded}, DeclSeq: d.nextDeclSeq()})
 				recordHandledMacro(v.Name, internAnys(args))
 
 				continue

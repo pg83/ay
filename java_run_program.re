@@ -26,7 +26,7 @@ func javaRunProgramRefNext(yyinput string, pos int) (rs, re int, ok bool) {
 		re2c:define:YYRESTORE = "yycursor = yymarker";
 		re2c:define:YYLESSTHAN = "yylimit <= yycursor";
 
-		"{" [^${}]+ "}" { return pos + i, yycursor, true }
+		"{" [^${}\x00-\x1F]+ "}" { return pos + i, yycursor, true }
 		[A-Za-z_] [A-Za-z0-9_]* { return pos + i, yycursor, true }
 		* { pos += i + 1; continue }
 		$ { pos += i + 1; continue }
