@@ -56,8 +56,6 @@ func withDllForStmts(ctx *GenCtx, dir string, stmt *UnknownStmt, visit func([]St
 
 	out := []Stmt{
 		set("DLL_FOR", "yes"), set("DLL_FOR_DIR", forDir), set("DLL_FOR_ARGS", strings.Join(anyStrs(args), " ")),
-		&SrcDirStmt{Dirs: []ANY{internStr(forDir).any()}, Line: stmt.Line},
-		&AddInclStmt{AllPaths: []ANY{source(forDir).any()}, Line: stmt.Line},
 	}
 
 	if exports != 0 {

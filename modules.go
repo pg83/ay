@@ -188,6 +188,7 @@ type ModuleData struct {
 	docs                    *DocsData
 	moduleStmt              *ModuleStmt
 	moduleEnded             bool
+	moduleOpening           bool
 	readModuleContentOnly   bool
 	readModuleContentDone   bool
 	autoincluded            bool
@@ -1412,6 +1413,116 @@ func (d *ModuleData) processModuleEnd(modulePath string, line int, onWarn func(W
 	return false
 }
 
+func interpretedModuleVars(env Environment) []Stmt {
+	var out []Stmt
+
+	if dir := env.string(envDllForDir); dir != "" {
+		out = append(out, &SrcDirStmt{Dirs: []ANY{internStr(dir).any()}}, &AddInclStmt{AllPaths: []ANY{source(dir).any()}})
+	}
+
+	if dirs := env.string(envSrcdir); dirs != "" {
+		out = append(out, &SrcDirStmt{Dirs: internAnys(strings.Fields(dirs))})
+	}
+
+	return out
+}
+
+func allowedOutsideModule(s Stmt) bool {
+	switch v := s.(type) {
+	case *IncludeStmt, *MissingIncludeStmt, *IfStmt, *SetStmt, *DefaultVarStmt, *ModuleStmt, *EndStmt:
+		return true
+	case *UnknownStmt:
+		switch v.Name {
+		case tokEnable, tokDisable, tokSetAppend, tokMessage, tokIncludeOnce, tokNoBuildIf, tokBuildOnlyIf, tokSubscriber,
+			tokVersion, tokOriginalSource, tokNeedReview, tokNeedCheck, tokNoNeedCheck, tokOnlyTags, tokExcludeTags,
+			tokIncludeTags, tokSetResourceUriFromJson, tokSetResourceMapFromJson, tokDllFor, tokPyProtosFor, tokGoTestFor,
+			tokExtradir, tokSourceGroup, tokRecurse, tokRecurseForTests, tokRecurseRootRelative, tokPartitionedRecurse,
+			tokPartitionedRecurseForTests, tokPartitionedRecurseRootRelative:
+			return true
+		}
+	}
+
+	return false
+}
+
+func stmtMacroName(s Stmt) string {
+	switch v := s.(type) {
+	case *UnknownStmt:
+		return v.Raw.string()
+	case *DeclareResourceStmt:
+		return v.Macro.string()
+	case *RunAntlrStmt:
+		return v.Macro
+	case *CFlagsStmt:
+		if v.Global {
+			return "GLOBAL_CFLAGS"
+		}
+
+		return "CFLAGS"
+	case *AllResourceFilesStmt:
+		if v.FromDirs {
+			return "ALL_RESOURCE_FILES_FROM_DIRS"
+		}
+
+		return "ALL_RESOURCE_FILES"
+	case *GenerateEnumSerializationStmt:
+		switch v.Variant {
+		case "with_header":
+			return "GENERATE_ENUM_SERIALIZATION_WITH_HEADER"
+		case "noexcept_header":
+			return "ALICE_GENERATE_NOEXCEPT_ENUM_SERIALIZATION"
+		case "noutf":
+			return "GENERATE_ENUM_SERIALIZATION_NOUTF"
+		}
+
+		return "GENERATE_ENUM_SERIALIZATION"
+	case *RunAntlr4PythonStmt:
+		return "RUN_ANTLR4_PYTHON" + v.Version
+	case *PeerdirStmt:
+		return "PEERDIR"
+	case *SrcsStmt:
+		return "SRCS"
+	case *JoinSrcsStmt:
+		return "JOIN_SRCS"
+	case *AddInclStmt:
+		return "ADDINCL"
+	case *CXXFlagsStmt:
+		return "CXXFLAGS"
+	case *CONLYFlagsStmt:
+		return "CONLYFLAGS"
+	case *LDFlagsStmt:
+		return "LDFLAGS"
+	case *SrcDirStmt:
+		return "SRCDIR"
+	case *GlobalSrcsStmt:
+		return "GLOBAL_SRCS"
+	case *RunProgramStmt:
+		return "RUN_PROGRAM"
+	case *RunPythonStmt:
+		return "RUN_PYTHON3"
+	case *FromSandboxStmt:
+		return "FROM_SANDBOX"
+	case *SplitCodegenStmt:
+		return "SPLIT_CODEGEN"
+	case *BaseCodegenStmt:
+		return "BASE_CODEGEN"
+	case *ConfigureFileStmt:
+		return "CONFIGURE_FILE"
+	case *CreateBuildInfoStmt:
+		return "CREATE_BUILDINFO_FOR"
+	case *RunAntlr4CppStmt:
+		return "RUN_ANTLR4_CPP"
+	case *RunAntlr4CppSplitStmt:
+		return "RUN_ANTLR4_CPP_SPLIT"
+	case *ResourceStmt:
+		return "RESOURCE"
+	case *ResourceFilesStmt:
+		return "RESOURCE_FILES"
+	}
+
+	return fmt.Sprintf("%T", s)
+}
+
 func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Language, stmts []Stmt, env Environment, d *ModuleData, onWarn func(Warn), platform *Platform) {
 	fs := ctx.fs
 
@@ -1422,6 +1533,12 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 
 		if d.discarded {
 			return
+		}
+
+		if d.moduleStmt == nil && !d.moduleOpening && !allowedOutsideModule(s) {
+			onWarn(Warn{Kind: WarnSyntax, Message: fmt.Sprintf("%s: unexpected command %s outside of a module", modulePath, stmtMacroName(s))})
+
+			continue
 		}
 
 		switch v := s.(type) {
@@ -1439,6 +1556,8 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 
 				return
 			}
+
+			d.moduleOpening = true
 
 			expanded := *v
 
@@ -1494,6 +1613,8 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 			}
 
 			d.moduleStmt = moduleStmtForKind(v, d.unit)
+
+			collectStmts(ctx, modulePath, kind, language, interpretedModuleVars(env), env, d, onWarn, platform)
 
 			if hasCppDefaultAllocator(d.unit.Type) {
 				env.setDefaultString(envALLOCATOR, env.expand("$DEFAULT_ALLOCATOR"))

@@ -319,6 +319,13 @@ var tokName = [...]STR{
 	tokPyNamespace:                     internStr("PY_NAMESPACE"),
 	tokPyRegister:                      internStr("PY_REGISTER"),
 	tokRegisterSandboxImport:           internStr("REGISTER_SANDBOX_IMPORT"),
+	tokIncludeOnce:                     kwINCLUDE_ONCE,
+	tokSetResourceMapFromJson:          internStr("SET_RESOURCE_MAP_FROM_JSON"),
+	tokPyProtosFor:                     internStr("PY_PROTOS_FOR"),
+	tokExtradir:                        internStr("EXTRADIR"),
+	tokPartitionedRecurse:              internStr("PARTITIONED_RECURSE"),
+	tokPartitionedRecurseForTests:      internStr("PARTITIONED_RECURSE_FOR_TESTS"),
+	tokPartitionedRecurseRootRelative:  internStr("PARTITIONED_RECURSE_ROOT_RELATIVE"),
 	tokPySrcs:                          internStr("PY_SRCS"),
 	tokRecurse:                         internStr("RECURSE"),
 	tokRecurseForTests:                 internStr("RECURSE_FOR_TESTS"),
@@ -1010,6 +1017,13 @@ const (
 	tokCrateBuildScript
 	tokCrateBuildDeps
 	tokRegisterSandboxImport
+	tokIncludeOnce
+	tokSetResourceMapFromJson
+	tokPyProtosFor
+	tokExtradir
+	tokPartitionedRecurse
+	tokPartitionedRecurseForTests
+	tokPartitionedRecurseRootRelative
 )
 
 type TOK uint16
