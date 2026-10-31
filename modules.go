@@ -66,6 +66,14 @@ const (
 	tokenExpandPathArguments
 )
 
+func allocatorPeerdirs(name string, p *Platform) []string {
+	if name == "J" && p.windows() {
+		return allocatorPeers["SYSTEM"]
+	}
+
+	return allocatorPeers[name]
+}
+
 type CppProtoPlugin struct {
 	Name              string
 	ToolPath          string
@@ -3768,7 +3776,7 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 			arg += "=init"
 		}
 
-		d.resources = append(d.resources, ResourceEntry{Path: "-", Key: "py/constructors/" + arg})
+		d.resources = append(d.resources, ResourceEntry{Path: "-", Key: "py/constructors/" + arg, DontCompress: true})
 	case tokNoCheckImports:
 
 		value := joinAnys(v.Args, " ")

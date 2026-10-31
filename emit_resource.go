@@ -583,7 +583,7 @@ func (e *EmitContext) packObjcopyResourceChunk(chunk []ResourceItem, p ResourceP
 func (e *EmitContext) packRawResourceChunk(chunk []ResourceItem, p ResourcePack) (NodeRef, VFS) {
 	ctx, instance := e.ctx, e.instance
 	na := ctx.na
-	rescompilerRef, _ := e.tool(argToolsRescompiler)
+	rescompilerRef, rescompilerBin := e.tool(argToolsRescompiler)
 	unitElem := internJoined("$S", cleanRel(instance.Path.relString())).string()
 	dash := str2
 	tag := ""
@@ -669,7 +669,7 @@ func (e *EmitContext) packRawResourceChunk(chunk []ResourceItem, p ResourcePack)
 
 	nodeCmd := na.anys.alloc(commandWords)[:0]
 
-	nodeCmd = append(nodeCmd, rescompilerBinVFS.any(), aux.any())
+	nodeCmd = append(nodeCmd, rescompilerBin.any(), aux.any())
 	var resourceUses []STR
 
 	for i := range chunk {
@@ -718,8 +718,8 @@ func (e *EmitContext) packRawResourceChunk(chunk []ResourceItem, p ResourcePack)
 
 		tail = na.vfs.alloc(1)[:0]
 
-		if deduper.add(rescompilerBinVFS.strID()) {
-			tail = append(tail, rescompilerBinVFS)
+		if deduper.add(rescompilerBin.strID()) {
+			tail = append(tail, rescompilerBin)
 		}
 
 		na.vfs.commit(len(tail))
@@ -755,7 +755,7 @@ func (e *EmitContext) emitKvOnlyResource(tag STR, kvsHash []string, kvsCmd []STR
 		items[i] = ResourceItem{Path: "-", Key: kvsHash[i], Cmd: kvsCmd[i]}
 	}
 
-	return e.packResources(ResourcePack{Tag: tag, Items: items})
+	return e.packResources(ResourcePack{Tag: tag, Items: items, DontCompress: true})
 }
 
 func (e *EmitContext) emitResourceFile(entries []ResourceEntry, moduleTag STR) (refs []NodeRef, outs []VFS) {

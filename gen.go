@@ -1751,7 +1751,7 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 	var allocatorExplicitPeers []string
 
 	if isProgram {
-		allocatorExplicitPeers = allocatorPeers[d.allocatorName.string()]
+		allocatorExplicitPeers = allocatorPeerdirs(d.allocatorName.string(), instance.Platform)
 	}
 
 	const googleapisPeer = "contrib/libs/googleapis-common-protos"
