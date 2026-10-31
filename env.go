@@ -85,7 +85,14 @@ func (s *EnvStore) settle(e ENV) {
 
 			s.appends = slices.Delete(s.appends, i, i+1)
 			s.pending.remove(uint32(e))
+
+			ranges := s.textInputs[e]
+
 			Environment{s: s}.setString(e, value)
+
+			if ranges != nil {
+				s.textInputs[e] = ranges
+			}
 
 			return
 		}

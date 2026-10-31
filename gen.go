@@ -328,6 +328,11 @@ func runGenIntoWithResources(fs FS, parsers *IncludeParserManager, targets []str
 	ctx.flushFbsFlatcRecipes()
 	ctx.bindCommandScopes()
 	ctx.bindForeignTools()
+
+	if tests != nil && targetP.ifEnv.bool(envCppAnalysisMode) {
+		ctx.emit.results = ctx.emit.results[:0]
+	}
+
 	ctx.emitDiscoveredModuleTests(suites)
 	ctx.scannerTarget.fixer.finish(ctx.emit)
 
@@ -2819,7 +2824,7 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 			sbomName := binaryName
 
 			if dyn != nil {
-				sbomName = strings.TrimSuffix(binaryName, ".so")
+				sbomName = moduleRealPrjName(instance.Path.relString(), d.moduleStmt, d.unit)
 			}
 
 			ownSbomRef, ownSbomPath = e.emitSbomComponent(sbomName)
@@ -2927,7 +2932,7 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 
 		arRef = goRef
 		arPath = ptr(goPath)
-	} else if len(local.refs) > 0 || d.moduleStmt.Name == tokCudaDeviceLinkLibrary {
+	} else if len(local.refs) > 0 && !d.fakeModuleSet() || d.moduleStmt.Name == tokCudaDeviceLinkLibrary {
 		if d.moduleStmt.Name == tokCudaDeviceLinkLibrary {
 			arRef = e.emitCudaDeviceLink(arBaseName, local, arPluginVFS)
 		} else if perModuleCCTag != 0 {

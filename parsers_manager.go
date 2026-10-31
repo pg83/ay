@@ -30,10 +30,30 @@ func (set ParsedIncludeSet) bucket(bucket ParsedIncludeBucket) []IncludeDirectiv
 
 func (pm *IncludeParserManager) outputIncludes(output VFS, set ParsedIncludeSet) ParsedIncludeSet {
 	if len(set[parsedIncludesLocal]) > 0 {
-		if parser, _ := pm.registry.registeredParserFor(output.relString()); parser == cythonParser {
+		switch parser, _ := pm.registry.registeredParserFor(output.relString()); parser.(type) {
+		case CythonIncludeDirectiveParser:
 			return pm.cythonOutputIncludes(set)
+		case ProtoIncludeDirectiveParser:
+			return pm.protoOutputIncludes(set)
 		}
 	}
+
+	return set
+}
+
+func (pm *IncludeParserManager) protoOutputIncludes(set ParsedIncludeSet) ParsedIncludeSet {
+	local := set[parsedIncludesLocal]
+	stored := pm.cache.directives.alloc(len(set[parsedIncludesCpp]) + len(local))
+	k := copy(stored, set[parsedIncludesCpp])
+
+	for _, d := range local {
+		stored[k] = IncludeDirective{kind: d.kind, target: includeTarget(pm.protoParser().inducedHeader(d.target.str()).any())}
+		k++
+	}
+
+	pm.cache.directives.commit(k)
+	set[parsedIncludesHeader] = stored[:k:k]
+	set[parsedIncludesCpp] = stored[:k:k]
 
 	return set
 }

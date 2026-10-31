@@ -1,8 +1,8 @@
 package main
 
 /*!re2c
-	ws = [\t\n\f\r ];
-	comment = "/*" ([^*] | "*"+ [^*/])* "*"+ "/";
+	ws = [\t\n\v\f\r ];
+	comment = "/*" [^*]* "*/";
 	sp = ws | comment;
 	str = "\"" [^"]* "\"" | "'" [^']* "'";
 	ident = [a-zA-Z$_] [a-zA-Z0-9$_]*;
@@ -14,9 +14,10 @@ package main
 	clause = ident (sep (namespace | named))? | namespace | named;
 */
 
-// tsImportCallMatch matches "( <str> )" with comments/whitespace at the
-// start of input[pos:]; input must end with a 0 sentinel.
-func tsImportCallMatch(yyinput []byte, pos int) (end, qs, qe int, ok bool) {
+// tsImportCallMatch matches "( <str>" with comments/whitespace at the
+// start of input[pos:]; input must end with a 0 sentinel. Upstream adds the
+// import on the closing quote, so the call closer is not required.
+func tsImportCallMatch(yyinput []byte, pos int) (end, qs, qe int, kind TSImportMatch) {
 	yycursor, yymarker := pos, pos
 	yylimit := len(yyinput) - 1
 	q1, q2 := -1, -1
@@ -36,15 +37,16 @@ func tsImportCallMatch(yyinput []byte, pos int) (end, qs, qe int, ok bool) {
 	re2c:define:YYSHIFTSTAG = "@@{tag} += @@{shift}";
 
 
-	sp* "(" sp* @q1 str @q2 sp* ")" { return yycursor, q1, q2, true }
-	* { return 0, 0, 0, false }
-	$ { return 0, 0, 0, false }
+	sp* "(" sp* @q1 str @q2 { return yycursor, q1, q2, tsImportMatched }
+	sp* "(" sp* { return yycursor, 0, 0, tsSpecifierExpected }
+	* { return 0, 0, 0, tsNoImport }
+	$ { return 0, 0, 0, tsNoImport }
 	*/
 }
 
 // tsImportDeclMatch matches an import/export clause followed by a module
 // string at the start of input[pos:]; input must end with a 0 sentinel.
-func tsImportDeclMatch(yyinput []byte, pos int) (end, qs, qe int, ok bool) {
+func tsImportDeclMatch(yyinput []byte, pos int) (end, qs, qe int, kind TSImportMatch) {
 	yycursor, yymarker := pos, pos
 	yylimit := len(yyinput) - 1
 	q1, q2 := -1, -1
@@ -64,8 +66,10 @@ func tsImportDeclMatch(yyinput []byte, pos int) (end, qs, qe int, ok bool) {
 	re2c:define:YYSHIFTSTAG = "@@{tag} += @@{shift}";
 
 
-	sp+ (("type" sp+)? clause sp+ "from" sp+)? @q1 str @q2 { return yycursor, q1, q2, true }
-	* { return 0, 0, 0, false }
-	$ { return 0, 0, 0, false }
+	sp+ (("type" sp+)? clause sp+ "from" sp+)? @q1 str @q2 { return yycursor, q1, q2, tsImportMatched }
+	sp+ ("type" sp+)? clause sp+ "from" sp+ { return yycursor, 0, 0, tsSpecifierExpected }
+	sp+ { return yycursor, 0, 0, tsClauseExpected }
+	* { return 0, 0, 0, tsNoImport }
+	$ { return 0, 0, 0, tsNoImport }
 	*/
 }

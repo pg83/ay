@@ -671,23 +671,34 @@ func (ex *Executor) restoreManifest(uid UID, where string, symlink bool) {
 		target := mountString(outVFS, ex.srcRoot, where)
 
 		throw(os.MkdirAll(filepath.Dir(target), 0o755))
-		_ = os.Remove(target)
 
 		switch {
 		case e.Link != "":
-			throw(os.Symlink(e.Link, target))
+			replaceWithSymlink(e.Link, target)
 
 		case symlink:
-			throw(os.Symlink(throw2(filepath.Abs(ex.casPathForHash(e.Cas))), target))
+			replaceWithSymlink(throw2(filepath.Abs(ex.casPathForHash(e.Cas))), target)
 
 		default:
 			src := ex.casPathForHash(e.Cas)
 
+			_ = os.Remove(target)
+
 			if err := os.Link(src, target); err != nil && !os.IsExist(err) {
-				throw(os.Symlink(throw2(filepath.Abs(src)), target))
+				replaceWithSymlink(throw2(filepath.Abs(src)), target)
 			}
 		}
 	}
+}
+
+func replaceWithSymlink(dest, target string) {
+	tf := throw2(os.CreateTemp(filepath.Dir(target), "."+filepath.Base(target)+".*"))
+	name := tf.Name()
+
+	throw(tf.Close())
+	throw(os.Remove(name))
+	throw(os.Symlink(dest, name))
+	throw(os.Rename(name, target))
 }
 
 func (ex *Executor) installRoot(ref NodeRef, where string) {

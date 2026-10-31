@@ -430,6 +430,7 @@ type SrcMeta struct {
 	Stmt        int
 	Global      bool
 	RosZeroCopy bool
+	Auto        bool
 	Compile     CompileSpec
 	CompileRef  NodeRef
 	PyMeta      uint32
@@ -1061,13 +1062,20 @@ func collectModuleInto(ctx *GenCtx, instance ModuleInstance, stmts []Stmt, env E
 	}
 
 	generatedProto := hasGeneratedSourceClass(d, srcExtProto)
+	generatedEv := hasGeneratedSourceClass(d, srcExtEv)
 
 	hasProto = hasProto || generatedProto
 
-	evInduced, protoInduced, cudaInduced := false, generatedProto, false
+	evInduced, protoInduced, cudaInduced := generatedEv, generatedProto, false
 
-	if generatedProto {
-		induceProtoPeer(d, env)
+	if !isGoModuleType(d.unit.Type) {
+		if generatedEv {
+			d.peerdirs = append(d.peerdirs, strLibraryCppEventlog.any(), strContribLibsProtobuf.any())
+		}
+
+		if generatedProto {
+			d.peerdirs = append(d.peerdirs, strContribLibsProtobuf.any())
+		}
 	}
 
 	for _, meta := range d.srcs {
@@ -1094,7 +1102,12 @@ func collectModuleInto(ctx *GenCtx, instance ModuleInstance, stmts []Stmt, env E
 		case srcExtProto:
 			if !protoInduced {
 				protoInduced = true
-				induceProtoPeer(d, env)
+
+				isProtoLibrary := d.moduleStmt != nil && d.moduleStmt.Name == tokProtoLibrary
+
+				if !isGoModuleType(d.unit.Type) && (!isProtoLibrary || !env.bool(envPY3_PROTO) && !env.bool(envPyProto)) {
+					d.peerdirs = append(d.peerdirs, strContribLibsProtobuf.any())
+				}
 			}
 		}
 	}
@@ -1134,14 +1147,6 @@ func collectModuleInto(ctx *GenCtx, instance ModuleInstance, stmts []Stmt, env E
 	}
 
 	return d
-}
-
-func induceProtoPeer(d *ModuleData, env Environment) {
-	isProtoLibrary := d.moduleStmt != nil && d.moduleStmt.Name == tokProtoLibrary
-
-	if !isGoModuleType(d.unit.Type) && (!isProtoLibrary || !env.bool(envPY3_PROTO) && !env.bool(envPyProto)) {
-		d.peerdirs = append(d.peerdirs, strContribLibsProtobuf.any())
-	}
 }
 
 func applyResourceFiles(fs FS, modulePath string, args []string, line int, d *ModuleData) {
@@ -2044,6 +2049,7 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 			expanded.OUTFiles = expandStmtTokens(v.OUTFiles, env)
 			expanded.OUTNoAutoFiles = expandStmtTokens(v.OUTNoAutoFiles, env)
 			expanded.OutputIncludes = expandStmtTokens(v.OutputIncludes, env)
+			expanded.InducedDeps = expandStmtTokens(v.InducedDeps, env)
 			expanded.Renames = expandStmtTokens(v.Renames, env)
 			expanded.DeclSeq = d.nextDeclSeq()
 
@@ -5168,7 +5174,7 @@ func expandTokenTracked(s string, env Environment, phase TokenExpansion, track *
 	for i := 0; i < 8; i++ {
 		prev := s
 
-		if strings.HasPrefix(s, "$") && !strings.HasPrefix(s, "${") {
+		if strings.HasPrefix(s, "$") && !strings.HasPrefix(s, "${") && !track.literal(0) {
 			name := strings.TrimPrefix(s, "$")
 
 			if isExpandVarName(name) {
@@ -5243,6 +5249,12 @@ func expandBracedVars(s string, env Environment, phase TokenExpansion, track *So
 
 		end += start + 2
 
+		if track.literal(len(out) + start - copied) {
+			searchFrom = end + 1
+
+			continue
+		}
+
 		name := s[start+2 : end]
 		val, ok := env.lookup(name)
 
@@ -5285,7 +5297,7 @@ func expandEmbeddedDollarVars(s string, env Environment, phase TokenExpansion, t
 	changed := false
 
 	for i := 0; i < len(s); {
-		if s[i] != '$' || i+1 >= len(s) || s[i+1] == '{' || s[i+1] == '(' {
+		if s[i] != '$' || i+1 >= len(s) || s[i+1] == '{' || s[i+1] == '(' || track.literal(len(b)) {
 			b = append(b, s[i])
 			i++
 

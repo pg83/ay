@@ -490,7 +490,7 @@ func composeCCPaths(instance ModuleInstance, srcRel string, srcVFS VFS, in Modul
 	}
 
 	if srcVFS.isBuild() && !in.FlatOutput && dir != "" {
-		if rel != dir && !(len(rel) > len(dir) && rel[len(dir)] == '/' && rel[:len(dir)] == dir) {
+		if !(len(rel) > len(dir) && rel[len(dir)] == '/' && rel[:len(dir)] == dir) {
 			outputRel := composeSrcDirOutputRel(dir, rel)
 
 			return build(dir, separator, outputRel, suffix), input
@@ -523,14 +523,15 @@ func composeSrcDirOutputRel(instancePath, target string) string {
 	for a != "" && b != "" {
 		ia := strings.IndexByte(a, '/')
 		ib := strings.IndexByte(b, '/')
-		ca, cb := a, b
+
+		if ib < 0 {
+			break
+		}
+
+		ca, cb := a, b[:ib]
 
 		if ia >= 0 {
 			ca = a[:ia]
-		}
-
-		if ib >= 0 {
-			cb = b[:ib]
 		}
 
 		if ca != cb {
@@ -543,11 +544,7 @@ func composeSrcDirOutputRel(instancePath, target string) string {
 			a = a[ia+1:]
 		}
 
-		if ib < 0 {
-			b = ""
-		} else {
-			b = b[ib+1:]
-		}
+		b = b[ib+1:]
 	}
 
 	if a == "" {

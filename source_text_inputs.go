@@ -52,6 +52,10 @@ func (t *SourceTextTracker) contains(start, end int) bool {
 	return false
 }
 
+func (t *SourceTextTracker) literal(pos int) bool {
+	return t != nil && t.contains(pos, pos+1)
+}
+
 func expandSourceScalarInputValue(value string, env Environment) (string, []SourceTextRange) {
 	if len(env.s.textInputs) == 0 {
 		return expandSourceScalarVarRef(value, env), nil

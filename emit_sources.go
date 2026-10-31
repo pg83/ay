@@ -106,7 +106,7 @@ func (e *EmitContext) emitOneSource(meta SrcMeta) {
 	case srcExtProto:
 		if isGoModuleType(e.d.unit.Type) {
 			e.emitGoProtoSource(meta)
-		} else if isPythonProtoModule(e.d) {
+		} else if isPythonProtoModule(e.d) && !meta.Auto {
 			e.emitPyProtoSource(src, e.sourceForEmission(meta), meta.Stmt, 0)
 			e.emitPyProtoGroupResources(meta.Stmt)
 		} else {
@@ -135,7 +135,7 @@ func (e *EmitContext) emitOneSource(meta SrcMeta) {
 	case srcExtEv:
 		if isGoModuleType(e.d.unit.Type) {
 			e.emitGoEvSource(meta)
-		} else if isPythonProtoModule(e.d) {
+		} else if isPythonProtoModule(e.d) && !meta.Auto {
 			e.emitPyProtoSource(src, e.sourceForEmission(meta), meta.Stmt, 0)
 			e.emitPyProtoGroupResources(meta.Stmt)
 		} else {

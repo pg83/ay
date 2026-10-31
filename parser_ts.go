@@ -5,6 +5,15 @@ import (
 	"strings"
 )
 
+const tsParseErrorPrefix = "__ymake_parse_error__"
+
+const (
+	tsNoImport TSImportMatch = iota
+	tsImportMatched
+	tsSpecifierExpected
+	tsClauseExpected
+)
+
 type TSIncludeDirectiveParser struct{}
 
 func (TSIncludeDirectiveParser) parse(_ string, data [][]byte, a *BumpAllocator[IncludeDirective]) ParsedIncludeSet {
@@ -60,17 +69,31 @@ func (TSIncludeDirectiveParser) parse(_ string, data [][]byte, a *BumpAllocator[
 				continue
 			}
 
-			end, qs, qe, ok := 0, 0, 0, false
+			end, qs, qe, call, decl := 0, 0, 0, tsNoImport, tsNoImport
 
 			if word != "export" {
-				end, qs, qe, ok = tsImportCallMatch(b, i)
+				end, qs, qe, call = tsImportCallMatch(b, i)
 			}
 
-			if !ok && word != "require" {
-				end, qs, qe, ok = tsImportDeclMatch(b, i)
+			if call != tsImportMatched && word != "require" {
+				var declEnd int
+
+				declEnd, qs, qe, decl = tsImportDeclMatch(b, i)
+
+				if decl == tsImportMatched || call == tsNoImport {
+					end = declEnd
+				}
 			}
 
-			if !ok {
+			if call != tsImportMatched && decl != tsImportMatched {
+				if errorAt := tsSpecifierError(s, word, end, call, decl); errorAt >= 0 {
+					if !ignore {
+						k = addDirective(block, k, IncludeDirective{kind: includeTypeScript, target: internStr(tsSpecifierErrorText(s[errorAt:])).any()})
+					}
+
+					ignore = false
+				}
+
 				continue
 			}
 
@@ -90,6 +113,43 @@ func (TSIncludeDirectiveParser) parse(_ string, data [][]byte, a *BumpAllocator[
 	a.commit(k)
 
 	return ParsedIncludeSet{parsedIncludesLocal: block[:k]}
+}
+
+type TSImportMatch uint8
+
+func tsSpecifierError(s, word string, end int, call, decl TSImportMatch) int {
+	if call == tsNoImport && decl == tsNoImport {
+		return -1
+	}
+
+	if end == len(s) {
+		return end
+	}
+
+	c := s[end]
+
+	switch {
+	case c == '"' || c == '\'' || c == '/':
+		return -1
+	case call == tsSpecifierExpected || decl == tsSpecifierExpected:
+		return end
+	case c == '*' || c == '{' || c == '$' || c == '_' || c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z':
+		return -1
+	case c == '(' && word == "import" || c == '=' && word == "export":
+		return -1
+	}
+
+	return end
+}
+
+func tsSpecifierErrorText(rest string) string {
+	rest = rest[:min(len(rest), 100)]
+
+	if lf := strings.IndexByte(rest, '\n'); lf >= 0 {
+		rest = rest[:lf]
+	}
+
+	return tsParseErrorPrefix + "Invalid module specifier: ..." + rest + "..."
 }
 
 func (pm *IncludeParserManager) resolveTSImport(dir, target string) VFS {

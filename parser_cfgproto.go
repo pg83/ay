@@ -39,7 +39,7 @@ func parseProtoConfigIncludeLine(line []byte) (string, bool) {
 		return "", false
 	}
 
-	if idx := bytes.Index(b, protoLineComment); idx >= 0 {
+	if idx := bytes.Index(b, includeCommentSign); idx >= 0 {
 		b = trimParserSpace(b[:idx])
 	}
 

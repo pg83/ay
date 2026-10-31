@@ -57,8 +57,11 @@ func (e *EmitContext) emitFromArchive(stmt FromArchiveEntry) {
 	})
 
 	parsed := extractionOutputIncludes(na, stmt.OutputIncludes)
+	induced := preparedInducedIncludes(stmt.InducedDeps)
 
 	for i, out := range outputs {
+		e.scanner.inheritInducedIncludes(out, induced, nil)
+
 		e.register(GeneratedFileSpec{
 			OutputPath: out, ProducerRef: ref, OnUse: pending,
 			ParsedIncludes:  ParsedIncludeSet{parsedIncludesLocal: parsed},
@@ -69,7 +72,7 @@ func (e *EmitContext) emitFromArchive(stmt FromArchiveEntry) {
 			if extIsArchiveMember(out.relString()) && !e.producersOnly() {
 				e.collectObj(ref, out, SrcMeta{Prio: stmtPrioDefault})
 			} else if isNativeSourceExt(out.relString()) || isCodegenProducingSrc(out.relString()) {
-				e.enqueueSrc(SrcMeta{Source: out.any(), Prio: stmtPrioDefault})
+				e.enqueueSrc(SrcMeta{Source: out.any(), Prio: stmtPrioDefault, Auto: true})
 			}
 		}
 	}

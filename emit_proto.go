@@ -95,13 +95,7 @@ func protoInducedPbH(pm *IncludeParserManager, local, dst []IncludeDirective) []
 			nameID = internStr(name)
 		}
 
-		pbH, ok := pm.protoParser().inducedHeader(nameID)
-
-		if !ok {
-			continue
-		}
-
-		dst = append(dst, IncludeDirective{kind: d.kind, target: includeTarget(pbH.any())})
+		dst = append(dst, IncludeDirective{kind: d.kind, target: includeTarget(pm.protoParser().inducedHeader(nameID).any())})
 	}
 
 	slices.SortFunc(dst[start:], func(a, b IncludeDirective) int { return strings.Compare(a.target.string(), b.target.string()) })

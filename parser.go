@@ -9,7 +9,6 @@ var (
 	blockCommentClose      = []byte("*/")
 	backtraceHeaderInclude = []byte("BACKTRACE_HEADER")
 	opensslUnistdInclude   = []byte("OPENSSL_UNISTD")
-	protoLineComment       = []byte("//")
 	protoImportKw          = []byte("import")
 	protoConfigIncludeKw   = []byte("option")
 	protoConfigIncludeExt  = []byte("(NProtoConfig.Include)")

@@ -167,8 +167,16 @@ func (e *EmitContext) collectPySrcGroup(gi int, group PySrcGroup) {
 		if !group.SourceRoot && src.vfs().isBuild() && !d.usePython2 {
 			kind = pySourceGenerated
 			token = internStr(trimModulePrefix(path.relString(), module)).any()
-		} else if !resolved.Existing && !resolved.Fixed && e.codegen.lookupSplit(instance.Path, src.str()) != nil {
-			path = build(module, "/", src.string())
+		} else if !resolved.Existing && !resolved.Fixed {
+			rel := src.str()
+
+			if !pathIsClean(rel.string()) {
+				rel = internStr(cleanRel(rel.string()))
+			}
+
+			if e.codegen.lookupSplit(instance.Path, rel) != nil {
+				path = build(module, "/", rel.string())
+			}
 		}
 
 		e.emitOneSource(SrcMeta{

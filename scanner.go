@@ -98,6 +98,12 @@ type IncludeDiagnostic struct {
 }
 
 func (d IncludeDiagnostic) warn() Warn {
+	if d.Directive.kind == includeTypeScript {
+		if message, ok := strings.CutPrefix(d.Directive.target.string(), tsParseErrorPrefix); ok {
+			return Warn{Kind: WarnMisconfiguration, Message: "Failed to parse import in " + d.Includer.string() + ": " + message}
+		}
+	}
+
 	return Warn{
 		Kind:     WarnMissingInclude,
 		includer: d.Includer,
@@ -618,7 +624,7 @@ func (sc *ScanCtx) appendResolvedInducedDeps(out []VFS, vfsPath VFS, incDir VFS,
 	out = append(out, info.ClosureLeaves...)
 
 	for _, include := range s.codegen.inducedIncludes[vfsPath] {
-		if s.usesInducedType(vfsPath, include.Type) {
+		if !sc.noResolve && s.usesInducedType(vfsPath, include.Type) {
 			out = sc.resolve(out, vfsPath, incDir, include.Include)
 		}
 	}
@@ -929,6 +935,12 @@ func (sc *ScanCtx) resolve(out []VFS, includerAbs, incDir VFS, d IncludeDirectiv
 
 	if d.kind == includeTypeScript {
 		if !sc.tsImports {
+			return out
+		}
+
+		if strings.HasPrefix(d.target.string(), tsParseErrorPrefix) {
+			sc.warnUnresolved(includerAbs, d, false)
+
 			return out
 		}
 

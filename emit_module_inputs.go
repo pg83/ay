@@ -186,8 +186,14 @@ func (e *EmitContext) collectModuleGlobalSource(src ANY) bool {
 	return true
 }
 
+func (d *ModuleData) fakeModuleSet() bool {
+	value, ok := d.setVars.get(strFakeModule), d.setVars.has(strFakeModule)
+
+	return ok && stringIsTruthy(value.string())
+}
+
 func (e *EmitContext) moduleIsFake(result *ModuleEmitResult) bool {
-	if value, ok := e.d.setVars.get(strFakeModule), e.d.setVars.has(strFakeModule); ok && stringIsTruthy(value.string()) {
+	if e.d.fakeModuleSet() {
 		return true
 	}
 

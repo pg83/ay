@@ -363,7 +363,9 @@ func (e *EmitContext) includeNodeInputs(node *NodeSpec) {
 
 		cl, _ := e.scanner.closure(node.input.root)
 
-		e.scanner.deferClosure(&node.Node, cl, fixIncludes)
+		if !e.d.dontResolveIncludes {
+			e.scanner.deferClosure(&node.Node, cl, fixIncludes)
+		}
 
 		if info := e.codegen.lookup(node.input.root); info != nil && info.IncludedInputs != nil {
 			e.scanner.addInputFix(&node.Node, node.input.root, fixIncludedSources)
@@ -439,7 +441,9 @@ func (e *EmitContext) includeNodeInputs(node *NodeSpec) {
 			if input.isBuild() && e.codegen.lookup(input) != nil || input.isSource() && !text {
 				cl := e.inputClosure(input)
 
-				e.scanner.deferClosure(&node.Node, cl, fixIncludes)
+				if !e.d.dontResolveIncludes {
+					e.scanner.deferClosure(&node.Node, cl, fixIncludes)
+				}
 
 				if cl.buckets != nil || cl.self != input {
 					if extra == nil {

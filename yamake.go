@@ -363,6 +363,7 @@ type ArchiveExtraction struct {
 	OUTFiles       []ANY
 	OUTNoAutoFiles []ANY
 	OutputIncludes []ANY
+	InducedDeps    []ANY
 	Renames        []ANY
 	Executable     bool
 	Prefix         string
@@ -1576,7 +1577,7 @@ func parseFromSandbox(args []ANY, line int) *FromSandboxStmt {
 		case "RENAME":
 			section = "RENAME"
 		case "INDUCED_DEPS":
-			section = "SKIP"
+			section = "INDUCED_DEPS"
 		default:
 			switch section {
 			case "":
@@ -1594,9 +1595,10 @@ func parseFromSandbox(args []ANY, line int) *FromSandboxStmt {
 				stmt.OUTNoAutoFiles = append(stmt.OUTNoAutoFiles, args[i])
 			case "OUTPUT_INCLUDES":
 				stmt.OutputIncludes = append(stmt.OutputIncludes, args[i])
+			case "INDUCED_DEPS":
+				stmt.InducedDeps = append(stmt.InducedDeps, args[i])
 			case "RENAME":
 				stmt.Renames = append(stmt.Renames, args[i])
-			case "SKIP":
 			}
 		}
 	}

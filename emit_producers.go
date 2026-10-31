@@ -160,6 +160,7 @@ func (e *EmitContext) srcPosition(meta SrcMeta) ([]VFS, []VFS) {
 	}
 
 	d := e.d
+	pyProto := isPythonProtoModule(d) && !meta.Auto
 	tok := meta.Source
 	src := tok.string()
 	class := srcExtClassOf(tok)
@@ -182,7 +183,7 @@ func (e *EmitContext) srcPosition(meta SrcMeta) ([]VFS, []VFS) {
 		protoRelID = e.protoSourceRel(protoInput.string())
 		protoRel = protoRelID.string()
 	case srcExtEv, srcExtCfgProto:
-		if class == srcExtEv && isPythonProtoModule(d) {
+		if class == srcExtEv && pyProto {
 			protoInput = meta.Resolved.Path
 			protoRelID = e.protoSourceRel(protoInput.string())
 		} else {
@@ -219,7 +220,7 @@ func (e *EmitContext) srcPosition(meta SrcMeta) ([]VFS, []VFS) {
 	case srcExtProto:
 		base := strings.TrimSuffix(protoRel, ".proto")
 
-		if isPythonProtoModule(d) {
+		if pyProto {
 			for _, suffix := range pyProtoSuffixes(d, false) {
 				e.prodVFS = append(e.prodVFS, build(base, "__int", protoPythonVersion(d), "__", suffix))
 			}
@@ -245,7 +246,7 @@ func (e *EmitContext) srcPosition(meta SrcMeta) ([]VFS, []VFS) {
 			}
 		}
 	case srcExtEv:
-		if isPythonProtoModule(d) {
+		if pyProto {
 			base := strings.TrimSuffix(protoRel, ".ev")
 
 			e.prodVFS = append(e.prodVFS, build(base, "__int", protoPythonVersion(d), "___ev_pb2.py"))
@@ -264,7 +265,7 @@ func (e *EmitContext) srcPosition(meta SrcMeta) ([]VFS, []VFS) {
 	module := e.instance.Path.relString()
 	insMark := len(e.prodVFS)
 
-	if class == srcExtProto || class == srcExtEv && isPythonProtoModule(d) {
+	if class == srcExtProto || class == srcExtEv && pyProto {
 		if _, rooted := moduleRootedVFS(module, src); !rooted && protoInput.isSource() && !meta.Resolved.Existing {
 			protoInput = protoInput.rel().build()
 		}
@@ -1031,6 +1032,33 @@ func (e *EmitContext) bindDeclaredProgramInputs(inputs []VFS, tokens []ANY) {
 	}
 }
 
+func (e *EmitContext) includesPendingOutput(info *GeneratedFileInfo, pi int) bool {
+	local := info.parsedIncludes().bucket(parsedIncludesLocal)
+
+	if len(local) == 0 {
+		return false
+	}
+
+	dir := pathDir(info.OutputPath.relString())
+
+	for _, d := range local {
+		target := d.target.str()
+		candidates := [2]STR{target}
+
+		if d.quotedLike() && dir != "" {
+			candidates[1] = internedV(dir, "/", target.string())
+		}
+
+		for _, rel := range candidates {
+			if from, declared := e.producerOutputs[rel.build()]; rel != 0 && declared && from >= 0 && from != pi && !e.prodPos[from].done {
+				return true
+			}
+		}
+	}
+
+	return false
+}
+
 func (e *EmitContext) drainCommands(cythonPlans []CythonStmtPlan, srcs []SrcMeta) {
 	blocked := 0
 
@@ -1054,7 +1082,13 @@ func (e *EmitContext) drainCommands(cythonPlans []CythonStmtPlan, srcs []SrcMeta
 		ready := true
 
 		for _, input := range pos.ins {
-			if e.codegen.lookup(input) != nil {
+			if info := e.codegen.lookup(input); info != nil {
+				if e.includesPendingOutput(info, pi) {
+					ready = false
+
+					break
+				}
+
 				continue
 			}
 

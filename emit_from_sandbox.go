@@ -24,7 +24,7 @@ func sameSandboxStmt(a, b *FromSandboxStmt) bool {
 	return a.ResourceId == b.ResourceId && a.File == b.File &&
 		a.Executable == b.Executable && a.Prefix == b.Prefix &&
 		slices.Equal(a.OUTFiles, b.OUTFiles) && slices.Equal(a.OUTNoAutoFiles, b.OUTNoAutoFiles) &&
-		slices.Equal(a.OutputIncludes, b.OutputIncludes) && slices.Equal(a.Renames, b.Renames)
+		slices.Equal(a.OutputIncludes, b.OutputIncludes) && slices.Equal(a.InducedDeps, b.InducedDeps) && slices.Equal(a.Renames, b.Renames)
 }
 
 func (e *EmitContext) existingSandbox(stmt *FromSandboxStmt) *GeneratedFileInfo {
@@ -82,8 +82,11 @@ func (e *EmitContext) emitFromSandbox(stmt *FromSandboxStmt) (memberRefs []NodeR
 	pending := e.pendingEmit(func() { e.emitReservedNode(node, ref) })
 	parsed := extractionOutputIncludes(ctx.na, stmt.OutputIncludes)
 	recipe := &SandboxRecipe{Stmt: stmt, Outputs: outVFSs, Auto: auto, Python3: e.d.tc.Python3}
+	induced := preparedInducedIncludes(stmt.InducedDeps)
 
 	for _, out := range outVFSs {
+		e.scanner.inheritInducedIncludes(out, induced, nil)
+
 		e.register(GeneratedFileSpec{
 			OutputPath:     out,
 			Sandbox:        recipe,
@@ -93,6 +96,12 @@ func (e *EmitContext) emitFromSandbox(stmt *FromSandboxStmt) (memberRefs []NodeR
 			ProducerMainOut: outVFSs[0],
 			OnUse:           pending,
 		})
+	}
+
+	for _, out := range outVFSs[:auto] {
+		if rel := out.relString(); !fromSandboxAutoLinkMember(rel) && (isNativeSourceExt(rel) || isCodegenProducingSrc(rel)) {
+			e.enqueueSrc(SrcMeta{Source: out.any(), Prio: stmtPrioDefault, Auto: true})
+		}
 	}
 
 	return recipe.linkMembers(ref)
