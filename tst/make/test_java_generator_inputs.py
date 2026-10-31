@@ -5,6 +5,20 @@ from tst.make.lib import MakeTest, PROJECT
 
 
 class JavaGeneratorInputsTest(MakeTest):
+    def test_input_jar_keeps_shared_native_inputs_through_a_java_diamond(self):
+        self.generator()
+        self.write("ya.make", f"JAVA_LIBRARY(answer)\nJDK_VERSION(17)\nPEERDIR({PROJECT}/subject)\nRUN_JAVA_PROGRAM(Generator CLASSPATH {PROJECT}/tool IN ${{ARCADIA_BUILD_ROOT}}/{PROJECT}/subject/subject.jar OUT Generated.java)\nJAVA_SRCS(Generated.java)\nEND()\n")
+        self.write("subject/ya.make", f"JAVA_LIBRARY(subject)\nJDK_VERSION(17)\nPEERDIR({PROJECT}/left {PROJECT}/right)\nEND()\n")
+        for name in ("left", "right"):
+            self.write(name + "/ya.make", f"JAVA_LIBRARY({name})\nJDK_VERSION(17)\nPEERDIR({PROJECT}/leaf)\nEND()\n")
+        self.write("leaf/ya.make", f"JAVA_LIBRARY(leaf)\nJDK_VERSION(17)\nPEERDIR({PROJECT}/native)\nEND()\n")
+        self.write("native/ya.make", "LIBRARY(native)\nSRCS(answer.cpp)\nEND()\n")
+        self.write("native/answer.cpp", "int answer() { return 42; }\n")
+        graph = self.graph()
+        generated = self.node(graph, "Generated.java")
+        self.assertEqual(generated["inputs"].count(f"$(B)/{PROJECT}/native/libnative.a"), 1)
+        self.assertIn(self.node(graph, "native/libnative.a")["uid"], generated["deps"])
+
     def test_input_jar_keeps_native_inputs_from_an_outputless_contrib_proxy(self):
         self.generator()
         self.write("ya.make", f"JAVA_LIBRARY(answer)\nJDK_VERSION(17)\nPEERDIR({PROJECT}/subject)\nRUN_JAVA_PROGRAM(Generator CLASSPATH {PROJECT}/tool IN ${{ARCADIA_BUILD_ROOT}}/{PROJECT}/subject/subject.jar OUT Generated.java)\nJAVA_SRCS(Generated.java)\nEND()\n")

@@ -913,11 +913,6 @@ func (ctx *GenCtx) javaIncludedRecipeOf(jm *JavaModule, record bool) (javaInclud
 			continue
 		}
 
-		if res.ARPath != nil {
-			r.paths = append(r.paths, *res.ARPath)
-			r.own = append(r.own, res.ARRef)
-		}
-
 		if res.GlobalPath != nil && res.GlobalRef != nil {
 			r.paths = append(r.paths, *res.GlobalPath)
 			r.own = append(r.own, *res.GlobalRef)
