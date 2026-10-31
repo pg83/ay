@@ -291,8 +291,6 @@ type ModuleData struct {
 	flags                   FlagSet
 	useSSE4                 bool
 	cpuCheck                bool
-	cpuCheckBound           bool
-	cpuCheckBase            STR
 	hadAllocator            bool
 	allocatorName           ANY
 	muslLite                bool
@@ -1006,6 +1004,8 @@ func collectModuleInto(ctx *GenCtx, instance ModuleInstance, stmts []Stmt, env E
 	d.flags.NoRuntime = env.bool(envNoruntime)
 	d.flags.NoLibc = env.bool(envNolibc)
 	d.flags.NoPlatform = env.bool(envNoplatform)
+	d.noPythonIncl = env.bool(envNoPythonIncls)
+	d.noImportTracing = !env.bool(envPythonImportTracing)
 
 	if env.bool(envPY3_PROTO) && instance.Language == LangPy {
 		d.usePython3 = true
@@ -1622,17 +1622,6 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 
 			collectStmts(ctx, modulePath, kind, language, interpretedModuleVars(env), env, d, onWarn, platform)
 
-			if hasCppDefaultAllocator(d.unit.Type) {
-				env.setDefaultString(envALLOCATOR, env.expand("$DEFAULT_ALLOCATOR"))
-			}
-
-			if isProgramModuleType(d.unit.Type) && !isGoModuleType(d.unit.Type) {
-				env.setDefaultString(envCpuCheck, "yes")
-				d.cpuCheckBound = true
-				d.cpuCheckBase = internStr(env.string(envCpuCheck))
-				d.recalcCpuCheck(env)
-			}
-
 			setupPythonImportMask(env, d)
 			setupSandboxPythonTask(v.Name, modulePath, kind, language, env, d)
 
@@ -1944,7 +1933,6 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 
 			env.setFromString(v.NameEnv, value)
 			env.setTextInputs(v.NameEnv, textInputs)
-			d.captureCpuCheckVariable(v.NameEnv, env)
 			d.captureResourcePeerPolicy(v.Name, env)
 
 			if v.Name == importMaskVariable {
@@ -2384,8 +2372,10 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 					if textAppend != nil {
 						env.setTextInputs(textAppend.id, textAppend.ranges)
 					}
+				}
 
-					d.captureCpuCheckMacro(expanded, env)
+				if expanded.Name == tokAllocator {
+					platform.conf.set(env, envALLOCATOR, &d.setVars)
 				}
 
 				if expanded.Name == tokEnable || expanded.Name == tokDisable || expanded.Name == tokSetAppend || expanded.Name == tokSetListPreSuf {
@@ -2951,11 +2941,10 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 		d.splitDwarf = true
 	case tokNoSplitDwarf:
 		d.splitDwarf = false
-	case tokNoPythonIncludes:
+	case tokNoPythonIncludes, tokNoImportTracing:
+		handled = false
 
-		d.noPythonIncl = true
-	case tokNoImportTracing:
-		d.noImportTracing = true
+		return false
 	case tokNoExtendedSourceSearch:
 		d.noExtendedPySearch = true
 	case tokStylePython, tokStyleRuff:
@@ -5124,16 +5113,6 @@ func applyAllocatorStmt(v UnknownStmt, d *ModuleData, env Environment) {
 	d.hadAllocator = true
 	d.allocatorName = name
 	env.setStringID(envALLOCATOR, name.str())
-}
-
-func hasCppDefaultAllocator(name TOK) bool {
-	switch name {
-	case tokProgram, tokYqlPrebuiltProgram, tokUnittest, tokUnittestFor, tokUnittestWithCustomEntryPoint,
-		tokGtest, tokGBenchmark, tokYBenchmark, tokFuzz, tokBoosttest, tokBoosttestWithMain:
-		return true
-	}
-
-	return false
 }
 
 func isProgramModuleType(name TOK) bool {

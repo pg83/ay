@@ -88,6 +88,7 @@ type ConfFile struct {
 	modules  map[string]string
 	variants map[string][]string
 	calls    map[string][]string
+	defaults map[string][]confInitStep
 
 	callNames  []string
 	callsGuard string
@@ -111,6 +112,20 @@ func (f *ConfFile) flushCalls() {
 
 	f.calls[f.callsGuard] = names
 	f.callsStart = len(f.callNames)
+}
+
+func (f *ConfFile) addDefault(guard, args string) {
+	words := strings.Fields(strings.TrimSuffix(strings.TrimSpace(args), ")"))
+
+	if len(words) == 0 {
+		return
+	}
+
+	if f.defaults == nil {
+		f.defaults = map[string][]confInitStep{}
+	}
+
+	f.defaults[guard] = append(f.defaults[guard], confInitStep{variable: internEnv(words[0]), value: internStr(strings.Join(words[1:], " ")), fallback: true})
 }
 
 type confParseFrame struct {
@@ -209,6 +224,10 @@ func (s *ConfState) readFile(rel, text string) *ConfFile {
 					}
 
 					conf.callNames = append(conf.callNames, internV("env", strings.TrimSpace(name)).string())
+
+					if strings.TrimSpace(name) == kwDEFAULT.string() {
+						conf.addDefault(top.guard, line[len(name)+1:])
+					}
 				}
 
 				continue
@@ -687,6 +706,16 @@ func (c *ConfFile) condVars(b int32, add func(ENV)) {
 	}
 }
 
+func confTextRefs(text string, visit func(ENV)) {
+	for i := strings.IndexByte(text, '$'); i >= 0; i = strings.IndexByte(text, '$') {
+		text = strings.TrimPrefix(text[i+1:], "{")
+
+		if end := confNameEnd(text, 0); end != 0 {
+			visit(internEnv(text[:end]))
+		}
+	}
+}
+
 func confNameEnd(text string, start int) int {
 	end := start
 
@@ -818,6 +847,7 @@ type confModule struct {
 	variable  ENV
 	builder   []ENV
 	calls     []string
+	defaults  []confInitStep
 	steps     []confInitStep
 	outputs   []ENV
 	originals []ENV
@@ -829,12 +859,15 @@ type confInitStep struct {
 	variable ENV
 	source   ENV
 	value    STR
+	fallback bool
 }
 
 type ConfAssignment struct {
 	key         ENV
 	value       ConfValue
 	clearInputs bool
+	stored      bool
+	original    STR
 }
 
 type confProgram struct {
@@ -955,6 +988,7 @@ func (pm *IncludeParserManager) confProgram(f *ConfFile, walking []string) *conf
 func (t *confTables) build() {
 	seen := map[*ConfFile]bool{}
 	calls := map[string][]string{}
+	defaults := map[string][]confInitStep{}
 
 	var counts DenseMap[ENV, int]
 	var dependencies []confDependency
@@ -982,6 +1016,10 @@ func (t *confTables) build() {
 
 			for guard, names := range r.file.calls {
 				calls[guard] = names
+			}
+
+			for guard, steps := range r.file.defaults {
+				defaults[guard] = steps
 			}
 
 			seen[r.file] = true
@@ -1100,6 +1138,7 @@ func (t *confTables) build() {
 		if module != nil {
 			module.builder = t.builderMacros(calls, module.variable.string(), map[string]bool{}, nil)
 			module.calls = calls[module.variable.string()]
+			module.defaults = defaults[module.variable.string()]
 		}
 	}
 }
@@ -1203,8 +1242,14 @@ func (t *confTables) plan(module *confModule) *confModule {
 		module.steps = append(module.steps, confInitStep{variable: envLinkerId, source: envDefaultLinkerId}, confInitStep{variable: envCommonLinkSettings})
 	}
 
+	defaults := module.defaults
+
 	for _, call := range module.calls {
-		module.steps, _ = t.flagMacroSteps(internStr(strings.TrimPrefix(call, "env")), module.steps, 0)
+		if name := internStr(strings.TrimPrefix(call, "env")); name != kwDEFAULT {
+			module.steps, _ = t.flagMacroSteps(name, module.steps, 0)
+		} else if len(defaults) != 0 {
+			module.steps, defaults = append(module.steps, defaults[0]), defaults[1:]
+		}
 	}
 
 	n := int(envTable.count)
@@ -1232,6 +1277,11 @@ func (t *confTables) plan(module *confModule) *confModule {
 	for _, step := range module.steps {
 		if step.source != 0 {
 			readVar(step.source)
+		}
+
+		if step.fallback {
+			readVar(step.variable)
+			confTextRefs(step.value.string(), readVar)
 		}
 
 		writeVar(step.variable)
@@ -1604,6 +1654,10 @@ func (c *Conf) initModule(env Environment, name STR, tag string, originals *SetV
 		for _, assignment := range recorded {
 			assignment.value.apply(env, assignment.key)
 
+			if assignment.stored {
+				originals.set(assignment.key.str(), assignment.original)
+			}
+
 			if assignment.clearInputs && assignment.value.kind == envAbsent {
 				delete(env.s.textInputs, assignment.key)
 
@@ -1627,6 +1681,23 @@ func (c *Conf) initModule(env Environment, name STR, tag string, originals *SetV
 func (c *Conf) runInit(plan *confModule, env Environment, originals *SetVars, recording []ConfAssignment) {
 	for _, step := range plan.steps {
 		switch {
+		case step.fallback:
+			if env.string(step.variable) != "" {
+				if recording != nil {
+					recordConfAssignment(recording, step.variable, env)
+				}
+
+				continue
+			}
+
+			value := internStr(env.expand(step.value.string()))
+
+			env.setStringID(step.variable, value)
+			originals.set(step.variable.str(), value)
+
+			if recording != nil {
+				recordConfOriginal(recording, step.variable, value)
+			}
 		case step.value != 0:
 			env.setStringID(step.variable, step.value)
 		case step.source != 0:
@@ -1640,6 +1711,16 @@ func (c *Conf) runInit(plan *confModule, env Environment, originals *SetVars, re
 		}
 
 		c.recalcInto(env, step.variable, originals, recording)
+	}
+}
+
+func recordConfOriginal(recording []ConfAssignment, key ENV, value STR) {
+	for i := range recording {
+		if recording[i].key == key {
+			recording[i].stored, recording[i].original = true, value
+
+			return
+		}
 	}
 }
 
