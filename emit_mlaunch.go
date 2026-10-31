@@ -91,8 +91,10 @@ func (e *EmitContext) genPackageFinal() *ModuleEmitResult {
 
 		peer.Demand = demandLinked
 
-		if e.ctx.moduleName(dir.string()) == tokMlaunchLibrary {
+		if name := e.ctx.moduleName(dir.string()); name == tokMlaunchLibrary {
 			peer.Language = LangPackage
+		} else {
+			peer = javaPackagePeerInstance(peer, name)
 		}
 
 		result, built := e.completePackagePeer(peer)

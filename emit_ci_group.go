@@ -16,18 +16,22 @@ func (e *EmitContext) packagePeer(dir string) (*ModuleEmitResult, []VFS) {
 		instance.Language = LangCPP
 	}
 
-	if units := javaModuleUnits[name]; len(units) > 0 {
-		for _, unit := range units {
-			if unit.tag == "JAR_RUNNABLE" || unit.tag == "FULL_JAR_COMPILATION" || len(units) == 1 {
-				instance.Kind = unit.sub
-				instance.Language = LangJava
+	return e.completePackagePeer(javaPackagePeerInstance(instance, name))
+}
 
-				break
-			}
+func javaPackagePeerInstance(instance ModuleInstance, name TOK) ModuleInstance {
+	units := javaModuleUnits[name]
+
+	for _, unit := range units {
+		if unit.tag == "JAR_RUNNABLE" || unit.tag == "FULL_JAR_COMPILATION" || len(units) == 1 {
+			instance.Kind = unit.sub
+			instance.Language = LangJava
+
+			break
 		}
 	}
 
-	return e.completePackagePeer(instance)
+	return instance
 }
 
 func (e *EmitContext) completePackagePeer(instance ModuleInstance) (*ModuleEmitResult, []VFS) {

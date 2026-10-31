@@ -1100,7 +1100,7 @@ func collectModuleInto(ctx *GenCtx, instance ModuleInstance, stmts []Stmt, env E
 
 				eventPeer := strLibraryCppEventlog
 
-				if isPythonProtoModule(d) {
+				if isPythonProtoModule(d) && !meta.Global {
 					eventPeer = strLibraryCppEventlogProto
 				}
 
@@ -4384,7 +4384,7 @@ func collectPythonSourceEntry(d *ModuleData, env Environment, peers *[]ANY) {
 }
 
 func collectPySrcGroup(fs FS, modulePath string, v UnknownStmt, d *ModuleData, env Environment, onWarn func(Warn), group int) {
-	if d.multimodule == tokProtoLibrary && env.bool(envGO_PROTO) {
+	if isGoModuleType(d.unit.Type) && env.bool(envGO_PROTO) {
 		return
 	}
 

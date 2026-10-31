@@ -2734,7 +2734,14 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 			ldSbomRefs, ldSbomPaths = insertOwnSbomComponent(peerSbomRefs, peerSbomPaths, *ownSbomRef, *ownSbomPath, ownSbomInsertIdx)
 		}
 
-		goRef, goPath := e.emitGoExe(resolved, local.refs, local.outs, peerObjAddLibsGlobal, peerArchiveRefs, peerArchivePaths, peerGlobalRefs, peerGlobalPaths, ldSbomRefs, ldSbomPaths, resourceGlobalsClosure)
+		goGlobalRefs, goGlobalPaths := peerGlobalRefs, peerGlobalPaths
+
+		if len(globalOutputs) > 0 {
+			goGlobalPaths = concat(globalOutputs, peerGlobalPaths)
+			goGlobalRefs = concat(slices.DeleteFunc(slices.Clone(globalRefs), func(ref NodeRef) bool { return ref == 0 }), peerGlobalRefs)
+		}
+
+		goRef, goPath := e.emitGoExe(resolved, local.refs, local.outs, peerObjAddLibsGlobal, peerArchiveRefs, peerArchivePaths, goGlobalRefs, goGlobalPaths, ldSbomRefs, ldSbomPaths, resourceGlobalsClosure)
 		result := newResult()
 
 		if d.moduleStmt.Name == tokGoDll {

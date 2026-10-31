@@ -727,6 +727,8 @@ func (b *javaNodeBuilder) closure(closure javaClosureSeq, n int) {
 			if lazy := b.use(e.path); lazy != 0 {
 				ref = lazy
 			}
+		case e.foreign.GlobalPath != nil && e.foreign.GlobalRef != nil && e.path == *e.foreign.GlobalPath:
+			ref = *e.foreign.GlobalRef
 		}
 
 		if ref != 0 {

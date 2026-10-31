@@ -427,8 +427,51 @@ func (ctx *GenCtx) javaEmitJar(jm *JavaModule) {
 
 	b.setKV(pkJV, pcLightBlue, true)
 	b.closure(closure, ctx.javaManagedLen(jm))
+	b.nativeGlobals(jm)
 	b.macroOuts(jm)
 	b.emitModule(jm)
+}
+
+func (b *javaNodeBuilder) nativeGlobals(jm *JavaModule) {
+	if jm.consumesUnmanageable() {
+		return
+	}
+
+	seen := map[*ModuleEmitResult]bool{}
+
+	add := func(peers []javaForeignPeer) {
+		for _, p := range peers {
+			if seen[p.res] {
+				continue
+			}
+
+			seen[p.res] = true
+
+			if p.res.GlobalPath != nil && p.res.GlobalRef != nil {
+				b.input(*p.res.GlobalPath)
+				b.deps = append(b.deps, *p.res.GlobalRef)
+			}
+
+			b.input(p.res.PeerGlobalClosurePaths...)
+			b.deps = append(b.deps, p.res.PeerGlobalClosureRefs...)
+		}
+	}
+
+	addModule := func(m *JavaModule) {
+		add(m.unmanageable)
+
+		for _, self := range m.selfPeers {
+			add(self.unmanageable)
+		}
+	}
+
+	addModule(jm)
+
+	for e := range b.ctx.javaManagedPeersClosure(jm) {
+		if e.java != nil {
+			addModule(e.java)
+		}
+	}
 }
 
 func (ctx *GenCtx) javaEmitIJar(jm *JavaModule) {
@@ -454,6 +497,7 @@ func (ctx *GenCtx) javaEmitIJar(jm *JavaModule) {
 	b.exts = []KVExt{{Key: "exclude_from_idea", Val: "yes"}}
 	b.outputs = []VFS{jm.target}
 	b.deps = append(b.deps, ref, b.use(full.target))
+	b.nativeGlobals(full)
 	b.macroOuts(jm)
 	b.emitModule(jm)
 }

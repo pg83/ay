@@ -818,6 +818,10 @@ func javaForeignFileName(p javaForeignPeer) VFS {
 		return build(p.dir, "/", javaRealPrjName(p.dir, javaNameThreeDirs), ".pkg.fake")
 	}
 
+	if p.res.GlobalPath != nil && p.res.GlobalRef != nil {
+		return *p.res.GlobalPath
+	}
+
 	return p.res.ArchiveFile
 }
 

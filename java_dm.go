@@ -910,7 +910,9 @@ func (ctx *GenCtx) javaIncludedRecipeOf(jm *JavaModule, record bool) (javaInclud
 				}
 			}
 
-			continue
+			if res.ARPath == nil {
+				continue
+			}
 		}
 
 		if res.GlobalPath != nil && res.GlobalRef != nil {

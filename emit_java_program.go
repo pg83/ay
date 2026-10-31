@@ -436,6 +436,10 @@ func dropUnknownConfRefs(arg string) string {
 	return out.String()
 }
 
+func (ctx *GenCtx) hasJavaJarUnit(dir string) bool {
+	return slices.ContainsFunc(javaModuleUnits[ctx.moduleName(dir)], func(u *javaUnit) bool { return u.kind == juJar })
+}
+
 func (ctx *GenCtx) javaJarTool(dir string) *JavaModule {
 	for _, u := range javaModuleUnits[ctx.moduleName(dir)] {
 		if u.kind == juJar {
@@ -529,6 +533,15 @@ func (ctx *GenCtx) emitJavaRunProgram(dir string, platform *Platform, jdk string
 		run = append(run, internV("@", cplst.string()).any())
 
 		if dep := ctx.javaBuilder(tool).use(cplst); dep != 0 {
+			b.input(tool.target)
+			b.deps = append(b.deps, dep)
+		}
+	} else if r.tool != "" && ctx.hasJavaJarUnit(r.tool) {
+		tool := ctx.javaJarTool(r.tool)
+
+		run = append(run, internV("@", tool.target.string(), ".cplst").any())
+
+		if dep := ctx.javaBuilder(tool).use(tool.target); dep != 0 {
 			b.input(tool.target)
 			b.deps = append(b.deps, dep)
 		}

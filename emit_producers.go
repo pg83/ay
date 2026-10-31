@@ -160,7 +160,7 @@ func (e *EmitContext) srcPosition(meta SrcMeta) ([]VFS, []VFS) {
 	}
 
 	d := e.d
-	pyProto := isPythonProtoModule(d) && !meta.Auto
+	pyProto := isPythonProtoModule(d) && !meta.Auto && !meta.Global
 	tok := meta.Source
 	src := tok.string()
 	class := srcExtClassOf(tok)
