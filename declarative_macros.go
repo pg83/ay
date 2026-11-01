@@ -194,14 +194,3 @@ func finishPythonHeaderConfig(d *ModuleData, env Environment) {
 		}
 	}
 }
-
-func (e *EmitContext) cowPeerdirs() []string {
-	switch (Environment{s: &e.frame.ifEnv}).string(envUseCow) {
-	case "yes":
-		return []string{"build/cow/on"}
-	case "no":
-		return []string{"build/cow/off"}
-	}
-
-	return nil
-}

@@ -102,14 +102,13 @@ var acknowledgedTokSet = func() BitSet {
 }()
 
 const (
-	variantDemandShift     = 5
-	variantDemandMask      = uint16(0x7) << variantDemandShift
-	variantPIC             = uint16(1) << 14
-	peerKindLangDefault    = 0
-	peerKindProgramDefault = 1
-	peerKindUserPeer       = 2
-	peerKindUnitTestPeer   = 3
-	KindForeignDescent     = KindJavaTestable + 1
+	variantDemandShift   = 5
+	variantDemandMask    = uint16(0x7) << variantDemandShift
+	variantPIC           = uint16(1) << 14
+	peerKindLangDefault  = 0
+	peerKindUserPeer     = 2
+	peerKindUnitTestPeer = 3
+	KindForeignDescent   = KindJavaTestable + 1
 )
 
 type ModuleEmitResult struct {
@@ -1740,7 +1739,7 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 		return result
 	}
 
-	languageDefaults := e.defaultPeerdirsForModule()
+	languageDefaults := e.confPeerdirs()
 	unitTestPeer := unittestForPeerPath(d.moduleStmt)
 
 	const googleapisPeer = "contrib/libs/googleapis-common-protos"
@@ -2272,7 +2271,7 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 						peerAddInclGlobal = append(peerAddInclGlobal, p)
 					}
 				}
-			case peerKindUnitTestPeer, peerKindProgramDefault:
+			case peerKindUnitTestPeer:
 				for _, p := range rp.result.AddInclGlobal {
 					if deduper.addStable(p.strID()) {
 						peerAddInclGlobal = append(peerAddInclGlobal, p)

@@ -127,14 +127,10 @@ func (e *EmitContext) emitDynamicLibrary() *ModuleEmitResult {
 
 	peerPaths := make([]string, 0, 5+len(d.dynamicLibraryFrom))
 
-	for _, p := range e.appendPlatformPeerdirs(nil, instance) {
+	for _, p := range e.confPeerdirs() {
 		if peerYaMakeExists(ctx.fs, source(p)) {
 			peerPaths = append(peerPaths, p)
 		}
-	}
-
-	if !effectiveNoPlatform(d.flags) {
-		peerPaths = append(peerPaths, e.defaultCommonLinkPeerdirs()...)
 	}
 
 	for _, p := range d.dynamicLibraryFrom {
