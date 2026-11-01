@@ -409,6 +409,7 @@ type ModuleData struct {
 	inducedDeps             ParsedIncludeSet
 	setVars                 SetVars
 	confModule              *confModule
+	defaultPeerTags         STR
 	tc                      ModuleToolchain
 	scanCtx                 *ScanContext
 	cc                      ModuleCompileEnv
@@ -906,7 +907,7 @@ func collectModuleInto(ctx *GenCtx, instance ModuleInstance, stmts []Stmt, env E
 		pythonHeaderEnv = d.pythonHeaderEnv
 	}
 
-	if specified := d.setVars.has(strPeerdirTags); specified || d.python2Headers || d.python3NativeIncl {
+	if specified := internStr(env.string(envPeerdirTags)) != d.defaultPeerTags; specified || d.python2Headers || d.python3NativeIncl {
 		d.peerTags = strings.Fields(pythonHeaderEnv.string(envPeerdirTags))
 	}
 
@@ -1602,7 +1603,8 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 			d.unit = resolveModuleUnit(v.Name, kind, language)
 			d.confModule = platform.conf.module(v.Name.str(), moduleConfTag(v.Name, kind, language, d))
 			platform.conf.initModule(env, d.confModule, &d.setVars)
-			env.setStringID(envPeerdirTags, platform.conf.peerTags(env, modulePeerTags(v, d.unit, language)))
+			d.defaultPeerTags = platform.conf.peerTags(env, modulePeerTags(v, d.unit, language))
+			env.setStringID(envPeerdirTags, d.defaultPeerTags)
 			env.setString(envREALPRJNAME, moduleRealPrjName(modulePath, v, d.unit))
 
 			if moduleType := confModuleType(v.Name, d); moduleType != "" {

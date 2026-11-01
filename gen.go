@@ -1757,14 +1757,16 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 	var preUserProgDefaults []string
 	var postUserProgDefaults []string
 
-	if isProgram {
+	varPeers := !isGoModuleType(d.moduleStmt.Name) && confBasePeers(d)
+
+	if isProgram && !varPeers {
 		preUserProgDefaults = e.defaultProgramPeerdirsForModule(false)
 		postUserProgDefaults = e.defaultProgramPeerdirsForModule(true)
 	}
 
 	var allocatorExplicitPeers []string
 
-	if isProgram {
+	if isProgram && !varPeers {
 		allocatorExplicitPeers = allocatorPeerdirs(d.allocatorName.string(), instance.Platform)
 	}
 

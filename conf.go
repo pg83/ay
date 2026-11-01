@@ -88,7 +88,8 @@ type ConfFile struct {
 	modules  map[string]string
 	variants map[string][]string
 	calls    map[string][]string
-	body     map[string][]confInitStep
+	body     map[string][]ConfMacroCall
+	inits    map[STR]*ConfMacro
 	selfPeer map[string][]string
 
 	callNames  []string
@@ -115,31 +116,12 @@ func (f *ConfFile) flushCalls() {
 	f.callsStart = len(f.callNames)
 }
 
-func (f *ConfFile) addBodyStep(guard string, name STR, args string) {
-	words := strings.Fields(strings.TrimSuffix(strings.TrimSpace(args), ")"))
-
-	if len(words) == 0 {
-		return
-	}
-
-	step := confInitStep{variable: internEnv(words[0]), value: strYes}
-
-	switch name {
-	case kwDEFAULT:
-		step.value, step.fallback = internStr(strings.Join(words[1:], " ")), true
-	case tokDisable.str():
-		step.value = strNo
-	}
-
+func (f *ConfFile) addBodyCall(guard string, name STR, args string) {
 	if f.body == nil {
-		f.body = map[string][]confInitStep{}
+		f.body = map[string][]ConfMacroCall{}
 	}
 
-	f.body[guard] = append(f.body[guard], step)
-}
-
-func confBodyStep(name STR) bool {
-	return name == kwDEFAULT || name == tokEnable.str() || name == tokDisable.str()
+	f.body[guard] = append(f.body[guard], ConfMacroCall{name: name, args: internStr(strings.TrimSpace(strings.TrimSuffix(strings.TrimSpace(args), ")")))})
 }
 
 type confParseFrame struct {
@@ -206,7 +188,7 @@ func (s *ConfState) readFile(rel, text string) *ConfFile {
 				previous = frame.branch
 
 				if frame.macro {
-					conf.addMacro(frame.body.header, frame.body.calls)
+					conf.addMacro(frame.body.header, frame.body.calls, frame.body.direct)
 				}
 
 				*frame = confParseFrame{}
@@ -249,8 +231,8 @@ func (s *ConfState) readFile(rel, text string) *ConfFile {
 
 					conf.callNames = append(conf.callNames, internV("env", strings.TrimSpace(name)).string())
 
-					if call := internStr(strings.TrimSpace(name)); confBodyStep(call) {
-						conf.addBodyStep(top.guard, call, line[len(name)+1:])
+					if top.block == "module" {
+						conf.addBodyCall(top.guard, internStr(strings.TrimSpace(name)), line[len(name)+1:])
 					}
 				}
 
@@ -871,7 +853,7 @@ type confModule struct {
 	variable  ENV
 	builder   []ENV
 	calls     []string
-	body      []confInitStep
+	body      []ConfMacroCall
 	order     int
 	steps     []confInitStep
 	outputs   []ENV
@@ -885,6 +867,8 @@ type confInitStep struct {
 	source   ENV
 	value    STR
 	fallback bool
+	expand   bool
+	original bool
 }
 
 type ConfAssignment struct {
@@ -898,11 +882,13 @@ type ConfAssignment struct {
 type confProgram struct {
 	stmts  []ConfStmtRef
 	macros map[STR]*ConfMacro
+	inits  map[STR]*ConfMacro
 }
 
 type confTables struct {
 	state       *ConfState
 	macros      map[STR]*ConfMacro
+	inits       map[STR]*ConfMacro
 	source      []ConfStmtRef
 	byVariable  DenseMap[ENV, []ENV]
 	byTarget    DenseMap[ENV, []ConfStmtRef]
@@ -942,7 +928,7 @@ func (s *ConfState) tablesFor(program *confProgram) *confTables {
 		}
 	}
 
-	t := &confTables{state: s, macros: program.macros}
+	t := &confTables{state: s, macros: program.macros, inits: program.inits}
 
 	for _, r := range stmts {
 		if confTableInput(r) {
@@ -963,10 +949,14 @@ func (pm *IncludeParserManager) confProgram(f *ConfFile, walking []string) *conf
 		return f.program
 	}
 
-	p := &confProgram{macros: map[STR]*ConfMacro{}}
+	p := &confProgram{macros: map[STR]*ConfMacro{}, inits: map[STR]*ConfMacro{}}
 
 	for name, macro := range f.macros {
 		p.macros[name] = macro
+	}
+
+	for name, macro := range f.inits {
+		p.inits[name] = macro
 	}
 
 	count := 0
@@ -1003,6 +993,12 @@ func (pm *IncludeParserManager) confProgram(f *ConfFile, walking []string) *conf
 				p.macros[name] = macro
 			}
 		}
+
+		for name, macro := range imported.inits {
+			if previous, ok := p.inits[name]; !ok || previous != nil {
+				p.inits[name] = macro
+			}
+		}
 	}
 
 	f.program = p
@@ -1013,7 +1009,7 @@ func (pm *IncludeParserManager) confProgram(f *ConfFile, walking []string) *conf
 func (t *confTables) build() {
 	seen := map[*ConfFile]bool{}
 	calls := map[string][]string{}
-	body := map[string][]confInitStep{}
+	body := map[string][]ConfMacroCall{}
 	selfPeers := map[string][]string{}
 
 	var owners []*ConfFile
@@ -1046,8 +1042,8 @@ func (t *confTables) build() {
 				calls[guard] = names
 			}
 
-			for guard, steps := range r.file.body {
-				body[guard] = steps
+			for guard, calls := range r.file.body {
+				body[guard] = calls
 			}
 
 			for guard, tags := range r.file.selfPeer {
@@ -1223,47 +1219,107 @@ func (t *confTables) orderVariants(owner string, variants []string, selfPeers ma
 	}
 }
 
-func (t *confTables) flagMacroSteps(name STR, out []confInitStep, depth int) ([]confInitStep, bool) {
-	macro := t.macros[name]
+func (t *confTables) callSteps(name STR, args string, out []confInitStep, depth int) ([]confInitStep, bool) {
+	words := strings.Fields(args)
 
-	if macro == nil || depth > 8 || len(macro.sig.positional) != 0 || len(macro.sig.keywords) != 0 || macro.sig.vararg != 0 {
+	switch name {
+	case tokEnable.str(), tokDisable.str():
+		if len(words) != 1 || strings.IndexByte(words[0], '$') >= 0 {
+			return out, false
+		}
+
+		value := strYes
+
+		if name == tokDisable.str() {
+			value = strNo
+		}
+
+		return append(out, confInitStep{variable: internEnv(words[0]), value: value, original: true}), true
+	case kwSET, kwDEFAULT:
+		if len(words) == 0 || strings.IndexByte(args, '"') >= 0 || strings.IndexByte(words[0], '$') >= 0 {
+			return out, false
+		}
+
+		step := confInitStep{variable: internEnv(words[0]), value: internStr(strings.Join(words[1:], " ")), original: true, fallback: name == kwDEFAULT}
+
+		step.expand = step.fallback || step.value == 0 || strings.IndexByte(step.value.string(), '$') >= 0
+
+		return append(out, step), true
+	}
+
+	macro := t.inits[name]
+
+	if macro == nil || depth > 8 || len(macro.sig.keywords) != 0 || len(words) > len(macro.sig.positional) && macro.sig.vararg == 0 {
 		return out, false
 	}
 
 	mark := len(out)
 
 	for _, call := range macro.calls {
-		words := strings.Fields(call.args.string())
+		var ok bool
 
-		switch call.name {
-		case tokEnable.str(), tokDisable.str():
-			if len(words) != 1 {
-				return out[:mark], false
-			}
-
-			value := strYes
-
-			if call.name == tokDisable.str() {
-				value = strNo
-			}
-
-			out = append(out, confInitStep{variable: internEnv(words[0]), value: value})
-		case kwSET:
-			if len(words) < 2 || strings.ContainsAny(call.args.string(), "$\"") {
-				return out[:mark], false
-			}
-
-			out = append(out, confInitStep{variable: internEnv(words[0]), value: internStr(strings.Join(words[1:], " "))})
-		default:
-			var ok bool
-
-			if out, ok = t.flagMacroSteps(call.name, out, depth+1); !ok {
-				return out[:mark], false
-			}
+		if out, ok = t.callSteps(call.name, bindConfParams(call.args.string(), macro.sig, words), out, depth+1); !ok {
+			return out[:mark], false
 		}
 	}
 
 	return out, true
+}
+
+func bindConfParams(text string, sig ConfMacroSignature, args []string) string {
+	if strings.IndexByte(text, '$') < 0 {
+		return text
+	}
+
+	value := func(name STR) (string, bool) {
+		if i := slices.Index(sig.positional, name); i >= 0 {
+			if i < len(args) {
+				return args[i], true
+			}
+
+			return "", true
+		}
+
+		if name == sig.vararg && sig.vararg != 0 {
+			if len(args) > len(sig.positional) {
+				return strings.Join(args[len(sig.positional):], " "), true
+			}
+
+			return "", true
+		}
+
+		return "", false
+	}
+
+	var b strings.Builder
+
+	for i := strings.IndexByte(text, '$'); i >= 0; i = strings.IndexByte(text, '$') {
+		b.WriteString(text[:i])
+
+		rest := text[i+1:]
+		name, braced := strings.CutPrefix(rest, "{")
+		end := confNameEnd(name, 0)
+
+		if bound, ok := value(internStr(name[:end])); end != 0 && ok && (!braced || strings.HasPrefix(name[end:], "}")) {
+			b.WriteString(bound)
+
+			text = name[end:]
+
+			if braced {
+				text = text[1:]
+			}
+
+			continue
+		}
+
+		b.WriteByte('$')
+
+		text = rest
+	}
+
+	b.WriteString(text)
+
+	return b.String()
 }
 
 func (t *confTables) builderMacros(calls map[string][]string, guard string, seen map[string]bool, out []ENV) []ENV {
@@ -1315,18 +1371,13 @@ func (t *confTables) plan(module *confModule) *confModule {
 
 	module.steps = append(module.steps, confInitStep{variable: module.variable})
 
-	switch module.variable.string() {
-	case "env_LINK_UNIT", "envGO_PROGRAM":
-		module.steps = append(module.steps, confInitStep{variable: envLinkerId, source: envDefaultLinkerId})
+	for _, call := range module.body {
+		module.steps, _ = t.callSteps(call.name, call.args.string(), module.steps, 0)
 	}
 
-	body := module.body
-
-	for _, call := range module.calls {
-		if name := internStr(strings.TrimPrefix(call, "env")); !confBodyStep(name) {
-			module.steps, _ = t.flagMacroSteps(name, module.steps, 0)
-		} else if len(body) != 0 {
-			module.steps, body = append(module.steps, body[0]), body[1:]
+	for _, step := range module.steps {
+		if step.expand {
+			confTextRefs(step.value.string(), func(ENV) {})
 		}
 	}
 
@@ -1359,6 +1410,9 @@ func (t *confTables) plan(module *confModule) *confModule {
 
 		if step.fallback {
 			readVar(step.variable)
+		}
+
+		if step.expand {
 			confTextRefs(step.value.string(), readVar)
 		}
 
@@ -1761,29 +1815,30 @@ func (c *Conf) initModule(env Environment, module *confModule, originals *SetVar
 func (c *Conf) runInit(plan *confModule, env Environment, originals *SetVars, recording []ConfAssignment) {
 	for _, step := range plan.steps {
 		switch {
-		case step.fallback:
-			if env.string(step.variable) != "" {
-				if recording != nil {
-					recordConfAssignment(recording, step.variable, env)
-				}
-
-				continue
-			}
-
-			value := internStr(env.expand(step.value.string()))
-
-			env.setStringID(step.variable, value)
-			originals.set(step.variable.str(), value)
-
+		case step.fallback && env.string(step.variable) != "":
 			if recording != nil {
-				recordConfOriginal(recording, step.variable, value)
+				recordConfAssignment(recording, step.variable, env)
 			}
+
+			continue
+		case step.expand:
+			env.setStringID(step.variable, internStr(env.expand(step.value.string())))
 		case step.value != 0:
 			env.setStringID(step.variable, step.value)
 		case step.source != 0:
 			env.setString(step.variable, env.string(step.source))
 		default:
 			env.setBool(step.variable, true)
+		}
+
+		if step.original {
+			value := internStr(env.string(step.variable))
+
+			originals.set(step.variable.str(), value)
+
+			if recording != nil {
+				recordConfOriginal(recording, step.variable, value)
+			}
 		}
 
 		if recording != nil {
@@ -1887,10 +1942,11 @@ type ConfMacro struct {
 type confMacroBody struct {
 	header      string
 	calls       []ConfMacroCall
+	direct      []ConfMacroCall
 	unsupported bool
 }
 
-func (f *ConfFile) addMacro(header string, calls []ConfMacroCall) {
+func (f *ConfFile) addMacro(header string, calls, direct []ConfMacroCall) {
 	name, params, opened := strings.Cut(strings.TrimPrefix(header, "macro "), "(")
 	params, closed := strings.CutSuffix(strings.TrimSpace(params), ")")
 
@@ -1900,6 +1956,16 @@ func (f *ConfFile) addMacro(header string, calls []ConfMacroCall) {
 
 	sig, specialized := f.state.parseMacroSignature(f.rel, params)
 	key := internStr(strings.TrimSpace(name))
+
+	if !specialized && len(direct) != 0 {
+		if f.inits == nil {
+			f.inits = map[STR]*ConfMacro{}
+		}
+
+		if _, ok := f.inits[key]; !ok {
+			f.inits[key] = &ConfMacro{file: f.rel, sig: sig, calls: direct}
+		}
+	}
 
 	if !specialized && len(calls) == 0 {
 		return
@@ -1921,10 +1987,6 @@ func (f *ConfFile) addMacro(header string, calls []ConfMacroCall) {
 }
 
 func (body *confMacroBody) addLine(line string) {
-	if body.unsupported {
-		return
-	}
-
 	if property, ok := strings.CutPrefix(line, "."); ok {
 		key, _, _ := strings.Cut(property, "=")
 
@@ -1940,7 +2002,13 @@ func (body *confMacroBody) addLine(line string) {
 		args, closed := strings.CutSuffix(args, ")")
 
 		if opened && closed && isIdentShapedName(name) {
-			body.calls = append(body.calls, ConfMacroCall{name: internStr(name), args: internStr(strings.TrimSpace(args))})
+			call := ConfMacroCall{name: internStr(name), args: internStr(strings.TrimSpace(args))}
+
+			body.direct = append(body.direct, call)
+
+			if !body.unsupported {
+				body.calls = append(body.calls, call)
+			}
 
 			return
 		}

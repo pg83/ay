@@ -157,7 +157,7 @@ func (e *EmitContext) defaultPeerdirsForWithState(instance ModuleInstance) []str
 		return nil
 	}
 
-	if !isProgramModuleType(d.moduleStmt.Name) && !isDllModuleType(d.moduleStmt.Name) {
+	if confBasePeers(d) {
 		return e.confPeerdirs(instance)
 	}
 
@@ -204,6 +204,10 @@ func (e *EmitContext) defaultPeerdirsForWithState(instance ModuleInstance) []str
 	}
 
 	return e.appendPlatformPeerdirs(peers, instance)
+}
+
+func confBasePeers(d *ModuleData) bool {
+	return !isPyProgramType(d.moduleStmt.Name) && !isPyProgramType(d.unit.Type)
 }
 
 func (e *EmitContext) confPeerdirs(instance ModuleInstance) []string {
