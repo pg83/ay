@@ -184,6 +184,7 @@ type ModuleEmitResult struct {
 	TestSuites                      []*TestSuite
 	testProject                     VFS
 	testPeers                       []*ModuleEmitResult
+	variantOrder                    int
 }
 
 func protoResultWholeArchiveCmdPaths(res *ProtoSrcsResult) []VFS {
@@ -773,6 +774,8 @@ func (ctx *GenCtx) collectConfiguredSubmoduleTests(dir string, results ...*Modul
 			instance.Kind = KindLib
 		}
 	default:
+		slices.SortStableFunc(results, func(a, b *ModuleEmitResult) int { return a.variantOrder - b.variantOrder })
+
 		ctx.testRoots = append(ctx.testRoots, results...)
 
 		return
@@ -1483,10 +1486,13 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 
 	defer ctx.popFrame()
 
+	var variantOrder int
+
 	defer func() {
 		if result != nil {
 			result.testProject = instance.Path
 			result.testPeers = append(result.testPeers, frame.testPeers...)
+			result.variantOrder = variantOrder
 		}
 	}()
 
@@ -1496,6 +1502,10 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 
 	d := collectModuleInto(ctx, instance, stmts, env, ctx.onWarn, &frame.d, nil)
 	e := newEmitContextIn(frame, ctx, instance, d, nil)
+
+	if d.confModule != nil {
+		variantOrder = d.confModule.order
+	}
 
 	if d.discarded {
 		result := &ModuleEmitResult{}

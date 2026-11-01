@@ -408,6 +408,7 @@ type ModuleData struct {
 	primaryOutput           string
 	inducedDeps             ParsedIncludeSet
 	setVars                 SetVars
+	confModule              *confModule
 	tc                      ModuleToolchain
 	scanCtx                 *ScanContext
 	cc                      ModuleCompileEnv
@@ -1386,12 +1387,20 @@ func pyModuleTypeUsesPython3(name TOK) bool {
 	return false
 }
 
-func moduleConfTag(name TOK, kind ModuleKind, language Language, unitTag STR) string {
+func moduleConfTag(name TOK, kind ModuleKind, language Language, d *ModuleData) string {
+	if name == tokYqlLibrary {
+		if d.yqlCurrent {
+			return "YQL_LIBRARY_CURRENT"
+		}
+
+		return "YQL_LIBRARY_STABLE"
+	}
+
 	if tag := multimoduleVariantTag(name, kind, language); tag != "" {
 		return tag
 	}
 
-	return unitTag.string()
+	return d.unit.Tag.string()
 }
 
 func collectModuleAutoinclude(ctx *GenCtx, modulePath string, kind ModuleKind, language Language, env Environment, d *ModuleData, onWarn func(Warn), platform *Platform) {
@@ -1591,8 +1600,8 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 			}
 
 			d.unit = resolveModuleUnit(v.Name, kind, language)
-
-			platform.conf.initModule(env, v.Name.str(), moduleConfTag(v.Name, kind, language, d.unit.Tag), &d.setVars)
+			d.confModule = platform.conf.module(v.Name.str(), moduleConfTag(v.Name, kind, language, d))
+			platform.conf.initModule(env, d.confModule, &d.setVars)
 			env.setStringID(envPeerdirTags, platform.conf.peerTags(env, modulePeerTags(v, d.unit, language)))
 			env.setString(envREALPRJNAME, moduleRealPrjName(modulePath, v, d.unit))
 
@@ -1971,7 +1980,7 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 			}
 
 			collectModuleAutoinclude(ctx, modulePath, kind, language, env, d, onWarn, platform)
-			platform.conf.finishModule(env, d.moduleStmt.Name.str(), moduleConfTag(d.moduleStmt.Name, kind, language, d.unit.Tag), &d.setVars)
+			platform.conf.finishModule(env, d.confModule, &d.setVars)
 			d.pythonLint.bind(env)
 			d.finishResourcePeerPolicy()
 

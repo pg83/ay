@@ -13,6 +13,8 @@ var multimoduleTags = map[TOK]map[string]Language{
 	tokMlaunchLibrary:   {"CPP_MLAUNCH": LangCPP, "GO_MLAUNCH": LangGo, "UNION_MLAUNCH": LangPackage},
 	tokMlaunchComponent: {"CPP_MLAUNCH": LangCPP, "GO_MLAUNCH": LangGo, "UNION_MLAUNCH": LangPackage},
 	tokMlaunchPipeline:  {"PIPELINE": LangCPP, "GOLAUNCH": LangGo, "DEPLOY": LangPackage},
+	tokSdcDiagsLibrary:  {"CPP_DIAG": LangCPP, "GO_DIAG": LangGo},
+	tokSdcUnion:         {"SDC_INSTALL_ALL": LangCPP, "SDC_INSTALL_SHARE": LangPackage},
 }
 
 const defaultProtoVariants = 1<<LangCPP | 1<<LangJava | 1<<LangPy | 1<<LangGo | 1<<LangDescProto

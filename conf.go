@@ -88,7 +88,8 @@ type ConfFile struct {
 	modules  map[string]string
 	variants map[string][]string
 	calls    map[string][]string
-	defaults map[string][]confInitStep
+	body     map[string][]confInitStep
+	selfPeer map[string][]string
 
 	callNames  []string
 	callsGuard string
@@ -114,18 +115,31 @@ func (f *ConfFile) flushCalls() {
 	f.callsStart = len(f.callNames)
 }
 
-func (f *ConfFile) addDefault(guard, args string) {
+func (f *ConfFile) addBodyStep(guard string, name STR, args string) {
 	words := strings.Fields(strings.TrimSuffix(strings.TrimSpace(args), ")"))
 
 	if len(words) == 0 {
 		return
 	}
 
-	if f.defaults == nil {
-		f.defaults = map[string][]confInitStep{}
+	step := confInitStep{variable: internEnv(words[0]), value: strYes}
+
+	switch name {
+	case kwDEFAULT:
+		step.value, step.fallback = internStr(strings.Join(words[1:], " ")), true
+	case tokDisable.str():
+		step.value = strNo
 	}
 
-	f.defaults[guard] = append(f.defaults[guard], confInitStep{variable: internEnv(words[0]), value: internStr(strings.Join(words[1:], " ")), fallback: true})
+	if f.body == nil {
+		f.body = map[string][]confInitStep{}
+	}
+
+	f.body[guard] = append(f.body[guard], step)
+}
+
+func confBodyStep(name STR) bool {
+	return name == kwDEFAULT || name == tokEnable.str() || name == tokDisable.str()
 }
 
 type confParseFrame struct {
@@ -208,6 +222,16 @@ func (s *ConfState) readFile(rel, text string) *ConfFile {
 
 			top := &stack[len(stack)-1]
 
+			if property, ok := strings.CutPrefix(line, ".PEERDIRSELF="); ok && top.block == "module" && !top.skipped {
+				if conf.selfPeer == nil {
+					conf.selfPeer = map[string][]string{}
+				}
+
+				conf.selfPeer[top.guard] = strings.Fields(property)
+
+				continue
+			}
+
 			if name, value, op, ok := confStmtAssignment(line); ok {
 				if !top.skipped && top.block != "macro" {
 					conf.stmts = append(conf.stmts, ConfStmt{branch: top.branch, name: internEnv(name), scalar: confStringValue(value), value: value, op: op})
@@ -225,8 +249,8 @@ func (s *ConfState) readFile(rel, text string) *ConfFile {
 
 					conf.callNames = append(conf.callNames, internV("env", strings.TrimSpace(name)).string())
 
-					if strings.TrimSpace(name) == kwDEFAULT.string() {
-						conf.addDefault(top.guard, line[len(name)+1:])
+					if call := internStr(strings.TrimSpace(name)); confBodyStep(call) {
+						conf.addBodyStep(top.guard, call, line[len(name)+1:])
 					}
 				}
 
@@ -847,7 +871,8 @@ type confModule struct {
 	variable  ENV
 	builder   []ENV
 	calls     []string
-	defaults  []confInitStep
+	body      []confInitStep
+	order     int
 	steps     []confInitStep
 	outputs   []ENV
 	originals []ENV
@@ -988,7 +1013,10 @@ func (pm *IncludeParserManager) confProgram(f *ConfFile, walking []string) *conf
 func (t *confTables) build() {
 	seen := map[*ConfFile]bool{}
 	calls := map[string][]string{}
-	defaults := map[string][]confInitStep{}
+	body := map[string][]confInitStep{}
+	selfPeers := map[string][]string{}
+
+	var owners []*ConfFile
 
 	var counts DenseMap[ENV, int]
 	var dependencies []confDependency
@@ -1018,8 +1046,16 @@ func (t *confTables) build() {
 				calls[guard] = names
 			}
 
-			for guard, steps := range r.file.defaults {
-				defaults[guard] = steps
+			for guard, steps := range r.file.body {
+				body[guard] = steps
+			}
+
+			for guard, tags := range r.file.selfPeer {
+				selfPeers[guard] = tags
+			}
+
+			if len(r.file.variants) != 0 {
+				owners = append(owners, r.file)
 			}
 
 			seen[r.file] = true
@@ -1138,8 +1174,52 @@ func (t *confTables) build() {
 		if module != nil {
 			module.builder = t.builderMacros(calls, module.variable.string(), map[string]bool{}, nil)
 			module.calls = calls[module.variable.string()]
-			module.defaults = defaults[module.variable.string()]
+			module.body = body[module.variable.string()]
 		}
+	}
+
+	for _, file := range owners {
+		for owner, variants := range file.variants {
+			t.orderVariants(owner, variants, selfPeers)
+		}
+	}
+}
+
+func (t *confTables) orderVariants(owner string, variants []string, selfPeers map[string][]string) {
+	suffix := "__from__" + owner
+	tags := make([]string, len(variants))
+
+	for i, variant := range variants {
+		tags[i] = strings.TrimSuffix(variant, suffix)
+	}
+
+	slices.Sort(tags)
+
+	done := map[string]bool{}
+	order := 0
+
+	var visit func(tag string)
+
+	visit = func(tag string) {
+		if done[tag] || !slices.Contains(tags, tag) {
+			return
+		}
+
+		done[tag] = true
+
+		for _, peer := range selfPeers[internV("env", tag, suffix).string()] {
+			visit(peer)
+		}
+
+		if module, _ := t.modules.get(internV(tag, suffix)); module != nil {
+			module.order = order
+		}
+
+		order++
+	}
+
+	for _, tag := range tags {
+		visit(tag)
 	}
 }
 
@@ -1236,19 +1316,17 @@ func (t *confTables) plan(module *confModule) *confModule {
 	module.steps = append(module.steps, confInitStep{variable: module.variable})
 
 	switch module.variable.string() {
-	case "env_BASE_UNIT":
-		module.steps = append(module.steps, confInitStep{variable: envBisonFlexSetDefaults})
 	case "env_LINK_UNIT", "envGO_PROGRAM":
-		module.steps = append(module.steps, confInitStep{variable: envLinkerId, source: envDefaultLinkerId}, confInitStep{variable: envCommonLinkSettings})
+		module.steps = append(module.steps, confInitStep{variable: envLinkerId, source: envDefaultLinkerId})
 	}
 
-	defaults := module.defaults
+	body := module.body
 
 	for _, call := range module.calls {
-		if name := internStr(strings.TrimPrefix(call, "env")); name != kwDEFAULT {
+		if name := internStr(strings.TrimPrefix(call, "env")); !confBodyStep(name) {
 			module.steps, _ = t.flagMacroSteps(name, module.steps, 0)
-		} else if len(defaults) != 0 {
-			module.steps, defaults = append(module.steps, defaults[0]), defaults[1:]
+		} else if len(body) != 0 {
+			module.steps, body = append(module.steps, body[0]), body[1:]
 		}
 	}
 
@@ -1603,10 +1681,12 @@ func (c *Conf) recalcPut(key uint64, target ENV, original STR, value ConfValue) 
 	c.recalcs[key] = append(c.recalcs[key], confRecalc{target: target, original: original, inputs: slices.Clone(c.inputs), value: value})
 }
 
-func (c *Conf) initModule(env Environment, name STR, tag string, originals *SetVars) {
-	defer func() { env.s.confBase = nil }()
+func (c *Conf) module(name STR, tag string) *confModule {
+	return c.tables.module(name, tag)
+}
 
-	module := c.tables.module(name, tag)
+func (c *Conf) initModule(env Environment, module *confModule, originals *SetVars) {
+	defer func() { env.s.confBase = nil }()
 
 	if module == nil {
 		return
@@ -1737,8 +1817,8 @@ func recordConfAssignment(recording []ConfAssignment, key ENV, env Environment) 
 	}
 }
 
-func (c *Conf) finishModule(env Environment, name STR, tag string, originals *SetVars) {
-	if module := c.tables.module(name, tag); module != nil {
+func (c *Conf) finishModule(env Environment, module *confModule, originals *SetVars) {
+	if module != nil {
 		c.finishModuleParent(env, module, originals)
 	}
 }

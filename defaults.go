@@ -1,6 +1,7 @@
 package main
 
 import (
+	"slices"
 	"strings"
 )
 
@@ -156,6 +157,10 @@ func (e *EmitContext) defaultPeerdirsForWithState(instance ModuleInstance) []str
 		return nil
 	}
 
+	if !isProgramModuleType(d.moduleStmt.Name) && !isDllModuleType(d.moduleStmt.Name) {
+		return e.confPeerdirs(instance)
+	}
+
 	rc := ImplicitPeerCtx{
 		flags:      flags,
 		noPlatform: noPlatform,
@@ -198,10 +203,20 @@ func (e *EmitContext) defaultPeerdirsForWithState(instance ModuleInstance) []str
 		peers = append(peers, "library/cpp/sanitizer/include")
 	}
 
-	peers = e.appendPlatformPeerdirs(peers, instance)
+	return e.appendPlatformPeerdirs(peers, instance)
+}
 
-	if (Environment{s: &e.frame.ifEnv}).bool(envCommonLinkSettings) && !isProgramModuleType(d.moduleStmt.Name) && !isDllModuleType(d.moduleStmt.Name) && !noPlatform {
-		peers = append(peers, e.defaultCommonLinkPeerdirs()...)
+func (e *EmitContext) confPeerdirs(instance ModuleInstance) []string {
+	peers := e.peerScratch[:0]
+
+	defer func() { e.peerScratch = retainMaxLen(e.peerScratch, peers) }()
+
+	self := instance.Path.relString()
+
+	for peer := range strings.FieldsSeq((Environment{s: &e.frame.ifEnv}).expand("$PEERDIR")) {
+		if peer != self && !slices.Contains(peers, peer) {
+			peers = append(peers, peer)
+		}
 	}
 
 	return peers
