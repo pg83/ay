@@ -1440,7 +1440,41 @@ func interpretedModuleVars(env Environment) []Stmt {
 		out = append(out, &SrcDirStmt{Dirs: internAnys(strings.Fields(dirs))})
 	}
 
+	if dirs := env.string(envAddincl); dirs != "" {
+		out = append(out, splitAddInclPaths(internAnys(strings.Fields(dirs))))
+	}
+
 	return out
+}
+
+func applyInterpretedModuleVars(ctx *GenCtx, modulePath string, kind ModuleKind, language Language, env Environment, d *ModuleData, onWarn func(Warn), platform *Platform) {
+	lists := [...]*[]VFS{
+		&d.srcDirs, &d.addInclGlobal, &d.addInclOneLevel, &d.addInclUserGlobal, &d.cythonAddIncl, &d.cythonAddInclGlobal,
+		&d.asmAddIncl, &d.protoAddIncl, &d.protoAddInclGlobal, &d.protoIncludeLocal, &d.flatcAddIncl, &d.flatcAddInclGlobal,
+		&d.swigAddIncl, &d.swigAddInclGlobal, &d.scAddIncl, &d.scAddInclGlobal, &d.scAddInclExport,
+	}
+
+	var marks [len(lists)]int
+
+	for i, list := range lists {
+		marks[i] = len(*list)
+	}
+
+	local := len(d.addInclP)
+
+	collectStmts(ctx, modulePath, kind, language, interpretedModuleVars(env), env, d, onWarn, platform)
+
+	for i, list := range lists {
+		rotateFront(*list, marks[i])
+	}
+
+	rotateFront(d.addInclP, local)
+}
+
+func rotateFront[T any](s []T, from int) {
+	slices.Reverse(s[:from])
+	slices.Reverse(s[from:])
+	slices.Reverse(s)
 }
 
 func allowedOutsideModule(s Stmt) bool {
@@ -1630,8 +1664,6 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 			}
 
 			d.moduleStmt = moduleStmtForKind(v, d.unit)
-
-			collectStmts(ctx, modulePath, kind, language, interpretedModuleVars(env), env, d, onWarn, platform)
 
 			setupPythonImportMask(env, d)
 			setupSandboxPythonTask(v.Name, modulePath, kind, language, env, d)
@@ -1983,6 +2015,7 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 
 			collectModuleAutoinclude(ctx, modulePath, kind, language, env, d, onWarn, platform)
 			platform.conf.finishModule(env, d.confModule, &d.setVars)
+			applyInterpretedModuleVars(ctx, modulePath, kind, language, env, d, onWarn, platform)
 			d.pythonLint.bind(env)
 			d.finishResourcePeerPolicy()
 

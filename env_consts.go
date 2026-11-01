@@ -27,6 +27,7 @@ var (
 	envAVX512_CFLAGS                          = internEnv("AVX512_CFLAGS")
 	envAVX_CFLAGS                             = internEnv("AVX_CFLAGS")
 	envAddPeerdirsGenTests                    = internEnv("ADD_PEERDIRS_GEN_TESTS")
+	envAddincl                                = internEnv("ADDINCL")
 	envAntlrPython                            = internEnv("ANTLR_PYTHON")
 	envArcadiaPythonUnicodeSize               = internEnv("ARCADIA_PYTHON_UNICODE_SIZE")
 	envAsmPrefix                              = internEnv("ASM_PREFIX")
