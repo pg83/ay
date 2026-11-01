@@ -289,8 +289,6 @@ type ModuleData struct {
 	objAddLibsGlobal        []ANY
 	srcDirs                 []VFS
 	flags                   FlagSet
-	useSSE4                 bool
-	cpuCheck                bool
 	hadAllocator            bool
 	allocatorName           ANY
 	muslLite                bool
@@ -300,7 +298,6 @@ type ModuleData struct {
 	implibs                 []ImplibStmt
 	linkExcludeLibraries    []ANY
 	muslEnabled             bool
-	useAsmlib               bool
 	useArcadiaLibm          bool
 	useDynamicCuda          bool
 	splitDwarf              bool
@@ -821,7 +818,6 @@ func collectModuleInto(ctx *GenCtx, instance ModuleInstance, stmts []Stmt, env E
 
 	d.ifReplay = replay
 	d.pythonSQLite3 = true
-	d.useAsmlib = true
 	d.bisonGenExt = strCpp
 	d.needGoogleProtoPeerdirs = true
 	d.yqlCurrent = instance.YqlCurrent
@@ -852,8 +848,6 @@ func collectModuleInto(ctx *GenCtx, instance ModuleInstance, stmts []Stmt, env E
 	d.peerdirs = append(d.peerdirs, d.macroPeerdirs...)
 	d.pyProtoMypy = env.string(envPyProtoMypyEnabled) == "yes" &&
 		(isPythonProtoModule(d) || d.unit.Type == tokPy2Library || d.unit.Type == tokPy3Library || d.unit.Type == tokPy23Library)
-	d.cpuCheck = env.string(envCpuCheck) == "yes"
-	d.useSSE4 = env.string(envUSE_SSE4) == "yes"
 	d.flags.NoCompilerWarnings = env.bool(envNoCompilerWarnings)
 
 	nativeSources := d.srcs[:0]
@@ -3569,8 +3563,6 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 				d.pythonSQLite3 = true
 			case "USE_LIGHT_PY2CC":
 				d.useLightPy2cc = true
-			case "USE_ASMLIB":
-				d.useAsmlib = true
 			}
 		}
 	case tokDisable:
@@ -3597,10 +3589,6 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 
 			if a == "NEED_GOOGLE_PROTO_PEERDIRS" {
 				d.needGoogleProtoPeerdirs = false
-			}
-
-			if a == "USE_ASMLIB" {
-				d.useAsmlib = false
 			}
 		}
 	case tokNoMypy:

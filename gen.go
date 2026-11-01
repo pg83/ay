@@ -1754,19 +1754,11 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 	isProgram := (isProgramModuleType(d.moduleStmt.Name) || isDllModuleType(d.moduleStmt.Name)) && !isRuntimeAncestor(instance.Path.relString())
 	unitTestPeer := unittestForPeerPath(d.moduleStmt)
 
-	var preUserProgDefaults []string
-	var postUserProgDefaults []string
-
-	varPeers := !isGoModuleType(d.moduleStmt.Name) && confBasePeers(d)
-
-	if isProgram && !varPeers {
-		preUserProgDefaults = e.defaultProgramPeerdirsForModule(false)
-		postUserProgDefaults = e.defaultProgramPeerdirsForModule(true)
-	}
-
+	var goProgramDefaults []string
 	var allocatorExplicitPeers []string
 
-	if isProgram && !varPeers {
+	if isProgram && isGoExeModuleType(d.moduleStmt.Name) {
+		goProgramDefaults = e.goProgramPeerdirs()
 		allocatorExplicitPeers = allocatorPeerdirs(d.allocatorName.string(), instance.Platform)
 	}
 
@@ -1779,7 +1771,7 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 		internStr(unitTestPeer)
 	}
 
-	for _, ss := range [][]string{languageDefaults, preUserProgDefaults, allocatorExplicitPeers, postUserProgDefaults} {
+	for _, ss := range [][]string{languageDefaults, goProgramDefaults, allocatorExplicitPeers} {
 		for _, p := range ss {
 			internStr(p)
 		}
@@ -1817,6 +1809,11 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 			resolveGoogleapis = !peerSeen(googleapisPeer)
 		}
 
+		if self := internStr(instance.Path.relString()).any(); slices.Contains(d.peerdirs, self) && !peerSeen(self.string()) {
+			allPeers = append(allPeers, self.string())
+			peerKinds = append(peerKinds, peerKindUserPeer)
+		}
+
 		for _, p := range languageDefaults {
 			peerSeen(p)
 
@@ -1824,7 +1821,7 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 			peerKinds = append(peerKinds, peerKindLangDefault)
 		}
 
-		for _, p := range preUserProgDefaults {
+		for _, p := range goProgramDefaults {
 			peerSeen(p)
 
 			allPeers = append(allPeers, p)
@@ -1836,13 +1833,6 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 
 			allPeers = append(allPeers, p)
 			peerKinds = append(peerKinds, peerKindUserPeer)
-		}
-
-		for _, p := range postUserProgDefaults {
-			peerSeen(p)
-
-			allPeers = append(allPeers, p)
-			peerKinds = append(peerKinds, peerKindProgramDefault)
 		}
 
 		appendUserPeer := func(p ANY) {
@@ -1922,8 +1912,6 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 		frame.peerCXXFlagsGlobal = peerCXXFlagsGlobal[:0]
 		frame.peerCOnlyFlagsGlobal = peerCOnlyFlagsGlobal[:0]
 	}()
-
-	allPeers, peerKinds = applyDeferredPeerOrder(d.moduleStmt.Name, allPeers, peerKinds, allocatorExplicitPeers)
 
 	resolved := append(frame.resolved[:0], preResolved...)
 
