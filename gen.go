@@ -1096,16 +1096,6 @@ func applyImplicitPeerdirs(ctx *GenCtx, instance ModuleInstance, d *ModuleData) 
 		}
 	}
 
-	if !d.hadAllocator && isPyProgramType(d.moduleStmt.Name) {
-		d.hadAllocator = true
-		d.allocatorName = strJ.any()
-	}
-
-	if !d.hadAllocator && isDllModuleType(d.moduleStmt.Name) {
-		d.hadAllocator = true
-		d.allocatorName = strFAKE.any()
-	}
-
 	d.peerdirs = append(d.peerdirs, d.nativeSwigPeerdirs()...)
 
 	pythonProtoVariant := isPythonProtoModule(d)
@@ -1751,16 +1741,7 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 	}
 
 	languageDefaults := e.defaultPeerdirsForModule()
-	isProgram := (isProgramModuleType(d.moduleStmt.Name) || isDllModuleType(d.moduleStmt.Name)) && !isRuntimeAncestor(instance.Path.relString())
 	unitTestPeer := unittestForPeerPath(d.moduleStmt)
-
-	var goProgramDefaults []string
-	var allocatorExplicitPeers []string
-
-	if isProgram && isGoExeModuleType(d.moduleStmt.Name) {
-		goProgramDefaults = e.goProgramPeerdirs()
-		allocatorExplicitPeers = allocatorPeerdirs(d.allocatorName.string(), instance.Platform)
-	}
 
 	const googleapisPeer = "contrib/libs/googleapis-common-protos"
 
@@ -1771,10 +1752,8 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 		internStr(unitTestPeer)
 	}
 
-	for _, ss := range [][]string{languageDefaults, goProgramDefaults, allocatorExplicitPeers} {
-		for _, p := range ss {
-			internStr(p)
-		}
+	for _, p := range languageDefaults {
+		internStr(p)
 	}
 
 	allPeers := frame.allPeers[:0]
@@ -1819,20 +1798,6 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 
 			allPeers = append(allPeers, p)
 			peerKinds = append(peerKinds, peerKindLangDefault)
-		}
-
-		for _, p := range goProgramDefaults {
-			peerSeen(p)
-
-			allPeers = append(allPeers, p)
-			peerKinds = append(peerKinds, peerKindProgramDefault)
-		}
-
-		for _, p := range allocatorExplicitPeers {
-			peerSeen(p)
-
-			allPeers = append(allPeers, p)
-			peerKinds = append(peerKinds, peerKindUserPeer)
 		}
 
 		appendUserPeer := func(p ANY) {
@@ -2166,7 +2131,7 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 			linkTarget := isLinkingModuleType(d.moduleStmt.Name)
 			sbomBlockR := ctx.refSlices.alloc(sbomCap)
 			sbomBlockP := ctx.vfsSlices.alloc(sbomCap)
-			peerSbomRefsRaw, peerSbomPathsRaw, sbomInsertIdx := aggregateSbomComponents(deduper, e, d.moduleStmt.Name, linkTarget, resolved, allocatorExplicitPeers, sbomBlockR[:0], sbomBlockP[:0])
+			peerSbomRefsRaw, peerSbomPathsRaw, sbomInsertIdx := aggregateSbomComponents(deduper, e, d.moduleStmt.Name, linkTarget, resolved, sbomBlockR[:0], sbomBlockP[:0])
 
 			ownSbomInsertIdx = sbomInsertIdx
 			peerSbomRefs = ctx.refSlices.intern(peerSbomRefsRaw)

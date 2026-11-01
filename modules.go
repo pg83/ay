@@ -18,31 +18,31 @@ var (
 	dontExpandVars      = [...]ENV{envARCADIA_BUILD_ROOT, envARCADIA_ROOT, envBINDIR, envCURDIR, envPythonBin, envTestCaseRoot, envTestOutRoot, envTestSourceRoot, envTestWorkRoot}
 )
 
-var allocatorPeers = map[string][]string{
-	"MIM":                       {"library/cpp/malloc/mimalloc"},
-	"MIM_SDC":                   {"library/cpp/malloc/mimalloc_sdc"},
-	"HU":                        {"library/cpp/malloc/hu"},
-	"PROFILED_HU":               {"library/cpp/malloc/profiled_hu"},
-	"THREAD_PROFILED_HU":        {"library/cpp/malloc/thread_profiled_hu"},
-	"TCMALLOC_256K":             {"library/cpp/malloc/tcmalloc", "contrib/libs/tcmalloc"},
-	"TCMALLOC_SMALL_BUT_SLOW":   {"library/cpp/malloc/tcmalloc", "contrib/libs/tcmalloc/small_but_slow"},
-	"TCMALLOC_NUMA_256K":        {"library/cpp/malloc/tcmalloc", "contrib/libs/tcmalloc/numa_256k"},
-	"TCMALLOC_NUMA_LARGE_PAGES": {"library/cpp/malloc/tcmalloc", "contrib/libs/tcmalloc/numa_large_pages"},
-	"TCMALLOC":                  {"library/cpp/malloc/tcmalloc", "contrib/libs/tcmalloc/default"},
-	"TCMALLOC_TC":               {"library/cpp/malloc/tcmalloc", "contrib/libs/tcmalloc/no_percpu_cache"},
-	"GOOGLE":                    {"library/cpp/malloc/galloc"},
-	"J":                         {"library/cpp/malloc/jemalloc"},
-	"LF":                        {"library/cpp/lfalloc"},
-	"LF_YT":                     {"library/cpp/lfalloc/yt"},
-	"LF_DBG":                    {"library/cpp/lfalloc/dbg"},
-	"B":                         {"library/cpp/balloc"},
-	"BM":                        {"library/cpp/balloc_market"},
-	"C":                         {"library/cpp/malloc/calloc"},
-	"LOCKLESS":                  {"library/cpp/malloc/lockless"},
-	"YT":                        {"library/cpp/ytalloc/impl"},
-	"FAKE":                      nil,
-	"SYSTEM":                    {"library/cpp/malloc/system"},
-	"DEFAULT":                   nil,
+var knownAllocators = map[string]bool{
+	"MIM":                       true,
+	"MIM_SDC":                   true,
+	"HU":                        true,
+	"PROFILED_HU":               true,
+	"THREAD_PROFILED_HU":        true,
+	"TCMALLOC_256K":             true,
+	"TCMALLOC_SMALL_BUT_SLOW":   true,
+	"TCMALLOC_NUMA_256K":        true,
+	"TCMALLOC_NUMA_LARGE_PAGES": true,
+	"TCMALLOC":                  true,
+	"TCMALLOC_TC":               true,
+	"GOOGLE":                    true,
+	"J":                         true,
+	"LF":                        true,
+	"LF_YT":                     true,
+	"LF_DBG":                    true,
+	"B":                         true,
+	"BM":                        true,
+	"C":                         true,
+	"LOCKLESS":                  true,
+	"YT":                        true,
+	"FAKE":                      true,
+	"SYSTEM":                    true,
+	"DEFAULT":                   true,
 }
 
 const (
@@ -65,14 +65,6 @@ const (
 	tokenExpandAssignment
 	tokenExpandPathArguments
 )
-
-func allocatorPeerdirs(name string, p *Platform) []string {
-	if name == "J" && p.windows() {
-		return allocatorPeers["SYSTEM"]
-	}
-
-	return allocatorPeers[name]
-}
 
 type CppProtoPlugin struct {
 	Name              string
@@ -289,8 +281,6 @@ type ModuleData struct {
 	objAddLibsGlobal        []ANY
 	srcDirs                 []VFS
 	flags                   FlagSet
-	hadAllocator            bool
-	allocatorName           ANY
 	muslLite                bool
 	cudaSrcs                []CudaSrcsStmt
 	nvccDeviceSrcs          []ANY
@@ -5138,12 +5128,10 @@ func applyAllocatorStmt(v UnknownStmt, d *ModuleData, env Environment) {
 
 	name := v.Args[0]
 
-	if _, ok := allocatorPeers[name.string()]; !ok {
-		throwFmt("gen: unknown allocator %q (line %d); extend allocatorPeers in gen.go", name.string(), v.Line)
+	if !knownAllocators[name.string()] {
+		throwFmt("gen: unknown allocator %q (line %d); extend knownAllocators in modules.go", name.string(), v.Line)
 	}
 
-	d.hadAllocator = true
-	d.allocatorName = name
 	env.setStringID(envALLOCATOR, name.str())
 }
 

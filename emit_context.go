@@ -71,7 +71,6 @@ type EmitContext struct {
 	prodVFS            []VFS
 	cvScratch          []Closure
 	peerScratch        []string
-	sbomOrder          []ResolvedPeer
 	orderedCC          []VFS
 	prodOrder          []int
 	prodRanks          []int
@@ -187,7 +186,6 @@ func newEmitContextIn(frame *ModuleFrame, ctx *GenCtx, instance ModuleInstance, 
 		prodVFS:           prev.prodVFS[:0],
 		cvScratch:         scrub(prev.cvScratch),
 		peerScratch:       scrub(prev.peerScratch),
-		sbomOrder:         scrub(prev.sbomOrder),
 		orderedCC:         prev.orderedCC[:0],
 		prodOrder:         prev.prodOrder[:0],
 		prodRanks:         prev.prodRanks[:0],

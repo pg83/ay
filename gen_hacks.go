@@ -1,71 +1,7 @@
 package main
 
-import "path/filepath"
-
-func applySbomComponentOrder(e *EmitContext, name TOK, linkTarget bool, resolved []ResolvedPeer, allocatorExplicitPeers []string) []ResolvedPeer {
+func aggregateSbomComponents(deduper *DeDuper, e *EmitContext, name TOK, linkTarget bool, resolved []ResolvedPeer, refs []NodeRef, paths []VFS) ([]NodeRef, []VFS, int) {
 	sbomOrder := resolved
-
-	cloneOrder := func() {
-		if len(resolved) > 0 && len(sbomOrder) == len(resolved) && &sbomOrder[0] == &resolved[0] {
-			sbomOrder = append(e.sbomOrder[:0], resolved...)
-			e.sbomOrder = retainMaxLen(e.sbomOrder, sbomOrder)
-		}
-	}
-
-	cxxIdx, libcxxIdx := -1, -1
-
-	for i, rp := range resolved {
-		switch rp.path {
-		case "contrib/libs/cxxsupp":
-			cxxIdx = i
-		case "contrib/libs/cxxsupp/libcxx":
-			libcxxIdx = i
-		}
-	}
-
-	if !isSpecializedLibraryType(name) && cxxIdx > libcxxIdx && libcxxIdx >= 0 {
-		cloneOrder()
-
-		cxx := sbomOrder[cxxIdx]
-
-		copy(sbomOrder[libcxxIdx+2:cxxIdx+1], sbomOrder[libcxxIdx+1:cxxIdx])
-		sbomOrder[libcxxIdx+1] = cxx
-	}
-
-	if linkTarget && len(allocatorExplicitPeers) > 0 {
-		allocSet := make(map[string]struct{}, len(allocatorExplicitPeers))
-
-		for _, p := range allocatorExplicitPeers {
-			allocSet[filepath.Clean(p)] = struct{}{}
-		}
-
-		lldIdx, allocIdx := -1, -1
-
-		for i, rp := range sbomOrder {
-			if rp.path == "build/platform/lld" {
-				lldIdx = i
-			}
-
-			if _, ok := allocSet[rp.path]; ok && allocIdx < 0 {
-				allocIdx = i
-			}
-		}
-
-		if lldIdx >= 0 && allocIdx >= 0 && lldIdx < allocIdx {
-			cloneOrder()
-
-			lld := sbomOrder[lldIdx]
-
-			copy(sbomOrder[lldIdx:allocIdx-1], sbomOrder[lldIdx+1:allocIdx])
-			sbomOrder[allocIdx-1] = lld
-		}
-	}
-
-	return sbomOrder
-}
-
-func aggregateSbomComponents(deduper *DeDuper, e *EmitContext, name TOK, linkTarget bool, resolved []ResolvedPeer, allocatorExplicitPeers []string, refs []NodeRef, paths []VFS) ([]NodeRef, []VFS, int) {
-	sbomOrder := applySbomComponentOrder(e, name, linkTarget, resolved, allocatorExplicitPeers)
 	keepLld := linkTarget || isGoModuleType(name)
 
 	deduper.reset()

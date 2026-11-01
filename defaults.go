@@ -5,28 +5,8 @@ import (
 	"strings"
 )
 
-var runtimeAncestorPaths = map[string]bool{
-	"contrib/libs/musl":                    true,
-	"contrib/libs/libc_compat":             true,
-	"contrib/libs/linuxvdso":               true,
-	"contrib/libs/linuxvdso/original":      true,
-	"contrib/libs/cxxsupp/builtins":        true,
-	"contrib/libs/cxxsupp/libcxx":          true,
-	"contrib/libs/cxxsupp/libcxxrt":        true,
-	"contrib/libs/cxxsupp/libcxxabi":       true,
-	"contrib/libs/cxxsupp/libcxxabi-parts": true,
-	"contrib/libs/libunwind":               true,
-	"library/cpp/malloc/api":               true,
-	"library/cpp/sanitizer/include":        true,
-	"util":                                 true,
-}
-
 var runtimeAncestorCxxConsumers = map[string]bool{
 	"library/cpp/malloc/api": true,
-}
-
-func isRuntimeAncestor(path string) bool {
-	return runtimeAncestorPaths[path]
 }
 
 func (e *EmitContext) defaultPeerdirsForModule() []string {
@@ -52,37 +32,10 @@ func (e *EmitContext) defaultPeerdirsForModule() []string {
 
 func (e *EmitContext) defaultPeerdirsForWithState(instance ModuleInstance) []string {
 	d := e.d
-	flags := d.flags
-	noPlatform := effectiveNoPlatform(flags)
 
-	addLinuxHeaders := instance.Platform.OS == OSLinux && d.setVars.get(strNeedPlatformPeerdirs) != strNo &&
-		instance.Path.relString() != "contrib/libs/linux-headers" &&
-		!strings.HasPrefix(instance.Path.relString(), "contrib/libs/linux-headers/")
-
-	if d.moduleStmt != nil && isGoModuleType(d.moduleStmt.Name) {
-		peers := []string{"build/platform/python/ymake_python3"}
-
-		if instance.Platform.UsesSDKRoot {
-			peers = append(peers, "build/platform/linux_sdk")
-		}
-
-		if addLinuxHeaders {
-			peers = append(peers, "contrib/libs/linux-headers")
-		}
-
-		if !flags.NoRuntime && !noPlatform {
-			peers = append(peers, "contrib/libs/cxxsupp")
-		}
-
-		if !flags.NoUtil && !noPlatform {
-			peers = append(peers, "util")
-		}
-
-		return append(peers, "build/platform/clang")
-	}
-
-	if instance.Language != LangCPP {
-		if addLinuxHeaders {
+	if !isGoModuleType(d.moduleStmt.Name) && instance.Language != LangCPP {
+		if instance.Platform.OS == OSLinux && d.setVars.get(strNeedPlatformPeerdirs) != strNo &&
+			instance.Path.relString() != "contrib/libs/linux-headers" && !strings.HasPrefix(instance.Path.relString(), "contrib/libs/linux-headers/") {
 			return []string{"contrib/libs/linux-headers"}
 		}
 
@@ -106,14 +59,6 @@ func (e *EmitContext) confPeerdirs(instance ModuleInstance) []string {
 	}
 
 	return peers
-}
-
-func (e *EmitContext) goProgramPeerdirs() []string {
-	if e.instance.Platform.ifEnv.bool(envAutocheck) && e.instance.Platform.OS == OSLinux {
-		return append([]string{"build/platform/lld", "contrib/libs/libeatmydata"}, e.cowPeerdirs()...)
-	}
-
-	return append([]string{"build/platform/lld"}, e.cowPeerdirs()...)
 }
 
 func (e *EmitContext) appendPlatformPeerdirs(peers []string, instance ModuleInstance) []string {

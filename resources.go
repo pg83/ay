@@ -607,7 +607,7 @@ func (e *EmitContext) resourcesLibraryPeerClosure(own []ResourceDecl) ResourcesL
 		}
 
 		if e.ctx.sbomEnabled {
-			c.sbomRefs, c.sbomPaths, _ = aggregateSbomComponents(dd, e, e.d.moduleStmt.Name, false, peers, nil, nil, nil)
+			c.sbomRefs, c.sbomPaths, _ = aggregateSbomComponents(dd, e, e.d.moduleStmt.Name, false, peers, nil, nil)
 		}
 
 		dd.reset()
