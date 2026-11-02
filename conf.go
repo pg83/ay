@@ -132,7 +132,28 @@ type confParseFrame struct {
 	owner     string
 	guard     string
 	macro     bool
+	enclosing int
 	body      confMacroBody
+}
+
+func (f *ConfFile) macroConditionParams(macroBranch int32, sig ConfMacroSignature) []string {
+	var params []string
+
+	for b := int(macroBranch) + 1; b < len(f.branches); b++ {
+		if f.branches[b].parent < macroBranch {
+			break
+		}
+
+		confTextRefs(f.branches[b].expr, func(key ENV) {
+			name := internStr(key.string())
+
+			if (slices.Contains(sig.positional, name) || name == sig.vararg && sig.vararg != 0 || slices.ContainsFunc(sig.keywords, func(k ConfKeyword) bool { return k.name == name })) && !slices.Contains(params, name.string()) {
+				params = append(params, name.string())
+			}
+		})
+	}
+
+	return params
 }
 
 func (s *ConfState) readFile(rel, text string) *ConfFile {
@@ -188,7 +209,7 @@ func (s *ConfState) readFile(rel, text string) *ConfFile {
 				previous = frame.branch
 
 				if frame.macro {
-					conf.addMacro(frame.body.header, frame.body.calls, frame.body.direct)
+					conf.addMacro(frame.body.header, frame.branch, &frame.body)
 				}
 
 				*frame = confParseFrame{}
@@ -215,8 +236,16 @@ func (s *ConfState) readFile(rel, text string) *ConfFile {
 			}
 
 			if name, value, op, ok := confStmtAssignment(line); ok {
-				if !top.skipped && top.block != "macro" {
-					conf.stmts = append(conf.stmts, ConfStmt{branch: top.branch, name: internEnv(name), scalar: confStringValue(value), value: value, op: op})
+				if !top.skipped {
+					branch := top.branch
+
+					if top.block == "macro" {
+						branch = 0
+					} else if top.enclosing != 0 {
+						stack[top.enclosing].body.conditions = true
+					}
+
+					conf.stmts = append(conf.stmts, ConfStmt{branch: branch, name: internEnv(name), scalar: confStringValue(value), value: value, op: op})
 				}
 
 				continue
@@ -310,10 +339,11 @@ func (s *ConfState) readFile(rel, text string) *ConfFile {
 
 			conf.branches = append(conf.branches, branch)
 
-			frame := confParseFrame{branch: int32(len(conf.branches) - 1), selectVar: selectVar, skipped: skip, block: block, owner: owner, guard: guard}
+			frame := confParseFrame{branch: int32(len(conf.branches) - 1), selectVar: selectVar, skipped: skip, block: block, owner: owner, guard: guard, enclosing: top.enclosing}
 
 			if strings.HasPrefix(header, "macro ") {
 				frame.macro = true
+				frame.enclosing = len(stack)
 				frame.body.header = header
 			}
 
@@ -1936,17 +1966,18 @@ type ConfMacro struct {
 	file       string
 	sig        ConfMacroSignature
 	calls      []ConfMacroCall
+	conditions bool
+	guard      ENV
 	expansions *confMacroExpansion
 }
 
 type confMacroBody struct {
-	header      string
-	calls       []ConfMacroCall
-	direct      []ConfMacroCall
-	unsupported bool
+	header     string
+	calls      []ConfMacroCall
+	conditions bool
 }
 
-func (f *ConfFile) addMacro(header string, calls, direct []ConfMacroCall) {
+func (f *ConfFile) addMacro(header string, branch int32, body *confMacroBody) {
 	name, params, opened := strings.Cut(strings.TrimPrefix(header, "macro "), "(")
 	params, closed := strings.CutSuffix(strings.TrimSpace(params), ")")
 
@@ -1956,18 +1987,23 @@ func (f *ConfFile) addMacro(header string, calls, direct []ConfMacroCall) {
 
 	sig, specialized := f.state.parseMacroSignature(f.rel, params)
 	key := internStr(strings.TrimSpace(name))
+	calls := body.calls
 
-	if !specialized && len(direct) != 0 {
+	if !specialized && len(calls) != 0 {
 		if f.inits == nil {
 			f.inits = map[STR]*ConfMacro{}
 		}
 
 		if _, ok := f.inits[key]; !ok {
-			f.inits[key] = &ConfMacro{file: f.rel, sig: sig, calls: direct}
+			f.inits[key] = &ConfMacro{file: f.rel, sig: sig, calls: calls}
 		}
 	}
 
-	if !specialized && len(calls) == 0 {
+	for _, param := range f.macroConditionParams(branch, sig) {
+		calls = append(calls[:len(calls):len(calls)], ConfMacroCall{name: kwSET, args: internV(param, " $", param)})
+	}
+
+	if !specialized && len(calls) == 0 && !body.conditions {
 		return
 	}
 
@@ -1982,40 +2018,24 @@ func (f *ConfFile) addMacro(header string, calls, direct []ConfMacroCall) {
 	}
 
 	if _, ok := f.macros[key]; !ok {
-		f.macros[key] = &ConfMacro{file: f.rel, sig: sig, calls: calls}
+		f.macros[key] = &ConfMacro{file: f.rel, sig: sig, calls: calls, conditions: body.conditions, guard: internEnv("env" + key.string())}
 	}
 }
 
 func (body *confMacroBody) addLine(line string) {
-	if property, ok := strings.CutPrefix(line, "."); ok {
-		key, _, _ := strings.Cut(property, "=")
-
-		switch strings.TrimSpace(key) {
-		case "ALLOWED_IN_LINTERS_MAKE", "SEM", "STRUCT_SEM":
-			return
-		}
-	} else {
-		name, args, opened := strings.Cut(line, "(")
-
-		name = strings.TrimSpace(name)
-
-		args, closed := strings.CutSuffix(args, ")")
-
-		if opened && closed && isIdentShapedName(name) {
-			call := ConfMacroCall{name: internStr(name), args: internStr(strings.TrimSpace(args))}
-
-			body.direct = append(body.direct, call)
-
-			if !body.unsupported {
-				body.calls = append(body.calls, call)
-			}
-
-			return
-		}
+	if strings.HasPrefix(line, ".") {
+		return
 	}
 
-	body.calls = nil
-	body.unsupported = true
+	name, args, opened := strings.Cut(line, "(")
+
+	name = strings.TrimSpace(name)
+
+	args, closed := strings.CutSuffix(args, ")")
+
+	if opened && closed && isIdentShapedName(name) {
+		body.calls = append(body.calls, ConfMacroCall{name: internStr(name), args: internStr(strings.TrimSpace(args))})
+	}
 }
 
 func (s *ConfState) parseMacroSignature(rel, params string) (sig ConfMacroSignature, specialized bool) {
@@ -2337,6 +2357,11 @@ func expandConfMacro(ctx *GenCtx, modulePath string, kind ModuleKind, language L
 	d.confMacroDepth++
 
 	defer func() { d.confMacroDepth-- }()
+
+	if macro.conditions {
+		env.setBool(macro.guard, true)
+		platform.conf.set(env, macro.guard, &d.setVars)
+	}
 
 	for i, call := range macro.calls {
 		cached := &expansion.calls[i]
