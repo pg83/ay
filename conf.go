@@ -294,9 +294,21 @@ func (s *ConfState) readFile(rel, text string) *ConfFile {
 			owner := top.owner
 
 			switch {
+			case strings.HasPrefix(header, "macro "), strings.HasPrefix(header, "multimodule "):
+				if len(stack) != 1 {
+					throwFmt("conf: %s: %s inside a block", rel, header)
+				}
+			case strings.HasPrefix(header, "module "):
+				if len(stack) != 1 && !(len(stack) == 2 && top.block == "multimodule") {
+					throwFmt("conf: %s: %s inside a block", rel, header)
+				}
+			}
+
+			switch {
 			case strings.HasPrefix(header, "multimodule "):
 				owner = strings.TrimSpace(strings.TrimPrefix(header, "multimodule "))
 				branch.cond = nil
+				block = "multimodule"
 			case strings.HasPrefix(header, "module "):
 				name, parent, _ := strings.Cut(strings.TrimSpace(strings.TrimPrefix(header, "module ")), ":")
 

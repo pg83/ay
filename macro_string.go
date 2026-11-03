@@ -9,7 +9,7 @@ import (
 
 var (
 	substVariables = &substPolicy{literal: rootVar}
-	substCommand   = &substPolicy{emptyUnknown: true}
+	substCommand   = &substPolicy{emptyUnknown: true, command: true}
 )
 
 var macroModifierNames = map[string]macroFlags{
@@ -82,6 +82,7 @@ const (
 
 type substPolicy struct {
 	makefile      bool
+	command       bool
 	emptyUnknown  bool
 	keepModifiers bool
 	literal       func(name string) bool
@@ -161,16 +162,35 @@ func macroString(text string, i int) (int, bool) {
 	return i, false
 }
 
-func scanMacroRef(text string, i int) (macroRef, bool) {
+func cmdIdentLen(s string) int {
+	if s == "" || !(s[0] == '_' || s[0] >= 'a' && s[0] <= 'z' || s[0] >= 'A' && s[0] <= 'Z') {
+		return 0
+	}
+
+	n := 1
+
+	for n < len(s) && (s[n] == '_' || isMacroAlnum(s[n])) {
+		n++
+	}
+
+	return n
+}
+
+func scanMacroRef(text string, i int, command bool) (macroRef, bool) {
 	ref := macroRef{start: i}
 	j := i + 1
+	nameLen := confVarNameLen
+
+	if command {
+		nameLen = cmdIdentLen
+	}
 
 	if j >= len(text) {
 		return ref, false
 	}
 
 	if text[j] != '{' {
-		n := confVarNameLen(text[j:])
+		n := nameLen(text[j:])
 
 		if n == 0 {
 			return ref, false
@@ -258,7 +278,7 @@ func scanMacroRef(text string, i int) (macroRef, bool) {
 		ref.name, ref.raw = text[j+1:end-1], true
 		j = end
 	} else {
-		n := confVarNameLen(text[j:])
+		n := nameLen(text[j:])
 
 		if n == 0 {
 			return ref, false
@@ -502,7 +522,7 @@ func substMacro(text string, locals []confMacroBinding, env Environment, constan
 		if policy.makefile {
 			ref, ok = scanMakefileRef(text, i)
 		} else {
-			ref, ok = scanMacroRef(text, i)
+			ref, ok = scanMacroRef(text, i, policy.command)
 		}
 
 		if !ok {
@@ -687,7 +707,7 @@ func macroRefs(text string) func(yield func(macroRef) bool) {
 				continue
 			}
 
-			ref, ok := scanMacroRef(text, i)
+			ref, ok := scanMacroRef(text, i, false)
 
 			if !ok {
 				i++
