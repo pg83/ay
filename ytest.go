@@ -265,13 +265,15 @@ func envEnabled(v string) bool {
 }
 
 func testArgs(ss []string) []ANY {
-	out := make([]ANY, len(ss))
+	return testArgsInto(make([]ANY, 0, len(ss)), ss)
+}
 
-	for i, s := range ss {
+func testArgsInto(out []ANY, ss []string) []ANY {
+	for _, s := range ss {
 		if strings.HasPrefix(s, "$(S)/") || strings.HasPrefix(s, "$(B)/") {
-			out[i] = intern(s).any()
+			out = append(out, intern(s).any())
 		} else {
-			out[i] = internStr(s).any()
+			out = append(out, internStr(s).any())
 		}
 	}
 
@@ -621,7 +623,7 @@ func (ctx *GenCtx) testNode(s *TestSuite, chunk TestChunk) *Node {
 	meta, trace, log := work+"/meta.json", work+"/ytest.report.trace", work+"/run_test.log"
 	tar := work + "/testing_out_stuff.tar.zstd"
 	outputs := []VFS{intern(meta), intern(trace), intern(log)}
-	strs := []string{testToolHostPath, "run_test"}
+	strs := append(ctx.testStrs[:0], testToolHostPath, "run_test")
 
 	if o.commandFile {
 		strs = append(strs, testCmdFileStart)
@@ -729,7 +731,9 @@ func (ctx *GenCtx) testNode(s *TestSuite, chunk TestChunk) *Node {
 
 	strs = append(strs, "--compression-filter", "zstd", "--compression-level", "1")
 
-	head := testArgs(strs)
+	head := testArgsInto(ctx.testAnys[:0], strs)
+
+	ctx.testStrs = strs[:0]
 
 	for _, g := range sortedResourceGlobals(s.globals) {
 		head = append(head, argGlobalResource.any(), g.Token.any())
@@ -785,8 +789,9 @@ func (ctx *GenCtx) testNode(s *TestSuite, chunk TestChunk) *Node {
 	}
 
 	cmds = append(cmds, Cmd{CmdArgs: na.chunkList(na.anyList(head...)), Cwd: bld.cwd()})
+	ctx.testAnys = head[:0]
 
-	inputs := append(append(append([]VFS{}, s.runInputs...), s.checkFiles...), s.prepareInputs...)
+	inputs := append(append(append(ctx.testInputs[:0], s.runInputs...), s.checkFiles...), s.prepareInputs...)
 	inputNames := s.inputNames
 
 	for _, p := range related {
@@ -798,6 +803,7 @@ func (ctx *GenCtx) testNode(s *TestSuite, chunk TestChunk) *Node {
 	}
 
 	slices.SortFunc(inputs, vfsCompare)
+	ctx.testInputs = inputs[:0]
 
 	kv := &KV{P: testSizeKinds[s.size], Path: s.projectPath + "/" + s.name, PC: pcYellow, RunTestNode: true, ShowOutBool: true, HasSpecialRunner: true}
 
@@ -898,7 +904,53 @@ func (o *TestOpts) commonEnvMap() map[string]string {
 	return env
 }
 
+type testEnvKey struct {
+	clearEnvironment, pythonNoBytecode, disableLeaks, importCheckEnv bool
+	execPath                                                         string
+}
+
+type testEnvTemplate struct {
+	vars EnvVars
+	name int
+}
+
 func (ctx *GenCtx) testEnv(s *TestSuite) EnvVars {
+	key := testEnvKey{clearEnvironment: s.clearEnvironment, pythonNoBytecode: s.pythonNoBytecode, disableLeaks: s.disableLeaks, importCheckEnv: s.importCheckEnv}
+
+	if s.testType == "exectest" {
+		key.execPath = s.execPath
+	}
+
+	template, ok := ctx.testEnvTemplates[key]
+
+	if !ok {
+		vars := ctx.testEnvVars(s)
+		name := envTEST_NAME
+
+		template = testEnvTemplate{vars: vars, name: slices.IndexFunc(vars, func(v EnvVar) bool { return v.Name == name })}
+
+		if ctx.testEnvTemplates == nil {
+			ctx.testEnvTemplates = map[testEnvKey]testEnvTemplate{}
+		}
+
+		ctx.testEnvTemplates[key] = template
+	}
+
+	n := len(template.vars)
+	out := ctx.na.envs.alloc(n)[:n:n]
+
+	copy(out, template.vars)
+
+	if template.name >= 0 {
+		out[template.name].Value = internStr(s.name).any()
+	}
+
+	ctx.na.envs.commit(n)
+
+	return EnvVars(out)
+}
+
+func (ctx *GenCtx) testEnvVars(s *TestSuite) EnvVars {
 	env := ctx.tests.commonEnvMap()
 	mandatory := map[string]bool{"YA_MANDATORY_ENV_VARS": true}
 
@@ -911,7 +963,7 @@ func (ctx *GenCtx) testEnv(s *TestSuite) EnvVars {
 	env["ARCADIA_BUILD_ROOT"] = testBuildRoot
 	env["ARCADIA_ROOT_DISTBUILD"] = testSourceRoot
 	env["ARCADIA_SOURCE_ROOT"] = testSourceRoot
-	env["TEST_NAME"] = s.name
+	env["TEST_NAME"] = ""
 	env["YA_TEST_RUNNER"] = "1"
 	env["GORACE"] = "halt_on_error=1"
 

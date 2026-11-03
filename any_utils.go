@@ -127,6 +127,10 @@ func joinAnys(as []ANY, sep string) string {
 }
 
 func joinAnysSTR(as []ANY, sep string) STR {
+	if len(as) == 1 && as[0].vfs() == 0 {
+		return as[0].str()
+	}
+
 	b := joinAnysScratch[:0]
 
 	for i, a := range as {

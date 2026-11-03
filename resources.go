@@ -279,11 +279,36 @@ func resolveResourceGlobalRef(s string, globals []ResourceDecl) string {
 	return ""
 }
 
-func resolveResourceGlobalArgs(args []ANY, globals []ResourceDecl, scratch *EnvStore) []ANY {
+func resolveResourceGlobalArgs(args []ANY, globals []ResourceDecl, scratch *resourceEnvScratch) []ANY {
 	return resourceGlobalArgumentValue(args, globals, scratch).Args
 }
 
-func resourceGlobalArgumentValue(args []ANY, globals []ResourceDecl, scratch *EnvStore) CompilerFlagValue {
+type resourceEnvScratch struct {
+	store EnvStore
+	bound []ResourceDecl
+}
+
+func (scratch *resourceEnvScratch) bind(globals []ResourceDecl) {
+	if len(globals) == len(scratch.bound) && (len(globals) == 0 || &globals[0] == &scratch.bound[0]) {
+		return
+	}
+
+	env := Environment{s: &scratch.store}
+
+	for _, d := range scratch.bound {
+		env.unbind(internEnvSTR(d.GlobalVar))
+	}
+
+	scratch.store.resourceBindings = scratch.store.resourceBindings[:0]
+
+	for _, d := range globals {
+		env.setResource(d)
+	}
+
+	scratch.bound = globals
+}
+
+func resourceGlobalArgumentValue(args []ANY, globals []ResourceDecl, scratch *resourceEnvScratch) CompilerFlagValue {
 	var uses []STR
 	var env Environment
 	var out []ANY
@@ -300,18 +325,8 @@ func resourceGlobalArgumentValue(args []ANY, globals []ResourceDecl, scratch *En
 		}
 
 		if env.s == nil {
-			scratch.resourceBindings = scratch.resourceBindings[:0]
-			env = Environment{s: scratch, resourceUses: &uses}
-
-			for _, d := range globals {
-				env.setResource(d)
-			}
-
-			defer func() {
-				for _, d := range globals {
-					env.unbind(internEnvSTR(d.GlobalVar))
-				}
-			}()
+			scratch.bind(globals)
+			env = Environment{s: &scratch.store, resourceUses: &uses}
 		}
 
 		if out == nil {

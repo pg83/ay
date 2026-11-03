@@ -161,7 +161,12 @@ func captureSourceTextAppend(v *UnknownStmt, env Environment) *sourceTextAppend 
 		return nil
 	}
 
-	id := internEnv(expandStmtToken(v.Args[0].string(), env))
+	id := internEnvSTR(v.Args[0].str())
+
+	if strHasDollar(v.Args[0].str().any()) {
+		id = internEnv(expandStmtToken(v.Args[0].string(), env))
+	}
+
 	out := &sourceTextAppend{id: id, ranges: append([]SourceTextRange(nil), env.s.textInputs[id]...)}
 	offset := 0
 

@@ -1852,10 +1852,14 @@ func stmtMacroNameID(s Stmt) STR {
 func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Language, stmts []Stmt, env Environment, d *ModuleData, onWarn func(Warn), platform *Platform) {
 	fs := ctx.fs
 
-	defer d.recordProducerDeclarations()
+	if d.interpreting {
+		defer d.recordProducerDeclarations()
+	}
 
 	for _, s := range stmts {
-		d.recordProducerDeclarations()
+		if d.interpreting {
+			d.recordProducerDeclarations()
+		}
 
 		if d.discarded {
 			return
@@ -4345,6 +4349,7 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 			}
 
 			name := v.Args[0].string()
+			nameEnv := internEnvSTR(v.Args[0].str())
 			value := joinAnysSTR(v.Args[1:], " ")
 
 			if name == "TEST_ENV_VALUE" {
@@ -4354,9 +4359,9 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 			original := value.string()
 
 			if name == importMaskVariable {
-				env.setFromString(internEnv(name), appendPythonImportMask(original, env, d))
+				env.setFromString(nameEnv, appendPythonImportMask(original, env, d))
 			} else {
-				env.appendSTR(internEnv(name), value)
+				env.appendSTR(nameEnv, value)
 			}
 
 			d.captureResourcePeerPolicy(name, env)

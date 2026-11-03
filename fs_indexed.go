@@ -17,15 +17,15 @@ const (
 )
 
 type fsBackend struct {
-	tree         *IndexedTree
-	readBuf      []byte
-	confRootOnce sync.Once
-	confRootDir  string
+	tree           *IndexedTree
+	testReadErrors map[string]error
+	confRootOnce   sync.Once
+	confRootDir    string
 }
 
 func (fs *OsFS) initBackend() {
 	fs.tree = throw2(openIndexed(fs.srcRoot))
-	fs.readBuf = make([]byte, readChunkSize)
+	fs.testReadErrors = map[string]error{}
 }
 
 func (fs *OsFS) lookupRel(rel string) int {
@@ -72,9 +72,9 @@ func (fs *OsFS) readFileRel(rel string) [][]byte {
 	}
 
 	data := fs.tree.data(i)
-	n := copy(fs.readBuf, data)
+	n := min(len(data), readChunkSize)
 
-	fs.readResult[0] = fs.readBuf[:n]
+	fs.readResult[0] = data[:n:n]
 
 	if n == len(data) {
 		return fs.readResult[:1]
@@ -124,6 +124,18 @@ func (fs *OsFS) sourcePathExists(rel string) bool {
 }
 
 func (fs *OsFS) testPathReadError(rel string) error {
+	if err, cached := fs.testReadErrors[rel]; cached {
+		return err
+	}
+
+	err := fs.testPathReadErrorUncached(rel)
+
+	fs.testReadErrors[rel] = err
+
+	return err
+}
+
+func (fs *OsFS) testPathReadErrorUncached(rel string) error {
 	roots := []string{rel}
 
 	if i := fs.lookupRel(rel); i >= 0 && fs.tree.isDir(i) {

@@ -10,6 +10,7 @@ import (
 var (
 	vfsEscapedJSON vfsEscapeCache
 	vfsCleanJSON   BitSet
+	strJSONState   TwoBitSet
 )
 
 var htmlSafeNoEscape = func() [128]bool {
@@ -30,9 +31,37 @@ var htmlSafeNoEscape = func() [128]bool {
 }()
 
 const (
+	strJSONClean        = 1
+	strJSONEscaped      = 2
 	vfsEscapeBlockShift = 20
 	hex                 = "0123456789abcdef"
 )
+
+func appendSTRComma(buf []byte, id STR) []byte {
+	s := id.string()
+
+	switch strJSONState.get(uint32(id)) {
+	case strJSONClean:
+		buf = append(buf, '"')
+		buf = append(buf, s...)
+
+		return append(buf, '"', ',')
+	case strJSONEscaped:
+		return append(appendString(buf, s), ',')
+	}
+
+	start := len(buf)
+
+	buf = appendString(buf, s)
+
+	if len(buf)-start == len(s)+2 {
+		strJSONState.set(uint32(id), strJSONClean)
+	} else {
+		strJSONState.set(uint32(id), strJSONEscaped)
+	}
+
+	return append(buf, ',')
+}
 
 type vfsEscapeCache struct {
 	pos    []uint32
@@ -262,8 +291,7 @@ func appendStrChunks(buf []byte, chunks ArgChunks) []byte {
 			if v := a.vfs(); v != 0 {
 				buf = appendVFSComma(buf, v)
 			} else {
-				buf = appendString(buf, a.str().string())
-				buf = append(buf, ',')
+				buf = appendSTRComma(buf, a.str())
 			}
 		}
 	}

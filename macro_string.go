@@ -468,7 +468,7 @@ func substMacro(text string, locals []confMacroBinding, env Environment, constan
 		case '\\':
 			if policy.makefile && i+1 < len(text) {
 				if copied == 0 {
-					out.Grow(len(text))
+					out.Grow(len(text) + len(text)/2 + 32)
 				}
 
 				if policy.track != nil {
@@ -534,7 +534,7 @@ func substMacro(text string, locals []confMacroBinding, env Environment, constan
 		}
 
 		if copied == 0 {
-			out.Grow(len(text))
+			out.Grow(len(text) + len(text)/2 + 32)
 		}
 
 		out.WriteString(text[copied:ref.start])

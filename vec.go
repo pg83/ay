@@ -40,7 +40,7 @@ func (v *Vec[T]) freshLen(n int) bool {
 		return false
 	}
 
-	v.s = make([]T, n+n/8)
+	v.s = make([]T, n+n/4)
 
 	return true
 }

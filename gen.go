@@ -263,7 +263,11 @@ type GenCtx struct {
 	scannerTargetPIC    *IncludeScanner
 	roots               map[ModuleInstance]bool
 	rootPaths           map[VFS]bool
-	resourceEnv         EnvStore
+	resourceEnv         resourceEnvScratch
+	testEnvTemplates    map[testEnvKey]testEnvTemplate
+	testStrs            []string
+	testAnys            []ANY
+	testInputs          []VFS
 	targetDirs          map[string]bool
 	rootDemand          ModuleDemand
 }
@@ -611,7 +615,19 @@ func (ctx *GenCtx) scanModuleConfiguration(instance ModuleInstance) (*ModuleStmt
 
 	d.reset()
 
+	var pending *ModuleStmt
+
+	applyModule := func() {
+		if pending != nil {
+			stmt := pending
+
+			pending = nil
+			collectStmts(ctx, dir, instance.Kind, instance.Language, []Stmt{stmt}, env, d, ctx.onWarn, instance.Platform)
+		}
+	}
+
 	apply := func(stmt Stmt) {
+		applyModule()
 		collectStmts(ctx, dir, instance.Kind, instance.Language, []Stmt{stmt}, env, d, ctx.onWarn, instance.Platform)
 	}
 
@@ -630,19 +646,30 @@ func (ctx *GenCtx) scanModuleConfiguration(instance ModuleInstance) (*ModuleStmt
 					apply(st)
 				}
 			case *ModuleStmt:
+				applyModule()
+
 				v = d.moduleContentDeclaration(v)
 				module = v
 
 				instance = ctx.rootInstanceForDeclaration(dir, demandNone, v)
 				instance.Platform = platform
-				apply(st)
+
+				if d.readModuleContentOnly {
+					apply(st)
+				} else {
+					pending = v
+				}
 			case *EndStmt:
-				if d.processModuleEnd(dir, v.Line, ctx.onWarn) {
+				if pending != nil && !d.moduleEnded {
+					d.moduleEnded = true
+				} else if d.processModuleEnd(dir, v.Line, ctx.onWarn) {
 					d.moduleEnded = true
 				}
 			case *SetStmt, *DefaultVarStmt:
 				apply(st)
 			case *IfStmt:
+				applyModule()
+
 				if evalCond(v.Cond, env) {
 					scan(v.Then)
 				} else {
@@ -654,12 +681,14 @@ func (ctx *GenCtx) scanModuleConfiguration(instance ModuleInstance) (*ModuleStmt
 				}
 
 				if v.Name == tokDllFor {
+					applyModule()
 					withDllForStmts(ctx, dir, v, scan)
 
 					continue
 				}
 
 				if v.Name == tokGoTestFor {
+					applyModule()
 					d.withGoTestForStmts(ctx, dir, v, scan)
 
 					continue
@@ -675,6 +704,14 @@ func (ctx *GenCtx) scanModuleConfiguration(instance ModuleInstance) (*ModuleStmt
 
 				if v.Name == tokRecurse || v.Name == tokRecurseRootRelative || v.Name == tokRecurseForTests {
 					expanded := *v
+
+					for _, arg := range v.Args {
+						if strHasDollar(arg.str().any()) {
+							applyModule()
+
+							break
+						}
+					}
 
 					expanded.Args = expandStmtTokens(v.Args, env)
 					children = appendConfigurationRecurses(children, dir, expanded, platform)
