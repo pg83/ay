@@ -316,7 +316,6 @@ type ModuleData struct {
 	cFlagsAppend            []ANY
 	pythonSQLite3           bool
 	pyNamespace             *ANY
-	pyModuleNamespace       *ANY
 	pyNamespacePython2      bool
 	protoNamespace          *ANY
 	ymapsSprotoSrcs         []ANY
@@ -842,6 +841,10 @@ func collectModuleInto(ctx *GenCtx, instance ModuleInstance, stmts []Stmt, env E
 		(isPythonProtoModule(d) || d.unit.Type == tokPy2Library || d.unit.Type == tokPy3Library || d.unit.Type == tokPy23Library)
 	d.flags.NoCompilerWarnings = env.bool(envNoCompilerWarnings)
 	d.noLint = env.string(envNoLintValue)
+
+	if value := env.string(envPyNamespaceValue); value != "" && d.pyNamespace == nil {
+		d.pyNamespace = ptr(internStr(value).any())
+	}
 
 	nativeSources := d.srcs[:0]
 
@@ -3532,13 +3535,6 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 		if !isGoModuleType(d.unit.Type) && !pythonProtoPeerContext(d) {
 			d.peerdirs = append(d.peerdirs, strContribLibsGrpc.any())
 		}
-	case tokPyNamespace:
-		if len(v.Args) != 1 {
-			throwFmt("gen: PY_NAMESPACE expects exactly 1 argument, got %d", len(v.Args))
-		}
-
-		d.pyNamespace = ptr(v.Args[0])
-		d.pyModuleNamespace = d.pyNamespace
 	case tokProtoToNamespace:
 		collectProtoToNamespace(fs, modulePath, v, d, env, onWarn)
 	case tokRegisterYqlPythonUdf:
@@ -4697,7 +4693,12 @@ func collectPySrcGroup(fs FS, modulePath string, v UnknownStmt, d *ModuleData, e
 	cythonHeader := false
 	cythonApiHeader := false
 	swigCMode := false
-	namespace := d.pyModuleNamespace
+
+	var namespace *ANY
+
+	if value := env.string(envPyNamespaceValue); value != "" {
+		namespace = ptr(internStr(value).any())
+	}
 
 	if namespace != nil && namespace.string() == "." {
 		topLevel = true

@@ -128,7 +128,6 @@ var handledMacroTokens = map[TOK]bool{
 	tokProtoToNamespace:                     true,
 	tokPyConstructor:                        true,
 	tokPyMain:                               true,
-	tokPyNamespace:                          true,
 	tokPyProtoPlugin:                        true,
 	tokPyProtoPlugin2:                       true,
 	tokPyRegister:                           true,

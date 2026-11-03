@@ -257,6 +257,7 @@ var (
 	envPy3Ros                                 = internEnv("PY3_ROS")
 	envPyExtraLintFilesValue                  = internEnv("_PY_EXTRA_LINT_FILES_VALUE")
 	envPyLinterFiles                          = internEnv("PY_LINTER_FILES")
+	envPyNamespaceValue                       = internEnv("PY_NAMESPACE_VALUE")
 	envPyProto                                = internEnv("PY_PROTO")
 	envPyProtoMypyEnabled                     = internEnv("PY_PROTO_MYPY_ENABLED")
 	envPythonBin                              = internEnv("PYTHON_BIN")
