@@ -220,6 +220,7 @@ var (
 	envOS_LINUX                               = internEnv("OS_LINUX")
 	envOS_SDK                                 = internEnv("OS_SDK")
 	envOS_WINDOWS                             = internEnv("OS_WINDOWS")
+	envOptimizePyProtosFlag                   = internEnv("OPTIMIZE_PY_PROTOS_FLAG")
 	envOsIos                                  = internEnv("OS_IOS")
 	envPOPCNT_CFLAGS                          = internEnv("POPCNT_CFLAGS")
 	envPROFILE_MEMORY_ALLOCATIONS             = internEnv("PROFILE_MEMORY_ALLOCATIONS")

@@ -54,7 +54,7 @@ func (d *ModuleData) collectPythonStyleChecks(env Environment) {
 	checks := d.styleChecks[:0]
 
 	for _, check := range d.styleChecks {
-		if check.CPP && (d.noLint == "none" || d.noLint == "none_internal" || env.bool(envCppAnalysisMode)) {
+		if noLint := env.string(envNoLintValue); check.CPP && (noLint == "none" || noLint == "none_internal" || env.bool(envCppAnalysisMode)) {
 			continue
 		}
 

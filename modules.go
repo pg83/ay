@@ -323,7 +323,6 @@ type ModuleData struct {
 	pyProtoMypy             bool
 	noOptimize              bool
 	optimizePyProtos        bool
-	optimizePyProtosSet     bool
 	ignoreCppProtoSelfPeers bool
 	needGoogleProtoPeerdirs bool
 	cppProtoPlugins         []CppProtoPlugin
@@ -842,6 +841,7 @@ func collectModuleInto(ctx *GenCtx, instance ModuleInstance, stmts []Stmt, env E
 	d.pyProtoMypy = env.string(envPyProtoMypyEnabled) == "yes" &&
 		(isPythonProtoModule(d) || d.unit.Type == tokPy2Library || d.unit.Type == tokPy3Library || d.unit.Type == tokPy23Library)
 	d.flags.NoCompilerWarnings = env.bool(envNoCompilerWarnings)
+	d.noLint = env.string(envNoLintValue)
 
 	nativeSources := d.srcs[:0]
 
@@ -1151,10 +1151,7 @@ func collectModuleInto(ctx *GenCtx, instance ModuleInstance, stmts []Stmt, env E
 		d.peerdirs = append(d.peerdirs, strLibraryCppProtoConfigCodegen.any(), strLibraryCppProtoConfigProtos.any(), strContribLibsProtobuf.any())
 	}
 
-	if d.moduleStmt != nil && d.moduleStmt.Name == tokProtoLibrary && !d.optimizePyProtosSet {
-		d.optimizePyProtos = true
-	}
-
+	d.optimizePyProtos = env.string(envOptimizePyProtosFlag) == "yes"
 	d.ignoreCppProtoSelfPeers = env.string(envIgnoreCppProtoSelfPeers) == "yes"
 
 	if hasPyGztProto && d.optimizePyProtos {
@@ -1928,7 +1925,6 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 			}
 
 			if v.Name == tokProtoLibrary && language == LangTS {
-				d.noLint = "none"
 				env.setString(envNoLintValue, "none")
 			}
 
@@ -2030,7 +2026,6 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 				}
 
 				if language == LangPy {
-					d.noLint = "none_internal"
 					env.setBool(envPy3Fbs, true)
 					env.setString(envNoLintValue, "none_internal")
 				}
@@ -2075,7 +2070,6 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 
 			if d.moduleStmt.Name == tokProtoLibrary {
 				if language == LangPy || language == LangPy2 {
-					d.noLint = "none_internal"
 					env.setString(envNoLintValue, "none_internal")
 				}
 
@@ -3391,20 +3385,12 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 		for _, name := range goDirSources(fs, dir) {
 			d.srcs = append(d.srcs, SrcMeta{Source: source(dir + "/" + name).any(), Prio: stmtPrioDefault})
 		}
-	case tokNoLint:
-		d.noLint = "none"
-
-		if len(v.Args) > 0 && v.Args[0].string() == "ktlint" {
-			d.noLint = "ktlint"
-		}
-
-		env.setString(envNoLintValue, d.noLint)
 	case tokStyleCpp:
 		d.collectCPPStyle(v, env)
 		env.setBool(envUseAllSrcs, true)
 		applyHeaders(fs, modulePath, []ANY{str4.any()}, d)
 
-		if d.noLint != "none" && d.noLint != "none_internal" {
+		if noLint := env.string(envNoLintValue); noLint != "none" && noLint != "none_internal" {
 			d.peerdirs = append(d.peerdirs, strBuildPlatformClangFormat.any())
 		}
 	case tokHeaders:
@@ -3807,12 +3793,6 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 		}
 	case tokExplicitOutputs:
 		d.unionExplicitOutputs = append(d.unionExplicitOutputs, expandSourceArguments(v.Args, env)...)
-	case tokNoOptimizePyProtos:
-		d.optimizePyProtos = false
-		d.optimizePyProtosSet = true
-	case tokOptimizePyProtos:
-		d.optimizePyProtos = true
-		d.optimizePyProtosSet = true
 	case tokSrc:
 
 		if len(v.Args) == 0 {
@@ -3985,7 +3965,7 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 		noLint, _ := env.lookup("_NO_LINT_VALUE")
 		tidy, _ := env.lookup("TIDY")
 
-		if d.noLint != "none" && d.noLint != "none_internal" && noLint != "none" && noLint != "none_internal" && tidy != "yes" {
+		if noLint != "none" && noLint != "none_internal" && tidy != "yes" {
 			d.peerdirs = append(d.peerdirs, internStr(javaDetekt.resourcePeer).any())
 		}
 	case tokStyleYAMLConf:
@@ -4839,7 +4819,7 @@ func collectPySrcGroup(fs FS, modulePath string, v UnknownStmt, d *ModuleData, e
 			if !explicitModule {
 				src = strings.TrimSuffix(src, ".gztproto") + ".proto"
 
-				if !d.optimizePyProtosSet || d.optimizePyProtos {
+				if env.string(envOptimizePyProtosFlag) == "yes" {
 					d.peerdirs = append(d.peerdirs, strKernelGazetteerProto.any())
 				}
 			}
