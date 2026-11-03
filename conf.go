@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"slices"
 	"strings"
+
+	"github.com/zeebo/xxh3"
 )
 
 const (
@@ -2036,7 +2038,7 @@ type ConfMacro struct {
 	command    bool
 	foreach    bool
 	guard      ENV
-	expansions *confMacroExpansion
+	expansions *IntMap[*confMacroExpansion]
 }
 
 type confMacroBody struct {
@@ -2258,7 +2260,19 @@ type confMacroExpansion struct {
 }
 
 func (s *ConfState) bind(macro *ConfMacro, args []ANY) *confMacroExpansion {
-	for expansion := macro.expansions; expansion != nil; expansion = expansion.next {
+	key := uint64(1)
+
+	if len(args) > 0 {
+		key = xxh3.Hash(sliceBytes(args)) | 1
+	}
+
+	if macro.expansions == nil {
+		macro.expansions = newIntMap[*confMacroExpansion](4)
+	}
+
+	cell, _ := macro.expansions.cell(key)
+
+	for expansion := *cell; expansion != nil; expansion = expansion.next {
 		if slices.Equal(expansion.args, args) {
 			return expansion
 		}
@@ -2266,12 +2280,12 @@ func (s *ConfState) bind(macro *ConfMacro, args []ANY) *confMacroExpansion {
 
 	expansion := s.expansions.one()
 
-	expansion.next = macro.expansions
+	expansion.next = *cell
 	expansion.args = astArgs.list(args...)
 	expansion.locals, expansion.failure = macro.sig.bind(expansion.args, s.bindings)
 	expansion.calls = s.calls.alloc(len(macro.calls))[:len(macro.calls):len(macro.calls)]
 	s.calls.commit(len(macro.calls))
-	macro.expansions = expansion
+	*cell = expansion
 
 	return expansion
 }
