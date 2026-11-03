@@ -254,7 +254,7 @@ func resolveCodegenInputRefs(node *Node, inputs InputChunks, reg *CodegenRegistr
 				refs = nodeRefScratches.get()
 			}
 
-			if info.OnUse != nil {
+			if info.onUse() != nil {
 				fireGenerated(info)
 			}
 
@@ -371,7 +371,7 @@ func (e *EmitContext) includeNodeInputs(node *NodeSpec) {
 			e.scanner.deferClosure(&node.Node, cl, fixIncludes)
 		}
 
-		if info := e.codegen.lookup(node.input.root); info != nil && info.IncludedInputs != nil {
+		if info := e.codegen.lookup(node.input.root); info != nil && info.includedInputs() != nil {
 			e.scanner.addInputFix(&node.Node, node.input.root, fixIncludedSources)
 		}
 
@@ -389,11 +389,16 @@ func (e *EmitContext) includeNodeInputs(node *NodeSpec) {
 	var extra []Closure
 	var included InputChunks
 	var templates, textTemplates []VFS
+	var depRefs, depRefsOne []NodeRef
 
 	defer func() {
 		if extra != nil {
 			clear(extra)
 			closureScratches.put(extra)
+		}
+
+		if depRefs != nil {
+			refScratches.put(depRefs[:0])
 		}
 
 		if included != nil {
@@ -409,12 +414,12 @@ func (e *EmitContext) includeNodeInputs(node *NodeSpec) {
 
 		for _, input := range chunk {
 			if info := e.codegen.lookup(input); info != nil {
-				if len(info.IncludedBuildInputs) > 0 {
+				if inputs := info.includedBuildInputs(); len(inputs) > 0 {
 					if included == nil {
 						included = inputChunkScratches.get()
 					}
 
-					included = append(included, info.IncludedBuildInputs)
+					included = append(included, inputs)
 				}
 			}
 		}
@@ -428,7 +433,16 @@ func (e *EmitContext) includeNodeInputs(node *NodeSpec) {
 				}
 
 				included = append(included, deps.Inputs)
-				node.DepRefs = concat(node.DepRefs, deps.Refs)
+
+				switch {
+				case len(deps.Refs) == 0:
+				case depRefs != nil:
+					depRefs = append(depRefs, deps.Refs...)
+				case depRefsOne == nil:
+					depRefsOne = deps.Refs
+				default:
+					depRefs = append(append(refScratches.get(), depRefsOne...), deps.Refs...)
+				}
 			}
 
 			template := strings.HasSuffix(input.relString(), ".in")
@@ -447,7 +461,7 @@ func (e *EmitContext) includeNodeInputs(node *NodeSpec) {
 			if input.isBuild() {
 				info = e.codegen.lookup(input)
 
-				if info != nil && info.OnUse != nil {
+				if info != nil && info.onUse() != nil {
 					e.touchFbsNativeInput(info)
 				}
 			}
@@ -467,10 +481,20 @@ func (e *EmitContext) includeNodeInputs(node *NodeSpec) {
 					extra = append(extra, cl)
 				}
 
-				if info := e.codegen.lookup(input); info != nil && info.IncludedInputs != nil {
+				if info := e.codegen.lookup(input); info != nil && info.includedInputs() != nil {
 					e.scanner.addInputFix(&node.Node, input, fixIncludedSources)
 				}
 			}
+		}
+	}
+
+	if depRefs != nil {
+		node.DepRefs = e.ctx.na.refsJoined(node.DepRefs, depRefs)
+	} else if depRefsOne != nil {
+		if len(node.DepRefs) == 0 {
+			node.DepRefs = depRefsOne
+		} else {
+			node.DepRefs = e.ctx.na.refsJoined(node.DepRefs, depRefsOne)
 		}
 	}
 
@@ -641,8 +665,8 @@ func (e *EmitContext) collectScriptOutput(output VFS) {
 func (e *EmitContext) appendModuleOutputs(node *NodeSpec) {
 	for _, meta := range e.metas {
 		if src := meta.Source.vfs(); src != 0 && src.isBuild() {
-			if info := e.codegen.lookup(src); info != nil && info.OwnerModule == e.instance.Path && len(info.ModuleOutputs) > 0 {
-				node.Outputs = append(node.Outputs, info.ModuleOutputs...)
+			if info := e.codegen.lookup(src); info != nil && info.OwnerModule == e.instance.Path && len(info.moduleOutputs()) > 0 {
+				node.Outputs = append(node.Outputs, info.moduleOutputs()...)
 			}
 		}
 	}
@@ -729,7 +753,7 @@ func (e *EmitContext) emit() {
 
 func (e *EmitContext) deferInputLoops(node *Node) {
 	for _, output := range node.Outputs {
-		if info := e.codegen.lookup(output); info != nil && len(info.InputLoopSources) > 0 {
+		if info := e.codegen.lookup(output); info != nil && len(info.inputLoopSources()) > 0 {
 			e.scanner.addInputFix(node, output, fixInputLoop)
 		}
 	}

@@ -7,7 +7,10 @@ import (
 	"unicode/utf8"
 )
 
-var vfsEscapedJSON vfsEscapeCache
+var (
+	vfsEscapedJSON vfsEscapeCache
+	vfsCleanJSON   BitSet
+)
 
 var htmlSafeNoEscape = func() [128]bool {
 	var t [128]bool
@@ -138,7 +141,7 @@ func writeGraphCompact(w io.Writer, g *Graph, dropSrcInputs bool) {
 func appendNode(buf []byte, n *Node, inputs InputChunks, fetchRefs *DenseMap[STR, NodeRef], dropSrcInputs bool) []byte {
 	buf = append(buf, '{')
 
-	if n.DisableCache || n.KV.DisableCache {
+	if n.disableCache() || n.KV.DisableCache {
 		buf = append(buf, `"cache":false,`...)
 	}
 
@@ -178,7 +181,7 @@ func appendNode(buf []byte, n *Node, inputs InputChunks, fetchRefs *DenseMap[STR
 	}
 
 	buf = append(buf, `,"kv":`...)
-	buf = appendKV(buf, *n.KV, n.KVExts)
+	buf = appendKV(buf, *n.KV, n.kvExts())
 	buf = append(buf, `,"outputs":`...)
 	buf = appendVFSSlice(buf, n.Outputs)
 
@@ -325,6 +328,14 @@ func appendVFS(buf []byte, v VFS) []byte {
 func appendVFSComma(buf []byte, v VFS) []byte {
 	id := v.strID()
 
+	if vfsCleanJSON.has(id) {
+		buf = append(buf, '"')
+		buf = append(buf, v.prefix()...)
+		buf = append(buf, v.relString()...)
+
+		return append(buf, '"', ',')
+	}
+
 	if cached := vfsEscapedJSON.get(id); cached != nil {
 		return append(buf, cached...)
 	}
@@ -346,7 +357,12 @@ func appendVFSUncached(buf []byte, v VFS, id uint32) []byte {
 	}
 
 	buf = append(buf, '"', ',')
-	vfsEscapedJSON.put(id, buf[start:])
+
+	if s != "" && len(buf)-start == len(s)+vfsPrefixLen+3 {
+		vfsCleanJSON.add(id)
+	} else {
+		vfsEscapedJSON.put(id, buf[start:])
+	}
 
 	return buf
 }

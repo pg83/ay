@@ -24,6 +24,10 @@ func (b *BitSet) add(v uint32) {
 	*unsafeAt(b.words.s, uint64(w)) |= uint64(1) << (v & 63)
 }
 
+func (b *BitSet) copyFrom(o *BitSet) {
+	b.words.s = append(b.words.s[:0], o.words.s...)
+}
+
 func (b *BitSet) remove(v uint32) {
 	w := v >> 6
 

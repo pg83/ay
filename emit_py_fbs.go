@@ -106,7 +106,7 @@ func (e *EmitContext) emitPyFbsGroup(files []PyFbsSource) {
 		Cmds: na.cmdList(
 			Cmd{CmdArgs: na.chunkList(args, d.flatcFlags, flatcIOLeadArgs[:len(flatcIOLeadArgs)-1], e.peers.FlatcIncludeArgs, tail), Cwd: bldRootDirVFS.cwd(), Env: envVarsVCS},
 			Cmd{CmdArgs: na.chunkList(na.anyList(d.tc.Python3, tar.any(), strExts.any(), strPy.any(), strInput.any(), build(dir).any(), strOutput.any(), out.any())), Env: envVarsVCS},
-		), Inputs: na.rootInputList(inputs, ctx.scripts[tar.rel()]), Outputs: na.vfsList(out), ForeignDepRefs: na.refList(toolRef), KV: &pyFbsKV, KVExts: []KVExt{{Key: "tared_kind", Val: "nodir"}}, Resources: usesPython3},
+		), Inputs: na.rootInputList(inputs, ctx.scripts[tar.rel()]), Outputs: na.vfsList(out), ForeignDepRefs: na.refList(toolRef), KV: &pyFbsKV, Extra: &NodeExtra{KVExts: []KVExt{{Key: "tared_kind", Val: "nodir"}}}, Resources: usesPython3},
 	}
 
 	node.Inputs = append(node.Inputs, imports...)

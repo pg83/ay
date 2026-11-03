@@ -132,7 +132,7 @@ func (e *EmitContext) cppStyleInputFiles(file VFS) []string {
 				visit(info.SourcePath)
 			}
 
-			for _, dependency := range info.BuildInputs {
+			for _, dependency := range info.buildInputs() {
 				visit(dependency)
 			}
 		}

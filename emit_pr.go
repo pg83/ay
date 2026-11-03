@@ -707,7 +707,11 @@ func (e *EmitContext) emitPR(spec RunProgramNodeSpec, id NodeRef) {
 		Env:  env, Inputs: inputs, Outputs: outputs,
 		KV:             kv,
 		ForeignDepRefs: toolRefs,
-		DepRefs:        inputNode.DepRefs, InputFixes: inputNode.InputFixes}, input: InputSpec{roots: inputNode.input.roots, text: inputNode.input.text},
+		DepRefs:        inputNode.DepRefs}, input: InputSpec{roots: inputNode.input.roots, text: inputNode.input.text},
+	}
+
+	if fixes := inputNode.inputFixes(); fixes != nil {
+		node.Node.extra().InputFixes = fixes
 	}
 
 	e.resolveNodeCodegenRefs(&node)

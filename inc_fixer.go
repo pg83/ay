@@ -54,14 +54,14 @@ func (s *IncludeScanner) includeFix(file VFS, kind includeFixKind) FixID {
 func (s *IncludeScanner) addInputFix(node *Node, file VFS, kind includeFixKind) FixID {
 	id := s.includeFix(file, kind)
 
-	if !slices.Contains(node.InputFixes, id) {
-		n := len(node.InputFixes) + 1
+	if fixes := node.inputFixes(); !slices.Contains(fixes, id) {
+		n := len(fixes) + 1
 		block := s.fixer.ids.alloc(n)[:n:n]
 
-		copy(block, node.InputFixes)
-		block[len(node.InputFixes)] = id
+		copy(block, fixes)
+		block[len(fixes)] = id
 		s.fixer.ids.commit(len(block))
-		node.InputFixes = block[:len(block):len(block)]
+		node.extra().InputFixes = block[:len(block):len(block)]
 	}
 
 	return id
@@ -146,11 +146,11 @@ func (f *IncludeFixer) resolve(entry *includeFix, na *NodeArenas) {
 	case fixIncludedSources, fixInputLoop:
 		if info := s.codegen.lookup(entry.file); info != nil {
 			if entry.kind == fixInputLoop {
-				inputs = append(inputs, info.InputLoopSources...)
+				inputs = append(inputs, info.inputLoopSources()...)
 			}
 
-			if info.IncludedInputs != nil {
-				for _, root := range info.IncludedInputs.Roots {
+			if included := info.includedInputs(); included != nil {
+				for _, root := range included.Roots {
 					s.establishedClosure(root).each(func(file VFS) {
 						if file.isSource() {
 							inputs = append(inputs, file)
@@ -173,13 +173,13 @@ func (f *IncludeFixer) finish(e *StreamingEmitter) {
 	}
 
 	for _, node := range e.nodes.s {
-		if node == nil || len(node.InputFixes) == 0 || !e.exportEligible.has(uint32(node.Ref)) {
+		if node == nil || len(node.inputFixes()) == 0 || !e.exportEligible.has(uint32(node.Ref)) {
 			continue
 		}
 
 		n, nr := 0, len(node.DepRefs)
 
-		for _, id := range node.InputFixes {
+		for _, id := range node.inputFixes() {
 			entry := &f.entries.s[id-1]
 
 			n += len(entry.inputs)
@@ -190,7 +190,7 @@ func (f *IncludeFixer) finish(e *StreamingEmitter) {
 			extra := e.na.vfs.alloc(n)
 			k := 0
 
-			for _, id := range node.InputFixes {
+			for _, id := range node.inputFixes() {
 				k += copy(extra[k:], f.entries.s[id-1].inputs)
 			}
 
@@ -203,7 +203,7 @@ func (f *IncludeFixer) finish(e *StreamingEmitter) {
 
 			refs = append(refs, node.DepRefs...)
 
-			for _, id := range node.InputFixes {
+			for _, id := range node.inputFixes() {
 				for _, ref := range f.entries.s[id-1].refs {
 					if ref != node.Ref {
 						refs = append(refs, ref)

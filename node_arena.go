@@ -116,6 +116,17 @@ func (na *NodeArenas) envList(vs ...EnvVar) EnvVars {
 	return EnvVars(na.envs.list(vs...))
 }
 
+func (na *NodeArenas) refsJoined(a, b []NodeRef) []NodeRef {
+	block := na.noderefs.alloc(len(a) + len(b))
+	k := copy(block, a)
+
+	k += copy(block[k:], b)
+
+	na.noderefs.commit(k)
+
+	return block[:k:k]
+}
+
 func (na *NodeArenas) refList(refs ...NodeRef) []NodeRef {
 	n := 0
 

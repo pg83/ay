@@ -53,7 +53,7 @@ func (p *pyPBPending) emitPending() {
 		Cmds: na.cmdList(Cmd{CmdArgs: s.cmdArgs, Cwd: s.protoCwd.cwd(), Env: envVarsVCS}),
 		Env:  envVarsVCS, Inputs: InputChunks(inputChunks[:len(inputChunks):len(inputChunks)]), Outputs: s.outputs,
 		KV:        &pbKV,
-		KVExts:    s.extOut,
+		Extra:     nodeExtraKVExts(s.extOut),
 		Resources: usesPython3}, input: InputSpec{roots: InputChunks(inputChunks[1:len(inputChunks):len(inputChunks)])},
 	}
 
@@ -441,18 +441,18 @@ func (e *EmitContext) emitPyProtoSource(srcTok ANY, protoSrcVFS VFS, srcGroup in
 
 func (e *EmitContext) extendSharedPyProto(shared *GeneratedFileInfo, next pyPBPending) {
 	ref := shared.ProducerRef
-	old, waiting := shared.OnUse.pendingEmitter().(*pyPBPending)
+	old, waiting := shared.onUse().pendingEmitter().(*pyPBPending)
 	outputs, extOut := next.outputs, next.extOut
 
 	if node := e.ctx.emit.nodes.s[ref]; !waiting && node != nil {
-		outputs, extOut = mergePyProtoOutputs(outputs, extOut, node.Outputs, node.KVExts)
+		outputs, extOut = mergePyProtoOutputs(outputs, extOut, node.Outputs, node.kvExts())
 	} else if waiting {
 		outputs, extOut = mergePyProtoOutputs(outputs, extOut, old.outputs, old.extOut)
 	}
 
 	next.outputs, next.extOut, next.pyPBRef = outputs, extOut, ref
 
-	use := shared.OnUse
+	use := shared.onUse()
 
 	if waiting {
 		*old = next

@@ -821,10 +821,9 @@ func (ctx *GenCtx) testNode(s *TestSuite, chunk TestChunk) *Node {
 	}
 
 	return &Node{
-		UIDSalt:  internStr(s.uidSalt),
 		Platform: s.p,
 		Cmds:     na.cmdList(cmds...),
-		Env:      ctx.testEnv(s), Inputs: na.inputList(na.vfsList(slices.Compact(inputs)...)), Extra: &NodeExtra{InputNames: names},
+		Env:      ctx.testEnv(s), Inputs: na.inputList(na.vfsList(slices.Compact(inputs)...)), Extra: &NodeExtra{InputNames: names, UIDSalt: internStr(s.uidSalt)},
 		KV:           kv,
 		Outputs:      na.vfsList(outputs...),
 		Requirements: req,

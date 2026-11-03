@@ -122,7 +122,7 @@ func (e *EmitContext) localLinkerFlagValue(peerRPath []ANY) LocalLinkerFlags {
 	}
 
 	args, _ := expand(env.string(envLdflags), nil)
-	value := resourceGlobalArgumentValue(internAnys(args), e.peers.ResourceGlobals)
+	value := resourceGlobalArgumentValue(internAnys(args), e.peers.ResourceGlobals, &e.ctx.resourceEnv)
 
 	value.Resources = resourceKeyUnion(resources, value.Resources)
 

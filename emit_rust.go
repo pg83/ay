@@ -206,7 +206,7 @@ func (e *EmitContext) emitRustModule(result *ModuleEmitResult, peers []ResolvedP
 	add("--native")
 	paths(native)
 
-	command := resourceGlobalArgumentValue(args, globals)
+	command := resourceGlobalArgumentValue(args, globals, &e.ctx.resourceEnv)
 
 	ref := e.emitLazyModuleNode(NodeSpec{Node: Node{Module: true, Platform: instance.Platform,
 		Cmds: na.cmdList(Cmd{CmdArgs: na.chunkList(na.anyList(command.Args...)), Env: envVarsVCS}),

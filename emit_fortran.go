@@ -53,7 +53,7 @@ func (e *EmitContext) prepareFortran() {
 	}
 
 	flags := expandCommandTokens(e.ctx.na.anyList(strCFlagsPlatform.any()), e.instance.Platform.ifEnv)
-	value := resourceGlobalArgumentValue(flags, e.peers.ResourceGlobals)
+	value := resourceGlobalArgumentValue(flags, e.peers.ResourceGlobals, &e.ctx.resourceEnv)
 
 	flags = value.Args
 

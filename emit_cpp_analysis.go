@@ -56,7 +56,7 @@ func (e *EmitContext) cppStaticAnalyzer(globals []ResourceDecl) *CppStaticAnalyz
 		}
 	}
 
-	pluginValue := resourceGlobalArgumentValue(d.clangSAPlugins, globals)
+	pluginValue := resourceGlobalArgumentValue(d.clangSAPlugins, globals, &e.ctx.resourceEnv)
 	plugins := pluginValue.Args
 
 	resources = resourceKeyUnion(resources, pluginValue.Resources)

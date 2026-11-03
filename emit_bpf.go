@@ -8,7 +8,7 @@ func (e *EmitContext) bpfCompileNode(stmt LlvmCompileStmt, out VFS) NodeSpec {
 	na, d, p := e.ctx.na, e.d, e.instance.Platform
 	input := e.llvmBcSourceInfo(stmt.Source)
 	compiler := resolveResourceGlobalRef("$CLANG18_RESOURCE_GLOBAL", e.peers.ResourceGlobals) + "/bin/clang"
-	platformFlags := resolveResourceGlobalArgs(p.CCHead, e.peers.ResourceGlobals)
+	platformFlags := resolveResourceGlobalArgs(p.CCHead, e.peers.ResourceGlobals, &e.ctx.resourceEnv)
 	windows := "no"
 
 	if p.windows() {

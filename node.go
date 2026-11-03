@@ -31,20 +31,15 @@ type Node struct {
 	Cmds            []Cmd          `json:"cmds"`
 	Env             EnvVars        `json:"env"`
 	Inputs          InputChunks    `json:"-"`
-	InputFixes      []FixID        `json:"-"`
 	KV              *KV            `json:"kv"`
-	KVExts          []KVExt        `json:"-"`
 	Outputs         []VFS          `json:"outputs"`
 	Platform        *Platform      `json:"platform"`
 	Requirements    *Requirements  `json:"requirements"`
-	PresetUID       *UID           `json:"-"`
 	DepRefs         []NodeRef      `json:"-"`
 	ForeignDepRefs  []NodeRef      `json:"-"`
 	Resources       []STR          `json:"-"`
 	ResourceGlobals []ResourceDecl `json:"-"`
 	Ref             NodeRef        `json:"-"`
-	UIDSalt         STR            `json:"-"`
-	DisableCache    bool           `json:"-"`
 	Module          bool           `json:"-"`
 }
 
@@ -111,6 +106,63 @@ type InputChunks [][]VFS
 type NodeExtra struct {
 	InputNames   []STR
 	ResourceURIs []STR
+	InputFixes   []FixID
+	KVExts       []KVExt
+	PresetUID    *UID
+	UIDSalt      STR
+	DisableCache bool
+}
+
+func (n *Node) extra() *NodeExtra {
+	if n.Extra == nil {
+		n.Extra = &NodeExtra{}
+	}
+
+	return n.Extra
+}
+
+func nodeExtraKVExts(exts []KVExt) *NodeExtra {
+	if len(exts) == 0 {
+		return nil
+	}
+
+	return &NodeExtra{KVExts: exts}
+}
+
+func (n *Node) inputFixes() []FixID {
+	if n.Extra != nil {
+		return n.Extra.InputFixes
+	}
+
+	return nil
+}
+
+func (n *Node) kvExts() []KVExt {
+	if n.Extra != nil {
+		return n.Extra.KVExts
+	}
+
+	return nil
+}
+
+func (n *Node) presetUID() *UID {
+	if n.Extra != nil {
+		return n.Extra.PresetUID
+	}
+
+	return nil
+}
+
+func (n *Node) uidSalt() STR {
+	if n.Extra != nil {
+		return n.Extra.UIDSalt
+	}
+
+	return 0
+}
+
+func (n *Node) disableCache() bool {
+	return n.Extra != nil && n.Extra.DisableCache
 }
 
 func (n *Node) inputNames() []STR {

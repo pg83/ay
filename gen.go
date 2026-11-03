@@ -262,6 +262,8 @@ type GenCtx struct {
 	frameSerial         uint32
 	scannerTargetPIC    *IncludeScanner
 	roots               map[ModuleInstance]bool
+	rootPaths           map[VFS]bool
+	resourceEnv         EnvStore
 	targetDirs          map[string]bool
 	rootDemand          ModuleDemand
 }
@@ -301,6 +303,7 @@ func runGenIntoWithResources(fs FS, parsers *IncludeParserManager, targets []str
 	}
 
 	ctx.roots = make(map[ModuleInstance]bool, len(all))
+	ctx.rootPaths = make(map[VFS]bool, len(all))
 	ctx.targetDirs = make(map[string]bool, len(targets))
 	ctx.rootDemand = rootDemand
 
@@ -310,6 +313,7 @@ func runGenIntoWithResources(fs FS, parsers *IncludeParserManager, targets []str
 
 	for _, target := range all {
 		ctx.roots[ctx.rootInstanceForDeclaration(target.Path, demandNone, target.Declaration)] = true
+		ctx.rootPaths[source(target.Path)] = true
 	}
 
 	for _, targets := range discovered {
@@ -2638,11 +2642,11 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 	}
 
 	if isGoModuleType(d.moduleStmt.Name) {
-		value := resourceGlobalArgumentValue(concatShared(ctx.argSlices, peerLDFlagsGlobal, ownLDFlags), resourceGlobalsClosure)
+		value := resourceGlobalArgumentValue(concatShared(ctx.argSlices, peerLDFlagsGlobal, ownLDFlags), resourceGlobalsClosure, &ctx.resourceEnv)
 
 		frame.peerCtx.LDFlagsGlobal, frame.peerCtx.LDResources = value.Args, value.Resources
 
-		goValue := resourceGlobalArgumentValue(concatShared(ctx.argSlices, peerGoLDFlagsGlobal, ownCompilerFlagArgs(effectiveGoLDFlagsGlobal, d.goLdflags)), resourceGlobalsClosure)
+		goValue := resourceGlobalArgumentValue(concatShared(ctx.argSlices, peerGoLDFlagsGlobal, ownCompilerFlagArgs(effectiveGoLDFlagsGlobal, d.goLdflags)), resourceGlobalsClosure, &ctx.resourceEnv)
 
 		frame.peerCtx.GoLDFlagsGlobal = goValue.Args
 		frame.peerCtx.LDResources = resourceKeyUnion(frame.peerCtx.LDResources, goValue.Resources)
@@ -2851,7 +2855,7 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 
 		if instance.Platform.MSVC && dyn == nil {
 			ldRef = e.emitMSVCLink(instance, binaryName, ldCCRefs, ldCCOutputs, ldPeerArchiveRefs, ldPeerArchivePaths, ldPeerLinkCmdPaths, peerGlobalRefs, peerGlobalPaths, peerWholeArchiveCmdPaths,
-				concat(resourceGlobalArgumentValue(ownLDFlags, resourceGlobalsClosure).Args, resourceGlobalArgumentValue(peerLDFlagsGlobal, resourceGlobalsClosure).Args, peerObjAddLibsGlobal), d.tc, ctx.emit, ctx.vcsRef)
+				concat(resourceGlobalArgumentValue(ownLDFlags, resourceGlobalsClosure, &ctx.resourceEnv).Args, resourceGlobalArgumentValue(peerLDFlagsGlobal, resourceGlobalsClosure, &ctx.resourceEnv).Args, peerObjAddLibsGlobal), d.tc, ctx.emit, ctx.vcsRef)
 		} else {
 			ldRef = e.emitLD(
 				ldInstance,
@@ -2868,8 +2872,8 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 				ownCFlags,
 				peerCFlagsGlobal,
 				d.moduleScopeCFlags,
-				resourceGlobalArgumentValue(peerLDFlagsGlobal, resourceGlobalsClosure),
-				resourceGlobalArgumentValue(ownLDFlags, resourceGlobalsClosure),
+				resourceGlobalArgumentValue(peerLDFlagsGlobal, resourceGlobalsClosure, &ctx.resourceEnv),
+				resourceGlobalArgumentValue(ownLDFlags, resourceGlobalsClosure, &ctx.resourceEnv),
 				peerRPathFlagsGlobal,
 				peerObjAddLibsGlobal,
 				linkExcludeLibraries,

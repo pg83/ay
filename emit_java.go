@@ -142,7 +142,7 @@ func (b *javaNodeBuilder) emitTo(ref NodeRef) {
 	node := NodeSpec{Node: Node{Platform: platform,
 		Cmds: na.cmdList(b.cmds...),
 		Env:  env, KV: kv,
-		KVExts:       b.exts,
+		Extra:        nodeExtraKVExts(b.exts),
 		Outputs:      na.vfsList(b.outputs...),
 		Requirements: b.req,
 		DepRefs:      na.refList(dedupRefs(b.deps)...),

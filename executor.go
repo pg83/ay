@@ -211,8 +211,8 @@ func (ex *Executor) fire(f *NodeFuture) {
 }
 
 func (ex *Executor) uidOf(n *Node, inputs InputChunks) UID {
-	if n.PresetUID != nil {
-		return *n.PresetUID
+	if uid := n.presetUID(); uid != nil {
+		return *uid
 	}
 
 	ex.canon.fetchRefs = ex.fetchRefs

@@ -107,6 +107,7 @@ func (ctx *GenCtx) genMultimoduleTargets(target DiscoveredModule, variants uint1
 
 	for _, instance := range instances {
 		ctx.roots[ModuleInstance{Path: instance.Path, Kind: instance.Kind, Language: instance.Language, Platform: instance.Platform, YqlCurrent: instance.YqlCurrent}] = true
+		ctx.rootPaths[instance.Path] = true
 
 		result := genModule(ctx, instance)
 

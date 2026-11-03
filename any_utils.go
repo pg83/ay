@@ -123,6 +123,10 @@ func prependAny(xs []ANY, x ANY) []ANY {
 }
 
 func joinAnys(as []ANY, sep string) string {
+	return joinAnysSTR(as, sep).string()
+}
+
+func joinAnysSTR(as []ANY, sep string) STR {
 	b := joinAnysScratch[:0]
 
 	for i, a := range as {
@@ -135,5 +139,5 @@ func joinAnys(as []ANY, sep string) string {
 
 	joinAnysScratch = b
 
-	return internBytes(b).string()
+	return internBytes(b)
 }

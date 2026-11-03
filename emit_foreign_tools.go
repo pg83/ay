@@ -58,7 +58,7 @@ func (ctx *GenCtx) moduleBuildDeps(ref NodeRef) ([]NodeRef, bool) {
 }
 
 func (ctx *GenCtx) activateNodeInputs(node *Node, selectProducer func(NodeRef)) {
-	if len(node.InputFixes) == 0 {
+	if len(node.inputFixes()) == 0 {
 		return
 	}
 
@@ -70,7 +70,7 @@ func (ctx *GenCtx) activateNodeInputs(node *Node, selectProducer func(NodeRef)) 
 
 	module := false
 
-	for _, id := range node.InputFixes {
+	for _, id := range node.inputFixes() {
 		entry := f.entries.s[id-1]
 
 		registry = entry.scanner.codegen

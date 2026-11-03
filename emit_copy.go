@@ -40,7 +40,7 @@ func (e *EmitContext) emitCopyFileStmt(entry CopyFileEntry) {
 	}
 
 	if info != nil {
-		info.OnUse = e.pendingEmit(pe)
+		info.rareFields().OnUse = e.pendingEmit(pe)
 	}
 }
 
@@ -130,5 +130,5 @@ func (e *EmitContext) emitCopyFileNodeSnap(entry CopyFileEntry, st CopyEmitState
 func (e *EmitContext) copyLoopSources(dst VFS) []VFS {
 	e.inputClosure(dst)
 
-	return e.codegen.mustInfo(dst).InputLoopSources
+	return e.codegen.mustInfo(dst).inputLoopSources()
 }

@@ -6,28 +6,103 @@ import (
 )
 
 type GeneratedFileInfo struct {
-	attributes       *GeneratedFileAttributes
-	id               uint32
-	BuildInputs      []VFS
-	OnUse            *PendingEmit
-	GeneratorRefs    []NodeRef
-	ClosureLeaves    []VFS
-	InputLoopSources []VFS
-	LateOutputs      []VFS
-	ModuleOutputs    []VFS
+	attributes      *GeneratedFileAttributes
+	rare            *GeneratedFileRare
+	id              uint32
+	GeneratorRefs   []NodeRef
+	OutputPath      VFS
+	SourcePath      VFS
+	PrimaryInput    VFS
+	OwnerModule     VFS
+	OwnerSerial     uint32
+	ProducerRef     NodeRef
+	ProducerMainOut VFS
+	ModuleType      TOK
+	InputsOnly      bool
+	ResourceObjcopy bool
+}
 
+type GeneratedFileRare struct {
+	BuildInputs         []VFS
+	OnUse               *PendingEmit
+	ClosureLeaves       []VFS
+	InputLoopSources    []VFS
+	LateOutputs         []VFS
+	ModuleOutputs       []VFS
 	IncludedBuildInputs []VFS
 	IncludedInputs      *IncludedInputPlan
-	OutputPath          VFS
-	SourcePath          VFS
-	PrimaryInput        VFS
-	OwnerModule         VFS
-	OwnerSerial         uint32
-	ProducerRef         NodeRef
-	ProducerMainOut     VFS
-	ModuleType          TOK
-	InputsOnly          bool
-	ResourceObjcopy     bool
+}
+
+func (info *GeneratedFileInfo) rareFields() *GeneratedFileRare {
+	if info.rare == nil {
+		info.rare = &GeneratedFileRare{}
+	}
+
+	return info.rare
+}
+
+func (info *GeneratedFileInfo) buildInputs() []VFS {
+	if info.rare != nil {
+		return info.rare.BuildInputs
+	}
+
+	return nil
+}
+
+func (info *GeneratedFileInfo) onUse() *PendingEmit {
+	if info.rare != nil {
+		return info.rare.OnUse
+	}
+
+	return nil
+}
+
+func (info *GeneratedFileInfo) closureLeaves() []VFS {
+	if info.rare != nil {
+		return info.rare.ClosureLeaves
+	}
+
+	return nil
+}
+
+func (info *GeneratedFileInfo) inputLoopSources() []VFS {
+	if info.rare != nil {
+		return info.rare.InputLoopSources
+	}
+
+	return nil
+}
+
+func (info *GeneratedFileInfo) lateOutputs() []VFS {
+	if info.rare != nil {
+		return info.rare.LateOutputs
+	}
+
+	return nil
+}
+
+func (info *GeneratedFileInfo) moduleOutputs() []VFS {
+	if info.rare != nil {
+		return info.rare.ModuleOutputs
+	}
+
+	return nil
+}
+
+func (info *GeneratedFileInfo) includedBuildInputs() []VFS {
+	if info.rare != nil {
+		return info.rare.IncludedBuildInputs
+	}
+
+	return nil
+}
+
+func (info *GeneratedFileInfo) includedInputs() *IncludedInputPlan {
+	if info.rare != nil {
+		return info.rare.IncludedInputs
+	}
+
+	return nil
 }
 
 type GeneratedFileSpec struct {
@@ -172,7 +247,7 @@ func newCodegenRegistry(na *NodeArenas) *CodegenRegistry {
 func (r *CodegenRegistry) use(path VFS) *GeneratedFileInfo {
 	info := r.lookup(path)
 
-	if info != nil && info.OnUse != nil {
+	if info != nil && info.onUse() != nil {
 		fireGenerated(info)
 	}
 
@@ -181,16 +256,16 @@ func (r *CodegenRegistry) use(path VFS) *GeneratedFileInfo {
 
 //go:noinline
 func fireGenerated(info *GeneratedFileInfo) {
-	pending := info.OnUse
+	pending := info.rare.OnUse
 
-	info.OnUse = nil
+	info.rare.OnUse = nil
 	pending.fire()
 }
 
 func (r *CodegenRegistry) register(info GeneratedFileSpec) *GeneratedFileInfo {
 	if existing, ok := r.byRel.get(info.OutputPath.rel()); ok {
 		if existing.InputsOnly {
-			info.ClosureLeaves = r.na.dedupClosure(info.ClosureLeaves, [][]VFS{existing.ClosureLeaves})
+			info.ClosureLeaves = r.na.dedupClosure(info.ClosureLeaves, [][]VFS{existing.closureLeaves()})
 			r.store(existing, info)
 			r.noteOwner(existing)
 			r.splitGeneration++
@@ -245,7 +320,7 @@ func (r *CodegenRegistry) forwardTemplateInputs(output VFS, templates, textTempl
 		r.byRel.put(output.rel(), info)
 	}
 
-	info.ClosureLeaves = r.na.dedupClosure(info.ClosureLeaves, [][]VFS{templates})
+	info.rareFields().ClosureLeaves = r.na.dedupClosure(info.closureLeaves(), [][]VFS{templates})
 	r.forwardTextTemplates(output, textTemplates)
 }
 
@@ -303,10 +378,10 @@ func (r *CodegenRegistry) shareInputLoop(members []VFS) {
 				sources = append(sources, info.SourcePath)
 			}
 
-			sources = append(sources, info.InputLoopSources...)
+			sources = append(sources, info.inputLoopSources()...)
 
-			if info.IncludedInputs != nil {
-				roots = append(roots, info.IncludedInputs.Roots...)
+			if included := info.includedInputs(); included != nil {
+				roots = append(roots, included.Roots...)
 			}
 		}
 	}
@@ -322,8 +397,10 @@ func (r *CodegenRegistry) shareInputLoop(members []VFS) {
 
 		for _, member := range members {
 			if info := r.lookup(member); info != nil {
-				info.InputLoopSources = shared
-				info.IncludedInputs = included
+				rare := info.rareFields()
+
+				rare.InputLoopSources = shared
+				rare.IncludedInputs = included
 			}
 		}
 	}

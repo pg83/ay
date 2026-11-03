@@ -79,7 +79,7 @@ func (e *EmitContext) genUnion() *ModuleEmitResult {
 	na := e.ctx.na
 
 	node := NodeSpec{Node: Node{Module: true, Platform: e.instance.Platform, KV: &unionKV,
-		KVExts: []KVExt{{Key: "package", Val: "UNION"}}, Env: envVarsVCS, Inputs: na.rootInputList(na.vfsList(own...), na.vfsList(generated...)), Outputs: na.vfsList(append([]VFS{out}, generated...)...), Resources: usesPython3,
+		Extra: &NodeExtra{KVExts: []KVExt{{Key: "package", Val: "UNION"}}}, Env: envVarsVCS, Inputs: na.rootInputList(na.vfsList(own...), na.vfsList(generated...)), Outputs: na.vfsList(append([]VFS{out}, generated...)...), Resources: usesPython3,
 		Cmds: na.cmdList(Cmd{CmdArgs: na.chunkList(na.anyList(e.d.tc.Python3, strC2.any(), internStr("open('"+out.string()+"','w').close()").any())), Env: envVarsVCS})},
 	}
 
@@ -87,7 +87,7 @@ func (e *EmitContext) genUnion() *ModuleEmitResult {
 
 	ref := e.emitLazyModuleNode(node, peers, out)
 
-	e.codegen.mustInfo(out).LateOutputs = e.ctx.na.vfsList(generated...)
+	e.codegen.mustInfo(out).rareFields().LateOutputs = e.ctx.na.vfsList(generated...)
 
 	passPeers := e.d.resourcePassPeers
 	info := e.codegen.mustInfo(out)

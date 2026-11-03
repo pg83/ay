@@ -4345,18 +4345,18 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 			}
 
 			name := v.Args[0].string()
-			value := joinAnys(v.Args[1:], " ")
+			value := joinAnysSTR(v.Args[1:], " ")
 
 			if name == "TEST_ENV_VALUE" {
-				value = expandSourceScalarVarRef(value, env)
+				value = internStr(expandSourceScalarVarRef(value.string(), env))
 			}
 
-			original := value
+			original := value.string()
 
 			if name == importMaskVariable {
-				env.setFromString(internEnv(name), appendPythonImportMask(value, env, d))
+				env.setFromString(internEnv(name), appendPythonImportMask(original, env, d))
 			} else {
-				env.appendString(internEnv(name), value)
+				env.appendSTR(internEnv(name), value)
 			}
 
 			d.captureResourcePeerPolicy(name, env)

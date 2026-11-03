@@ -29,7 +29,7 @@ func emitResourceFetch(ctx *GenCtx, decl ResourceDecl) NodeRef {
 		Requirements: &fetchRequirements},
 	}
 
-	node.PresetUID = resourceFetchUID(identity, output.string())
+	node.extra().PresetUID = resourceFetchUID(identity, output.string())
 
 	ctx.emit.deferPublication++
 

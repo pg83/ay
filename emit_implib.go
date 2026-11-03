@@ -69,7 +69,7 @@ func (e *EmitContext) emitImplib(stmt ImplibStmt) {
 		args = append(args, internStr(stmt.Path).any())
 	}
 
-	value := resourceGlobalArgumentValue(args, e.peers.ResourceGlobals)
+	value := resourceGlobalArgumentValue(args, e.peers.ResourceGlobals, &e.ctx.resourceEnv)
 
 	args = value.Args
 

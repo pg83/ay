@@ -165,8 +165,8 @@ func captureSourceTextAppend(v *UnknownStmt, env Environment) *sourceTextAppend 
 	out := &sourceTextAppend{id: id, ranges: append([]SourceTextRange(nil), env.s.textInputs[id]...)}
 	offset := 0
 
-	if prev := env.string(id); prev != "" {
-		offset = len(prev) + 1
+	if n := env.stringLen(id); n != 0 {
+		offset = n + 1
 	}
 
 	for _, arg := range v.Args[1:] {

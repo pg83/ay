@@ -131,7 +131,7 @@ func (e *EmitContext) emitLlvmBcStmt(stmt *LlvmBcStmt) {
 
 		if strings.HasSuffix(src, ".ll") {
 			input := e.llvmBcSourceInfo(src)
-			tool := resourceGlobalArgumentValue(na.anyList(internAny(stmt.ClangBCRoot)), e.peers.ResourceGlobals)
+			tool := resourceGlobalArgumentValue(na.anyList(internAny(stmt.ClangBCRoot)), e.peers.ResourceGlobals, &e.ctx.resourceEnv)
 
 			node = NodeSpec{Node: Node{Platform: instance.Platform,
 				Cmds: na.cmdList(Cmd{CmdArgs: na.chunkList(na.anyList(internV(clangRoot, "/bin/llvm-as").any(), input.any(), argDashO.any(), bcOut.any())), Env: env}),

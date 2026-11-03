@@ -211,7 +211,7 @@ func (s *IncludeScanner) bindGeneratedIncludes(file VFS) ScannedChildren {
 		}
 	}
 
-	for _, path := range info.ClosureLeaves {
+	for _, path := range info.closureLeaves() {
 		appendPath(path)
 	}
 
@@ -623,7 +623,7 @@ func (sc *ScanCtx) appendResolvedInducedDeps(out []VFS, vfsPath VFS, incDir VFS,
 		return out
 	}
 
-	out = append(out, info.ClosureLeaves...)
+	out = append(out, info.closureLeaves()...)
 
 	for _, include := range s.codegen.inducedIncludes[vfsPath] {
 		if !sc.noResolve && s.usesInducedType(vfsPath, include.Type) {

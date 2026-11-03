@@ -396,8 +396,10 @@ func (e *EmitContext) emitCythonCppPlanned(plans []CythonStmtPlan) {
 		})
 
 		for _, info := range p.infos {
-			info.OnUse = pending
-			info.BuildInputs = buildInputs
+			rare := info.rareFields()
+
+			rare.OnUse = pending
+			rare.BuildInputs = buildInputs
 		}
 
 		seq := p.stmt.Seq

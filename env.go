@@ -8,8 +8,9 @@ import (
 type EnvKind uint8
 
 type envAppend struct {
-	id  ENV
-	buf []byte
+	id     ENV
+	parts  []STR
+	length int
 }
 
 type EnvStore struct {
@@ -22,6 +23,7 @@ type EnvStore struct {
 	included         map[string]bool
 	confBase         *EnvStore
 	confWrites       []ENV
+	joined           []byte
 }
 
 type Environment struct {
@@ -52,7 +54,7 @@ func (s *EnvStore) ensure(e ENV) {
 		return
 	}
 
-	n = max(n, 2*len(s.kind))
+	n = max(n, len(s.kind)+len(s.kind)/8+64)
 
 	nk := make([]EnvKind, n)
 
@@ -80,14 +82,27 @@ func (s *EnvStore) lookup(e ENV) (EnvKind, STR) {
 func (s *EnvStore) settle(e ENV) {
 	for i := range s.appends {
 		if s.appends[i].id == e {
-			value := string(s.appends[i].buf)
+			buf := s.joined[:0]
 
+			for k, part := range s.appends[i].parts {
+				if k > 0 {
+					buf = append(buf, ' ')
+				}
+
+				buf = append(buf, part.string()...)
+			}
+
+			s.joined = buf[:0]
 			s.appends = slices.Delete(s.appends, i, i+1)
 			s.pending.remove(uint32(e))
 
 			ranges := s.textInputs[e]
 
-			Environment{s: s}.setString(e, value)
+			if vfsHasPrefix(string(buf)) {
+				Environment{s: s}.setVFS(e, intern(string(buf)))
+			} else {
+				Environment{s: s}.setStrID(e, internBytes(buf))
+			}
 
 			if ranges != nil {
 				s.textInputs[e] = ranges
@@ -120,37 +135,39 @@ func (s *EnvStore) dropAppend(e ENV) {
 }
 
 func (e Environment) appendString(id ENV, v string) {
+	e.appendSTR(id, internStr(v))
+}
+
+func (e Environment) appendSTR(id ENV, v STR) {
 	s := e.s
 
 	for i := range s.appends {
 		if s.appends[i].id == id {
-			s.appends[i].buf = append(append(s.appends[i].buf, ' '), v...)
+			s.appends[i].parts = append(s.appends[i].parts, v)
+			s.appends[i].length += 1 + len(v.string())
 
 			return
 		}
 	}
 
-	prev := ""
+	var prev STR
 
 	if int(id) < len(s.kind) {
 		switch s.kind[id] {
 		case envVFS:
-			prev = VFS(uint32(s.val[id])).string()
+			prev = internStr(VFS(uint32(s.val[id])).string())
 		case envStr, envInt:
-			prev = s.val[id].string()
+			prev = s.val[id]
 		}
 	}
 
-	if prev == "" {
-		e.setFromString(id, v)
+	if prev == 0 || prev.string() == "" {
+		e.setFromString(id, v.string())
 
 		return
 	}
 
-	buf := make([]byte, 0, 2*(len(prev)+len(v)+1))
-
-	buf = append(append(append(buf, prev...), ' '), v...)
-	s.appends = append(s.appends, envAppend{id: id, buf: buf})
+	s.appends = append(s.appends, envAppend{id: id, parts: append(make([]STR, 0, 8), prev, v), length: len(prev.string()) + 1 + len(v.string())})
 	s.pending.add(uint32(id))
 }
 
@@ -174,6 +191,31 @@ func strIsTruthy(v STR) bool {
 	}
 
 	return stringIsTruthy(v.string())
+}
+
+func (e Environment) stringLen(id ENV) int {
+	s := e.s
+
+	if len(s.appends) != 0 && s.pending.has(uint32(id)) {
+		for i := range s.appends {
+			if s.appends[i].id == id {
+				return s.appends[i].length
+			}
+		}
+	}
+
+	if int(id) >= len(s.kind) {
+		return 0
+	}
+
+	switch s.kind[id] {
+	case envVFS:
+		return VFS(uint32(s.val[id])).stringLen()
+	case envAbsent:
+		return 0
+	}
+
+	return len(s.val[id].string())
 }
 
 func (e Environment) string(id ENV) string {
@@ -203,11 +245,16 @@ func (e Environment) clone() Environment {
 }
 
 func (e Environment) cloneInto(dst *EnvStore) Environment {
-	e.s.settleAll()
 	dst.appends = dst.appends[:0]
 
-	if len(e.s.kind) > 0 {
-		dst.ensure(ENV(len(e.s.kind) - 1))
+	for _, a := range e.s.appends {
+		dst.appends = append(dst.appends, envAppend{id: a.id, parts: slices.Clone(a.parts), length: a.length})
+	}
+
+	dst.pending.copyFrom(&e.s.pending)
+
+	if n := max(len(e.s.kind), int(envTable.count)); n > 0 {
+		dst.ensure(ENV(n - 1))
 	}
 
 	clear(dst.val[copy(dst.val, e.s.val):])

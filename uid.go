@@ -271,8 +271,8 @@ func (c *CanonBuf) writeNode(n *Node, inputs InputChunks) {
 	c.writeVFSSlice(n.Outputs)
 	c.writeBytes(string(n.Platform.Target))
 
-	if n.UIDSalt != 0 {
-		c.writeSTR(n.UIDSalt)
+	if salt := n.uidSalt(); salt != 0 {
+		c.writeSTR(salt)
 	}
 
 	for _, uri := range n.resourceURIs() {

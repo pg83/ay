@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"encoding/base64"
 	"encoding/json"
 	"net/url"
@@ -198,6 +199,10 @@ func (pm *IncludeParserManager) notsVersion(tool, constraint string) string {
 	return selected
 }
 
+type notsLockEntry struct {
+	name, typ, tarball, integrity string
+}
+
 func (pm *IncludeParserManager) notsLockfile(rel string) *NotsLockfile {
 	key := internStr(rel)
 
@@ -205,27 +210,24 @@ func (pm *IncludeParserManager) notsLockfile(rel string) *NotsLockfile {
 		return v
 	}
 
-	var doc struct {
-		Version  string        `yaml:"lockfileVersion"`
-		Packages yaml.MapSlice `yaml:"packages"`
-	}
-	throw(yaml.Unmarshal(concatChunks(pm.fs.readPath(key)), &doc))
+	data := concatChunks(pm.fs.readPath(key))
+	version, entries, ok := notsLockfileScan(data)
 
-	if doc.Version != "6.0" && doc.Version != "9.0" {
-		throwFmt("%s: unsupported lockfileVersion %q", rel, doc.Version)
+	if !ok {
+		version, entries = notsLockfileDecode(data)
+	}
+
+	if version != "6.0" && version != "9.0" {
+		throwFmt("%s: unsupported lockfileVersion %q", rel, version)
 	}
 
 	result := &NotsLockfile{}
 	seen := make(map[string]bool)
 	registry := ""
 
-	for _, item := range doc.Packages {
-		name := notsString(item.Key)
-		resolution := notsObject(notsObject(item.Value)["resolution"])
-
-		res := struct{ Type, Tarball, Integrity string }{
-			notsString(resolution["type"]), notsString(resolution["tarball"]), notsString(resolution["integrity"]),
-		}
+	for _, item := range entries {
+		name := item.name
+		res := struct{ Type, Tarball, Integrity string }{item.typ, item.tarball, item.integrity}
 
 		if res.Type == "directory" {
 			continue
@@ -310,4 +312,185 @@ func (pm *IncludeParserManager) notsLockfile(rel string) *NotsLockfile {
 	pm.cache.notsLocks.put(key, result)
 
 	return result
+}
+
+func notsLockfileDecode(data []byte) (string, []notsLockEntry) {
+	var doc struct {
+		Version  string        `yaml:"lockfileVersion"`
+		Packages yaml.MapSlice `yaml:"packages"`
+	}
+	throw(yaml.Unmarshal(data, &doc))
+
+	entries := make([]notsLockEntry, 0, len(doc.Packages))
+
+	for _, item := range doc.Packages {
+		resolution := notsObject(notsObject(item.Value)["resolution"])
+
+		entries = append(entries, notsLockEntry{
+			name: notsString(item.Key), typ: notsString(resolution["type"]),
+			tarball: notsString(resolution["tarball"]), integrity: notsString(resolution["integrity"]),
+		})
+	}
+
+	return doc.Version, entries
+}
+
+func notsLockfileScan(data []byte) (string, []notsLockEntry, bool) {
+	version := ""
+	entries := []notsLockEntry(nil)
+	inPackages := false
+
+	for len(data) != 0 {
+		line := data
+		next := []byte(nil)
+
+		if i := bytes.IndexByte(data, '\n'); i >= 0 {
+			line, next = data[:i], data[i+1:]
+		}
+
+		data = next
+		line = bytes.TrimRight(line, " \r")
+
+		if len(line) == 0 {
+			continue
+		}
+
+		if line[0] != ' ' {
+			inPackages = false
+
+			if rest, found := bytes.CutPrefix(line, []byte("lockfileVersion:")); found {
+				value, ok := notsLockScalar(bytes.TrimSpace(rest))
+
+				if !ok {
+					return "", nil, false
+				}
+
+				version = value
+			} else if string(line) == "packages:" {
+				inPackages = true
+			} else if !notsLockTopKey(line) {
+				return "", nil, false
+			}
+
+			continue
+		}
+
+		if !inPackages {
+			continue
+		}
+
+		if bytes.HasPrefix(line, []byte("    ")) {
+			if bytes.HasPrefix(line, []byte("    resolution:")) && len(entries) != 0 {
+				if !notsLockResolution(&entries[len(entries)-1], bytes.TrimSpace(line[len("    resolution:"):])) {
+					return "", nil, false
+				}
+			}
+
+			continue
+		}
+
+		if !bytes.HasPrefix(line, []byte("  ")) || line[2] == ' ' || line[len(line)-1] != ':' {
+			return "", nil, false
+		}
+
+		name, ok := notsLockScalar(line[2 : len(line)-1])
+
+		if !ok {
+			return "", nil, false
+		}
+
+		entries = append(entries, notsLockEntry{name: name})
+	}
+
+	return version, entries, true
+}
+
+func notsLockResolution(entry *notsLockEntry, flow []byte) bool {
+	if len(flow) < 2 || flow[0] != '{' || flow[len(flow)-1] != '}' {
+		return false
+	}
+
+	for item := range bytes.SplitSeq(flow[1:len(flow)-1], []byte(",")) {
+		item = bytes.TrimSpace(item)
+
+		if len(item) == 0 {
+			continue
+		}
+
+		k, v, found := bytes.Cut(item, []byte(":"))
+
+		if !found {
+			return false
+		}
+
+		value, ok := notsLockScalar(bytes.TrimSpace(v))
+
+		if !ok || strings.ContainsAny(value, "{}[]") {
+			return false
+		}
+
+		switch string(bytes.TrimSpace(k)) {
+		case "integrity":
+			entry.integrity = value
+		case "tarball":
+			entry.tarball = value
+		case "type":
+			entry.typ = value
+		case "directory", "commit", "repo", "path":
+		default:
+			return false
+		}
+	}
+
+	return true
+}
+
+func notsLockScalar(s []byte) (string, bool) {
+	if len(s) == 0 {
+		return "", true
+	}
+
+	if s[0] == '\'' {
+		if len(s) < 2 || s[len(s)-1] != '\'' {
+			return "", false
+		}
+
+		body := s[1 : len(s)-1]
+
+		if bytes.IndexByte(body, '\'') < 0 {
+			return string(body), true
+		}
+
+		if bytes.Contains(bytes.ReplaceAll(body, []byte("''"), nil), []byte("'")) {
+			return "", false
+		}
+
+		return string(bytes.ReplaceAll(body, []byte("''"), []byte("'"))), true
+	}
+
+	if s[0] == '"' || s[0] == '|' || s[0] == '>' || s[0] == '&' || s[0] == '*' || s[0] == '!' || s[0] == '%' || s[0] == '@' || s[0] == '`' || bytes.Contains(s, []byte(" #")) {
+		return "", false
+	}
+
+	return string(s), true
+}
+
+func notsLockTopKey(line []byte) bool {
+	colon := bytes.IndexByte(line, ':')
+
+	if colon <= 0 || !isLockKeyByte(line[0]) || line[0] >= '0' && line[0] <= '9' {
+		return false
+	}
+
+	for _, b := range line[1:colon] {
+		if !isLockKeyByte(b) && b != '-' && b != '.' {
+			return false
+		}
+	}
+
+	return true
+}
+
+func isLockKeyByte(b byte) bool {
+	return b >= 'a' && b <= 'z' || b >= 'A' && b <= 'Z' || b >= '0' && b <= '9' || b == '_'
 }

@@ -5,6 +5,7 @@ import "slices"
 var (
 	inputChunkScratches = newSliceScratchPool[[]VFS](8)
 	closureScratches    = newSliceScratchPool[Closure](8)
+	refScratches        = newSliceScratchPool[NodeRef](8)
 )
 
 type InputSpec struct {

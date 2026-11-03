@@ -73,7 +73,7 @@ func (e *EmitContext) emitLibraryCudaSource(meta SrcMeta, in ModuleCCInputs) {
 			node.Requirements.RAMText = value
 		}
 
-		node.KVExts = []KVExt{{Key: "local_ram_limiter", Val: "1"}}
+		node.extra().KVExts = []KVExt{{Key: "local_ram_limiter", Val: "1"}}
 	}
 
 	ref := e.emitNode(node)
@@ -226,7 +226,7 @@ func (e *EmitContext) emitSplitCudaSource(src ANY, arches []string, embedPTX boo
 			"--orig_src_file_name", srcVFS.relString(), "--unicode_source_kind=UTF-8", "--allow_managed", "--extended-lambda", "--relaxed_constexpr", "--m64", "--parse_templates",
 			"--gen_c_file_name", hostOuts[1].string(), "--stub_file_name", filepath.Base(stub.relString()), "--module_id_file_name", moduleID.string(), hostOuts[0].string()})
 
-		inputs := appendInputChunks(na, na.inputList(na.vfsList(cudaCompileScriptVFS), na.vfsList(mtime, pid), na.vfsList(moduleID), e.codegen.mustInfo(moduleID).ClosureLeaves), na.rootInputList(compileRoots))
+		inputs := appendInputChunks(na, na.inputList(na.vfsList(cudaCompileScriptVFS), na.vfsList(mtime, pid), na.vfsList(moduleID), e.codegen.mustInfo(moduleID).closureLeaves()), na.rootInputList(compileRoots))
 
 		e.emitReservedNode(NodeSpec{Node: Node{Platform: e.instance.Platform, Cmds: na.cmdList(Cmd{CmdArgs: args, Env: env, Resources: resourceKeyUnion(e.cudaSettings().Resources, compilerCommandBlocks(in.CCBlocks, true).resources)}, Cmd{CmdArgs: na.chunkList(na.anyList(frontend...)), Env: envVarsVCS}), Env: env, Inputs: inputs, Outputs: hostOuts, KV: &cudaKV, DepRefs: na.refList(mtimeRef, pidRef), Resources: e.instance.Platform.CCUsesResources}, input: InputSpec{roots: appendInputChunks(na, inputs[:1], inputs[2:])}}, hostRef)
 	})

@@ -100,6 +100,14 @@ func cwdANY(s string) ANY {
 	return internStr(s).any()
 }
 
+func (v VFS) stringLen() int {
+	if n := len(v.relString()); n != 0 {
+		return vfsPrefixLen + n
+	}
+
+	return vfsPrefixLen - 1
+}
+
 func (v VFS) string() string {
 	rel := v.relString()
 

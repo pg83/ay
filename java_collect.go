@@ -1268,7 +1268,22 @@ func javaPathVar(name string) bool {
 
 func (d *JavaData) setRawVar(name, value string) {
 	d.rawVars[name] = value
-	d.rawBindings = nil
+
+	if d.rawBindings == nil {
+		return
+	}
+
+	id := internStr(name)
+
+	for i := range d.rawBindings {
+		if d.rawBindings[i].name == id {
+			d.rawBindings[i].values = []ANY{internAny(value)}
+
+			return
+		}
+	}
+
+	d.rawBindings = slices.Insert(d.rawBindings, len(d.rawBindings)-len(javaConfGlobals), confMacroBinding{name: id, values: []ANY{internAny(value)}, bound: true})
 }
 
 func (d *JavaData) javaRawArgs(raw []string) []string {

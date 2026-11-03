@@ -708,7 +708,7 @@ func (e *EmitContext) notsPrepare() notsPreparation {
 		prepOutputs = append(prepOutputs, build(dir, "/__tarballs__/", tarball))
 	}
 
-	prep := NodeSpec{Node: Node{Platform: e.instance.Platform, Cmds: na.cmdList(Cmd{CmdArgs: na.chunkList(na.anyList(appendInternAnys(nil, prepArgs)...)), Env: envVarsVCS}), Env: envVarsVCS, Inputs: na.rootInputList(na.vfsList(prepInputs...)), Outputs: na.vfsList(prepOutputs...), KV: &KV{P: pkTSDep, PC: pcMagenta}, KVExts: []KVExt{{Key: "text", Val: dir}}, ForeignDepRefs: na.refList(toolRef), Requirements: e.notsRequirements(), Resources: resourceNames, Extra: &NodeExtra{ResourceURIs: make([]STR, len(uris))}}, input: InputSpec{roots: na.inputList(prepInputs[:prepToolIndex], prepInputs[prepToolIndex+1:])}}
+	prep := NodeSpec{Node: Node{Platform: e.instance.Platform, Cmds: na.cmdList(Cmd{CmdArgs: na.chunkList(na.anyList(appendInternAnys(nil, prepArgs)...)), Env: envVarsVCS}), Env: envVarsVCS, Inputs: na.rootInputList(na.vfsList(prepInputs...)), Outputs: na.vfsList(prepOutputs...), KV: &KV{P: pkTSDep, PC: pcMagenta}, ForeignDepRefs: na.refList(toolRef), Requirements: e.notsRequirements(), Resources: resourceNames, Extra: &NodeExtra{ResourceURIs: make([]STR, len(uris)), KVExts: []KVExt{{Key: "text", Val: dir}}}}, input: InputSpec{roots: na.inputList(prepInputs[:prepToolIndex], prepInputs[prepToolIndex+1:])}}
 
 	for i, uri := range uris {
 		prep.Extra.ResourceURIs[i] = internStr(uri)

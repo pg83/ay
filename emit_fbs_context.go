@@ -71,7 +71,7 @@ func (e *EmitContext) bindFbsNativeSource(src, out VFS, in ModuleCCInputs, reser
 		owner := e.frame.serial
 		scanner, scanCtx := e.scanner, e.d.scanCtx
 
-		info.OnUse = e.pendingEmit(func() {
+		info.rareFields().OnUse = e.pendingEmit(func() {
 			command := in
 
 			command.IncludeView = scanner.walkClosure(src, scanCtx, scanDomainCC)

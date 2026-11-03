@@ -279,11 +279,11 @@ func resolveResourceGlobalRef(s string, globals []ResourceDecl) string {
 	return ""
 }
 
-func resolveResourceGlobalArgs(args []ANY, globals []ResourceDecl) []ANY {
-	return resourceGlobalArgumentValue(args, globals).Args
+func resolveResourceGlobalArgs(args []ANY, globals []ResourceDecl, scratch *EnvStore) []ANY {
+	return resourceGlobalArgumentValue(args, globals, scratch).Args
 }
 
-func resourceGlobalArgumentValue(args []ANY, globals []ResourceDecl) CompilerFlagValue {
+func resourceGlobalArgumentValue(args []ANY, globals []ResourceDecl, scratch *EnvStore) CompilerFlagValue {
 	var uses []STR
 	var env Environment
 	var out []ANY
@@ -300,12 +300,18 @@ func resourceGlobalArgumentValue(args []ANY, globals []ResourceDecl) CompilerFla
 		}
 
 		if env.s == nil {
-			env = newEnvironment()
-			env.resourceUses = &uses
+			scratch.resourceBindings = scratch.resourceBindings[:0]
+			env = Environment{s: scratch, resourceUses: &uses}
 
 			for _, d := range globals {
 				env.setResource(d)
 			}
+
+			defer func() {
+				for _, d := range globals {
+					env.unbind(internEnvSTR(d.GlobalVar))
+				}
+			}()
 		}
 
 		if out == nil {

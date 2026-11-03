@@ -61,7 +61,7 @@ func (d *ModuleData) collectUsrvFiles(args []string) {
 
 func (e *EmitContext) emitUsrvFile(file UsrvFile) {
 	na := e.ctx.na
-	toolValue := resourceGlobalArgumentValue([]ANY{strUsrvUnpackTarResourceGlobalUnpackTar.any()}, e.peers.ResourceGlobals)
+	toolValue := resourceGlobalArgumentValue([]ANY{strUsrvUnpackTarResourceGlobalUnpackTar.any()}, e.peers.ResourceGlobals, &e.ctx.resourceEnv)
 	toolArgs := toolValue.Args
 	src := e.runProgramInputVFS(file.Tar)
 	out := copyFileOutputVFS(e.instance.Path.relString(), file.File)

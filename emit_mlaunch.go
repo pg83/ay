@@ -130,7 +130,7 @@ func (e *EmitContext) genPackageFinal() *ModuleEmitResult {
 
 	for _, peer := range peers {
 		if info := e.codegen.lookup(peer); info != nil {
-			lateOuts = append(lateOuts, info.LateOutputs...)
+			lateOuts = append(lateOuts, info.lateOutputs()...)
 		}
 	}
 
@@ -175,7 +175,7 @@ func (e *EmitContext) genPackageFinal() *ModuleEmitResult {
 
 	args = append(args, strYaEndCommandFile.any())
 
-	node := NodeSpec{Node: Node{Module: true, Platform: e.instance.Platform, KV: &packageFinalKV, KVExts: []KVExt{{Key: "package", Val: "PACKAGE"}}, Env: envVarsVCS, Resources: usesPython3, Inputs: na.rootInputList(na.vfsList(dedup(inputs)...)), Outputs: na.vfsList(append(outputs, e.outs...)...), DepRefs: na.refList(dedupRefs(e.refs)...),
+	node := NodeSpec{Node: Node{Module: true, Platform: e.instance.Platform, KV: &packageFinalKV, Extra: &NodeExtra{KVExts: []KVExt{{Key: "package", Val: "PACKAGE"}}}, Env: envVarsVCS, Resources: usesPython3, Inputs: na.rootInputList(na.vfsList(dedup(inputs)...)), Outputs: na.vfsList(append(outputs, e.outs...)...), DepRefs: na.refList(dedupRefs(e.refs)...),
 		Cmds: na.cmdList(e.pythonScriptCmd("touch.py", out.string()), Cmd{CmdArgs: na.chunkList(args), Env: envVarsVCS})}, input: InputSpec{roots: buildFrom},
 	}
 

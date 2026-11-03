@@ -109,13 +109,7 @@ func (ctx *GenCtx) configureDependencies() {
 
 		configure(dependency.to)
 
-		retain := ctx.peerTests
-
-		for root := range ctx.roots {
-			retain = retain || root.Path == dependency.from
-		}
-
-		if retain {
+		if ctx.peerTests || ctx.rootPaths[dependency.from] {
 			ctx.testBuildDependencies(dependency.to)
 		}
 	}
