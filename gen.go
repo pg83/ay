@@ -13,7 +13,6 @@ var acknowledgedMacros = map[string]struct{}{
 	"ALICE_TYPED_CALLBACK":            {},
 	"SOURCE_GROUP":                    {},
 	"TS_PROTO_OPT":                    {},
-	"CUDA_NVCC_FLAGS":                 {},
 	"SET_APPEND_WITH_GLOBAL":          {},
 	"RECURSE":                         {},
 	"RECURSE_FOR_TESTS":               {},
@@ -51,7 +50,6 @@ var acknowledgedMacros = map[string]struct{}{
 	"NO_OPTIMIZE":                     {},
 	"NO_OPTIMIZE_PY_PROTOS":           {},
 	"NO_PYTHON2":                      {},
-	"NO_MYPY":                         {},
 	"NO_YMAKE_PYTHON":                 {},
 	"NO_YMAKE_PYTHON3":                {},
 	"TOOLCHAIN":                       {},
@@ -80,7 +78,6 @@ var acknowledgedMacros = map[string]struct{}{
 	"ONLY_TAGS":                       {},
 	"EXCLUDE_TAGS":                    {},
 	"CHECK_DEPENDENT_DIRS":            {},
-	"DISABLE_DATA_VALIDATION":         {},
 
 	"FROM_SANDBOX":      {},
 	"JAVA_PROTO_PLUGIN": {},

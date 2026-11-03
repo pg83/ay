@@ -3099,12 +3099,6 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 		d.pireInline = append(d.pireInline, v.Args...)
 	case tokGenerateYtRecord:
 		applyYtRecord(modulePath, v, d, env)
-	case tokYtRecordDisablePeerdir:
-		if len(v.Args) != 0 {
-			throwFmt("YT_RECORD_DISABLE_PEERDIR expects no arguments")
-		}
-
-		env.setString(envYtRecordPeerdir, "")
 	case tokRunJavascriptAfterBuildProcessInputs:
 		applyRunJavascriptAfterBuildProcessInputs(v.Args, env)
 	case tokGolaunchSrcs, tokGolaunchSrcdir, tokRuntimePeerdir, tokResourcePeerdir, tokGolaunchFunction, tokGolaunchOverride, tokNoGolaunchSrcs, tokGenerateGolaunchCallbacks, tokGolaunchCompositeComps:
@@ -3192,9 +3186,6 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 		if uri, ok := resolveResourceURIFromBundle(bundle, env); ok {
 			env.setString(internEnv(v.Args[0].string()), uri)
 		}
-	case tokNoPlatformResources:
-
-		env.setBool(envNoplatformResources, true)
 	case tokPrimaryOutput:
 
 		if len(v.Args) >= 1 {
@@ -3212,21 +3203,10 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 		handled = false
 
 		return false
-	case tokCompileCAsCxx:
-		env.setString(envExtraCFlags, env.expand("$C_AS_CXX_FLAGS"))
 	case tokNoWshadow:
 		d.flags.NoWShadow = true
 	case tokNoExportDynamicSymbols:
 		d.flags.NoExportDynSymbols = true
-	case tokUseLlvmBc16:
-		env.setString(envCLANG_BC_ROOT, "$"+envCLANG16_RESOURCE_GLOBAL.string())
-		env.setString(envLLVM_LLC_TOOL, "contrib/libs/llvm16/tools/llc")
-	case tokUseLlvmBc18:
-		env.setString(envCLANG_BC_ROOT, "$"+envCLANG18_RESOURCE_GLOBAL.string())
-		env.setString(envLLVM_LLC_TOOL, "contrib/libs/llvm18/tools/llc")
-	case tokUseLlvmBc20:
-		env.setString(envCLANG_BC_ROOT, "$"+envCLANG20_RESOURCE_GLOBAL.string())
-		env.setString(envLLVM_LLC_TOOL, "contrib/libs/llvm20/tools/llc")
 	case tokBpf, tokBpfStatic:
 		args := expandStmtTokens(v.Args, env)
 
@@ -3276,10 +3256,6 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 		d.splitDwarf = true
 	case tokNoSplitDwarf:
 		d.splitDwarf = false
-	case tokNoPythonIncludes, tokNoImportTracing:
-		handled = false
-
-		return false
 	case tokNoExtendedSourceSearch:
 		d.noExtendedPySearch = true
 	case tokStylePython, tokStyleRuff:
@@ -3435,14 +3411,6 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 		d.collectCPPStyle(v, env)
 		env.setBool(envUseAllSrcs, true)
 		applyHeaders(fs, modulePath, []ANY{str4.any()}, d)
-	case tokTsProtoNonRecursive:
-		env.setBool(envTsProtoNonRecursive, true)
-	case tokTsProtoPackageName:
-		if len(v.Args) != 1 {
-			throwFmt("TS_PROTO_PACKAGE_NAME expects one package name")
-		}
-
-		env.setString(envTsProtoAutoPackageName, v.Args[0].string())
 	case tokSetCustomClangTidy:
 		if len(v.Args) != 2 {
 			throwFmt("SET_CUSTOM_CLANG_TIDY expects a resource module and variable name")
@@ -3536,10 +3504,6 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 
 		stmt.Opts = append([]ANY(nil), rest...)
 		d.decimalMD5 = append(d.decimalMD5, stmt)
-	case tokCythonFlags:
-		applyUnknownStmt(fs, modulePath, UnknownStmt{Name: tokSetAppend, Args: append([]ANY{strCythonOptions.any()}, v.Args...)}, d, env, onWarn)
-	case tokFlexFlags:
-		applyUnknownStmt(fs, modulePath, UnknownStmt{Name: tokSetAppend, Args: append([]ANY{envLEX_FLAGS.str().any()}, v.Args...)}, d, env, onWarn)
 	case tokBuildwithCythonCpp:
 		if len(v.Args) == 0 {
 			throwFmt("BUILDWITH_CYTHON_CPP expects at least 1 argument")
@@ -3611,8 +3575,6 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 		collectProtoToNamespace(fs, modulePath, v, d, env, onWarn)
 	case tokRegisterYqlPythonUdf:
 		registerYqlPythonUdf(fs, modulePath, v, d, env, onWarn)
-	case tokUdfNoProbe:
-		env.setBool(envUdfNoProbe, true)
 	case tokYqlLastAbiVersion:
 		if len(v.Args) != 0 {
 			throwFmt("YQL_LAST_ABI_VERSION expects exactly 0 arguments, got %d", len(v.Args))
@@ -3646,12 +3608,6 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 			internArg(prefix+"MINOR="+v.Args[1].string()).any(),
 			internArg(prefix+"PATCH="+v.Args[2].string()).any(),
 		)
-	case tokProtocFatalWarnings:
-		if len(v.Args) != 0 {
-			throwFmt("PROTOC_FATAL_WARNINGS expects exactly 0 arguments, got %d", len(v.Args))
-		}
-
-		d.protocFlags = append(d.protocFlags, argFatalWarnings.any())
 	case tokUseCommonGoogleApis:
 
 		d.useCommonGoogleAPIs = true
@@ -3818,8 +3774,6 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 		applyArchiveAsmStmt(v, d)
 	case tokLj21Archive:
 		applyLj21ArchiveStmt(v, d)
-	case tokDisableDataValidation:
-		env.setBool(envValidateData, false)
 	case tokEnable:
 
 		for _, aTok := range v.Args {
@@ -3871,8 +3825,6 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 				d.needGoogleProtoPeerdirs = false
 			}
 		}
-	case tokNoMypy:
-		env.setBool(envPyProtoMypyEnabled, false)
 	case tokNoOptimize:
 		d.noOptimize = true
 	case tokExplicitOutputs:
@@ -3883,10 +3835,6 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 		}
 
 		env.setString(internEnv(v.Args[0].string()), "$_FMT_INDUCED_DEPS("+joinAnys(v.Args[1:], " ")+")")
-	case tokNoDebugInfo:
-		env.setStringID(envNO_DEBUGINFO, strYes)
-	case tokStrip:
-		env.setBool(envSTRIP, true)
 	case tokNoOptimizePyProtos:
 		d.optimizePyProtos = false
 		d.optimizePyProtosSet = true
@@ -4136,8 +4084,6 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 				d.pySrcGroups[i].SourceRoot = true
 			}
 		}
-	case tokPyExtraLintFiles:
-		applyUnknownStmt(fs, modulePath, UnknownStmt{Name: tokSetAppend, Args: append([]ANY{strPyExtraLintFilesValue.any()}, v.Args...)}, d, env, onWarn)
 	case tokPySrcs:
 
 		env.setDefaultString(envMODULE_TAG, "PY3")
@@ -4412,8 +4358,6 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 		if fs.isFilePathClean("build/internal/platform/cuda/ya.make") {
 			d.macroPeerdirs = append(d.macroPeerdirs, strBuildInternalPlatformCuda.any())
 		}
-	case tokCudaNvccFlags:
-		applyUnknownStmt(fs, modulePath, UnknownStmt{Name: tokSetAppend, Args: append([]ANY{envCudaNvccFlags.str().any()}, v.Args...)}, d, env, onWarn)
 	default:
 
 		handled = false
