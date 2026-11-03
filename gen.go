@@ -17,7 +17,6 @@ var acknowledgedMacros = map[string]struct{}{
 	"RECURSE_FOR_TESTS":               {},
 	"RECURSE_ROOT_RELATIVE":           {},
 	"LICENSE":                         {},
-	"VERSION":                         {},
 	"PROVIDES":                        {},
 	"SUPPRESSIONS":                    {},
 	"ENV":                             {},

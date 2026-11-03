@@ -998,6 +998,11 @@ func collectModuleInto(ctx *GenCtx, instance ModuleInstance, stmts []Stmt, env E
 	d.noExtendedPySearch = env.string(envNoExtendedSourceSearch) == "yes"
 	d.noOptimize = env.bool(envNoOptimize)
 	d.primaryOutput = env.string(envPrimaryOutputValue)
+
+	if version, ok := env.lookup("MODVER"); ok {
+		d.modver = strings.Join(strings.Fields(version), ".")
+	}
+
 	d.bisonGenExt = internStr(env.string(envBisonGenExt))
 
 	if plugin := env.string(envArPlugin); plugin != "" {
@@ -3456,20 +3461,9 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 
 		d.cgoCflags = append(d.cgoCflags, expanded...)
 		d.cFlags = append(d.cFlags, expanded...)
-	case tokMavenGroupId, tokAddDllsToJar:
-
 	case tokLicense:
 
 		d.hasLicense = true
-	case tokVersion:
-
-		components := anyStrs(expandStmtTokens(v.Args, env))
-		value := strings.Join(components, " ")
-
-		env.setFromString(envModver, value)
-
-		d.setVars.set(strModver, internStr(value))
-		d.modver = strings.Join(components, ".")
 	case tokToolchain:
 
 		if len(v.Args) == 1 {
@@ -3813,12 +3807,6 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 		}
 	case tokExplicitOutputs:
 		d.unionExplicitOutputs = append(d.unionExplicitOutputs, expandSourceArguments(v.Args, env)...)
-	case tokPrepareInducedDeps:
-		if len(v.Args) < 2 {
-			throwFmt("PREPARE_INDUCED_DEPS expects a variable name and dependency type")
-		}
-
-		env.setString(internEnv(v.Args[0].string()), "$_FMT_INDUCED_DEPS("+joinAnys(v.Args[1:], " ")+")")
 	case tokNoOptimizePyProtos:
 		d.optimizePyProtos = false
 		d.optimizePyProtosSet = true
@@ -3938,12 +3926,6 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 		if changed {
 			d.objAddLibsGlobal = append(d.objAddLibsGlobal[:0], internArg(libs).any())
 		}
-	case tokSelectClangSAConfig:
-		if len(v.Args) != 1 {
-			throwFmt("SELECT_CLANG_SA_CONFIG expects one configuration file")
-		}
-
-		env.setString(envClangSAConfig, v.Args[0].string())
 	case tokUseSAPlugins:
 		applySAPlugins(v.Args, d, env)
 	case tokUseNasm:
