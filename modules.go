@@ -814,7 +814,6 @@ func collectModuleInto(ctx *GenCtx, instance ModuleInstance, stmts []Stmt, env E
 
 	d.ifReplay = replay
 	d.pythonSQLite3 = true
-	d.bisonGenExt = strCpp
 	d.needGoogleProtoPeerdirs = true
 	d.yqlCurrent = instance.YqlCurrent
 	d.yqlStableABI = instance.Platform.YqlStableABI
@@ -996,6 +995,17 @@ func collectModuleInto(ctx *GenCtx, instance ModuleInstance, stmts []Stmt, env E
 	d.flags.NoRuntime = env.bool(envNoruntime)
 	d.flags.NoLibc = env.bool(envNolibc)
 	d.flags.NoPlatform = env.bool(envNoplatform)
+	d.flags.NoWShadow = env.bool(envNoWshadow)
+	d.flags.NoExportDynSymbols = env.bool(envNoExportDynamicSymbols)
+	d.noExtendedPySearch = env.string(envNoExtendedSourceSearch) == "yes"
+	d.noOptimize = env.bool(envNoOptimize)
+	d.primaryOutput = env.string(envPrimaryOutputValue)
+	d.bisonGenExt = internStr(env.string(envBisonGenExt))
+
+	if plugin := env.string(envArPlugin); plugin != "" {
+		d.arPlugin = ptr(internStr(plugin).any())
+	}
+
 	d.noPythonIncl = env.bool(envNoPythonIncls)
 	d.noImportTracing = !env.bool(envPythonImportTracing)
 
@@ -3186,11 +3196,6 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 		if uri, ok := resolveResourceURIFromBundle(bundle, env); ok {
 			env.setString(internEnv(v.Args[0].string()), uri)
 		}
-	case tokPrimaryOutput:
-
-		if len(v.Args) >= 1 {
-			d.primaryOutput = v.Args[0].string()
-		}
 	case tokUseCxx, tokUseUtil:
 		if !isGoModuleType(d.unit.Type) {
 			throwFmt("%s is not allowed for %s modules", v.Name.string(), d.unit.Type.string())
@@ -3203,10 +3208,6 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 		handled = false
 
 		return false
-	case tokNoWshadow:
-		d.flags.NoWShadow = true
-	case tokNoExportDynamicSymbols:
-		d.flags.NoExportDynSymbols = true
 	case tokBpf, tokBpfStatic:
 		args := expandStmtTokens(v.Args, env)
 
@@ -3256,8 +3257,6 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 		d.splitDwarf = true
 	case tokNoSplitDwarf:
 		d.splitDwarf = false
-	case tokNoExtendedSourceSearch:
-		d.noExtendedPySearch = true
 	case tokStylePython, tokStyleRuff:
 		d.collectExplicitPythonStyle(v, env)
 	case tokLlvmBc:
@@ -3537,10 +3536,6 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 		}
 
 		d.ragel6Builds = append(d.ragel6Builds, Ragel6BuildStmt{Src: args[0].string(), Options: args[1:], DeclSeq: d.nextDeclSeq()})
-	case tokBisonGenC:
-		d.bisonGenExt = strC
-	case tokBisonGenCpp:
-		d.bisonGenExt = strCpp
 	case tokBisonFlags:
 
 		for _, a := range v.Args {
@@ -3825,8 +3820,6 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 				d.needGoogleProtoPeerdirs = false
 			}
 		}
-	case tokNoOptimize:
-		d.noOptimize = true
 	case tokExplicitOutputs:
 		d.unionExplicitOutputs = append(d.unionExplicitOutputs, expandSourceArguments(v.Args, env)...)
 	case tokPrepareInducedDeps:
@@ -3905,13 +3898,6 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 	case tokLdPlugin:
 
 		d.ldPlugins = append(d.ldPlugins, v.Args...)
-	case tokArPlugin:
-
-		if len(v.Args) != 1 {
-			throwFmt("gen: AR_PLUGIN expects exactly 1 argument, got %d", len(v.Args))
-		}
-
-		d.arPlugin = ptr(internV(v.Args[0].string(), ".pyplugin").any())
 	case tokDynamicLibraryFrom:
 		if len(v.Args) == 0 {
 			throwFmt("gen: DYNAMIC_LIBRARY_FROM expects at least 1 argument")

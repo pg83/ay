@@ -28,7 +28,6 @@ var acknowledgedMacros = map[string]struct{}{
 	"SIZE":                            {},
 	"TIMEOUT":                         {},
 	"STYLE_PYTHON":                    {},
-	"NO_OPTIMIZE":                     {},
 	"NO_OPTIMIZE_PY_PROTOS":           {},
 	"NO_PYTHON2":                      {},
 	"NO_YMAKE_PYTHON":                 {},
