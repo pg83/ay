@@ -50,7 +50,6 @@ const (
 	stmtPrioDefault     = 2
 	stmtPrioSrcs        = 4
 	prioAddIncl         = 0
-	prioAddInclSelf     = 1
 	prioRuleAddIncl     = 2
 	prioOutputAddIncl   = 3
 	yaffPluginPath      = "library/cpp/yaff/tools/protoc_plugin"
@@ -3172,18 +3171,6 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 
 		for _, args := range yaToolsConfResourceFiles(fs, expandStmtTokenAny(v.Args[0], env).string()) {
 			applyResourceFiles(fs, modulePath, args, v.Line, d)
-		}
-	case tokAddInclSelf:
-
-		self := source(modulePath)
-
-		switch {
-		case len(v.Args) >= 2 && v.Args[0].string() == "FOR" && v.Args[1].string() == "cython":
-			d.cythonAddIncl = append(d.cythonAddIncl, self)
-		case len(v.Args) >= 2 && v.Args[0].string() == "FOR" && v.Args[1].string() == "asm":
-			d.asmAddIncl = append(d.asmAddIncl, self)
-		default:
-			d.addLocalIncl(prioAddInclSelf, self)
 		}
 	case tokSetResourceUriFromJson:
 

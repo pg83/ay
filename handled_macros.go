@@ -4,7 +4,6 @@ var handledMacroTokens = map[TOK]bool{
 	tokSplitDwarf:                           true,
 	tokNoSplitDwarf:                         true,
 	tokAddCustomExplicitLinterCheck:         true,
-	tokAddInclSelf:                          true,
 	tokAliceCapability:                      true,
 	tokAliceGenerateFunctionProtoIncludes:   true,
 	tokAliceGenerateProtoIncludes:           true,
