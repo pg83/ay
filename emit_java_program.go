@@ -408,32 +408,7 @@ func (ctx *GenCtx) javaTool(dir string) *JavaModule {
 }
 
 func dropUnknownConfRefs(arg string) string {
-	if !strings.Contains(arg, "$") {
-		return arg
-	}
-
-	var out strings.Builder
-
-	from := 0
-
-	for {
-		start, end, _ := nextConfReference(arg, from, false)
-
-		if start == end {
-			break
-		}
-
-		out.WriteString(arg[from:start])
-		from = end
-	}
-
-	if from == 0 {
-		return arg
-	}
-
-	out.WriteString(arg[from:])
-
-	return out.String()
+	return substMacroDeeply(arg, nil, Environment{}, nil, &substPolicy{emptyUnknown: true, keepModifiers: true})
 }
 
 func (ctx *GenCtx) hasJavaJarUnit(dir string) bool {

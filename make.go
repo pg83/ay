@@ -165,6 +165,7 @@ func cmdMake(g GlobalFlags, args []string) int {
 		}
 
 		if mf.dumpIgnoredMacros {
+			events.sync()
 			dumpMacroAudit(os.Stderr)
 		}
 

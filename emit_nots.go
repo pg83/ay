@@ -459,22 +459,12 @@ func (e *EmitContext) emitNotsNode(n NodeSpec) NodeRef {
 	env := Environment{s: &e.frame.ifEnv}
 	tool := env.string(envNotsTool)
 
-	for from := 0; ; {
-		start, end, name := nextConfReference(tool, from, true)
-
-		if start == end {
-			break
-		}
-
-		from = end
-
-		modifiers, _, _ := strings.Cut(tool[start:end], ":")
-
-		if !slices.Contains(strings.Split(strings.TrimPrefix(modifiers, "${"), ";"), "input") {
+	for ref := range macroRefs(tool) {
+		if ref.raw || ref.flags&modInput == 0 {
 			continue
 		}
 
-		for _, input := range strings.Fields(env.expand(env.string(internEnv(name)))) {
+		for _, input := range strings.Fields(env.expand(env.string(internEnv(ref.name)))) {
 			n.Inputs = append(n.Inputs, e.ctx.na.vfsList(source(input)))
 		}
 	}

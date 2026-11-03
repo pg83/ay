@@ -416,7 +416,7 @@ for test_path in make_test_paths:
     test_outputs = [result_file]
     test_env = {"AY_E2E_RUN_ID": make_test_run, "PYTHONDONTWRITEBYTECODE": "1"}
     test_deps = [make_test_binary]
-    if name == "test_indexed_fs":
+    if name in ("test_indexed_fs", "test_stat_syscall_errors"):
         test_deps += [ay_gate_test, ay_index]
         test_env.update(AY_GATE_TEST_BINARY=ay_gate_test.outputs[0], AY_INDEX_BINARY=ay_index.outputs[0])
     test_commands = [

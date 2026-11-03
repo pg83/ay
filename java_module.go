@@ -312,6 +312,7 @@ type JavaData struct {
 	lintLevel              string
 	noLint                 string
 	rawVars                map[string]string
+	rawBindings            []confMacroBinding
 	annotationProcs        []string
 	jarMainClass           string
 	jvmArgs                []string

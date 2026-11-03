@@ -145,7 +145,7 @@ func msvcConfWords(env Environment, text string, locals ...confMacroBinding) []A
 
 	constant := true
 
-	for _, word := range splitShellWords(substConfMacroArgs(text, locals, env, &constant)) {
+	for _, word := range splitShellWords(env.subst(text, locals, &constant)) {
 		out = append(out, internAny(word))
 	}
 

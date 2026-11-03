@@ -1,7 +1,6 @@
 package main
 
 import (
-	"crypto/md5"
 	"fmt"
 	"slices"
 	"strings"
@@ -91,6 +90,7 @@ type ConfFile struct {
 	body     map[string][]ConfMacroCall
 	inits    map[STR]*ConfMacro
 	selfPeer map[string][]string
+	aliases  map[string]map[STR]STR
 
 	callNames  []string
 	callsGuard string
@@ -224,6 +224,24 @@ func (s *ConfState) readFile(rel, text string) *ConfFile {
 			}
 
 			top := &stack[len(stack)-1]
+
+			if property, ok := strings.CutPrefix(line, ".ALIASES="); ok && top.block == "module" && !top.skipped {
+				if conf.aliases == nil {
+					conf.aliases = map[string]map[STR]STR{}
+				}
+
+				aliases := map[STR]STR{}
+
+				for pair := range strings.FieldsSeq(property) {
+					if from, to, ok := strings.Cut(pair, "="); ok {
+						aliases[internStr(from)] = internStr(to)
+					}
+				}
+
+				conf.aliases[top.guard] = aliases
+
+				continue
+			}
 
 			if property, ok := strings.CutPrefix(line, ".PEERDIRSELF="); ok && top.block == "module" && !top.skipped {
 				if conf.selfPeer == nil {
@@ -556,7 +574,7 @@ func confInCondition(rel, expr string) string {
 	end := 0
 
 	if strings.HasPrefix(text, "$") {
-		end = confNameEnd(text, 1)
+		end = 1 + confVarNameLen(text[1:])
 
 		if end == 1 {
 			return expr
@@ -743,39 +761,18 @@ func (c *ConfFile) condVars(b int32, add func(ENV)) {
 }
 
 func confTextRefs(text string, visit func(ENV)) {
-	for i := strings.IndexByte(text, '$'); i >= 0; i = strings.IndexByte(text, '$') {
-		text = strings.TrimPrefix(text[i+1:], "{")
-
-		if end := confNameEnd(text, 0); end != 0 {
-			visit(internEnv(text[:end]))
+	for ref := range macroRefs(text) {
+		if !ref.raw {
+			visit(internEnv(ref.name))
 		}
 	}
-}
-
-func confNameEnd(text string, start int) int {
-	end := start
-
-	if end < len(text) && macroVariableLetter(text[end]) {
-		end++
-
-		for end < len(text) && (macroVariableLetter(text[end]) || text[end] >= '0' && text[end] <= '9') {
-			end++
-		}
-	}
-
-	return end
 }
 
 func confValueVars(value string, add func(string)) {
-	for from := 0; ; {
-		start, end, name := nextConfReference(value, from, true)
-
-		if start == end {
-			return
+	for ref := range macroRefs(value) {
+		if !ref.raw {
+			add(ref.name)
 		}
-
-		add(name)
-		from = end
 	}
 }
 
@@ -881,9 +878,9 @@ type confModule struct {
 	index     int
 	parent    STR
 	variable  ENV
-	builder   []ENV
 	calls     []string
 	body      []ConfMacroCall
+	aliases   map[STR]STR
 	order     int
 	steps     []confInitStep
 	outputs   []ENV
@@ -1031,9 +1028,43 @@ func (pm *IncludeParserManager) confProgram(f *ConfFile, walking []string) *conf
 		}
 	}
 
+	p.markDirBodies()
+
 	f.program = p
 
 	return p
+}
+
+func (p *confProgram) markDirBodies() {
+	for _, macro := range p.macros {
+		if macro == nil {
+			continue
+		}
+
+		macro.dirs = slices.ContainsFunc(macro.calls, func(call ConfMacroCall) bool { return dirStatement(call.name) })
+
+		for i := range macro.calls {
+			macro.calls[i].macro = p.macros[macro.calls[i].name]
+		}
+	}
+
+	for grown := true; grown; {
+		grown = false
+
+		for _, macro := range p.macros {
+			if macro == nil || macro.dirs {
+				continue
+			}
+
+			for _, call := range macro.calls {
+				if nested := call.macro; nested != nil && nested.dirs {
+					macro.dirs, grown = true, true
+
+					break
+				}
+			}
+		}
+	}
 }
 
 func (t *confTables) build() {
@@ -1041,6 +1072,7 @@ func (t *confTables) build() {
 	calls := map[string][]string{}
 	body := map[string][]ConfMacroCall{}
 	selfPeers := map[string][]string{}
+	aliases := map[string]map[STR]STR{}
 
 	var owners []*ConfFile
 
@@ -1078,6 +1110,10 @@ func (t *confTables) build() {
 
 			for guard, tags := range r.file.selfPeer {
 				selfPeers[guard] = tags
+			}
+
+			for guard, pairs := range r.file.aliases {
+				aliases[guard] = pairs
 			}
 
 			if len(r.file.variants) != 0 {
@@ -1198,9 +1234,9 @@ func (t *confTables) build() {
 
 	for _, module := range t.modules.vals.s {
 		if module != nil {
-			module.builder = t.builderMacros(calls, module.variable.string(), map[string]bool{}, nil)
 			module.calls = calls[module.variable.string()]
 			module.body = body[module.variable.string()]
+			module.aliases = aliases[module.variable.string()]
 		}
 	}
 
@@ -1283,13 +1319,9 @@ func (t *confTables) callSteps(name STR, args string, out []confInitStep, depth 
 		return out, false
 	}
 
-	mark := len(out)
-
 	for _, call := range macro.calls {
-		var ok bool
-
-		if out, ok = t.callSteps(call.name, bindConfParams(call.args.string(), macro.sig, words), out, depth+1); !ok {
-			return out[:mark], false
+		if next, ok := t.callSteps(call.name, bindConfParams(call.args.string(), macro.sig, words), out, depth+1); ok {
+			out = next
 		}
 	}
 
@@ -1301,75 +1333,9 @@ func bindConfParams(text string, sig ConfMacroSignature, args []string) string {
 		return text
 	}
 
-	value := func(name STR) (string, bool) {
-		if i := slices.Index(sig.positional, name); i >= 0 {
-			if i < len(args) {
-				return args[i], true
-			}
+	locals, _ := sig.bind(internAnys(args), newBumpAllocator[confMacroBinding]())
 
-			return "", true
-		}
-
-		if name == sig.vararg && sig.vararg != 0 {
-			if len(args) > len(sig.positional) {
-				return strings.Join(args[len(sig.positional):], " "), true
-			}
-
-			return "", true
-		}
-
-		return "", false
-	}
-
-	var b strings.Builder
-
-	for i := strings.IndexByte(text, '$'); i >= 0; i = strings.IndexByte(text, '$') {
-		b.WriteString(text[:i])
-
-		rest := text[i+1:]
-		name, braced := strings.CutPrefix(rest, "{")
-		end := confNameEnd(name, 0)
-
-		if bound, ok := value(internStr(name[:end])); end != 0 && ok && (!braced || strings.HasPrefix(name[end:], "}")) {
-			b.WriteString(bound)
-
-			text = name[end:]
-
-			if braced {
-				text = text[1:]
-			}
-
-			continue
-		}
-
-		b.WriteByte('$')
-
-		text = rest
-	}
-
-	b.WriteString(text)
-
-	return b.String()
-}
-
-func (t *confTables) builderMacros(calls map[string][]string, guard string, seen map[string]bool, out []ENV) []ENV {
-	for _, call := range calls[guard] {
-		if seen[call] {
-			continue
-		}
-
-		seen[call] = true
-
-		variable := internEnv(call)
-
-		if targets, _ := t.byVariable.get(variable); len(targets) > 0 {
-			out = append(out, variable)
-		}
-
-		out = t.builderMacros(calls, call, seen, out)
-	}
-
-	return out
+	return substMacroDeeply(text, locals, Environment{}, nil, substVariables)
 }
 
 func (t *confTables) module(name STR, tag string) *confModule {
@@ -1483,6 +1449,97 @@ type Conf struct {
 	sysinclList []string
 	recalcs     map[uint64][]confRecalc
 	inputs      []uint64
+	keys        DenseMap[STR, confStatementKey]
+}
+
+type confStatementKey struct {
+	name  STR
+	prio  uint64
+	multi bool
+	parse bool
+}
+
+func (c *Conf) statementKey(name STR) confStatementKey {
+	if key, ok := c.keys.get(name); ok {
+		return key
+	}
+
+	key, found := c.carrier(name, 0)
+
+	key.prio = statementPriority(key.name)
+	key.parse = !found
+
+	c.keys.put(name, key)
+
+	return key
+}
+
+func (c *Conf) carrier(name STR, depth int) (confStatementKey, bool) {
+	if pluginMacroNames[name] {
+		return confStatementKey{name: name, multi: true}, true
+	}
+
+	if builtinStatement(name) {
+		return confStatementKey{name: name, multi: multiStatement(name)}, true
+	}
+
+	macro, present := c.program.macros[name]
+
+	if present && macro == nil {
+		return confStatementKey{name: name, multi: true}, true
+	}
+
+	if macro == nil {
+		return confStatementKey{name: name}, true
+	}
+
+	if depth < confMacroCallStackSize {
+		for _, call := range macro.calls {
+			if baseMacro(call.name) || dirStatement(call.name) {
+				continue
+			}
+
+			if key, ok := c.carrier(call.name, depth+1); ok {
+				return key, true
+			}
+		}
+	}
+
+	if macro.command || macro.foreach {
+		return confStatementKey{name: name, multi: macro.command}, true
+	}
+
+	return confStatementKey{name: name}, false
+}
+
+func baseMacro(name STR) bool {
+	switch name {
+	case kwSET, kwDEFAULT, strSetAppend, strSetAppendWithGlobal, strEnable, strDisable,
+		strGlob, strLateGlob, strMessage, strNevercache:
+		return true
+	}
+
+	return false
+}
+
+func dirStatement(name STR) bool {
+	switch name {
+	case kwPEERDIR, strGhostPeerdir, kwSRCDIR, kwADDINCL:
+		return true
+	}
+
+	return false
+}
+
+func builtinStatement(name STR) bool {
+	switch name {
+	case kwPEERDIR, strGhostPeerdir, kwSRCDIR, kwADDINCL, kwINDUCED_DEPS, kwDECLARE_EXTERNAL_RESOURCE,
+		kwDECLARE_EXTERNAL_HOST_RESOURCES_BUNDLE, strDeclareExternalHostResourcesPack, strLateGlob,
+		strPeerExport, strPeerQuery:
+		return true
+	}
+
+	return false
 }
 
 type confRecalc struct {
@@ -1590,7 +1647,7 @@ func loadConf(pm *IncludeParserManager, root *ConfFile, platformEnv Environment)
 	tables := pm.cache.conf.tablesFor(program)
 	c := &Conf{state: pm.cache.conf, program: program, tables: tables, platformEnv: platformEnv, bases: make([][]ConfAssignment, tables.moduleCount)}
 
-	c.sysinclList = strings.Fields(env.expand(env.string(envSYSINCL)))
+	c.sysinclList = strings.Fields(env.expandVariable(env.string(envSYSINCL)))
 
 	tables.byTarget.idx.each(func(key, _ uint32) {
 		c.inherited.put(ENV(key), confStringBinding(platformEnv, ENV(key)))
@@ -1614,6 +1671,13 @@ func bindConfCommandVariable(key ENV, values, target Environment, seen *BitSet) 
 
 func (c *Conf) sysincl() []string {
 	return c.sysinclList
+}
+
+func (c *Conf) setGuard(env Environment, macro *ConfMacro, originals *SetVars) {
+	if macro != nil && macro.conditions && !env.bool(macro.guard) {
+		env.setBool(macro.guard, true)
+		c.set(env, macro.guard, originals)
+	}
 }
 
 func (c *Conf) alias(name STR) *ConfMacro {
@@ -1769,6 +1833,16 @@ func (c *Conf) module(name STR, tag string) *confModule {
 	return c.tables.module(name, tag)
 }
 
+func (c *Conf) moduleAlias(module *confModule, name STR) STR {
+	for ; module != nil; module = c.tables.module(module.parent, "") {
+		if to, ok := module.aliases[name]; ok {
+			return to
+		}
+	}
+
+	return name
+}
+
 func (c *Conf) initModule(env Environment, module *confModule, originals *SetVars) {
 	defer func() { env.s.confBase = nil }()
 
@@ -1852,7 +1926,7 @@ func (c *Conf) runInit(plan *confModule, env Environment, originals *SetVars, re
 
 			continue
 		case step.expand:
-			env.setStringID(step.variable, internStr(env.expand(step.value.string())))
+			env.setStringID(step.variable, internStr(env.expandVariable(step.value.string())))
 		case step.value != 0:
 			env.setStringID(step.variable, step.value)
 		case step.source != 0:
@@ -1902,28 +1976,6 @@ func recordConfAssignment(recording []ConfAssignment, key ENV, env Environment) 
 	}
 }
 
-func (c *Conf) finishModule(env Environment, module *confModule, originals *SetVars) {
-	if module != nil {
-		c.finishModuleParent(env, module, originals)
-	}
-}
-
-func (c *Conf) finishModuleParent(env Environment, module *confModule, originals *SetVars) {
-	if parent := c.tables.module(module.parent, ""); parent != nil {
-		c.finishModuleParent(env, parent, originals)
-	}
-
-	for _, variable := range module.builder {
-		env.setBool(variable, true)
-
-		targets, _ := c.tables.byVariable.get(variable)
-
-		if slices.ContainsFunc(targets, func(target ENV) bool { return originals.has(target.str()) }) {
-			c.set(env, variable, originals)
-		}
-	}
-}
-
 func (f *ConfFile) activeStatements(env Environment, wanted func(ENV) bool, visit func(ConfStmt)) {
 	active := slices.Grow(f.state.active[:0], len(f.stmts))[:len(f.stmts)]
 
@@ -1958,8 +2010,9 @@ type ConfMacroSignature struct {
 }
 
 type ConfMacroCall struct {
-	name STR
-	args STR
+	name  STR
+	args  STR
+	macro *ConfMacro
 }
 
 type ConfMacro struct {
@@ -1967,6 +2020,9 @@ type ConfMacro struct {
 	sig        ConfMacroSignature
 	calls      []ConfMacroCall
 	conditions bool
+	dirs       bool
+	command    bool
+	foreach    bool
 	guard      ENV
 	expansions *confMacroExpansion
 }
@@ -1975,6 +2031,8 @@ type confMacroBody struct {
 	header     string
 	calls      []ConfMacroCall
 	conditions bool
+	command    bool
+	foreach    bool
 }
 
 func (f *ConfFile) addMacro(header string, branch int32, body *confMacroBody) {
@@ -2003,7 +2061,7 @@ func (f *ConfFile) addMacro(header string, branch int32, body *confMacroBody) {
 		calls = append(calls[:len(calls):len(calls)], ConfMacroCall{name: kwSET, args: internV(param, " $", param)})
 	}
 
-	if !specialized && len(calls) == 0 && !body.conditions {
+	if !specialized && len(calls) == 0 && !body.conditions && !body.command && !body.foreach {
 		return
 	}
 
@@ -2018,12 +2076,20 @@ func (f *ConfFile) addMacro(header string, branch int32, body *confMacroBody) {
 	}
 
 	if _, ok := f.macros[key]; !ok {
-		f.macros[key] = &ConfMacro{file: f.rel, sig: sig, calls: calls, conditions: body.conditions, guard: internEnv("env" + key.string())}
+		f.macros[key] = &ConfMacro{file: f.rel, sig: sig, calls: calls, conditions: body.conditions, command: body.command, foreach: body.foreach, guard: internEnv("env" + key.string())}
 	}
 }
 
 func (body *confMacroBody) addLine(line string) {
 	if strings.HasPrefix(line, ".") {
+		body.command = body.command || strings.HasPrefix(line, ".CMD=") || strings.HasPrefix(line, ".CMD =")
+
+		return
+	}
+
+	if strings.HasPrefix(line, "foreach") {
+		body.foreach = true
+
 		return
 	}
 
@@ -2327,11 +2393,13 @@ func (sig *ConfMacroSignature) bind(args []ANY, arena *BumpAllocator[confMacroBi
 	return locals, ""
 }
 
-func expandConfMacro(ctx *GenCtx, modulePath string, kind ModuleKind, language Language, v UnknownStmt, env Environment, d *ModuleData, onWarn func(Warn), platform *Platform) {
+func expandConfMacro(ctx *GenCtx, modulePath string, kind ModuleKind, language Language, v UnknownStmt, handled bool, env Environment, d *ModuleData, onWarn func(Warn), platform *Platform) {
 	macro := platform.conf.alias(v.Raw)
 
 	switch {
 	case macro != nil:
+	case handled:
+		return
 	case v.Name == tokInvalid:
 		onWarn(Warn{Kind: WarnUnknownMacro, Message: fmt.Sprintf("%s: macro %q is not in the modelled set (line %d); skipped", modulePath, v.Raw.string(), v.Line)})
 
@@ -2342,11 +2410,67 @@ func expandConfMacro(ctx *GenCtx, modulePath string, kind ModuleKind, language L
 		return
 	}
 
+	if handled && !macro.dirs {
+		d.deferBodyGuards(platform, macro, 0)
+
+		return
+	}
+
+	platform.conf.macroCalls(macro, v, env, d, onWarn, modulePath, func(name STR, args []ANY) {
+		if baseMacro(name) && (handled || d.interpreting) || dirStatement(name) && d.interpreting {
+			return
+		}
+
+		if handled && !baseMacro(name) && !dirStatement(name) {
+			d.deferGuard(platform, name)
+			expandConfMacro(ctx, modulePath, kind, language, UnknownStmt{Name: internTokMaybeSTR(name), Raw: name, Args: args, Line: v.Line}, true, env, d, onWarn, platform)
+
+			return
+		}
+
+		var scratch [1]Stmt
+
+		stmts := appendMacroCallStmts(scratch[:0], name, args, args, v.Line, func(format string, a ...any) {
+			throwFmt("%s: %s: "+format, append([]any{macro.file, name.string()}, a...)...)
+		})
+
+		markImplicitPeers(stmts)
+		collectStmts(ctx, modulePath, kind, language, stmts, env, d, onWarn, platform)
+	})
+}
+
+func (d *ModuleData) deferBodyGuards(platform *Platform, macro *ConfMacro, depth int) {
+	if depth == confMacroCallStackSize {
+		throwFmt("config error: recursion in the calls of macro %s", macro.file)
+	}
+
+	for _, call := range macro.calls {
+		if baseMacro(call.name) {
+			continue
+		}
+
+		d.deferGuardOf(platform, call.name, call.macro)
+
+		if call.macro != nil {
+			d.deferBodyGuards(platform, call.macro, depth+1)
+		}
+	}
+}
+
+func markImplicitPeers(stmts []Stmt) {
+	for _, s := range stmts {
+		if p, ok := s.(*PeerdirStmt); ok {
+			p.Implicit = true
+		}
+	}
+}
+
+func (c *Conf) macroCalls(macro *ConfMacro, v UnknownStmt, env Environment, d *ModuleData, onWarn func(Warn), modulePath string, visit func(name STR, args []ANY)) {
 	if d.confMacroDepth == confMacroCallStackSize {
 		throwFmt("%s: config error: recursion in the calls of macro %s", modulePath, v.Raw.string())
 	}
 
-	state := platform.conf.state
+	state := c.state
 	expansion := state.bind(macro, v.Args)
 	locals, failure := expansion.locals, expansion.failure
 
@@ -2358,11 +2482,6 @@ func expandConfMacro(ctx *GenCtx, modulePath string, kind ModuleKind, language L
 
 	defer func() { d.confMacroDepth-- }()
 
-	if macro.conditions {
-		env.setBool(macro.guard, true)
-		platform.conf.set(env, macro.guard, &d.setVars)
-	}
-
 	for i, call := range macro.calls {
 		cached := &expansion.calls[i]
 		args := cached.args
@@ -2372,7 +2491,7 @@ func expandConfMacro(ctx *GenCtx, modulePath string, kind ModuleKind, language L
 			constant := true
 
 			if strHasDollar(text.any()) {
-				text = internStr(substConfMacroArgs(text.string(), locals, env, &constant))
+				text = internStr(env.subst(text.string(), locals, &constant))
 			}
 
 			args = state.macroArgs(text)
@@ -2382,13 +2501,7 @@ func expandConfMacro(ctx *GenCtx, modulePath string, kind ModuleKind, language L
 			}
 		}
 
-		var scratch [1]Stmt
-
-		stmts := appendMacroCallStmts(scratch[:0], call.name, args, args, v.Line, func(format string, a ...any) {
-			throwFmt("%s: %s: "+format, append([]any{macro.file, call.name.string()}, a...)...)
-		})
-
-		collectStmts(ctx, modulePath, kind, language, stmts, env, d, onWarn, platform)
+		visit(call.name, args)
 	}
 }
 
@@ -2401,11 +2514,9 @@ func (s *ConfState) macroArgs(text STR) []ANY {
 	block := astArgs.alloc(strings.Count(value, " ") + 1)
 	n := 0
 
-	for arg := range strings.SplitSeq(value, " ") {
-		if arg != "" {
-			block[n] = internStr(arg).any()
-			n++
-		}
+	for arg := range macroArgsSeq(value) {
+		block[n] = internStr(arg).any()
+		n++
 	}
 
 	astArgs.commit(n)
@@ -2415,103 +2526,6 @@ func (s *ConfState) macroArgs(text STR) []ANY {
 	s.args.put(text, args)
 
 	return args
-}
-
-func substConfMacroArgs(text string, locals []confMacroBinding, env Environment, constant *bool) string {
-	for i := 0; strings.IndexByte(text, '$') >= 0; i++ {
-		next := substConfMacroPass(text, locals, env, constant)
-
-		if next == text {
-			break
-		}
-
-		if i == 127 {
-			throwFmt("Macro subst exceeded the limit 128")
-		}
-
-		text = next
-	}
-
-	return text
-}
-
-func substConfMacroPass(text string, locals []confMacroBinding, env Environment, constant *bool) string {
-	var out strings.Builder
-
-	copied := 0
-
-	replace := func(start, end int, value string) {
-		if value != text[start:end] {
-			out.WriteString(text[copied:start])
-			out.WriteString(value)
-			copied = end
-		}
-	}
-
-	for i := 0; i < len(text); {
-		switch {
-		case text[i] == '\\' && i+1 < len(text):
-			i += 2
-		case text[i] != '$':
-			i++
-		case i+1 < len(text) && text[i+1] == '{':
-			end := confMacroRefEnd(text, i+2)
-
-			if end < 0 {
-				i = len(text)
-
-				continue
-			}
-
-			inner := text[i+2 : end]
-
-			switch {
-			case strings.IndexByte(inner, '"') >= 0:
-			case strings.IndexByte(inner, '$') >= 0:
-				replace(i, end+1, "${"+substConfMacroPass(inner, locals, env, constant)+"}")
-			default:
-				replace(i, end+1, substConfMacroRef(text[i:end+1], inner, locals, env, constant))
-			}
-
-			i = end + 1
-		default:
-			n := confVarNameLen(text[i+1:])
-
-			if n == 0 {
-				i++
-
-				continue
-			}
-
-			replace(i, i+1+n, substConfMacroRef(text[i:i+1+n], text[i+1:i+1+n], locals, env, constant))
-			i += 1 + n
-		}
-	}
-
-	if copied == 0 {
-		return text
-	}
-
-	out.WriteString(text[copied:])
-
-	return out.String()
-}
-
-func confMacroRefEnd(text string, i int) int {
-	for depth := 1; i < len(text); i++ {
-		switch text[i] {
-		case '{':
-			depth++
-		case '}':
-			depth--
-
-			if depth == 0 {
-				return i
-			}
-		}
-	}
-
-	return -1
 }
 
 func confVarNameLen(s string) int {
@@ -2546,145 +2560,4 @@ func confVarNameLen(s string) int {
 
 func isConfIdentByte(b byte, first bool) bool {
 	return b >= 'a' && b <= 'z' || b >= 'A' && b <= 'Z' || b == '_' || !first && b >= '0' && b <= '9'
-}
-
-func substConfMacroRef(fragment, ref string, locals []confMacroBinding, env Environment, constant *bool) string {
-	mods, name := "", ref
-
-	if k := strings.LastIndexByte(ref, ':'); k >= 0 {
-		mods, name = ref[:k], ref[k+1:]
-	}
-
-	if confVarNameLen(name) != len(name) {
-		return fragment
-	}
-
-	var values []ANY
-
-	bound := false
-	id := interned(name)
-
-	for _, binding := range locals {
-		if binding.name == id && binding.bound {
-			values, bound = binding.values, true
-
-			break
-		}
-	}
-
-	if !bound {
-		switch name {
-		case envBINDIR.string(), envCURDIR.string(), envARCADIA_ROOT.string(), envARCADIA_BUILD_ROOT.string():
-			return fragment
-		}
-
-		*constant = false
-
-		value, bound := env.lookup(name)
-
-		if !bound {
-			return fragment
-		}
-
-		values = []ANY{internStr(value).any()}
-	}
-
-	return applyConfMacroMods(fragment, mods, values)
-}
-
-func applyConfMacroMods(fragment, mods string, values []ANY) string {
-	if mods == "" {
-		return internAnyWords(values).string()
-	}
-
-	var prefix, suffix, join string
-
-	var joined, hash, upper, lower, noExt, noAllExt, noPath, lastExt bool
-
-	for _, mod := range strings.Split(mods, ";") {
-		key, value, _ := strings.Cut(mod, "=")
-
-		switch key {
-		case "":
-		case "pre":
-			prefix = value
-		case "suf":
-			suffix = value
-		case "join":
-			join, joined = value, true
-		case "hash":
-			hash = true
-		case "toupper":
-			upper = true
-		case "tolower":
-			lower = true
-		case "noext":
-			noExt = true
-		case "noallext":
-			noAllExt = true
-		case "nopath":
-			noPath = true
-		case "lastext":
-			lastExt = true
-		default:
-			return fragment
-		}
-	}
-
-	parts := make([]string, len(values))
-
-	for i, arg := range values {
-		value := arg.string()
-		slash := strings.LastIndexByte(value, '/') + 1
-
-		if noExt || noAllExt {
-			dot := strings.LastIndexByte(value[slash:], '.')
-
-			if noAllExt {
-				dot = strings.IndexByte(value[slash:], '.')
-			}
-
-			if dot >= 0 {
-				value = value[:slash+dot]
-			}
-		}
-
-		if lastExt {
-			if dot := strings.LastIndexByte(value[slash:], '.'); dot >= 0 {
-				value = value[slash+dot+1:]
-			} else {
-				value = ""
-			}
-		}
-
-		if noPath {
-			value = value[strings.LastIndexByte(value, '/')+1:]
-		}
-
-		value = prefix + value + suffix
-
-		if upper {
-			value = strings.ToUpper(value)
-		}
-
-		if lower {
-			value = strings.ToLower(value)
-		}
-
-		parts[i] = value
-	}
-
-	separator := " "
-
-	if joined {
-		separator = join
-	}
-
-	result := strings.Join(parts, separator)
-
-	if hash {
-		result = fmt.Sprintf("%x", md5.Sum([]byte(result)))
-	}
-
-	return result
 }

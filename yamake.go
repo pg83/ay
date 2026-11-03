@@ -180,9 +180,14 @@ type ModuleStmt struct {
 	Prefix string
 }
 
+type MacroGuardStmt struct {
+	Name STR
+}
+
 type PeerdirStmt struct {
-	Paths []ANY
-	Line  int
+	Paths    []ANY
+	Line     int
+	Implicit bool
 }
 
 type DeclareResourceStmt struct {
@@ -227,8 +232,10 @@ type UnknownStmt struct {
 	Raw         STR
 	Args        []ANY
 	LexicalArgs []ANY
+	Body        []Stmt
 	Line        int
 	Internal    bool
+	Expanded    bool
 }
 
 type IfStmt struct {
@@ -299,6 +306,7 @@ type GlobalSrcsStmt struct {
 }
 
 type GenerateEnumSerializationStmt struct {
+	Macro   STR
 	Header  string
 	Variant string
 	Line    int
@@ -1131,7 +1139,7 @@ func appendMacroCallStmts(out []Stmt, nameID STR, args, lexical []ANY, line int,
 				continue
 			}
 
-			out = append(out, astOne(astEnumSers, GenerateEnumSerializationStmt{Header: args[i].string(), Variant: "with_header", Line: line}))
+			out = append(out, astOne(astEnumSers, GenerateEnumSerializationStmt{Macro: kwGENERATE_ENUM_SERIALIZATION_WITH_HEADER, Header: args[i].string(), Variant: "with_header", Line: line}))
 		}
 
 		return out
@@ -1348,25 +1356,25 @@ func buildStmtForID(nameID STR, args []ANY, line int, fail func(format string, a
 			fail("GENERATE_ENUM_SERIALIZATION expects exactly 1 argument (header path), got %d", len(args))
 		}
 
-		return astOne(astEnumSers, GenerateEnumSerializationStmt{Header: args[0].string(), Variant: "plain", Line: line})
+		return astOne(astEnumSers, GenerateEnumSerializationStmt{Macro: kwGENERATE_ENUM_SERIALIZATION, Header: args[0].string(), Variant: "plain", Line: line})
 	case "ALICE_GENERATE_NOEXCEPT_ENUM_SERIALIZATION":
 		if len(args) != 1 {
 			fail("ALICE_GENERATE_NOEXCEPT_ENUM_SERIALIZATION expects exactly 1 argument (header path), got %d", len(args))
 		}
 
-		return astOne(astEnumSers, GenerateEnumSerializationStmt{Header: args[0].string(), Variant: "noexcept_header", Line: line})
+		return astOne(astEnumSers, GenerateEnumSerializationStmt{Macro: strAliceGenerateNoexceptEnumSerialization, Header: args[0].string(), Variant: "noexcept_header", Line: line})
 	case "GENERATE_ENUM_SERIALIZATION_WITH_HEADER":
 		if len(args) != 1 {
 			fail("GENERATE_ENUM_SERIALIZATION_WITH_HEADER expects exactly 1 argument (header path), got %d", len(args))
 		}
 
-		return &GenerateEnumSerializationStmt{Header: args[0].string(), Variant: "with_header", Line: line}
+		return &GenerateEnumSerializationStmt{Macro: kwGENERATE_ENUM_SERIALIZATION_WITH_HEADER, Header: args[0].string(), Variant: "with_header", Line: line}
 	case "GENERATE_ENUM_SERIALIZATION_NOUTF":
 		if len(args) != 1 {
 			fail("GENERATE_ENUM_SERIALIZATION_NOUTF expects exactly 1 argument (header path), got %d", len(args))
 		}
 
-		return &GenerateEnumSerializationStmt{Header: args[0].string(), Variant: "noutf", Line: line}
+		return &GenerateEnumSerializationStmt{Macro: kwGENERATE_ENUM_SERIALIZATION_NOUTF, Header: args[0].string(), Variant: "noutf", Line: line}
 	case "DEFAULT":
 
 		varName := ""
@@ -2531,6 +2539,9 @@ func (*ModuleStmt) stmtMarker() {
 }
 
 func (*DeclareResourceStmt) stmtMarker() {
+}
+
+func (*MacroGuardStmt) stmtMarker() {
 }
 
 func (*PeerdirStmt) stmtMarker() {

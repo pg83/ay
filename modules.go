@@ -3,7 +3,6 @@ package main
 import (
 	"cmp"
 	"fmt"
-	"os"
 	"path"
 	"path/filepath"
 	"slices"
@@ -56,6 +55,7 @@ const (
 	prioOutputAddIncl   = 3
 	yaffPluginPath      = "library/cpp/yaff/tools/protoc_plugin"
 	yabsConfRel         = "build/internal/conf/project_specific/yabs.conf"
+	declSeqBlock        = 1 << 24
 )
 
 const (
@@ -397,6 +397,12 @@ type ModuleData struct {
 	setVars                 SetVars
 	confModule              *confModule
 	defaultPeerTags         STR
+	pending                 []PendingStmt
+	interpreting            bool
+	pendingIndex            int
+	varMacrosApplied        []STR
+	guards                  []STR
+	basePeerdirs            STR
 	tc                      ModuleToolchain
 	scanCtx                 *ScanContext
 	cc                      ModuleCompileEnv
@@ -829,7 +835,7 @@ func collectModuleInto(ctx *GenCtx, instance ModuleInstance, stmts []Stmt, env E
 	kindOfResolve, _ := env.s.lookup(envDontResolveIncludes)
 
 	d.dontResolveIncludes = kindOfResolve != envAbsent && env.string(envDontResolveIncludes) != "no"
-	finishYqlModule(ctx, instance, env, d, onWarn)
+	finishYqlModule(instance, env, d)
 
 	if d.unit.Type == tokCrate && !envRustHost(env) && env.string(envSANITIZER_TYPE) == "memory" {
 		d.peerdirs = append(d.peerdirs, internAny("contrib/restricted/rust_msan"))
@@ -1413,52 +1419,274 @@ func (d *ModuleData) processModuleEnd(modulePath string, line int, onWarn func(W
 	return false
 }
 
-func interpretedModuleVars(env Environment) []Stmt {
-	var out []Stmt
+type PendingStmt struct {
+	key   uint64
+	seq   int
+	name  STR
+	macro *ConfMacro
+	stmt  Stmt
+}
+
+func statementPriority(name STR) uint64 {
+	switch name {
+	case kwPEERDIR, strGhostPeerdir, kwSRCDIR, strLateGlob:
+		return 1
+	case kwSRCS, strGoProcessSrcs, strPySrcs:
+		return 4
+	case strAddPyLinterCheck:
+		return 5
+	case strAddCompilableByk, strJavaModule, strJavaTest, strSetupExectest, strProcessDocs, strProcessDocslib:
+		return 3
+	}
+
+	return 2
+}
+
+func multiStatement(name STR) bool {
+	switch name {
+	case strAllocator, kwINDUCED_DEPS, strGeneratePyProtos, strRunJavaProgram, strSplitCodegen, strCheckDependentDirs,
+		kwDECLARE_EXTERNAL_HOST_RESOURCES_BUNDLE, strDeclareExternalHostResourcesPack, strLateGlob, strPeerQuery, strPeerExport:
+		return true
+	}
+
+	return false
+}
+
+func (d *ModuleData) deferStmt(ctx *GenCtx, modulePath string, kind ModuleKind, language Language, s Stmt, env Environment, onWarn func(Warn), platform *Platform) bool {
+	statement := platform.conf.statementKey(platform.conf.moduleAlias(d.confModule, stmtMacroNameID(s)))
+
+	if statement.parse {
+		d.deferGuard(platform, statement.name)
+
+		return false
+	}
+
+	key := statement.prio << 32
+
+	if statement.multi {
+		key |= uint64(len(d.pending) + 1)
+	}
+
+	seq := d.declSeq
+
+	d.declSeq += declSeqBlock
+
+	d.pending = append(d.pending, PendingStmt{key: key, seq: seq, name: statement.name, macro: platform.conf.alias(statement.name), stmt: derefStmt(d.bindBody(ctx, modulePath, kind, language, s, env, onWarn, platform), env)})
+
+	return true
+}
+
+func (d *ModuleData) bindBody(ctx *GenCtx, modulePath string, kind ModuleKind, language Language, s Stmt, env Environment, onWarn func(Warn), platform *Platform) Stmt {
+	switch v := s.(type) {
+	case *UnknownStmt:
+		if handledMacroTokens[v.Name] {
+			d.expandBodyAtParse(ctx, modulePath, kind, language, v.Raw, expandStmtTokens(v.Args, env), v.Line, env, onWarn, platform)
+		} else if name := platform.conf.moduleAlias(d.confModule, v.Raw); platform.conf.alias(name) != nil {
+			return d.flattenConfMacro(ctx, modulePath, kind, language, v, name, expandStmtTokens(v.Args, env), env, onWarn, platform)
+		}
+	case *ResourceStmt:
+		d.expandBodyAtParse(ctx, modulePath, kind, language, kwRESOURCE, nil, v.Line, env, func(Warn) {}, platform)
+	case *GenerateEnumSerializationStmt:
+		if !enumSerializationSkipped(d, language, env, v) {
+			d.expandBodyAtParse(ctx, modulePath, kind, language, v.Macro, []ANY{internAny(v.Header)}, v.Line, env, func(Warn) {}, platform)
+		}
+	}
+
+	return s
+}
+
+func (d *ModuleData) flattenConfMacro(ctx *GenCtx, modulePath string, kind ModuleKind, language Language, v *UnknownStmt, name STR, args []ANY, env Environment, onWarn func(Warn), platform *Platform) *UnknownStmt {
+	macro := platform.conf.alias(name)
+	c := *v
+
+	c.Expanded = true
+
+	platform.conf.macroCalls(macro, UnknownStmt{Name: internTokMaybeSTR(name), Raw: name, Args: args, Line: v.Line}, env, d, onWarn, modulePath, func(callee STR, args []ANY) {
+		var scratch [1]Stmt
+
+		stmts := appendMacroCallStmts(scratch[:0], callee, args, args, v.Line, func(format string, a ...any) {
+			throwFmt("%s: %s: "+format, append([]any{macro.file, callee.string()}, a...)...)
+		})
+
+		if baseMacro(callee) || dirStatement(callee) {
+			markImplicitPeers(stmts)
+			collectStmts(ctx, modulePath, kind, language, stmts, env, d, onWarn, platform)
+
+			return
+		}
+
+		d.deferGuard(platform, callee)
+
+		for _, s := range stmts {
+			c.Body = append(c.Body, d.bindBody(ctx, modulePath, kind, language, s, env, onWarn, platform))
+		}
+	})
+
+	return &c
+}
+
+func (d *ModuleData) expandBodyAtParse(ctx *GenCtx, modulePath string, kind ModuleKind, language Language, macro STR, args []ANY, line int, env Environment, onWarn func(Warn), platform *Platform) {
+	name := platform.conf.moduleAlias(d.confModule, macro)
+
+	expandConfMacro(ctx, modulePath, kind, language, UnknownStmt{Name: internTokMaybeSTR(name), Raw: name, Args: args, Line: line}, true, env, d, onWarn, platform)
+}
+
+func enumSerializationSkipped(d *ModuleData, language Language, env Environment, v *GenerateEnumSerializationStmt) bool {
+	if d.multimodule == tokFbsLibrary && language == LangPy && (v.Variant == "plain" || v.Variant == "with_header") {
+		return true
+	}
+
+	return env.bool(envGO_PROTO)
+}
+
+func (d *ModuleData) deferGuard(platform *Platform, name STR) {
+	d.deferGuardOf(platform, name, platform.conf.alias(name))
+}
+
+func (d *ModuleData) deferGuardOf(platform *Platform, name STR, macro *ConfMacro) {
+	if macro == nil || !macro.conditions || slices.Contains(d.guards, name) {
+		return
+	}
+
+	d.guards = append(d.guards, name)
+
+	statement := platform.conf.statementKey(name)
+
+	d.pending = append(d.pending, PendingStmt{key: statement.prio << 32, seq: d.declSeq, name: statement.name, macro: macro, stmt: &MacroGuardStmt{Name: statement.name}})
+	d.declSeq += declSeqBlock
+}
+
+func parseTimeStmt(s Stmt) bool {
+	if allowedOutsideModule(s) {
+		return true
+	}
+
+	if v, ok := s.(*UnknownStmt); ok {
+		switch v.Name {
+		case tokSetAppendWithGlobal, tokDeclareExternalHostResourcesBundleByJson, tokGlob, tokLateGlob, tokDeclareInDirs:
+			return true
+		}
+	}
+
+	return false
+}
+
+func (d *ModuleData) deferModuleGuards(platform *Platform, module *confModule, seen []STR) []STR {
+	if module == nil {
+		return seen
+	}
+
+	if parent := platform.conf.tables.module(module.parent, ""); parent != nil {
+		seen = d.deferModuleGuards(platform, parent, seen)
+	}
+
+	for _, call := range module.body {
+		seen = d.deferCallGuards(platform, call.name, seen)
+	}
+
+	return seen
+}
+
+func (d *ModuleData) deferCallGuards(platform *Platform, name STR, seen []STR) []STR {
+	if baseMacro(name) || dirStatement(name) || slices.Contains(seen, name) {
+		return seen
+	}
+
+	seen = append(seen, name)
+	d.deferGuard(platform, name)
+
+	if macro := platform.conf.alias(name); macro != nil {
+		for _, call := range macro.calls {
+			seen = d.deferCallGuards(platform, call.name, seen)
+		}
+	}
+
+	return seen
+}
+
+func interpretPending(ctx *GenCtx, modulePath string, kind ModuleKind, language Language, env Environment, d *ModuleData, onWarn func(Warn), platform *Platform) {
+	var seen [32]STR
+
+	d.deferModuleGuards(platform, d.confModule, seen[:0])
+
+	slices.SortStableFunc(d.pending, func(a, b PendingStmt) int {
+		if a.key != b.key {
+			return cmp.Compare(a.key, b.key)
+		}
+
+		return strings.Compare(a.name.string(), b.name.string())
+	})
+
+	d.interpreting = true
 
 	if dir := env.string(envDllForDir); dir != "" {
-		out = append(out, &SrcDirStmt{Dirs: []ANY{internStr(dir).any()}}, &AddInclStmt{AllPaths: []ANY{source(dir).any()}})
+		d.srcDirs = append(d.srcDirs, dirKey(dir).source())
+		d.addLocalIncl(prioAddIncl, source(dir))
 	}
 
-	if dirs := env.string(envSrcdir); dirs != "" {
-		out = append(out, &SrcDirStmt{Dirs: internAnys(strings.Fields(dirs))})
+	snapshotBasePeers(env, d)
+	applyVarsAsMacros(ctx, modulePath, kind, language, env, d, onWarn, platform)
+
+	last := d.declSeq
+	declared := len(d.producerDeclarations)
+
+	for i := 0; i < len(d.pending); i++ {
+		d.declSeq = d.pending[i].seq
+		d.pendingIndex = int(d.pending[i].seq / declSeqBlock)
+
+		collectStmts(ctx, modulePath, kind, language, []Stmt{d.pending[i].stmt}, env, d, onWarn, platform)
+		platform.conf.setGuard(env, d.pending[i].macro, &d.setVars)
+		applyVarsAsMacros(ctx, modulePath, kind, language, env, d, onWarn, platform)
 	}
 
-	if dirs := env.string(envAddincl); dirs != "" {
-		out = append(out, splitAddInclPaths(internAnys(strings.Fields(dirs))))
-	}
+	d.recordProducerDeclarations()
 
-	return out
+	slices.SortStableFunc(d.producerDeclarations[declared:], func(a, b producerDeclaration) int { return cmp.Compare(a.stmt, b.stmt) })
+
+	d.declSeq = last
+	d.pending = d.pending[:0]
+	d.interpreting = false
+
+	for i := 1; i < len(d.srcs); i++ {
+		if d.srcs[i].Seq == 0 {
+			d.srcs[i].Seq = d.srcs[i-1].Seq
+		}
+	}
 }
 
-func applyInterpretedModuleVars(ctx *GenCtx, modulePath string, kind ModuleKind, language Language, env Environment, d *ModuleData, onWarn func(Warn), platform *Platform) {
-	lists := [...]*[]VFS{
-		&d.srcDirs, &d.addInclGlobal, &d.addInclOneLevel, &d.addInclUserGlobal, &d.cythonAddIncl, &d.cythonAddInclGlobal,
-		&d.asmAddIncl, &d.protoAddIncl, &d.protoAddInclGlobal, &d.protoIncludeLocal, &d.flatcAddIncl, &d.flatcAddInclGlobal,
-		&d.swigAddIncl, &d.swigAddInclGlobal, &d.scAddIncl, &d.scAddInclGlobal, &d.scAddInclExport,
+func applyVarsAsMacros(ctx *GenCtx, modulePath string, kind ModuleKind, language Language, env Environment, d *ModuleData, onWarn func(Warn), platform *Platform) {
+	for _, key := range [...]ENV{envPeerdir, envSrcdir, envAddincl} {
+		bound, raw := env.s.lookup(key)
+
+		if bound == envAbsent || raw == 0 || slices.Contains(d.varMacrosApplied, raw) {
+			continue
+		}
+
+		d.varMacrosApplied = append(d.varMacrosApplied, raw)
+
+		words := internAnys(strings.Fields(env.expandVariable(env.string(key))))
+
+		var stmt Stmt
+
+		switch key {
+		case envPeerdir:
+			stmt = &PeerdirStmt{Paths: slices.DeleteFunc(words, func(w ANY) bool { return w.string() == modulePath }), Implicit: true}
+		case envSrcdir:
+			stmt = &SrcDirStmt{Dirs: words}
+		default:
+			stmt = splitAddInclPaths(words)
+		}
+
+		collectStmts(ctx, modulePath, kind, language, []Stmt{stmt}, env, d, onWarn, platform)
 	}
-
-	var marks [len(lists)]int
-
-	for i, list := range lists {
-		marks[i] = len(*list)
-	}
-
-	local := len(d.addInclP)
-
-	collectStmts(ctx, modulePath, kind, language, interpretedModuleVars(env), env, d, onWarn, platform)
-
-	for i, list := range lists {
-		rotateFront(*list, marks[i])
-	}
-
-	rotateFront(d.addInclP, local)
 }
 
-func rotateFront[T any](s []T, from int) {
-	slices.Reverse(s[:from])
-	slices.Reverse(s[from:])
-	slices.Reverse(s)
+func snapshotBasePeers(env Environment, d *ModuleData) {
+	d.basePeerdirs = internStr(env.expandVariable(env.string(envPeerdir)))
+
+	if _, raw := env.s.lookup(envPeerdir); raw != 0 {
+		d.varMacrosApplied = append(d.varMacrosApplied, raw)
+	}
 }
 
 func allowedOutsideModule(s Stmt) bool {
@@ -1500,16 +1728,9 @@ func stmtMacroName(s Stmt) string {
 
 		return "ALL_RESOURCE_FILES"
 	case *GenerateEnumSerializationStmt:
-		switch v.Variant {
-		case "with_header":
-			return "GENERATE_ENUM_SERIALIZATION_WITH_HEADER"
-		case "noexcept_header":
-			return "ALICE_GENERATE_NOEXCEPT_ENUM_SERIALIZATION"
-		case "noutf":
-			return "GENERATE_ENUM_SERIALIZATION_NOUTF"
-		}
-
-		return "GENERATE_ENUM_SERIALIZATION"
+		return v.Macro.string()
+	case *MacroGuardStmt:
+		return v.Name.string()
 	case *RunAntlr4PythonStmt:
 		return "RUN_ANTLR4_PYTHON" + v.Version
 	case *PeerdirStmt:
@@ -1557,6 +1778,77 @@ func stmtMacroName(s Stmt) string {
 	return fmt.Sprintf("%T", s)
 }
 
+func stmtMacroNameID(s Stmt) STR {
+	switch v := s.(type) {
+	case *UnknownStmt:
+		return v.Raw
+	case *DeclareResourceStmt:
+		return v.Macro.str()
+	case *RunAntlrStmt:
+		return internStr(v.Macro)
+	case *CFlagsStmt:
+		if v.Global {
+			return strGlobalCflags
+		}
+
+		return kwCFLAGS
+	case *AllResourceFilesStmt:
+		if v.FromDirs {
+			return strAllResourceFilesFromDirs
+		}
+
+		return strAllResourceFiles
+	case *GenerateEnumSerializationStmt:
+		return v.Macro
+	case *MacroGuardStmt:
+		return v.Name
+	case *RunAntlr4PythonStmt:
+		return internStr("RUN_ANTLR4_PYTHON" + v.Version)
+	case *PeerdirStmt:
+		return kwPEERDIR
+	case *SrcsStmt:
+		return kwSRCS
+	case *JoinSrcsStmt:
+		return kwJOIN_SRCS
+	case *AddInclStmt:
+		return kwADDINCL
+	case *CXXFlagsStmt:
+		return kwCXXFLAGS
+	case *CONLYFlagsStmt:
+		return kwCONLYFLAGS
+	case *LDFlagsStmt:
+		return kwLDFLAGS
+	case *SrcDirStmt:
+		return kwSRCDIR
+	case *GlobalSrcsStmt:
+		return kwGLOBAL_SRCS
+	case *RunProgramStmt:
+		return kwRUN_PROGRAM
+	case *RunPythonStmt:
+		return kwRUN_PYTHON3
+	case *FromSandboxStmt:
+		return strFromSandbox
+	case *SplitCodegenStmt:
+		return strSplitCodegen
+	case *BaseCodegenStmt:
+		return strBaseCodegen
+	case *ConfigureFileStmt:
+		return kwCONFIGURE_FILE
+	case *CreateBuildInfoStmt:
+		return kwCREATE_BUILDINFO_FOR
+	case *RunAntlr4CppStmt:
+		return kwRUN_ANTLR4_CPP
+	case *RunAntlr4CppSplitStmt:
+		return kwRUN_ANTLR4_CPP_SPLIT
+	case *ResourceStmt:
+		return kwRESOURCE
+	case *ResourceFilesStmt:
+		return kwRESOURCE_FILES
+	}
+
+	return internStr(stmtMacroName(s))
+}
+
 func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Language, stmts []Stmt, env Environment, d *ModuleData, onWarn func(Warn), platform *Platform) {
 	fs := ctx.fs
 
@@ -1575,7 +1867,12 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 			continue
 		}
 
+		if d.moduleStmt != nil && !d.moduleEnded && !d.interpreting && !parseTimeStmt(s) && d.deferStmt(ctx, modulePath, kind, language, s, env, onWarn, platform) {
+			continue
+		}
+
 		switch v := s.(type) {
+		case *MacroGuardStmt:
 		case *IncludeStmt:
 			ctx.withIncludedStmts(v, env, func(included []Stmt) {
 				collectStmts(ctx, modulePath, kind, language, included, env, d, onWarn, platform)
@@ -1927,7 +2224,7 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 
 				pTok = peerdirModulePath(pTok).any()
 
-				if !platform.allowPeer(internStr(modulePath), pTok.str(), onWarn) {
+				if !v.Implicit && !platform.allowPeer(internStr(modulePath), pTok.str(), onWarn) {
 					addInclNext = false
 
 					continue
@@ -1940,7 +2237,7 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 
 				d.peerdirs = append(d.peerdirs, pTok)
 
-				if d.confMacroDepth == 0 && pTok.string() == unittestForPeerPath(d.moduleStmt) {
+				if !v.Implicit && pTok.string() == unittestForPeerPath(d.moduleStmt) {
 					d.unitTestPeerExplicit = true
 				}
 
@@ -1998,8 +2295,8 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 			}
 
 			collectModuleAutoinclude(ctx, modulePath, kind, language, env, d, onWarn, platform)
-			platform.conf.finishModule(env, d.confModule, &d.setVars)
-			applyInterpretedModuleVars(ctx, modulePath, kind, language, env, d, onWarn, platform)
+			yqlEpilogue(ctx, modulePath, kind, language, env, d, onWarn, platform)
+			interpretPending(ctx, modulePath, kind, language, env, d, onWarn, platform)
 			d.pythonLint.bind(env)
 			d.finishResourcePeerPolicy()
 
@@ -2026,20 +2323,22 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 			d.joinSrcs = append(d.joinSrcs, &expanded)
 		case *AddInclStmt:
 
-			d.addInclGlobal = append(d.addInclGlobal, expandConfigVFSPaths(v.GlobalPaths, env)...)
-			d.addInclOneLevel = append(d.addInclOneLevel, expandConfigVFSPaths(v.OneLevelPaths, env)...)
-			d.addInclUserGlobal = append(d.addInclUserGlobal, expandConfigVFSPaths(v.UserGlobalPaths, env)...)
+			d.addInclGlobal = append(d.addInclGlobal, addInclDirs(v.GlobalPaths, env)...)
+			d.addInclOneLevel = append(d.addInclOneLevel, addInclDirs(v.OneLevelPaths, env)...)
+			d.addInclUserGlobal = append(d.addInclUserGlobal, addInclDirs(v.UserGlobalPaths, env)...)
 
 			for _, p := range expandConfigVFSPaths(v.AllPaths, env) {
-				d.addLocalIncl(prioAddIncl, p)
+				if p != srcRootDirVFS {
+					d.addLocalIncl(prioAddIncl, p)
+				}
 			}
 
 			d.cythonAddIncl = append(d.cythonAddIncl, expandConfigVFSPaths(v.CythonPaths, env)...)
 			d.cythonAddInclGlobal = append(d.cythonAddInclGlobal, expandConfigVFSPaths(v.CythonGlobalPaths, env)...)
 			d.asmAddIncl = append(d.asmAddIncl, expandConfigVFSPaths(v.AsmPaths, env)...)
-			d.protoAddIncl = append(d.protoAddIncl, expandConfigVFSPaths(v.ProtoPaths, env)...)
-			d.protoAddInclGlobal = append(d.protoAddInclGlobal, expandConfigVFSPaths(v.ProtoGlobalPaths, env)...)
-			d.protoIncludeLocal = append(d.protoIncludeLocal, expandConfigVFSPaths(v.ProtoAllPaths, env)...)
+			d.protoAddIncl = append(d.protoAddIncl, addInclDirs(v.ProtoPaths, env)...)
+			d.protoAddInclGlobal = append(d.protoAddInclGlobal, addInclDirs(v.ProtoGlobalPaths, env)...)
+			d.protoIncludeLocal = append(d.protoIncludeLocal, addInclDirs(v.ProtoAllPaths, env)...)
 			d.flatcAddIncl = append(d.flatcAddIncl, expandConfigVFSPaths(v.FlatcPaths, env)...)
 			d.flatcAddInclGlobal = append(d.flatcAddInclGlobal, expandConfigVFSPaths(v.FlatcGlobalPaths, env)...)
 			d.swigAddIncl = append(d.swigAddIncl, expandConfigVFSPaths(v.SwigPaths, env)...)
@@ -2065,11 +2364,14 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 
 			for _, dirTok := range expandStmtTokens(v.Dirs, env) {
 				dir := dirTok.string()
+				rooted, ok := moduleRootedVFS(modulePath, dir)
 
-				if rooted, ok := moduleRootedVFS(modulePath, dir); ok {
+				if !ok {
+					rooted = dirKey(dir).source()
+				}
+
+				if !slices.Contains(d.srcDirs, rooted) {
 					d.srcDirs = append(d.srcDirs, rooted)
-				} else {
-					d.srcDirs = append(d.srcDirs, dirKey(dir).source())
 				}
 			}
 		case *GlobalSrcsStmt:
@@ -2077,11 +2379,7 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 				d.srcs = append(d.srcs, SrcMeta{Source: src, Prio: stmtPrioSrcs, Seq: d.nextDeclSeq(), Global: true})
 			}
 		case *GenerateEnumSerializationStmt:
-			if d.multimodule == tokFbsLibrary && language == LangPy && (v.Variant == "plain" || v.Variant == "with_header") {
-				continue
-			}
-
-			if env.bool(envGO_PROTO) {
+			if enumSerializationSkipped(d, language, env, v) {
 				continue
 			}
 
@@ -2089,12 +2387,6 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 
 			expandedEN.DeclSeq = d.nextDeclSeq()
 			d.enumSrcs = append(d.enumSrcs, expandedEN)
-
-			const enumSerPeer = "tools/enum_parser/enum_serialization_runtime"
-
-			if v.Variant != "noexcept_header" && modulePath != enumSerPeer {
-				d.peerdirs = append(d.peerdirs, internStr(enumSerPeer).any())
-			}
 		case *DefaultVarStmt:
 			value := expandSourceScalarVarRef(v.Value, env)
 			bound := env.hasBindingID(v.NameEnv)
@@ -2394,7 +2686,13 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 					recordHandledMacro(expanded.Name, expanded.Args)
 				} else {
 					if !applyUnknownStmt(fs, modulePath, expanded, d, env, onWarn) {
-						expandConfMacro(ctx, modulePath, kind, language, expanded, env, d, onWarn, platform)
+						if v.Expanded {
+							collectStmts(ctx, modulePath, kind, language, v.Body, env, d, onWarn, platform)
+						} else {
+							expandConfMacro(ctx, modulePath, kind, language, expanded, false, env, d, onWarn, platform)
+						}
+					} else if d.moduleStmt != nil && !d.moduleEnded && !d.interpreting {
+						d.expandBodyAtParse(ctx, modulePath, kind, language, expanded.Raw, expanded.Args, expanded.Line, env, onWarn, platform)
 					}
 
 					if textAppend != nil {
@@ -2404,6 +2702,11 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 
 				if expanded.Name == tokAllocator {
 					platform.conf.set(env, envALLOCATOR, &d.setVars)
+				}
+
+				if expanded.Name == tokUsePython3 || expanded.Name == tokUsePython2 || expanded.Name == tokPython3Addincl || expanded.Name == tokPython2Addincl {
+					platform.conf.set(env, envPYTHON3, &d.setVars)
+					platform.conf.set(env, envPYTHON2, &d.setVars)
 				}
 
 				if expanded.Name == tokEnable || expanded.Name == tokDisable || expanded.Name == tokSetAppend || expanded.Name == tokSetListPreSuf {
@@ -2802,7 +3105,7 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 		applyRunJavascriptAfterBuildProcessInputs(v.Args, env)
 	case tokGolaunchSrcs, tokGolaunchSrcdir, tokRuntimePeerdir, tokResourcePeerdir, tokGolaunchFunction, tokGolaunchOverride, tokNoGolaunchSrcs, tokGenerateGolaunchCallbacks, tokGolaunchCompositeComps:
 		applyMlaunchStmt(modulePath, v, env, d)
-	case tokGlob:
+	case tokGlob, tokLateGlob:
 		applyGlobStmt(fs, modulePath, v.Args, env, onWarn)
 	case tokAddCustomExplicitLinterCheck:
 		d.collectCustomStyle(modulePath, v.Args, env)
@@ -3142,7 +3445,6 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 		}
 
 		env.setBool(envCustomClangTidy, true)
-		d.peerdirs = append(d.peerdirs, v.Args[0])
 
 		root := "${" + v.Args[1].string() + "_RESOURCE_GLOBAL}/bin/"
 
@@ -3154,10 +3456,9 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 			break
 		}
 
-		positional, lists := goMacroLists(v.Args, "DEPS")
+		positional, _ := goMacroLists(v.Args, "DEPS")
 
 		d.goProtoOpts = append(d.goProtoOpts, GoProtoOpt{plugin: positional[0].string(), ext: positional[1].string(), tool: positional[2].string()})
-		d.peerdirs = append(d.peerdirs, lists["DEPS"]...)
 	case tokYtOrmProtoYson:
 		applyYtOrmProtoYson(modulePath, v.Args, d, env)
 	case tokUsrvGenProtoStructs, tokUsrvGenGrpcServiceV2, tokUsrvGenGrpcClientV2,
@@ -3171,7 +3472,6 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 	case tokCgoSrcs:
 
 		d.cgoSrcs = append(d.cgoSrcs, expandStmtTokens(v.Args, env)...)
-		d.peerdirs = append(d.peerdirs, internV(env.string(envGOSTD), "/syscall").any())
 	case tokCgoLdflags:
 		expanded := expandStmtTokens(v.Args, env)
 
@@ -3293,11 +3593,7 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 			})
 		}
 
-		if isGoModuleType(d.unit.Type) {
-			for _, p := range goGrpcImports(env.string(envGOSTD)) {
-				d.peerdirs = append(d.peerdirs, internStr(p).any())
-			}
-		} else if !pythonProtoPeerContext(d) {
+		if !isGoModuleType(d.unit.Type) && !pythonProtoPeerContext(d) {
 			d.peerdirs = append(d.peerdirs, strContribLibsGrpc.any())
 		}
 	case tokPyNamespace:
@@ -3434,22 +3730,13 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 			throwFmt("gen: PROTO_NAMESPACE expects at least 1 argument")
 		}
 
-		withGen := false
-
-		for _, arg := range v.Args[:len(v.Args)-1] {
-			withGen = withGen || arg.string() == "WITH_GEN"
-		}
-
-		applyProtoNamespace(d, v.Args[len(v.Args)-1], withGen)
-	case tokProtoAddIncl:
-		applyProtoAddIncl(d, v.Args)
+		d.protoNamespace = ptr(v.Args[len(v.Args)-1])
 	case tokResolveProto:
 		if len(v.Args) != 0 {
 			throwFmt("gen: RESOLVE_PROTO expects no arguments")
 		}
 
 		env.setStringID(envDontResolveIncludes, strNo)
-		d.addProtoInclude(expandConfigVFSPaths(anysOf("$PROTOBUF_INCLUDE_PATH"), env), false)
 	case tokUseSdcMeta:
 
 		d.setVars.set(strUSE_SDC_META, strYes)
@@ -3458,8 +3745,7 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 		d.setVars.set(str_GO_PACKAGE_VALUE, v.Args[0].str())
 		env.setStringID(envGoPackageOverride, v.Args[0].str())
 	case tokExportYmapsProto:
-		applyProtoNamespace(d, mapsDocProtoNS.any(), false)
-
+		d.protoNamespace = ptr(mapsDocProtoNS.any())
 		d.protoAddInclGlobal = append(d.protoAddInclGlobal, mapsDocProto)
 	case tokYmapsSproto:
 		if env.bool(envGO_PROTO) {
@@ -3680,7 +3966,6 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 		}
 
 		d.dynamicLibraryFrom = append(d.dynamicLibraryFrom, v.Args...)
-		d.peerdirs = append(d.peerdirs, v.Args...)
 	case tokExportsScript:
 		if len(v.Args) != 1 {
 			throwFmt("gen: EXPORTS_SCRIPT expects exactly 1 argument, got %d", len(v.Args))
@@ -3734,10 +4019,8 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 		applySAPlugins(v.Args, d, env)
 	case tokUseNasm:
 		env.setBool(envUseNasmAssembler, true)
-		d.peerdirs = append(d.peerdirs, strBuildExternalResourcesNasm.any())
 	case tokUsePython2:
 		applyPython2Addincl(d, env, false)
-		d.peerdirs = append(d.peerdirs, strContribLibsPython.any())
 	case tokPython2Addincl:
 		if d.moduleStmt != nil && d.moduleStmt.Name == tokPy23NativeLibrary && d.unit.HashTag == unitTagPy3Native {
 			applyPython3Addincl(d, env)
@@ -3750,11 +4033,8 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 		applyPython3Addincl(d, env)
 	case tokUsePython3:
 
-		d.peerdirs = append(d.peerdirs,
-			strContribLibsPython.any(),
-			strLibraryPythonRuntimePy3.any(),
-		)
-
+		env.setBool(envPYTHON3, true)
+		env.setBool(envPYTHON2, false)
 		d.usePython3 = true
 	case tokNoBuildIf, tokBuildOnlyIf:
 		strict, args := true, v.Args
@@ -3919,8 +4199,6 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 			throwFmt("TASKLET expects no arguments, got %d", len(v.Args))
 		}
 
-		d.peerdirs = append(d.peerdirs, strTaskletV1Api.any())
-
 		applyUnknownStmt(fs, modulePath, UnknownStmt{Name: tokCppProtoPlugin, Args: internAnys([]string{
 			"tasklet_cpp", "tasklet/v1/gen/cpp", ".tasklet.h",
 		})}, d, env, onWarn)
@@ -3934,7 +4212,6 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 			d.pyProtoPlugins = append(d.pyProtoPlugins, parsePyProtoPlugin(v))
 		}
 	case tokWithKotlinGrpc:
-		d.peerdirs = append(d.peerdirs, strBuildPlatformJavaKotlinGrpc.any())
 	case tokAliceGenerateProtoIncludes, tokAliceGenerateFunctionProtoIncludes:
 		applyAliceProtoIncludes(fs, modulePath, v, d)
 	case tokCompileNlg:
@@ -4917,29 +5194,6 @@ func (d *ModuleData) addProtoInclude(paths []VFS, global bool) {
 	}
 }
 
-func applyProtoNamespace(d *ModuleData, namespace ANY, withGen bool) {
-	d.protoNamespace = ptr(namespace)
-
-	protoSourceRoot := protoIncludeDir(namespace.string())
-	protoBuildRoot := protoSourceRoot.rel().build()
-
-	var includes []VFS
-
-	if withGen {
-		includes = append(includes, protoBuildRoot)
-	}
-
-	if protoSourceRoot.relString() != "" {
-		includes = append(includes, protoSourceRoot)
-	}
-
-	d.addProtoInclude(includes, true)
-
-	d.addLocalIncl(prioAddIncl, protoBuildRoot)
-	d.addInclGlobal = append(d.addInclGlobal, protoBuildRoot)
-	d.addInclUserGlobal = append(d.addInclUserGlobal, protoBuildRoot)
-}
-
 func protoIncludeDir(rel string) VFS {
 	rel = filepath.ToSlash(filepath.Clean(rel))
 
@@ -4980,19 +5234,6 @@ func protoAddInclPaths(args []ANY) ([]VFS, VFS, bool) {
 	}
 
 	return includes, bld, global
-}
-
-func applyProtoAddIncl(d *ModuleData, args []ANY) {
-	includes, bld, global := protoAddInclPaths(args)
-
-	d.addProtoInclude(includes, global)
-
-	d.addLocalIncl(prioAddIncl, bld)
-
-	if global {
-		d.addInclGlobal = append(d.addInclGlobal, bld)
-		d.addInclUserGlobal = append(d.addInclUserGlobal, bld)
-	}
 }
 
 func applyArchiveStmt(v UnknownStmt, d *ModuleData) {
@@ -5228,15 +5469,39 @@ func expandConfigVFSPaths(paths []ANY, env Environment) []VFS {
 		}
 
 		if v := path.vfs(); v != 0 {
-			out = append(out, v)
+			out = append(out, cleanVFS(v))
 
 			continue
 		}
 
-		out = append(out, path.str().source())
+		out = append(out, cleanVFS(path.str().source()))
 	}
 
 	return out
+}
+
+func addInclDirs(paths []ANY, env Environment) []VFS {
+	dirs := expandConfigVFSPaths(paths, env)
+
+	if slices.Contains(dirs, srcRootDirVFS) {
+		dirs = slices.DeleteFunc(dirs, func(v VFS) bool { return v == srcRootDirVFS })
+	}
+
+	return dirs
+}
+
+func cleanVFS(v VFS) VFS {
+	rel := v.sharedRel()
+
+	if rel == "" || pathIsClean(rel) {
+		return v
+	}
+
+	if v.isBuild() {
+		return build(cleanRel(rel))
+	}
+
+	return source(cleanRel(rel))
 }
 
 func parseModulePathVFS(path string) VFS {
@@ -5265,18 +5530,6 @@ func expandStmtToken(s string, env Environment) string {
 
 type TokenExpansion uint8
 
-func (phase TokenExpansion) clearsBracedUnbound(name string) bool {
-	if phase == tokenExpandPathArguments {
-		return tokenExpandAssignment.clearsUnbound(name) && !strings.HasSuffix(name, resourceGlobalSuffix)
-	}
-
-	return phase.clearsUnbound(name)
-}
-
-func (phase TokenExpansion) clearsUnbound(name string) bool {
-	return phase == tokenExpandFinal || phase == tokenExpandArguments && !keepDeferredVar(name) || phase == tokenExpandAssignment && !dontExpandVar(name)
-}
-
 func dontExpandVar(name string) bool {
 	for _, id := range dontExpandVars {
 		if id.string() == name {
@@ -5300,15 +5553,27 @@ func expandToken(s string, env Environment, phase TokenExpansion) string {
 	return expandTokenTracked(s, env, phase, nil)
 }
 
+func (phase TokenExpansion) policies(track *SourceTextTracker) (deref, render substPolicy) {
+	deref = substPolicy{makefile: true, track: track}
+	render = substPolicy{track: track}
+
+	switch phase {
+	case tokenExpandLazy:
+		return deref, render
+	case tokenExpandArguments:
+		deref.reserved, render.reserved = keepDeferredVar, keepDeferredVar
+	case tokenExpandAssignment:
+		deref.reserved, render.reserved = dontExpandVar, dontExpandVar
+	case tokenExpandPathArguments:
+		deref.reserved, render.reserved = pathArgumentsReservedVar, pathArgumentsReservedVar
+	}
+
+	deref.emptyUnknown, render.emptyUnknown = true, true
+
+	return deref, render
+}
+
 func expandTokenTracked(s string, env Environment, phase TokenExpansion, track *SourceTextTracker) string {
-	if strings.Contains(s, "\\$") {
-		s = strings.ReplaceAll(s, "\\$", "$")
-	}
-
-	if strings.Contains(s, "$ENV{") {
-		s = expandProcessEnvRefs(s)
-	}
-
 	if s == "$S" {
 		return "$(S)"
 	}
@@ -5317,184 +5582,17 @@ func expandTokenTracked(s string, env Environment, phase TokenExpansion, track *
 		return "$(B)"
 	}
 
-	for i := 0; i < 8; i++ {
-		prev := s
+	deref, render := phase.policies(track)
 
-		if strings.HasPrefix(s, "$") && !strings.HasPrefix(s, "${") && !track.literal(0) {
-			name := strings.TrimPrefix(s, "$")
-
-			if isExpandVarName(name) {
-				if val, ok := env.lookup(name); ok || phase.clearsUnbound(name) {
-					if track != nil {
-						track.replace(0, len(s), len(val), env.s.textInputs[internedEnv(name)])
-					}
-
-					s = val
-				}
-			}
-		}
-
-		s = expandEmbeddedDollarVars(s, env, phase, track)
-		s = expandBracedVars(s, env, phase, track)
-
-		if s == prev {
-			break
-		}
-	}
-
-	return s
+	return substMacroDeeply(substMacroDeeply(s, nil, env, nil, &deref), nil, env, nil, &render)
 }
 
-func expandProcessEnvRefs(s string) string {
-	var out strings.Builder
-
-	for {
-		start := strings.Index(s, "$ENV{")
-
-		if start < 0 {
-			break
-		}
-
-		end := strings.IndexByte(s[start+5:], '}')
-
-		if end < 0 {
-			break
-		}
-
-		out.WriteString(s[:start])
-		out.WriteString(os.Getenv(s[start+5 : start+5+end]))
-		s = s[start+5+end+1:]
-	}
-
-	out.WriteString(s)
-
-	return out.String()
+func keepDeferredOrDontExpandVar(name string) bool {
+	return keepDeferredVar(name) || dontExpandVar(name)
 }
 
-func expandBracedVars(s string, env Environment, phase TokenExpansion, track *SourceTextTracker) string {
-	var stack [256]byte
-
-	out := stack[:0]
-	copied, searchFrom := 0, 0
-	changed := false
-
-	for {
-		start := strings.Index(s[searchFrom:], "${")
-
-		if start < 0 {
-			break
-		}
-
-		start += searchFrom
-
-		end := strings.IndexByte(s[start+2:], '}')
-
-		if end < 0 {
-			break
-		}
-
-		end += start + 2
-
-		if track.literal(len(out) + start - copied) {
-			searchFrom = end + 1
-
-			continue
-		}
-
-		name := s[start+2 : end]
-		val, ok := env.lookup(name)
-
-		if !ok && phase.clearsBracedUnbound(name) && name != "" && !strings.ContainsAny(name, " ${}\"';") {
-			ok = true
-		}
-
-		if name == "" || strings.ContainsAny(name, "${") || !ok {
-			searchFrom = end + 1
-
-			continue
-		}
-
-		if track != nil {
-			at := len(out) + start - copied
-
-			track.replace(at, at+end+1-start, len(val), env.s.textInputs[internedEnv(name)])
-		}
-
-		out = append(append(out, s[copied:start]...), val...)
-		copied, searchFrom = end+1, end+1
-		changed = true
-	}
-
-	if !changed {
-		return s
-	}
-
-	return string(append(out, s[copied:]...))
-}
-
-func expandEmbeddedDollarVars(s string, env Environment, phase TokenExpansion, track *SourceTextTracker) string {
-	if !strings.Contains(s, "$") {
-		return s
-	}
-
-	var buf [192]byte
-
-	b := buf[:0]
-	changed := false
-
-	for i := 0; i < len(s); {
-		if s[i] != '$' || i+1 >= len(s) || s[i+1] == '{' || s[i+1] == '(' || track.literal(len(b)) {
-			b = append(b, s[i])
-			i++
-
-			continue
-		}
-
-		j := i + 1
-
-		for j < len(s) {
-			c := s[j]
-
-			if (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '_' {
-				j++
-
-				continue
-			}
-
-			break
-		}
-
-		if j == i+1 {
-			b = append(b, s[i])
-			i++
-
-			continue
-		}
-
-		name := s[i+1 : j]
-		val, ok := env.lookup(name)
-
-		if !ok && !phase.clearsUnbound(name) {
-			b = append(b, s[i:j]...)
-			i = j
-
-			continue
-		}
-
-		if track != nil {
-			track.replace(len(b), len(b)+j-i, len(val), env.s.textInputs[internedEnv(name)])
-		}
-
-		b = append(b, val...)
-		i = j
-		changed = true
-	}
-
-	if !changed {
-		return s
-	}
-
-	return internBytes(b).string()
+func pathArgumentsReservedVar(name string) bool {
+	return dontExpandVar(name) || strings.HasSuffix(name, resourceGlobalSuffix)
 }
 
 func expandInFiles(files []ANY, noParse int, env Environment, evaluated bool) ([]ANY, int) {
@@ -5719,19 +5817,11 @@ func expandScalarVarRef(s string, env Environment) string {
 }
 
 func expandAssignedScalarVarRef(s string, env Environment) string {
-	bindir, curdir := env.unbind(envBINDIR), env.unbind(envCURDIR)
-	value := expandToken(s, env, tokenExpandAssignment)
-
-	env.rebind(envBINDIR, bindir)
-	env.rebind(envCURDIR, curdir)
-
-	return value
+	return expandToken(s, env, tokenExpandAssignment)
 }
 
 func expandSourceScalarVarRef(s string, env Environment) string {
-	return expandMakeExpression(s, env, func(name string) bool {
-		return !tokenExpandAssignment.clearsUnbound(name) || strings.HasSuffix(name, resourceGlobalSuffix)
-	})
+	return expandMakeExpression(s, env, pathArgumentsReservedVar)
 }
 
 func allPySrcArgs(fs FS, modulePath string, v UnknownStmt) []ANY {
@@ -6096,22 +6186,15 @@ func appendCompilerFlags(args []ANY, env Environment, name string, allGlobal boo
 }
 
 func compilerFlagRootValue(value string, env Environment) string {
-	return replaceConfigMacroVariables(value, func(start, end int) string {
-		reference := value[start:end]
+	var roots [4]confMacroBinding
 
-		if reference[0] == '$' {
-			name := strings.TrimSuffix(strings.TrimPrefix(reference[1:], "{"), "}")
+	for i, root := range [...]ENV{envARCADIA_ROOT, envARCADIA_BUILD_ROOT, envCURDIR, envBINDIR} {
+		bound, _ := env.lookup(root.string())
 
-			switch name {
-			case "ARCADIA_ROOT", "ARCADIA_BUILD_ROOT", "CURDIR", "BINDIR":
-				value, _ := env.lookup(name)
+		roots[i] = confMacroBinding{name: root.str(), values: []ANY{internAny(bound)}, bound: true}
+	}
 
-				return value
-			}
-		}
-
-		return reference
-	})
+	return substMacroDeeply(value, roots[:], Environment{}, nil, &substPolicy{})
 }
 
 type SetVars struct {

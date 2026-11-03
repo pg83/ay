@@ -363,13 +363,6 @@ func applyGoGrpcGatewayStmt(v UnknownStmt, d *ModuleData, env Environment) {
 	}
 
 	if !isGoModuleType(d.unit.Type) {
-		switch v.Name {
-		case tokGoGrpcGatewayV2OpenapiSrcs:
-			peer(goGatewayV2Options)
-		case tokGoGrpcGatewaySwagger:
-			peer(goGatewayV1Options)
-		}
-
 		return
 	}
 

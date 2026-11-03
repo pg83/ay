@@ -1908,6 +1908,10 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 			continue
 		}
 
+		if isGoModuleType(peerResult.ModuleStmtName) && !isGoModuleType(d.unit.Type) {
+			continue
+		}
+
 		if peerResult.isPROGRAM && !(isRustModule(d.moduleStmt.Name) && peerResult.ModuleStmtName == tokCrateProcMacro) {
 			if kind == peerKindUserPeer {
 				ctx.onWarn(Warn{Kind: WarnModuleFailed, Message: fmt.Sprintf("PEERDIR from %s to %s is not allowed and skipped: module types are incompatible", instance.Path.relString(), peerPath)})

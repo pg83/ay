@@ -8,6 +8,8 @@ import (
 type producerDeclaration struct {
 	kind  int
 	index int
+	seq   int
+	stmt  int
 }
 
 func (d *ModuleData) recordProducerDeclarations() {
@@ -55,14 +57,17 @@ func (d *ModuleData) recordProducerDeclarations() {
 
 	for kind, count := range counts {
 		for index := d.producerCounts[kind]; index < count; index++ {
-			d.producerDeclarations = append(d.producerDeclarations, producerDeclaration{kind, index})
+			d.producerDeclarations = append(d.producerDeclarations, producerDeclaration{kind: kind, index: index})
 		}
 	}
 
+	for i := start; i < len(d.producerDeclarations); i++ {
+		d.producerDeclarations[i].seq = d.producerDeclarationSequence(d.producerDeclarations[i])
+		d.producerDeclarations[i].stmt = d.pendingIndex
+	}
+
 	if n > 1 {
-		slices.SortStableFunc(d.producerDeclarations[start:], func(a, b producerDeclaration) int {
-			return cmp.Compare(d.producerDeclarationSequence(a), d.producerDeclarationSequence(b))
-		})
+		slices.SortStableFunc(d.producerDeclarations[start:], func(a, b producerDeclaration) int { return cmp.Compare(a.seq, b.seq) })
 	}
 
 	d.producerCounts = counts

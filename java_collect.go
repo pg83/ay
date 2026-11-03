@@ -213,7 +213,7 @@ func collectJavaData(ctx *GenCtx, jm *JavaModule, stmts []Stmt, env Environment)
 	clear(d.rawVars)
 	collectJavaStmts(ctx, jm, d, stmts, env)
 
-	d.rawVars = nil
+	d.rawVars, d.rawBindings = nil, nil
 
 	if !d.autoincluded {
 		throwFmt("%s: module declaration has no END()", jm.dir)
@@ -358,14 +358,14 @@ func collectJavaStmts(ctx *GenCtx, jm *JavaModule, d *JavaData, stmts []Stmt, en
 		case *SetStmt:
 			env.setFromString(v.NameEnv, expandSourceScalarVarRef(v.Value, env))
 
-			d.rawVars[v.Name] = d.rawExpand(v.Value)
+			d.setRawVar(v.Name, d.rawExpand(v.Value))
 		case *DefaultVarStmt:
 			bound := env.hasBindingID(v.NameEnv)
 
 			env.setDefaultString(v.NameEnv, expandSourceScalarVarRef(v.Value, env))
 
 			if !bound {
-				d.rawVars[v.VarName] = d.rawExpand(v.Value)
+				d.setRawVar(v.VarName, d.rawExpand(v.Value))
 			}
 		case *IfStmt:
 			taken := v.Then
@@ -651,7 +651,7 @@ func applyJavaMacro(ctx *GenCtx, jm *JavaModule, d *JavaData, name string, args,
 			rawValue = prev + " " + rawValue
 		}
 
-		d.rawVars[args[0]] = rawValue
+		d.setRawVar(args[0], rawValue)
 
 		if args[0] == "_PROTOC_FLAGS" {
 			d.protocFlags = append(d.protocFlags, args[1:]...)
@@ -1247,54 +1247,28 @@ func (d *JavaData) addProtoInclude(args []string, exported bool) {
 }
 
 func (d *JavaData) rawExpand(s string) string {
-	for i := 0; i < 8 && strings.Contains(s, "${"); i++ {
-		var sb strings.Builder
+	if d.rawBindings == nil {
+		d.rawBindings = make([]confMacroBinding, 0, len(d.rawVars)+len(javaConfGlobals))
 
-		rest := s
-
-		for {
-			start := strings.Index(rest, "${")
-
-			if start < 0 {
-				sb.WriteString(rest)
-
-				break
-			}
-
-			end := strings.IndexByte(rest[start:], '}')
-
-			if end < 0 {
-				sb.WriteString(rest)
-
-				break
-			}
-
-			name := rest[start+2 : start+end]
-
-			sb.WriteString(rest[:start])
-
-			switch value, ok := d.rawVars[name]; {
-			case ok:
-				sb.WriteString(value)
-			case javaPathVars[name]:
-				sb.WriteString(rest[start : start+end+1])
-			default:
-				if g, ok := javaConfGlobals[name]; ok {
-					sb.WriteString(g)
-				}
-			}
-
-			rest = rest[start+end+1:]
+		for name, value := range d.rawVars {
+			d.rawBindings = append(d.rawBindings, confMacroBinding{name: internStr(name), values: []ANY{internAny(value)}, bound: true})
 		}
 
-		if sb.String() == s {
-			break
+		for name, value := range javaConfGlobals {
+			d.rawBindings = append(d.rawBindings, confMacroBinding{name: internStr(name), values: []ANY{internAny(value)}, bound: true})
 		}
-
-		s = sb.String()
 	}
 
-	return s
+	return substMacroDeeply(s, d.rawBindings, Environment{}, nil, &substPolicy{makefile: true, emptyUnknown: true, literal: javaPathVar})
+}
+
+func javaPathVar(name string) bool {
+	return javaPathVars[name]
+}
+
+func (d *JavaData) setRawVar(name, value string) {
+	d.rawVars[name] = value
+	d.rawBindings = nil
 }
 
 func (d *JavaData) javaRawArgs(raw []string) []string {

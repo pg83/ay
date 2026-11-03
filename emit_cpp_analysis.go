@@ -27,7 +27,6 @@ func applySAPlugins(args []ANY, d *ModuleData, env Environment) {
 		switch section {
 		case "FROM":
 			markUserArg(arg)
-			d.peerdirs = append(d.peerdirs, arg)
 		case "NAME":
 			markUserArg(arg)
 			plugins += " ${" + value + resourceGlobalSuffix + "}/plugin.so"

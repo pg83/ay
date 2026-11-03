@@ -193,7 +193,7 @@ func compilerFlagForwarding(value string, env Environment, parameters map[string
 	var keys []STR
 	env.resourceUses = &keys
 
-	body := continueConfigMacroBody(value, env, 1, parameters)
+	body := continueConfigMacroBody(value, env, parameters)
 
 	var origins []compilerFlagResourceOrigin
 
@@ -210,7 +210,7 @@ func compilerFlagForwarding(value string, env Environment, parameters map[string
 
 		origin := compilerFlagResourceOrigin{key: key}
 
-		continueConfigMacroBodyTracked(value, Environment{s: &store}, 1, parameters, &origin.track)
+		continueConfigMacroBodyTracked(value, Environment{s: &store}, parameters, &origin.track)
 		origins = append(origins, origin)
 	}
 

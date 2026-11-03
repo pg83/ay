@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"maps"
-	"os"
 	"path"
 	"slices"
 	"sort"
@@ -93,7 +92,7 @@ func expandResourcePairs(args []ANY, line int, env Environment) ([]ResourcePair,
 }
 
 func expandResourceArgument(value string, env Environment) string {
-	return expandMakeExpression(value, env, keepDeferredVar)
+	return substMacroDeeply(value, nil, env, nil, &substPolicy{emptyUnknown: true, keepModifiers: true, literal: keepDeferredVar})
 }
 
 func expandMakeExpression(value string, env Environment, reserved func(string) bool) string {
@@ -101,77 +100,7 @@ func expandMakeExpression(value string, env Environment, reserved func(string) b
 }
 
 func expandMakeExpressionTracked(value string, env Environment, reserved func(string) bool, track *SourceTextTracker) string {
-	if strings.IndexByte(value, '$') < 0 && strings.IndexByte(value, '\\') < 0 {
-		return value
-	}
-
-	var out strings.Builder
-
-	delta := 0
-
-	for i := 0; i < len(value); {
-		if value[i] == '\\' && i+1 < len(value) {
-			if track != nil {
-				track.replace(i+delta, i+delta+1, 0, nil)
-				delta--
-			}
-
-			out.WriteByte(value[i+1])
-			i += 2
-
-			continue
-		}
-
-		if value[i] == '$' {
-			j := i + 1
-
-			for j < len(value) && (value[j] >= 'a' && value[j] <= 'z' || value[j] >= 'A' && value[j] <= 'Z' || value[j] >= '0' && value[j] <= '9') {
-				j++
-			}
-
-			if j < len(value) && value[j] == '{' {
-				end := strings.IndexAny(value[j+1:], "${}")
-
-				if end > 0 && value[j+1+end] == '}' {
-					end += j + 1
-
-					macro, key := value[i+1:j], value[j+1:end]
-					replacement, _ := env.lookup(key)
-					expand := macro == "" && !reserved(key)
-
-					if macro == "ENV" {
-						replacement, expand = os.Getenv(key), true
-					}
-
-					if expand {
-						if track != nil {
-							var ranges []SourceTextRange
-
-							if macro == "" {
-								ranges = env.s.textInputs[internedEnv(key)]
-							}
-
-							track.replace(i+delta, end+1+delta, len(replacement), ranges)
-							delta += len(replacement) - (end + 1 - i)
-						}
-
-						out.WriteString(replacement)
-					} else {
-						out.WriteString(value[i : end+1])
-					}
-
-					i = end + 1
-
-					continue
-				}
-			}
-		}
-
-		out.WriteByte(value[i])
-		i++
-	}
-
-	return out.String()
+	return substMacroDeeply(value, nil, env, nil, &substPolicy{makefile: true, emptyUnknown: true, literal: reserved, track: track})
 }
 
 func expandResourceFiles(d *ModuleData, out []ResourceEntry, args []string) []ResourceEntry {

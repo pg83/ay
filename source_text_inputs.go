@@ -1,7 +1,6 @@
 package main
 
 import (
-	"strings"
 	"unicode"
 )
 
@@ -63,9 +62,7 @@ func expandSourceScalarInputValue(value string, env Environment) (string, []Sour
 
 	var track SourceTextTracker
 
-	value = expandMakeExpressionTracked(value, env, func(name string) bool {
-		return !tokenExpandAssignment.clearsUnbound(name) || strings.HasSuffix(name, resourceGlobalSuffix)
-	}, &track)
+	value = expandMakeExpressionTracked(value, env, pathArgumentsReservedVar, &track)
 
 	return value, track.ranges
 }
@@ -106,7 +103,7 @@ func prepareRunProgramInputArguments(args []ANY, env Environment) ([]ANY, []ANY)
 	for _, arg := range args {
 		var track SourceTextTracker
 
-		value := continueConfigMacroBodyTracked(arg.string(), env, 0, nil, &track)
+		value := continueConfigMacroBodyTracked(arg.string(), env, nil, &track)
 
 		for _, span := range sourceWordSpans(value, func(r rune) bool { return r == ' ' || r == ',' }) {
 			word := internAny(value[span.Start:span.End])

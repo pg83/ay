@@ -181,7 +181,7 @@ func collectTestRecipe(args []ANY, env Environment) string {
 		words := []string{arg.string()}
 
 		if strings.ContainsRune(words[0], '$') {
-			words = strings.Split(expandResourceArgument(words[0], env), " ")
+			words = strings.Split(expandMakeExpression(words[0], env, keepDeferredVar), " ")
 			words = slices.DeleteFunc(words, func(word string) bool { return word == "" })
 		}
 
@@ -199,7 +199,7 @@ func collectTestRecipe(args []ANY, env Environment) string {
 
 	value = strings.Join(slices.DeleteFunc(words, func(word string) bool { return word == "" }), " ")
 
-	return expandResourceArgument(value, env)
+	return expandMakeExpression(value, env, keepDeferredVar)
 }
 
 func expandConfigMacroBody(value string, env Environment) string {
@@ -207,58 +207,15 @@ func expandConfigMacroBody(value string, env Environment) string {
 		return value
 	}
 
-	return continueConfigMacroBody(value, env, 0, nil)
+	return continueConfigMacroBody(value, env, nil)
 }
 
-func continueConfigMacroBody(value string, env Environment, iteration int, parameters map[string][]string) string {
-	return continueConfigMacroBodyTracked(value, env, iteration, parameters, nil)
+func continueConfigMacroBody(value string, env Environment, parameters map[string][]string) string {
+	return continueConfigMacroBodyTracked(value, env, parameters, nil)
 }
 
-func continueConfigMacroBodyTracked(value string, env Environment, iteration int, parameters map[string][]string, track *SourceTextTracker) string {
-	for ; ; iteration++ {
-		delta := 0
-
-		expanded := replaceConfigMacroVariables(value, func(start, end int) string {
-			reference := value[start:end]
-
-			if reference[0] == '\\' || strings.HasPrefix(reference, `${"`) {
-				return reference
-			}
-
-			name := strings.TrimSuffix(strings.TrimPrefix(reference[1:], "{"), "}")
-
-			if values, ok := parameters[name]; ok {
-				return strings.Join(values, " ")
-			}
-
-			if replacement, ok := env.lookup(name); ok {
-				originalSize := len(replacement)
-
-				replacement = strings.TrimPrefix(replacement, " ")
-
-				if track != nil {
-					ranges := sliceSourceTextRanges(env.s.textInputs[internedEnv(name)], originalSize-len(replacement), originalSize)
-
-					track.replace(start+delta, end+delta, len(replacement), ranges)
-					delta += len(replacement) - len(reference)
-				}
-
-				return replacement
-			}
-
-			return reference
-		})
-
-		if iteration == 127 {
-			throwFmt("Macro subst exceeded the limit 128")
-		}
-
-		if expanded == value || expanded == "" {
-			return expanded
-		}
-
-		value = expanded
-	}
+func continueConfigMacroBodyTracked(value string, env Environment, parameters map[string][]string, track *SourceTextTracker) string {
+	return substMacroDeeply(value, bindingsOf(parameters), env, nil, &substPolicy{keepModifiers: true, track: track})
 }
 
 func testInnerCommand(s *TestSuite, meta TestMeta, binary, work string, chunk TestChunk, opts *TestOpts) []ANY {

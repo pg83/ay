@@ -16,7 +16,7 @@ func (e *EmitContext) confPeerdirs() []string {
 
 	self := e.instance.Path.relString()
 
-	for peer := range strings.FieldsSeq((Environment{s: &e.frame.ifEnv}).expand("$PEERDIR")) {
+	for peer := range strings.FieldsSeq(e.d.basePeerdirs.string()) {
 		if peer != self && !slices.Contains(peers, peer) {
 			peers = append(peers, peer)
 		}

@@ -81,14 +81,16 @@ func applyYqlABI(d *ModuleData, env Environment, current bool) {
 	}
 }
 
-func finishYqlModule(ctx *GenCtx, instance ModuleInstance, env Environment, d *ModuleData, onWarn func(Warn)) {
-	modulePath := instance.Path.relString()
+func finishYqlModule(instance ModuleInstance, env Environment, d *ModuleData) {
+	finishYqlUdfModule(instance.Path.relString(), d, env)
+}
 
-	finishYqlUdfModule(modulePath, d, env)
-
+func yqlEpilogue(ctx *GenCtx, modulePath string, kind ModuleKind, language Language, env Environment, d *ModuleData, onWarn func(Warn), platform *Platform) {
 	if !d.yqlPrebuiltAliases {
 		return
 	}
+
+	instance := ModuleInstance{Path: parseModulePathVFS(modulePath), Kind: kind, Language: language, Platform: platform}
 
 	d.yqlPrebuiltAliases = false
 	d.yqlPrebuiltResource = selectYqlPrebuiltResource(modulePath, env, d)
