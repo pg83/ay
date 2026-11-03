@@ -733,3 +733,13 @@ func macroArgsSeq(text string) func(yield func(string) bool) {
 		}
 	}
 }
+
+func commandVariableArgs(env Environment, name ENV) []ANY {
+	value := env.string(name)
+
+	if value == "" {
+		return nil
+	}
+
+	return internAnys(splitShellWords(env.expand(value)))
+}

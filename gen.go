@@ -2615,7 +2615,6 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 		}(),
 		ModuleTag:   perModuleCCTag,
 		Ragel6Flags: d.ragel6Flags,
-		BisonFlags:  d.bisonFlags,
 		BisonGenExt: d.bisonGenExt.string(),
 		NoOptimize:  d.noOptimize,
 		TC:          d.tc,

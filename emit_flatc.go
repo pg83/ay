@@ -188,7 +188,7 @@ func (e *EmitContext) emitFlatcProducer(srcVFS VFS, v *FlatcVariant) {
 	headerVFS := build(srcRel, ".h")
 	cppVFS := build(srcRel, ".cpp")
 	bfbsVFS := build(strings.TrimSuffix(srcRel, v.srcExt), v.bfbsExt)
-	flatcFlags := ctx.na.anyList(d.flatcFlags...)
+	flatcFlags := ctx.na.anyList(commandVariableArgs(Environment{s: &e.frame.ifEnv}, envFlatcFlagsValue)...)
 
 	var recipe *FbsFlatcRecipe
 

@@ -270,7 +270,6 @@ type ModuleData struct {
 	sFlags                  []ANY
 	protocFlags             []ANY
 	fbsNamespaces           []ANY
-	flatcFlags              []ANY
 	flatcAddIncl            []VFS
 	flatcAddInclGlobal      []VFS
 	clangWarnings           []ANY
@@ -389,7 +388,6 @@ type ModuleData struct {
 	pyRegister              []PyRegistration
 	ragel6Flags             []ANY
 	ragel6Builds            []Ragel6BuildStmt
-	bisonFlags              []ANY
 	conflictMod             *ModuleStmt
 	resourceDeclStmts       []*DeclareResourceStmt
 	primaryOutput           string
@@ -3536,11 +3534,6 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 		}
 
 		d.ragel6Builds = append(d.ragel6Builds, Ragel6BuildStmt{Src: args[0].string(), Options: args[1:], DeclSeq: d.nextDeclSeq()})
-	case tokBisonFlags:
-
-		for _, a := range v.Args {
-			d.bisonFlags = append(d.bisonFlags, internArg(a.string()).any())
-		}
 	case tokGrpc:
 		if !d.grpc {
 			d.grpcOutputIndex = len(d.cppProtoPlugins)
@@ -3636,8 +3629,6 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 
 		d.proto2Fbs = append(d.proto2Fbs, Proto2FbsStmt{Source: expandStmtTokenAny(v.Args[0], env), Seq: d.nextDeclSeq()})
 		d.hasFbs = true
-	case tokFlatcFlags:
-		d.flatcFlags = append(d.flatcFlags, v.Args...)
 	case tokCopyFile, tokCopyFileWithContext:
 		entry := parseCopyFileEntry(anyStrs(v.Args), v.Name == tokCopyFileWithContext, v.Line)
 
@@ -4251,11 +4242,7 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 		env.setFromString(internEnv(name), value)
 
 		d.setVars.set(internStr(name), internStr(value))
-	case tokSetAppend, tokAsmPreinclude:
-		if v.Name == tokAsmPreinclude {
-			v.Args = append([]ANY{strYasmPreincludesValue.any()}, v.Args...)
-		}
-
+	case tokSetAppend:
 		if len(v.Args) >= 1 {
 			switch v.Args[0].string() {
 			case "GO_PROTO_OPTS":

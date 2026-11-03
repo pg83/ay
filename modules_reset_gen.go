@@ -51,7 +51,6 @@ func (x *ModuleData) reset() {
 		cOnlyFlagsGlobal:     x.cOnlyFlagsGlobal[:0],
 		sFlags:               x.sFlags[:0],
 		protocFlags:          x.protocFlags[:0],
-		flatcFlags:           x.flatcFlags[:0],
 		clangWarnings:        x.clangWarnings[:0],
 		ldFlags:              x.ldFlags[:0],
 		rpathFlagsGlobal:     x.rpathFlagsGlobal[:0],
@@ -96,7 +95,6 @@ func (x *ModuleData) reset() {
 		noCheckImports:       x.noCheckImports[:0],
 		pyRegister:           x.pyRegister[:0],
 		ragel6Flags:          x.ragel6Flags[:0],
-		bisonFlags:           x.bisonFlags[:0],
 		resourceDeclStmts:    scrub(x.resourceDeclStmts),
 		setVars:              SetVars{vals: clearedMap(x.setVars.vals)},
 	}

@@ -57,10 +57,11 @@ func (e *EmitContext) emitBisonProducer(meta SrcMeta) {
 	python3 := d.cc.TC.Python3
 	scanner := e.scanner
 	scanCtx := d.scanCtx
-	head := na.anys.alloc(6 + len(d.cc.BisonFlags))[:0]
+	flags := commandVariableArgs(d.cc.CompilerEnv, envBisonFlags)
+	head := na.anys.alloc(5 + len(flags))[:0]
 
-	head = append(head, bisonBin.any(), argV.any())
-	head = appendAnyLists(head, d.cc.BisonFlags)
+	head = append(head, bisonBin.any())
+	head = append(head, flags...)
 
 	head = append(head,
 		internV("--defines=", headerVFS.prefix(), headerVFS.relString()).any(),

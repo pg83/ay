@@ -57,7 +57,6 @@ type ModuleCompileEnv struct {
 	MainOutInducedInputs bool
 	ModuleTag            STR
 	Ragel6Flags          []ANY
-	BisonFlags           []ANY
 	BisonGenExt          string
 	TC                   ModuleToolchain
 	ForceConsistentDebug bool
