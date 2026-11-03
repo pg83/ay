@@ -111,7 +111,7 @@ func yqlEpilogue(ctx *GenCtx, modulePath string, kind ModuleKind, language Langu
 		&UnknownStmt{Name: tokNoPlatform, Raw: tokNoPlatform.str()},
 		&SetStmt{Name: "NEED_PLATFORM_PEERDIRS", NameEnv: envNeedPlatformPeerdirs, Value: "no"},
 		&UnknownStmt{Name: tokDisable, Args: []ANY{strCommonLinkSettings.any()}},
-		&UnknownStmt{Name: tokAllocator, Args: []ANY{strFAKE.any()}},
+		&UnknownStmt{Name: tokAllocator, Raw: tokAllocator.str(), Args: []ANY{strFAKE.any()}},
 	}, env, d, onWarn, instance.Platform)
 
 	prebuilt := path.Base(yqlPrebuiltOutput(instance, d).relString()) + ".prebuilt"

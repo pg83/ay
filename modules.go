@@ -17,33 +17,6 @@ var (
 	dontExpandVars      = [...]ENV{envARCADIA_BUILD_ROOT, envARCADIA_ROOT, envBINDIR, envCURDIR, envPythonBin, envTestCaseRoot, envTestOutRoot, envTestSourceRoot, envTestWorkRoot}
 )
 
-var knownAllocators = map[string]bool{
-	"MIM":                       true,
-	"MIM_SDC":                   true,
-	"HU":                        true,
-	"PROFILED_HU":               true,
-	"THREAD_PROFILED_HU":        true,
-	"TCMALLOC_256K":             true,
-	"TCMALLOC_SMALL_BUT_SLOW":   true,
-	"TCMALLOC_NUMA_256K":        true,
-	"TCMALLOC_NUMA_LARGE_PAGES": true,
-	"TCMALLOC":                  true,
-	"TCMALLOC_TC":               true,
-	"GOOGLE":                    true,
-	"J":                         true,
-	"LF":                        true,
-	"LF_YT":                     true,
-	"LF_DBG":                    true,
-	"B":                         true,
-	"BM":                        true,
-	"C":                         true,
-	"LOCKLESS":                  true,
-	"YT":                        true,
-	"FAKE":                      true,
-	"SYSTEM":                    true,
-	"DEFAULT":                   true,
-}
-
 const (
 	event2cppPluginName = "event2cpp"
 	event2cppToolPath   = "tools/event2cpp"
@@ -2713,10 +2686,6 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 					}
 				}
 
-				if expanded.Name == tokAllocator {
-					platform.conf.set(env, envALLOCATOR, &d.setVars)
-				}
-
 				if expanded.Name == tokUsePython3 || expanded.Name == tokUsePython2 || expanded.Name == tokPython3Addincl || expanded.Name == tokPython2Addincl {
 					platform.conf.set(env, envPYTHON3, &d.setVars)
 					platform.conf.set(env, envPYTHON2, &d.setVars)
@@ -3640,12 +3609,6 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 		}
 
 		d.protoNamespace = ptr(v.Args[len(v.Args)-1])
-	case tokResolveProto:
-		if len(v.Args) != 0 {
-			throwFmt("gen: RESOLVE_PROTO expects no arguments")
-		}
-
-		env.setStringID(envDontResolveIncludes, strNo)
 	case tokUseSdcMeta:
 
 		d.setVars.set(strUSE_SDC_META, strYes)
@@ -3712,8 +3675,6 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 		}
 
 		d.yaConfJSON = append(d.yaConfJSON, v.Args[0])
-	case tokAllocator:
-		applyAllocatorStmt(v, d, env)
 	case tokArchive:
 
 		applyArchiveStmt(v, d)
@@ -3891,8 +3852,6 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 		}
 	case tokUseSAPlugins:
 		applySAPlugins(v.Args, d, env)
-	case tokUseNasm:
-		env.setBool(envUseNasmAssembler, true)
 	case tokUsePython2:
 		applyPython2Addincl(d, env, false)
 	case tokPython2Addincl:
@@ -5232,20 +5191,6 @@ func applyLj21ArchiveStmt(v UnknownStmt, d *ModuleData) {
 		ArchiveEntry{Name: "LuaScripts.inc", DontCompress: true, Files: raws, Keys: []string{strings.Join(luas, ":")}},
 		ArchiveEntry{Name: "LuaSources.inc", DontCompress: true, Files: append([]string(nil), luas...), Keys: []string{strings.Join(luas, ":")}},
 	)
-}
-
-func applyAllocatorStmt(v UnknownStmt, d *ModuleData, env Environment) {
-	if len(v.Args) != 1 {
-		throwFmt("gen: ALLOCATOR expects exactly 1 argument, got %d (line %d)", len(v.Args), v.Line)
-	}
-
-	name := v.Args[0]
-
-	if !knownAllocators[name.string()] {
-		throwFmt("gen: unknown allocator %q (line %d); extend knownAllocators in modules.go", name.string(), v.Line)
-	}
-
-	env.setStringID(envALLOCATOR, name.str())
 }
 
 func isProgramModuleType(name TOK) bool {
