@@ -140,7 +140,7 @@ type ModuleData struct {
 	yqlUdfShared            bool
 	yqlPythonUdf            bool
 	yqlCurrent              bool
-	yqlStableABI            bool
+	macroCalls              []UnknownStmt
 	yqlPrebuiltResource     string
 	yqlPrebuiltAliases      bool
 	yqlSourceSrcs           []ANY
@@ -784,7 +784,6 @@ func collectModuleInto(ctx *GenCtx, instance ModuleInstance, stmts []Stmt, env E
 	d.pythonSQLite3 = true
 	d.needGoogleProtoPeerdirs = true
 	d.yqlCurrent = instance.YqlCurrent
-	d.yqlStableABI = instance.Platform.YqlStableABI
 	initPythonImportMask(env, d)
 
 	collectStmts(ctx, modulePath, kind, instance.Language, stmts, env, d, onWarn, instance.Platform)
@@ -813,6 +812,10 @@ func collectModuleInto(ctx *GenCtx, instance ModuleInstance, stmts []Stmt, env E
 		(isPythonProtoModule(d) || d.unit.Type == tokPy2Library || d.unit.Type == tokPy3Library || d.unit.Type == tokPy23Library)
 	d.flags.NoCompilerWarnings = env.bool(envNoCompilerWarnings)
 	d.noLint = env.string(envNoLintValue)
+
+	if env.string(envYqlAbiPeerdirTag) == "YQL_ABI_CURRENT" {
+		d.yqlCurrent = true
+	}
 
 	if value := env.string(envPyNamespaceValue); value != "" && d.pyNamespace == nil {
 		d.pyNamespace = ptr(internStr(value).any())
@@ -1508,6 +1511,31 @@ func (d *ModuleData) flattenConfMacro(ctx *GenCtx, modulePath string, kind Modul
 	})
 
 	return &c
+}
+
+func (d *ModuleData) callConfMacro(ctx *GenCtx, modulePath string, kind ModuleKind, language Language, call UnknownStmt, env Environment, onWarn func(Warn), platform *Platform) {
+	if macro := platform.conf.alias(platform.conf.moduleAlias(d.confModule, call.Raw)); macro != nil {
+		platform.conf.macroCalls(macro, call, env, d, onWarn, modulePath, func(callee STR, args []ANY) {
+			if !baseMacro(callee) && !dirStatement(callee) {
+				d.callConfMacro(ctx, modulePath, kind, language, UnknownStmt{Name: internTokMaybeSTR(callee), Raw: callee, Args: args, Line: call.Line}, env, onWarn, platform)
+
+				return
+			}
+
+			var scratch [1]Stmt
+
+			stmts := appendMacroCallStmts(scratch[:0], callee, args, args, call.Line, func(format string, a ...any) {
+				throwFmt("%s: %s: "+format, append([]any{macro.file, callee.string()}, a...)...)
+			})
+
+			markImplicitPeers(stmts)
+			collectStmts(ctx, modulePath, kind, language, stmts, env, d, onWarn, platform)
+		})
+
+		platform.conf.setGuard(env, macro, &d.setVars)
+	}
+
+	applyUnknownStmt(ctx.fs, modulePath, call, d, env, onWarn)
 }
 
 func (d *ModuleData) expandBodyAtParse(ctx *GenCtx, modulePath string, kind ModuleKind, language Language, macro STR, args []ANY, line int, env Environment, onWarn func(Warn), platform *Platform) {
@@ -2681,6 +2709,13 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 						d.expandBodyAtParse(ctx, modulePath, kind, language, expanded.Raw, expanded.Args, expanded.Line, env, onWarn, platform)
 					}
 
+					for len(d.macroCalls) > 0 {
+						call := d.macroCalls[0]
+
+						d.macroCalls = d.macroCalls[1:]
+						d.callConfMacro(ctx, modulePath, kind, language, call, env, onWarn, platform)
+					}
+
 					if textAppend != nil {
 						env.setTextInputs(textAppend.id, textAppend.ranges)
 					}
@@ -3495,39 +3530,6 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 		collectProtoToNamespace(fs, modulePath, v, d, env, onWarn)
 	case tokRegisterYqlPythonUdf:
 		registerYqlPythonUdf(fs, modulePath, v, d, env, onWarn)
-	case tokYqlLastAbiVersion:
-		if len(v.Args) != 0 {
-			throwFmt("YQL_LAST_ABI_VERSION expects exactly 0 arguments, got %d", len(v.Args))
-		}
-
-		if d.yqlStableABI {
-			applyYqlABI(d, env, false)
-		} else {
-			d.cxxFlags = append(d.cxxFlags, argDuseCurrentUdfAbiVersion.any())
-		}
-	case tokYqlCurrentAbiVersion, tokYqlStableAbiVersion:
-		if len(v.Args) != 0 {
-			throwFmt("%s expects no arguments", v.Name.string())
-		}
-
-		applyYqlABI(d, env, v.Name == tokYqlCurrentAbiVersion)
-	case tokYqlAbiVersion:
-		if len(v.Args) != 3 {
-			throwFmt("YQL_ABI_VERSION expects exactly 3 arguments, got %d", len(v.Args))
-		}
-
-		prefix := "-DUDF_ABI_VERSION_"
-
-		if d.yqlStableABI {
-			applyYqlABI(d, env, false)
-			prefix = "-DMIN_UDF_ABI_VERSION_"
-		}
-
-		d.cxxFlags = append(d.cxxFlags,
-			internArg(prefix+"MAJOR="+v.Args[0].string()).any(),
-			internArg(prefix+"MINOR="+v.Args[1].string()).any(),
-			internArg(prefix+"PATCH="+v.Args[2].string()).any(),
-		)
 	case tokUseCommonGoogleApis:
 
 		d.useCommonGoogleAPIs = true
@@ -4158,6 +4160,8 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 			case "USER_CFLAGS":
 
 				d.cFlags = append(d.cFlags, v.Args[1:]...)
+			case "USER_CXXFLAGS":
+				d.cxxFlags = append(d.cxxFlags, v.Args[1:]...)
 			case "CFLAGS":
 				d.cFlagsAppend = append(d.cFlagsAppend, v.Args[1:]...)
 			case "_PROTOC_FLAGS":

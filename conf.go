@@ -256,12 +256,18 @@ func (s *ConfState) readFile(rel, text string) *ConfFile {
 			}
 
 			if name, value, op, ok := confStmtAssignment(line); ok {
+				if top.block == "macro" {
+					if !top.skipped {
+						top.body.locals = append(top.body.locals, confMacroLocal{name: internStr(name), value: internStr(value).any()})
+					}
+
+					continue
+				}
+
 				if !top.skipped {
 					branch := top.branch
 
-					if top.block == "macro" {
-						branch = 0
-					} else if top.enclosing != 0 {
+					if top.enclosing != 0 {
 						stack[top.enclosing].body.conditions = true
 					}
 
@@ -2038,11 +2044,18 @@ type ConfMacro struct {
 	command    bool
 	foreach    bool
 	guard      ENV
+	locals     []confMacroLocal
 	expansions *IntMap[*confMacroExpansion]
+}
+
+type confMacroLocal struct {
+	name  STR
+	value ANY
 }
 
 type confMacroBody struct {
 	header     string
+	locals     []confMacroLocal
 	calls      []ConfMacroCall
 	conditions bool
 	command    bool
@@ -2067,7 +2080,7 @@ func (f *ConfFile) addMacro(header string, branch int32, body *confMacroBody) {
 		}
 
 		if _, ok := f.inits[key]; !ok {
-			f.inits[key] = &ConfMacro{file: f.rel, sig: sig, calls: calls}
+			f.inits[key] = &ConfMacro{file: f.rel, sig: sig, calls: calls, locals: body.locals}
 		}
 	}
 
@@ -2090,7 +2103,7 @@ func (f *ConfFile) addMacro(header string, branch int32, body *confMacroBody) {
 	}
 
 	if _, ok := f.macros[key]; !ok {
-		f.macros[key] = &ConfMacro{file: f.rel, sig: sig, calls: calls, conditions: body.conditions, command: body.command, foreach: body.foreach, guard: internEnv("env" + key.string())}
+		f.macros[key] = &ConfMacro{file: f.rel, sig: sig, calls: calls, locals: body.locals, conditions: body.conditions, command: body.command, foreach: body.foreach, guard: internEnv("env" + key.string())}
 	}
 }
 
@@ -2283,6 +2296,21 @@ func (s *ConfState) bind(macro *ConfMacro, args []ANY) *confMacroExpansion {
 	expansion.next = *cell
 	expansion.args = astArgs.list(args...)
 	expansion.locals, expansion.failure = macro.sig.bind(expansion.args, s.bindings)
+
+	if len(macro.locals) > 0 {
+		n := len(expansion.locals) + len(macro.locals)
+		locals := s.bindings.alloc(n)[:n:n]
+
+		s.bindings.commit(n)
+		copy(locals, expansion.locals)
+
+		for i, local := range macro.locals {
+			locals[len(expansion.locals)+i] = confMacroBinding{name: local.name, values: astArgs.list(local.value), bound: true}
+		}
+
+		expansion.locals = locals
+	}
+
 	expansion.calls = s.calls.alloc(len(macro.calls))[:len(macro.calls):len(macro.calls)]
 	s.calls.commit(len(macro.calls))
 	*cell = expansion

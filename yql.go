@@ -2,19 +2,8 @@ package main
 
 import (
 	"path"
-	"slices"
 	"strings"
 )
-
-func confYqlStableABI(fs FS, parsers *IncludeParserManager) bool {
-	const conf = "build/conf/project_specific/yql_udf.conf"
-
-	if !fs.isFile(srcRootRel, conf) {
-		return false
-	}
-
-	return slices.Contains(parsers.confFile(conf).declared, strYqlStableAbiVersion)
-}
 
 func setupYqlModule(d *ModuleData, name TOK, env Environment) {
 	d.yqlPrebuiltTool = name == tokYqlPrebuiltTool
@@ -61,24 +50,6 @@ func setYqlCurrentPeers(d *ModuleData, env Environment) {
 	d.yqlCurrent = true
 	env.setString(envYqlAbiPeerdirTag, "YQL_ABI_CURRENT")
 	env.setString(envYqlUdfStaticPeerdirTag, "YQL_UDF_STATIC_CURRENT")
-}
-
-func applyYqlABI(d *ModuleData, env Environment, current bool) {
-	stated := "_YQL_ABI_STATED_STABLE"
-	flag := "-DUSE_STABLE_UDF_ABI_VERSION"
-
-	if current {
-		stated = "_YQL_ABI_STATED_CURRENT"
-		flag = "-DUSE_CURRENT_UDF_ABI_VERSION"
-		setYqlCurrentPeers(d, env)
-	}
-
-	env.setBool(internEnv(stated), true)
-	d.cxxFlags = append(d.cxxFlags, internArg(flag).any())
-
-	if env.bool(envYqlAbiStatedStable) && env.bool(envYqlAbiStatedCurrent) {
-		d.peerdirs = append(d.peerdirs, strYqlEssentialsPublicUdfAbiConflict.any())
-	}
 }
 
 func finishYqlModule(instance ModuleInstance, env Environment, d *ModuleData) {
@@ -353,7 +324,7 @@ func registerYqlPythonUdf(fs FS, modulePath string, stmt UnknownStmt, d *ModuleD
 		throwFmt("Libra modules are not supported in opensource python UDFs")
 	}
 
-	applyUnknownStmt(fs, modulePath, UnknownStmt{Name: tokYqlAbiVersion, Args: internAnys([]string{"2", "45", "0"})}, d, env, onWarn)
+	d.macroCalls = append(d.macroCalls, UnknownStmt{Name: tokYqlAbiVersion, Raw: tokYqlAbiVersion.str(), Args: internAnys([]string{"2", "45", "0"})})
 	d.macroPeerdirs = append(d.macroPeerdirs, internAnys([]string{"yql/essentials/udfs/common/python/python_udf", "yql/essentials/public/udf"})...)
 
 	includes := []string{"yql/essentials/udfs/common/python/python_udf/python_udf.h", "yql/essentials/public/udf/udf_registrator.h"}

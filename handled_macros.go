@@ -206,9 +206,5 @@ var handledMacroTokens = map[TOK]bool{
 	tokYaff:                                 true,
 	tokYaffSchema:                           true,
 	tokYmapsSproto:                          true,
-	tokYqlAbiVersion:                        true,
-	tokYqlCurrentAbiVersion:                 true,
-	tokYqlLastAbiVersion:                    true,
-	tokYqlStableAbiVersion:                  true,
 	tokYtOrmProtoYson:                       true,
 }

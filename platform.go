@@ -15,12 +15,11 @@ type PlatformConf struct {
 	GoStdVersion        string
 	Linker              *LinkerConf
 	Parsers             *IncludeParserManager
-	YqlStableABI        bool
 	ProtoHeaderEpilogue bool
 }
 
 func readPlatformConf(fs FS, parsers *IncludeParserManager) PlatformConf {
-	return PlatformConf{GoStdVersion: confGoStdVersion(fs, parsers), Linker: readLinkerConf(parsers), Parsers: parsers, YqlStableABI: confYqlStableABI(fs, parsers), ProtoHeaderEpilogue: confProtoHeaderEpilogue(fs)}
+	return PlatformConf{GoStdVersion: confGoStdVersion(fs, parsers), Linker: readLinkerConf(parsers), Parsers: parsers, ProtoHeaderEpilogue: confProtoHeaderEpilogue(fs)}
 }
 
 func confProtoHeaderEpilogue(fs FS) bool {
@@ -31,7 +30,6 @@ func confProtoHeaderEpilogue(fs FS) bool {
 
 type Platform struct {
 	conf                  *Conf
-	YqlStableABI          bool
 	ProtoHeaderEpilogue   bool
 	picVariant            *Platform
 	picOnce               sync.Once
@@ -162,7 +160,6 @@ func newPlatform(os OS, isa ISA, buildType string, tc *Toolchain, flags map[stri
 	}
 
 	p := &Platform{
-		YqlStableABI:          pc.YqlStableABI,
 		ProtoHeaderEpilogue:   pc.ProtoHeaderEpilogue,
 		OS:                    os,
 		ISA:                   isa,
