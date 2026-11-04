@@ -1369,14 +1369,12 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 	}
 
 	if !instance.Platform.PIC && instance.Language == LangCPP && instance.Kind != KindForeignDescent && picTransition(moduleName) && (moduleName != tokYqlUdf && moduleName != tokYqlUdfContrib || instance.Kind != KindLib) {
-		if moduleName != tokDynamicLibrary {
-			descent := instance
+		descent := instance
 
-			descent.Kind = KindForeignDescent
-			descent.Demand = demandNone
+		descent.Kind = KindForeignDescent
+		descent.Demand = demandNone
 
-			genModule(ctx, descent)
-		}
+		genModule(ctx, descent)
 
 		pic := instance
 
