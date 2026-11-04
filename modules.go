@@ -260,13 +260,8 @@ type ModuleData struct {
 	useArcadiaLibm          bool
 	useDynamicCuda          bool
 	splitDwarf              bool
-	pythonModule2           bool
-	pythonModule3           bool
-	python2Headers          bool
-	python3NativeIncl       bool
 	peerRequest             PeerRequest
 	unionExplicitOutputs    []ANY
-	pythonHeaderEnv         Environment
 	resourcePeerOverride    STR
 	resourcePeerExplicit    bool
 	resourcePeerClosed      bool
@@ -851,12 +846,6 @@ func collectModuleInto(ctx *GenCtx, instance ModuleInstance, stmts []Stmt, env E
 		d.pythonLint.bind(env)
 	}
 
-	pythonHeaderEnv := env
-
-	if d.pythonHeaderEnv.s != nil {
-		pythonHeaderEnv = d.pythonHeaderEnv
-	}
-
 	for _, priority := range []int{stmtPrioDefault, stmtPrioSrcs} {
 		for i, group := range d.pySrcGroups {
 			if group.Prio == priority && group.Statement != nil && group.Statement.Name == tokPySrcs {
@@ -907,8 +896,6 @@ func collectModuleInto(ctx *GenCtx, instance ModuleInstance, stmts []Stmt, env E
 	d.addInclUserGlobal = append(d.addInclUserGlobal, d.cfAddInclGlobal...)
 	d.cfAddIncl = d.cfAddIncl[:0]
 	d.cfAddInclGlobal = d.cfAddInclGlobal[:0]
-	finishPythonDllConfig(d, pythonHeaderEnv)
-	finishPythonHeaderConfig(d, pythonHeaderEnv)
 
 	filterInvalidAddIncl(fs, d, modulePath, onWarn)
 
@@ -1248,6 +1235,15 @@ func shouldCheckSourceDir(path VFS) bool {
 	}
 
 	return true
+}
+
+func (d *ModuleData) syncPythonVersion(env Environment) {
+	switch {
+	case env.string(envPYTHON2) == "yes":
+		d.usePython2, d.usePython3 = true, false
+	case env.string(envPYTHON3) == "yes":
+		d.usePython2, d.usePython3 = false, true
+	}
 }
 
 func usePython2(env Environment, d *ModuleData, moduleTag STR) {
@@ -1998,6 +1994,7 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 			}
 
 			platform.conf.initModule(env, d.confModule, &d.setVars)
+			d.syncPythonVersion(env)
 			env.setString(envREALPRJNAME, moduleRealPrjName(modulePath, v, d.unit))
 
 			if moduleType := confModuleType(v.Name, d); moduleType != "" {
@@ -2106,14 +2103,7 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 				d.moduleVariants = defaultProtoVariants
 			}
 
-			if v.Name == tokPy2Module {
-				applyPythonModuleSelector(d, env, false)
-			} else if v.Name == tokPy3Module {
-				applyPythonModuleSelector(d, env, true)
-			} else if d.unit.HashTag == unitTagPy2Native {
-				applyPython2Addincl(d, env, true)
-			} else if d.unit.HashTag == unitTagPy3Native {
-				applyPython3Addincl(d, env)
+			if isPythonDllModule(v.Name) || d.unit.HashTag == unitTagPy2Native || d.unit.HashTag == unitTagPy3Native {
 			} else if d.unit.Tag == unitTagPy2 || d.unit.Tag == unitTagPy2Native || d.unit.Tag == strPyProto {
 				usePython2(env, d, d.unit.HashTag)
 			} else if d.unit.Tag != 0 {
@@ -2353,6 +2343,10 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 				setupPythonImportMask(env, d)
 			}
 
+			if v.NameEnv == envPYTHON2 || v.NameEnv == envPYTHON3 {
+				d.syncPythonVersion(env)
+			}
+
 			d.setVars.set(internStr(v.Name), internStr(value))
 			platform.conf.set(env, v.NameEnv, &d.setVars)
 
@@ -2392,11 +2386,6 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 
 			d.unit.HashTag = internStr(env.string(envMODULE_TAG))
 			d.pyNamespacePython2 = env.string(envPYTHON2) == "yes"
-
-			if d.python2Headers || d.python3NativeIncl || d.moduleStmt.Name == tokPyAnyModule {
-				d.pythonHeaderEnv = env.clone()
-			}
-
 			d.moduleEnded = true
 
 		case *JoinSrcsStmt:
@@ -2792,11 +2781,6 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 					if textAppend != nil {
 						env.setTextInputs(textAppend.id, textAppend.ranges)
 					}
-				}
-
-				if expanded.Name == tokUsePython3 || expanded.Name == tokUsePython2 || expanded.Name == tokPython3Addincl || expanded.Name == tokPython2Addincl {
-					platform.conf.set(env, envPYTHON3, &d.setVars)
-					platform.conf.set(env, envPYTHON2, &d.setVars)
 				}
 
 				if expanded.Name == tokEnable || expanded.Name == tokDisable || expanded.Name == tokSetAppend || expanded.Name == tokSetListPreSuf {
@@ -3915,23 +3899,6 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 		}
 	case tokUseSAPlugins:
 		applySAPlugins(v.Args, d, env)
-	case tokUsePython2:
-		applyPython2Addincl(d, env, false)
-	case tokPython2Addincl:
-		if d.moduleStmt != nil && d.moduleStmt.Name == tokPy23NativeLibrary && d.unit.HashTag == unitTagPy3Native {
-			applyPython3Addincl(d, env)
-		} else {
-			applyPython2Addincl(d, env, true)
-		}
-	case tokPython2Module, tokPython3Module:
-		applyPythonModuleSelector(d, env, v.Name == tokPython3Module)
-	case tokPython3Addincl:
-		applyPython3Addincl(d, env)
-	case tokUsePython3:
-
-		env.setBool(envPYTHON3, true)
-		env.setBool(envPYTHON2, false)
-		d.usePython3 = true
 	case tokNoBuildIf, tokBuildOnlyIf:
 		strict, args := true, v.Args
 

@@ -82,7 +82,6 @@ func setupRosModule(stmt *ModuleStmt, module string, language Language, env Envi
 		env.setBool(envPy3Ros, true)
 	case LangRosBindings:
 		d.selfPeers = append(d.selfPeers, LangCPP)
-		applyUnknownStmt(nil, module, UnknownStmt{Name: tokUsePython3}, d, env, nil)
 
 		d.peerdirs = append(d.peerdirs, internAnys([]string{
 			"contrib/python/numpy/py3",
