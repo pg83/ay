@@ -474,6 +474,7 @@ var (
 	strProtoFile                                                                             = internStr("--proto-file")
 	strProtoIncludesCpp                                                                      = internStr("proto_includes.cpp")
 	strProtoIncludesH                                                                        = internStr("proto_includes.h")
+	strProtoSchema                                                                           = internStr("PROTO_SCHEMA")
 	strProtocOutDir                                                                          = internStr("--protoc-out-dir")
 	strProtocTransitiveHeaders                                                               = internStr("PROTOC_TRANSITIVE_HEADERS")
 	strPy                                                                                    = internStr(".py")

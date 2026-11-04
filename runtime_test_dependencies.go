@@ -173,6 +173,11 @@ func (ctx *GenCtx) testDependencyMainRefs(project VFS) map[NodeRef]bool {
 
 	for entry := ctx.memo.heads.getSafe(uint32(project.rel())); entry != nil; entry = entry.next {
 		result := entry.result
+
+		if result == nil {
+			continue
+		}
+
 		module := ctx.runtimeTestDependencyModule(TestBuildDependency{result: result})
 
 		if module.fake || module.multimodule && !module.final || testDependencyOutput(result) == 0 {

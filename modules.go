@@ -192,6 +192,7 @@ type ModuleData struct {
 	noExtendedPySearch      bool
 	enumSrcs                []*GenerateEnumSerializationStmt
 	peerdirs                []ANY
+	explicitPeers           []ANY
 	unitTestPeerExplicit    bool
 	resourcePeerDeferred    bool
 	protoCmdPeers           []ANY
@@ -263,7 +264,6 @@ type ModuleData struct {
 	pythonModule3           bool
 	python2Headers          bool
 	python3NativeIncl       bool
-	peerTags                []string
 	peerRequest             PeerRequest
 	unionExplicitOutputs    []ANY
 	pythonHeaderEnv         Environment
@@ -357,7 +357,7 @@ type ModuleData struct {
 	inducedDeps             ParsedIncludeSet
 	setVars                 SetVars
 	confModule              *confModule
-	defaultPeerTags         STR
+	consumerTags            STR
 	pending                 []PendingStmt
 	interpreting            bool
 	pendingIndex            int
@@ -855,10 +855,6 @@ func collectModuleInto(ctx *GenCtx, instance ModuleInstance, stmts []Stmt, env E
 
 	if d.pythonHeaderEnv.s != nil {
 		pythonHeaderEnv = d.pythonHeaderEnv
-	}
-
-	if specified := internStr(env.string(envPeerdirTags)) != d.defaultPeerTags; specified || d.python2Headers || d.python3NativeIncl {
-		d.peerTags = strings.Fields(pythonHeaderEnv.string(envPeerdirTags))
 	}
 
 	for _, priority := range []int{stmtPrioDefault, stmtPrioSrcs} {
@@ -2022,10 +2018,14 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 			}
 
 			d.unit = resolveModuleUnit(v.Name, kind, language)
-			d.confModule = platform.conf.module(v.Name.str(), moduleConfTag(v.Name, kind, language, d))
+
+			if v.Schema && v.Name == tokProtoLibrary {
+				d.confModule = platform.conf.module(strProtoSchema, protoModuleTag(language, true))
+			} else {
+				d.confModule = platform.conf.module(v.Name.str(), moduleConfTag(v.Name, kind, language, d))
+			}
+
 			platform.conf.initModule(env, d.confModule, &d.setVars)
-			d.defaultPeerTags = platform.conf.peerTags(env, modulePeerTags(v, d.unit, language))
-			env.setStringID(envPeerdirTags, d.defaultPeerTags)
 			env.setString(envREALPRJNAME, moduleRealPrjName(modulePath, v, d.unit))
 
 			if moduleType := confModuleType(v.Name, d); moduleType != "" {
@@ -2346,6 +2346,10 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 				}
 
 				d.peerdirs = append(d.peerdirs, pTok)
+
+				if !v.Implicit {
+					d.explicitPeers = append(d.explicitPeers, pTok)
+				}
 
 				if !v.Implicit && pTok.string() == unittestForPeerPath(d.moduleStmt) {
 					d.unitTestPeerExplicit = true
@@ -5868,7 +5872,8 @@ func (e *EmitContext) derivePeerInstance(peerPath string) ModuleInstance {
 
 func (e *EmitContext) derivePeerInstanceVFS(peerVFS VFS) ModuleInstance {
 	if e.d.peerRequest == 0 {
-		e.d.peerRequest = makePeerRequest(e.instance, e.d, Environment{s: &e.frame.ifEnv})
+		e.d.peerRequest = makePeerRequest(e.d)
+		e.d.consumerTags = consumerPeerTags(e.d, Environment{s: &e.frame.ifEnv})
 	}
 
 	return ModuleInstance{
@@ -5878,6 +5883,7 @@ func (e *EmitContext) derivePeerInstanceVFS(peerVFS VFS) ModuleInstance {
 		Platform: e.instance.Platform,
 		Demand:   e.peerDemand(),
 		Peer:     e.d.peerRequest,
+		PeerTags: e.d.consumerTags,
 		PeerFrom: e.instance.Path,
 	}
 }

@@ -9,14 +9,7 @@ func (e *EmitContext) packagePeer(dir string) (*ModuleEmitResult, []VFS) {
 
 	instance.Demand = demandLinked
 
-	name := e.ctx.moduleName(instance.Path.relString())
-
-	if name == tokPackage {
-		instance.Peer |= peerPackageContents
-		instance.Language = LangCPP
-	}
-
-	return e.completePackagePeer(javaPackagePeerInstance(instance, name))
+	return e.completePackagePeer(javaPackagePeerInstance(instance, e.ctx.moduleName(instance.Path.relString())))
 }
 
 func javaPackagePeerInstance(instance ModuleInstance, name TOK) ModuleInstance {

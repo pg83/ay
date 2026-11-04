@@ -80,6 +80,7 @@ type ModuleInstance struct {
 	Language   Language
 	Platform   *Platform
 	Peer       PeerRequest
+	PeerTags   STR
 	Demand     ModuleDemand
 	YqlCurrent bool
 }

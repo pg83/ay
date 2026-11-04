@@ -1,6 +1,7 @@
 package main
 
 import (
+	"cmp"
 	"fmt"
 	"slices"
 	"strings"
@@ -944,6 +945,7 @@ type confInitStep struct {
 	source   ENV
 	value    STR
 	fallback bool
+	appended bool
 	expand   bool
 	original bool
 }
@@ -973,6 +975,7 @@ type confTables struct {
 	recalcReads DenseMap[ENV, []ENV]
 	modules     DenseMap[STR, *confModule]
 	variants    DenseMap[STR, []ConfVariant]
+	peers       DenseMap[STR, []confPeerVariant]
 	moduleCount int
 }
 
@@ -1325,6 +1328,58 @@ func (t *confTables) build() {
 			t.orderVariants(owner, variants, selfPeers)
 		}
 	}
+
+	for _, file := range owners {
+		for owner, variants := range file.variants {
+			t.peers.put(internStr(owner), t.peerVariants(owner, variants))
+		}
+	}
+}
+
+type confPeerVariant struct {
+	sub STR
+	tag STR
+}
+
+func (t *confTables) peerVariants(owner string, variants []string) []confPeerVariant {
+	type ordered struct {
+		variant confPeerVariant
+		order   int
+	}
+
+	list := make([]ordered, 0, len(variants))
+
+	for _, name := range variants {
+		module, _ := t.modules.get(internStr(name))
+		sub := internStr(strings.TrimSuffix(name, "__from__"+owner))
+		tag, own := sub, false
+
+		for _, step := range t.plan(module).steps {
+			own = own || step.variable == module.variable
+
+			if own && step.variable == envMODULE_TAG && step.value != 0 && !step.expand && !step.appended {
+				tag = step.value
+			}
+		}
+
+		list = append(list, ordered{confPeerVariant{sub: sub, tag: tag}, module.order})
+	}
+
+	slices.SortStableFunc(list, func(a, b ordered) int { return cmp.Compare(a.order, b.order) })
+
+	out := make([]confPeerVariant, len(list))
+
+	for i, entry := range list {
+		out[i] = entry.variant
+	}
+
+	return out
+}
+
+func (c *Conf) peerVariants(owner STR) []confPeerVariant {
+	variants, _ := c.tables.peers.get(owner)
+
+	return variants
 }
 
 func (t *confTables) bodyDirs(module *confModule) []ConfMacroCall {
@@ -1585,6 +1640,14 @@ func (t *confTables) callSteps(name STR, args string, out []confInitStep, depth 
 		step.expand = step.fallback || step.value == 0 || strings.IndexByte(step.value.string(), '$') >= 0
 
 		return append(out, step), true
+	case tokSetAppend.str():
+		if len(words) < 2 || strings.IndexByte(args, '"') >= 0 || strings.IndexByte(words[0], '$') >= 0 {
+			return out, false
+		}
+
+		value := internStr(strings.Join(words[1:], " "))
+
+		return append(out, confInitStep{variable: internEnv(words[0]), value: value, appended: true, original: true, expand: strings.IndexByte(value.string(), '$') >= 0}), true
 	}
 
 	macro := t.inits[name]
@@ -1678,7 +1741,7 @@ func (t *confTables) plan(module *confModule) *confModule {
 			readVar(step.source)
 		}
 
-		if step.fallback {
+		if step.fallback || step.appended {
 			readVar(step.variable)
 		}
 
@@ -1715,7 +1778,6 @@ type Conf struct {
 	state       *ConfState
 	program     *confProgram
 	tables      *confTables
-	tags        DenseMap[STR, confExpansion]
 	platformEnv Environment
 	inherited   DenseMap[ENV, ConfValue]
 	base        *EnvStore
@@ -1958,52 +2020,6 @@ func (c *Conf) alias(name STR) *ConfMacro {
 	return c.program.macros[name]
 }
 
-type confExpansion struct {
-	keys   []ENV
-	values []ConfValue
-	result STR
-}
-
-func (c *Conf) peerTags(env Environment, template string) STR {
-	key := internStr(template)
-
-	if memo, ok := c.tags.get(key); ok {
-		valid := true
-
-		for i, k := range memo.keys {
-			if confEnvValue(env, k) != memo.values[i] {
-				valid = false
-
-				break
-			}
-		}
-
-		if valid {
-			return memo.result
-		}
-	}
-
-	result := internStr(expandAssignedScalarVarRef(template, env))
-	memo := confExpansion{result: result}
-	nested := false
-
-	confValueVars(template, func(name string) {
-		k := internEnv(name)
-		v := confEnvValue(env, k)
-
-		nested = nested || v.kind != envAbsent && strings.IndexByte(v.value.string(), '$') >= 0
-
-		memo.keys = append(memo.keys, k)
-		memo.values = append(memo.values, v)
-	})
-
-	if !nested {
-		c.tags.put(key, memo)
-	}
-
-	return result
-}
-
 func (c *Conf) set(env Environment, variable ENV, originals *SetVars) {
 	c.recalcInto(env, variable, originals, nil)
 }
@@ -2199,6 +2215,18 @@ func (c *Conf) runInit(plan *confModule, env Environment, originals *SetVars, re
 			}
 
 			continue
+		case step.appended:
+			value := step.value.string()
+
+			if step.expand {
+				value = env.expandVariable(value)
+			}
+
+			if old := env.string(step.variable); old != "" {
+				value = old + " " + value
+			}
+
+			env.setStringID(step.variable, internStr(value))
 		case step.expand:
 			env.setStringID(step.variable, internStr(env.expandVariable(step.value.string())))
 		case step.value != 0:

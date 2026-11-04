@@ -83,7 +83,7 @@ const (
 )
 
 type ModuleEmitResult struct {
-	protoExcluded                   bool
+	excluded                        bool
 	ToolRequired                    bool
 	ToolPath                        ARG
 	ForeignTool                     *ForeignTool
@@ -161,6 +161,7 @@ func protoResultWholeArchiveCmdPaths(res *ProtoSrcsResult) []VFS {
 }
 
 type GenCtx struct {
+	peerTagSets         map[STR][]STR
 	scanData            ModuleData
 	dirs                map[dirEvaluationKey]*DirEvaluation
 	dependencyInstances map[string][]ModuleInstance
@@ -246,6 +247,7 @@ type moduleMemoEntry struct {
 	next     *moduleMemoEntry
 	result   *ModuleEmitResult
 	peer     PeerRequest
+	tags     STR
 	variant  uint16
 	resolved uint16
 }
@@ -1328,7 +1330,7 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 			sandboxVariants = ctx.sandboxPythonTaskVariants(instance, moduleName)
 
 			if sandboxVariants&sandboxPythonTaskVariantBit(instance) == 0 {
-				result = &ModuleEmitResult{ModuleVariants: sandboxVariants}
+				result = &ModuleEmitResult{ModuleVariants: sandboxVariants, excluded: true}
 
 				ctx.memoPut(instance, result)
 
@@ -1470,7 +1472,7 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 	}
 
 	if tag != "" && excluded {
-		result := &ModuleEmitResult{ModuleVariants: d.moduleVariants, protoExcluded: moduleName == tokProtoLibrary}
+		result := &ModuleEmitResult{ModuleVariants: d.moduleVariants, excluded: true}
 
 		ctx.memoPut(instance, result)
 
@@ -1538,7 +1540,7 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 	e.prepareUserverProtos()
 
 	if d.moduleStmt.Name == tokProtoLibrary && instance.Language == LangCPP && moduleExcludesTag(d, protoModuleTag(LangCPP, d.moduleStmt.Schema)) {
-		result := &ModuleEmitResult{ModuleVariants: d.moduleVariants, ModuleStmtName: tokProtoLibrary, protoExcluded: true}
+		result := &ModuleEmitResult{ModuleVariants: d.moduleVariants, ModuleStmtName: tokProtoLibrary, excluded: true}
 
 		ctx.memoPut(instance, result)
 
@@ -1824,6 +1826,8 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 
 		if kind != peerKindUserPeer {
 			peerInstance.Peer |= peerOptional
+		} else if slices.Contains(d.explicitPeers, peerVFS.rel().any()) {
+			peerInstance.Peer |= peerExplicit
 		}
 
 		peerResult := genModule(ctx, peerInstance)
@@ -3020,7 +3024,7 @@ func (ctx *GenCtx) memoEntry(in ModuleInstance) *moduleMemoEntry {
 	other := ctx.instanceVariant(in) & mask
 
 	for entry := ctx.memo.heads.getSafe(uint32(in.Path.rel())); entry != nil; entry = entry.next {
-		if entry.variant&mask == other && entry.peer == in.Peer {
+		if entry.variant&mask == other && entry.peer == in.Peer && entry.tags == in.PeerTags {
 			return entry
 		}
 	}
@@ -3034,7 +3038,7 @@ func (ctx *GenCtx) memoPut(in ModuleInstance, result *ModuleEmitResult) *moduleM
 	head := ctx.memo.heads.getSafe(path)
 	entry := ctx.memo.entries.one()
 
-	*entry = moduleMemoEntry{next: head, result: result, variant: variant, peer: in.Peer}
+	*entry = moduleMemoEntry{next: head, result: result, variant: variant, peer: in.Peer, tags: in.PeerTags}
 	ctx.memo.heads.set(path, entry)
 
 	return entry

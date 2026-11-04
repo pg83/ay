@@ -139,7 +139,7 @@ func (ctx *GenCtx) moduleOutputIncludedDeps(info *GeneratedFileInfo) []IncludeDi
 	for entry := ctx.memo.heads.getSafe(uint32(info.OwnerModule.rel())); entry != nil; entry = entry.next {
 		r := entry.result
 
-		if moduleOutputPath(r) != info.OutputPath {
+		if r == nil || moduleOutputPath(r) != info.OutputPath {
 			continue
 		}
 
