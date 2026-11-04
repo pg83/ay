@@ -25,7 +25,7 @@ func (d *ModuleData) addFiles(files []ANY) {
 
 func (e *EmitContext) genUnion() *ModuleEmitResult {
 	var peers []VFS
-	var globals []ResourceDecl
+	var closures [][]ResourceDecl
 	var peerIncludes, peerProtoIncludes []VFS
 	var peerContexts []ModuleInstance
 
@@ -38,13 +38,13 @@ func (e *EmitContext) genUnion() *ModuleEmitResult {
 		res := e.genPeerModule(peer)
 
 		peers = append(peers, res.JavaClosure...)
-		globals = append(globals, res.ResourceGlobalClosure...)
+		closures = append(closures, res.ResourceGlobalClosure)
 		peerIncludes = append(peerIncludes, res.AddInclGlobal...)
 		peerProtoIncludes = append(peerProtoIncludes, res.ProtoInclude...)
 		e.globalSources = append(e.globalSources, res.GlobalSources...)
 	}
 
-	globals = e.scriptModuleResources(globals, "build/platform/python/ymake_python3")
+	globals := e.scriptModuleResources(closures, "build/platform/python/ymake_python3")
 
 	e.d.scanCtx.ccPeer = e.ctx.na.vfsList(dedup(peerIncludes)...)
 	e.d.scanCtx.protoInclude = e.ctx.na.vfsList(dedup(e.d.scanCtx.protoInclude, peerProtoIncludes)...)

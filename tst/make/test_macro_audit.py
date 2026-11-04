@@ -12,7 +12,7 @@ class MacroAuditTest(MakeTest):
         self.assertIn('=== unhandled service-keyword arguments (not present as a "…" literal in *.go) ===\n  (none)', result.stderr)
 
     def test_empty_report(self):
-        self.write("ya.make", "RESOURCES_LIBRARY()\nEND()\n")
+        self.write("ya.make", "RESOURCES_LIBRARY()\nNO_YMAKE_PYTHON3()\nEND()\n")
         result = self.make("--dump-ignored-macros", dump_graph=False)
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(result.stdout, "")

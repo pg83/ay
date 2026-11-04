@@ -13,7 +13,7 @@ func (e *EmitContext) genDocs() *ModuleEmitResult {
 	module := instance.Path.relString()
 
 	var peers []VFS
-	var globals []ResourceDecl
+	var closures [][]ResourceDecl
 
 	resourcePeers := []string{"build/platform/python/ymake_python3"}
 
@@ -36,7 +36,7 @@ func (e *EmitContext) genDocs() *ModuleEmitResult {
 		res := e.genPeerModule(ModuleInstance{Path: source(peer), Kind: KindLib, Language: language, Platform: instance.Platform})
 
 		peers = append(peers, res.DocsClosure...)
-		globals = append(globals, res.ResourceGlobalClosure...)
+		closures = append(closures, res.ResourceGlobalClosure)
 	}
 
 	if d.moduleStmt.Name == tokDocs {
@@ -47,7 +47,7 @@ func (e *EmitContext) genDocs() *ModuleEmitResult {
 		}
 	}
 
-	globals = e.scriptModuleResources(globals, resourcePeers...)
+	globals := e.scriptModuleResources(closures, resourcePeers...)
 
 	e.emitDeclaredProducers(nil)
 

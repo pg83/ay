@@ -154,7 +154,7 @@ func (e *EmitContext) appendPackagePeer(out []VFS, res *ModuleEmitResult, seen m
 
 func (e *EmitContext) genCiGroup() *ModuleEmitResult {
 	var peers, construction []VFS
-	var globals []ResourceDecl
+	var closures [][]ResourceDecl
 
 	seen := map[*ModuleEmitResult]bool{}
 
@@ -163,10 +163,11 @@ func (e *EmitContext) genCiGroup() *ModuleEmitResult {
 
 		construction = append(construction, built...)
 		peers = e.appendPackagePeer(peers, res, seen, nil)
-		globals = append(globals, res.ResourceGlobalClosure...)
+		closures = append(closures, res.ResourceGlobalClosure)
 	}
 
-	globals = e.scriptModuleResources(globals, "build/platform/python/ymake_python3")
+	globals := e.scriptModuleResources(closures, "build/platform/python/ymake_python3")
+
 	e.emitDeclaredProducers(nil)
 
 	module := e.instance.Path.relString()

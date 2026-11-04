@@ -356,7 +356,7 @@ type ModuleData struct {
 	pendingIndex            int
 	varMacrosApplied        []STR
 	guards                  []STR
-	basePeerdirs            STR
+	startPeers              int
 	tc                      ModuleToolchain
 	scanCtx                 *ScanContext
 	cc                      ModuleCompileEnv
@@ -911,10 +911,6 @@ func collectModuleInto(ctx *GenCtx, instance ModuleInstance, stmts []Stmt, env E
 
 	if d.clangSAEnable && d.clangSAConfig != "" {
 		d.peerdirs = append(d.peerdirs, clangSAPeer.any())
-	}
-
-	if env.string(envUSE_OPENMP) == "yes" {
-		d.peerdirs = append([]ANY{strContribLibsOpenmp.any()}, d.peerdirs...)
 	}
 
 	if d.multimodule == tokMlaunchPipeline && d.unit.Type == tokProgram && env.string(envSdcPlatform) == "" {
@@ -1676,8 +1672,15 @@ func interpretPending(ctx *GenCtx, modulePath string, kind ModuleKind, language 
 		d.addLocalIncl(prioAddIncl, source(dir))
 	}
 
-	snapshotBasePeers(env, d)
+	early := len(d.peerdirs)
+
 	applyVarsAsMacros(ctx, modulePath, kind, language, env, d, onWarn, platform)
+
+	d.startPeers = len(d.peerdirs) - early
+
+	slices.Reverse(d.peerdirs)
+	slices.Reverse(d.peerdirs[:d.startPeers])
+	slices.Reverse(d.peerdirs[d.startPeers:])
 
 	last := d.declSeq
 	declared := len(d.producerDeclarations)
@@ -1706,6 +1709,22 @@ func interpretPending(ctx *GenCtx, modulePath string, kind ModuleKind, language 
 	}
 }
 
+func (ctx *GenCtx) varWords(value STR) []ANY {
+	if words, ok := ctx.varWordCache[value]; ok {
+		return words
+	}
+
+	words := slices.Clip(internAnys(strings.Fields(value.string())))
+
+	if ctx.varWordCache == nil {
+		ctx.varWordCache = map[STR][]ANY{}
+	}
+
+	ctx.varWordCache[value] = words
+
+	return words
+}
+
 func applyVarsAsMacros(ctx *GenCtx, modulePath string, kind ModuleKind, language Language, env Environment, d *ModuleData, onWarn func(Warn), platform *Platform) {
 	for _, key := range [...]ENV{envPeerdir, envSrcdir, envAddincl} {
 		bound, raw := env.s.lookup(key)
@@ -1716,13 +1735,17 @@ func applyVarsAsMacros(ctx *GenCtx, modulePath string, kind ModuleKind, language
 
 		d.varMacrosApplied = append(d.varMacrosApplied, raw)
 
-		words := internAnys(strings.Fields(env.expandVariable(env.string(key))))
+		words := ctx.varWords(internStr(env.expandVariable(env.string(key))))
 
 		var stmt Stmt
 
 		switch key {
 		case envPeerdir:
-			stmt = &PeerdirStmt{Paths: slices.DeleteFunc(words, func(w ANY) bool { return w.string() == modulePath }), Implicit: true}
+			if own := internStr(modulePath).any(); slices.Contains(words, own) {
+				words = slices.DeleteFunc(slices.Clone(words), func(w ANY) bool { return w == own })
+			}
+
+			stmt = &PeerdirStmt{Paths: words, Implicit: true}
 		case envSrcdir:
 			stmt = &SrcDirStmt{Dirs: words}
 		default:
@@ -1730,14 +1753,6 @@ func applyVarsAsMacros(ctx *GenCtx, modulePath string, kind ModuleKind, language
 		}
 
 		collectStmts(ctx, modulePath, kind, language, []Stmt{stmt}, env, d, onWarn, platform)
-	}
-}
-
-func snapshotBasePeers(env Environment, d *ModuleData) {
-	d.basePeerdirs = internStr(env.expandVariable(env.string(envPeerdir)))
-
-	if _, raw := env.s.lookup(envPeerdir); raw != 0 {
-		d.varMacrosApplied = append(d.varMacrosApplied, raw)
 	}
 }
 
@@ -2290,7 +2305,7 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 					d.unitTestPeerExplicit = true
 				}
 
-				if d.nots != nil && d.nots.Kind == tokProtoLibrary {
+				if !v.Implicit && d.nots != nil && d.nots.Kind == tokProtoLibrary {
 					d.nots.ProtoPeers = append(d.nots.ProtoPeers, pTok)
 				}
 			}

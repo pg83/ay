@@ -105,7 +105,7 @@ func (c *SliceCache[T]) commit(block []T) []T {
 	return block[:len(block):len(block)]
 }
 
-func dedupSharedWith[T IdKey](deduper *DeDuper, c *SliceCache[T], lists ...[]T) []T {
+func dedupSharedWith[T DedupKey](deduper *DeDuper, c *SliceCache[T], lists ...[]T) []T {
 	total := 0
 	last := -1
 

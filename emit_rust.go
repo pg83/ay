@@ -23,7 +23,7 @@ func (e *EmitContext) emitRustModule(result *ModuleEmitResult, peers []ResolvedP
 	out := build(instance.Path.relString(), "/", env.string(envMODULE_PREFIX), name, env.string(envMODULE_SUFFIX))
 	outputs := []VFS{out}
 
-	globals = e.scriptModuleResources(globals)
+	globals = e.scriptModuleResources([][]ResourceDecl{globals})
 	result.ResourceGlobalClosure = globals
 	var direct, dependencies, native []VFS
 

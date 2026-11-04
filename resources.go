@@ -34,6 +34,10 @@ type ResourceDecl struct {
 	Token      STR
 }
 
+func (r ResourceDecl) strID() uint32 {
+	return r.GlobalVar.strID()
+}
+
 type ResourceDescriptor struct {
 	Pattern     string               `json:"pattern,omitempty"`
 	Platform    string               `json:"platform,omitempty"`

@@ -103,16 +103,20 @@ func (e *EmitContext) emitLazyModuleNode(node NodeSpec, needs []VFS, ownedOutput
 	return ref
 }
 
-func (e *EmitContext) scriptModuleResources(globals []ResourceDecl, peers ...string) []ResourceDecl {
+func (e *EmitContext) scriptModuleResources(closures [][]ResourceDecl, peers ...string) []ResourceDecl {
 	for _, peer := range peers {
 		if !peerYaMakeExists(e.ctx.fs, source(peer)) {
 			continue
 		}
 
-		res := e.genPeerModule(ModuleInstance{Path: source(peer), Kind: KindLib, Platform: e.instance.Platform})
-
-		globals = append(globals, res.ResourceGlobalClosure...)
+		closures = append(closures, e.genPeerModule(ModuleInstance{Path: source(peer), Kind: KindLib, Platform: e.instance.Platform}).ResourceGlobalClosure)
 	}
+
+	var globals []ResourceDecl
+
+	dedupers.with(func(deduper *DeDuper) {
+		globals = dedupSharedWith(deduper, e.ctx.declSlices, closures...)
+	})
 
 	e.frame.peerCtx = PeerContext{ResourceGlobals: globals}
 	e.peers = &e.frame.peerCtx

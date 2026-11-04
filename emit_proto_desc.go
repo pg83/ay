@@ -63,6 +63,8 @@ func descPeerClosure(e *EmitContext, peerdirs []ANY, injectBuiltins, commonGoogl
 	seen := make(map[VFS]struct{})
 	includesSeen := make(map[VFS]struct{})
 
+	var closures [][]ResourceDecl
+
 	add := func(peers []DescProtoPeer) {
 		for _, p := range peers {
 			if _, dup := seen[p.SelfProtodesc]; dup {
@@ -94,7 +96,7 @@ func descPeerClosure(e *EmitContext, peerdirs []ANY, injectBuiltins, commonGoogl
 
 		res := e.genPeerModule(peerInstance)
 
-		span.globals = append(span.globals, res.ResourceGlobalClosure...)
+		closures = append(closures, res.ResourceGlobalClosure)
 
 		add(res.DescClosure)
 
@@ -123,6 +125,10 @@ func descPeerClosure(e *EmitContext, peerdirs []ANY, injectBuiltins, commonGoogl
 
 		enter(p.string())
 	}
+
+	dedupers.with(func(deduper *DeDuper) {
+		span.globals = dedupSharedWith(deduper, ctx.declSlices, closures...)
+	})
 
 	return span
 }

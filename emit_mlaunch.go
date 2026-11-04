@@ -64,7 +64,7 @@ func (e *EmitContext) emitGolaunchSource(kv *KV, script VFS, args []ANY, out VFS
 func (e *EmitContext) genPackageFinal() *ModuleEmitResult {
 	var peers []VFS
 	var directPeers, construction, globalOuts []VFS
-	var globals []ResourceDecl
+	var closures [][]ResourceDecl
 
 	seen := map[*ModuleEmitResult]bool{}
 	selves := e.confSelfPeerInstances()
@@ -88,7 +88,7 @@ func (e *EmitContext) genPackageFinal() *ModuleEmitResult {
 		}
 
 		peers = e.appendPackagePeer(peers, result, seen, &globalOuts)
-		globals = append(globals, result.ResourceGlobalClosure...)
+		closures = append(closures, result.ResourceGlobalClosure)
 	}
 
 	for _, dir := range e.d.peerdirs {
@@ -112,10 +112,11 @@ func (e *EmitContext) genPackageFinal() *ModuleEmitResult {
 
 		peers = e.appendPackagePeer(peers, result, seen, &globalOuts)
 		e.globalSources = append(e.globalSources, result.GlobalSources...)
-		globals = append(globals, result.ResourceGlobalClosure...)
+		closures = append(closures, result.ResourceGlobalClosure)
 	}
 
-	globals = e.scriptModuleResources(globals, "build/platform/python/ymake_python3")
+	globals := e.scriptModuleResources(closures, "build/platform/python/ymake_python3")
+
 	e.emitDeclaredProducers(nil)
 
 	module := e.instance.Path.relString()

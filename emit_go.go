@@ -274,9 +274,9 @@ func applyGoImplicitPeerdirs(ctx *GenCtx, instance ModuleInstance, d *ModuleData
 	}
 
 	if isGoExeModuleType(d.moduleStmt.Name) {
-		user := slices.Clone(d.peerdirs)
+		user := slices.Clone(d.peerdirs[d.startPeers:])
 
-		d.peerdirs = d.peerdirs[:0]
+		d.peerdirs = d.peerdirs[:d.startPeers]
 
 		addPeer(std.Prefix + "/runtime/cgo")
 

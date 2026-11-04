@@ -162,6 +162,7 @@ func protoResultWholeArchiveCmdPaths(res *ProtoSrcsResult) []VFS {
 
 type GenCtx struct {
 	peerTagSets         map[STR][]STR
+	varWordCache        map[STR][]ANY
 	scanData            ModuleData
 	dirs                map[dirEvaluationKey]*DirEvaluation
 	dependencyInstances map[string][]ModuleInstance
@@ -1630,19 +1631,7 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 		return result
 	}
 
-	languageDefaults := e.confPeerdirs()
 	unitTestPeer := unittestForPeerPath(d.moduleStmt)
-
-	instance.Path.rel()
-
-	if unitTestPeer != "" {
-		internStr(unitTestPeer)
-	}
-
-	for _, p := range languageDefaults {
-		internStr(p)
-	}
-
 	allPeers := frame.allPeers[:0]
 	peerKinds := frame.peerKinds[:0]
 
@@ -1674,13 +1663,6 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 			peerKinds = append(peerKinds, peerKindUserPeer)
 		}
 
-		for _, p := range languageDefaults {
-			peerSeen(p)
-
-			allPeers = append(allPeers, p)
-			peerKinds = append(peerKinds, peerKindImplicit)
-		}
-
 		appendUserPeer := func(p ANY) {
 			if !deduper.add(p.strID()) {
 				return
@@ -1697,13 +1679,17 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 			peerKinds = append(peerKinds, kind)
 		}
 
-		for _, p := range d.peerdirs {
+		for _, p := range d.peerdirs[:d.startPeers] {
+			appendUserPeer(p)
+		}
+
+		for _, p := range d.peerdirs[d.startPeers:] {
 			if _, isFront := frontSet[p]; isFront {
 				appendUserPeer(p)
 			}
 		}
 
-		for _, p := range d.peerdirs {
+		for _, p := range d.peerdirs[d.startPeers:] {
 			if _, isFront := frontSet[p]; !isFront {
 				appendUserPeer(p)
 			}
@@ -1932,7 +1918,7 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 		d.tc = resolveModuleToolchain(ctx, resourceGlobalsClosure, instance.Platform)
 
 		if d.yqlPrebuiltResource != "" && d.tc.Python3 == 0 {
-			resourceGlobalsClosure = e.scriptModuleResources(resourceGlobalsClosure, "build/platform/python/ymake_python3")
+			resourceGlobalsClosure = e.scriptModuleResources([][]ResourceDecl{resourceGlobalsClosure}, "build/platform/python/ymake_python3")
 		}
 
 		e.bindCompilerFlagResources(resourceGlobalsClosure)

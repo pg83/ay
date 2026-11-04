@@ -35,6 +35,11 @@ type IdKey interface {
 	strID() uint32
 }
 
+type DedupKey interface {
+	comparable
+	strID() uint32
+}
+
 type DeDuper struct {
 	gen   Vec[uint16]
 	epoch uint16

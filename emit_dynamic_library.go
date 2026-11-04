@@ -123,9 +123,9 @@ func (e *EmitContext) emitDynamicLibrary() *ModuleEmitResult {
 
 	peerPaths := make([]string, 0, 5+len(d.dynamicLibraryFrom))
 
-	for _, p := range e.confPeerdirs() {
-		if peerYaMakeExists(ctx.fs, source(p)) {
-			peerPaths = append(peerPaths, p)
+	for _, p := range d.peerdirs[:d.startPeers] {
+		if peerYaMakeExists(ctx.fs, source(p.string())) {
+			peerPaths = append(peerPaths, p.string())
 		}
 	}
 

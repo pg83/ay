@@ -1,14 +1,14 @@
 package main
 
 func (e *EmitContext) genGeneratedLibrary() *ModuleEmitResult {
-	var globals []ResourceDecl
+	var closures [][]ResourceDecl
 	var peerRefs []NodeRef
 	var peerPaths []VFS
 
 	for _, peer := range e.d.peerdirs {
 		res := e.genPeerModule(ModuleInstance{Path: source(peer.string()), Kind: KindLib, Language: LangCPP, Platform: e.instance.Platform})
 
-		globals = append(globals, res.ResourceGlobalClosure...)
+		closures = append(closures, res.ResourceGlobalClosure)
 		peerPaths = append(peerPaths, res.PeerArchiveClosurePaths...)
 		peerRefs = append(peerRefs, res.PeerArchiveClosureRefs...)
 
@@ -33,7 +33,8 @@ func (e *EmitContext) genGeneratedLibrary() *ModuleEmitResult {
 		peerRefs = peerRefs[:n]
 	})
 
-	globals = e.scriptModuleResources(globals, "build/platform/python/ymake_python3")
+	globals := e.scriptModuleResources(closures, "build/platform/python/ymake_python3")
+
 	e.emitDeclaredProducers(nil)
 
 	module := e.instance.Path.relString()
