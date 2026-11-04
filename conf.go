@@ -93,6 +93,7 @@ type ConfFile struct {
 	inits    map[STR]*ConfMacro
 	selfPeer map[string][]string
 	aliases  map[string]map[STR]STR
+	limits   map[string]*confMacroLimits
 
 	callNames  []string
 	callsGuard string
@@ -241,6 +242,25 @@ func (s *ConfState) readFile(rel, text string) *ConfFile {
 				}
 
 				conf.aliases[top.guard] = aliases
+
+				continue
+			}
+
+			if name, list, ok := confLimitProperty(line); ok && top.block == "module" && !top.skipped {
+				if conf.limits == nil {
+					conf.limits = map[string]*confMacroLimits{}
+				}
+
+				limits := conf.limits[top.guard]
+
+				if limits == nil {
+					limits = &confMacroLimits{}
+					conf.limits[top.guard] = limits
+				}
+
+				for macro := range strings.FieldsSeq(list) {
+					limits.set(name).add(internStr(macro))
+				}
 
 				continue
 			}
@@ -901,6 +921,9 @@ type confModule struct {
 	calls     []string
 	body      []ConfMacroCall
 	aliases   map[STR]STR
+	own       *confMacroLimits
+	limits    *confMacroLimits
+	renames   map[STR]STR
 	order     int
 	steps     []confInitStep
 	outputs   []ENV
@@ -1093,6 +1116,7 @@ func (t *confTables) build() {
 	body := map[string][]ConfMacroCall{}
 	selfPeers := map[string][]string{}
 	aliases := map[string]map[STR]STR{}
+	limits := map[string]*confMacroLimits{}
 
 	var owners []*ConfFile
 
@@ -1134,6 +1158,10 @@ func (t *confTables) build() {
 
 			for guard, pairs := range r.file.aliases {
 				aliases[guard] = pairs
+			}
+
+			for guard, own := range r.file.limits {
+				limits[guard] = own
 			}
 
 			if len(r.file.variants) != 0 {
@@ -1257,12 +1285,150 @@ func (t *confTables) build() {
 			module.calls = calls[module.variable.string()]
 			module.body = body[module.variable.string()]
 			module.aliases = aliases[module.variable.string()]
+			module.own = limits[module.variable.string()]
+		}
+	}
+
+	for _, module := range t.modules.vals.s {
+		if module != nil {
+			t.inheritLimits(module)
+		}
+	}
+
+	for _, file := range owners {
+		for _, variants := range file.variants {
+			t.uniteLimits(variants)
 		}
 	}
 
 	for _, file := range owners {
 		for owner, variants := range file.variants {
 			t.orderVariants(owner, variants, selfPeers)
+		}
+	}
+}
+
+type confMacroLimits struct {
+	restricted, ignored, allowed confNameSet
+}
+
+type confNameSet []STR
+
+func (s confNameSet) has(name STR) bool {
+	return slices.Contains(s, name)
+}
+
+func (s *confNameSet) add(name STR) {
+	if !s.has(name) {
+		*s = append(*s, name)
+	}
+}
+
+func confLimitProperty(line string) (string, string, bool) {
+	for _, name := range [...]string{".RESTRICTED=", ".IGNORED=", ".ALLOWED="} {
+		if list, ok := strings.CutPrefix(line, name); ok {
+			return name, list, true
+		}
+	}
+
+	return "", "", false
+}
+
+func (l *confMacroLimits) set(property string) *confNameSet {
+	switch property {
+	case ".RESTRICTED=":
+		return &l.restricted
+	case ".IGNORED=":
+		return &l.ignored
+	}
+
+	return &l.allowed
+}
+
+func (t *confTables) inheritLimits(module *confModule) *confMacroLimits {
+	if module.limits != nil {
+		return module.limits
+	}
+
+	limits := &confMacroLimits{}
+
+	module.renames = map[STR]STR{}
+
+	for from, to := range module.aliases {
+		module.renames[from] = to
+	}
+
+	if module.own != nil {
+		*limits = confMacroLimits{restricted: slices.Clone(module.own.restricted), ignored: slices.Clone(module.own.ignored), allowed: slices.Clone(module.own.allowed)}
+	}
+
+	module.limits = limits
+
+	if parent := t.module(module.parent, ""); parent != nil && parent != module {
+		inherited := t.inheritLimits(parent)
+
+		for from, to := range parent.renames {
+			if _, ok := module.renames[from]; !ok {
+				module.renames[from] = to
+			}
+		}
+
+		for _, name := range inherited.allowed {
+			if !limits.restricted.has(name) {
+				limits.allowed.add(name)
+			}
+		}
+
+		for _, name := range inherited.restricted {
+			if !limits.allowed.has(name) {
+				limits.restricted.add(name)
+			}
+		}
+
+		for _, name := range inherited.ignored {
+			if !limits.allowed.has(name) {
+				limits.ignored.add(name)
+			}
+		}
+	}
+
+	return limits
+}
+
+func (t *confTables) uniteLimits(variants []string) {
+	var all confNameSet
+
+	for i, variant := range variants {
+		module, _ := t.modules.get(internStr(variant))
+
+		if module == nil {
+			return
+		}
+
+		restricted := t.inheritLimits(module).restricted
+
+		if i == 0 {
+			all = slices.Clone(restricted)
+
+			continue
+		}
+
+		if len(restricted) == 0 {
+			all = nil
+
+			break
+		}
+
+		all = slices.DeleteFunc(all, func(name STR) bool { return !restricted.has(name) })
+	}
+
+	for _, variant := range variants {
+		module, _ := t.modules.get(internStr(variant))
+
+		for _, name := range module.limits.restricted {
+			if !all.has(name) {
+				module.limits.ignored.add(name)
+			}
 		}
 	}
 }
