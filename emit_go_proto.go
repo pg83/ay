@@ -16,11 +16,6 @@ var goProtoHead = []ANY{
 
 var goProtobufInclude = []VFS{contribLibsProtobufSrc}
 
-var goCommonGoogleApis = []string{
-	"api/annotations", "api/configchange", "api/distribution", "api/expr/v1alpha1", "api/expr/v1beta1",
-	"api/httpbody", "api/label", "api/metric", "api/monitoredres", "api/serviceconfig",
-}
-
 func goProtobufImports(std *GoStd) []string {
 	return []string{
 		std.Prefix + "/sync",
@@ -209,44 +204,4 @@ type GoProtoOpt struct {
 	ext    string
 	tool   string
 	opts   []string
-}
-
-func applyGoCommonGoogleApis(args []ANY, d *ModuleData) {
-	const genproto = "vendor/google.golang.org/genproto/googleapis/"
-
-	var peers []ANY
-
-	if len(args) == 0 {
-		for _, api := range goCommonGoogleApis {
-			peers = append(peers, internStr(genproto+api).any())
-		}
-
-		for _, p := range []string{
-			"vendor/cloud.google.com/go/servicecontrol/apiv1/servicecontrolpb",
-			"vendor/cloud.google.com/go/servicemanagement/apiv1/servicemanagementpb",
-			"vendor/cloud.google.com/go/longrunning/autogen/longrunningpb",
-		} {
-			peers = append(peers, internStr(p).any())
-		}
-
-		for _, api := range []string{
-			"iam/admin/v1", "iam/credentials/v1", "iam/v1", "iam/v1/logging", "logging/type", "logging/v2",
-			"rpc/code", "rpc/errdetails", "rpc/status", "type/calendarperiod", "type/color", "type/date",
-			"type/date_range", "type/datetime", "type/date_time_range", "type/dayofweek", "type/decimal",
-			"type/expr", "type/fraction", "type/interval", "type/latlng", "type/localized_text", "type/money",
-			"type/month", "type/phone_number", "type/postaladdress", "type/quaternion", "type/timeofday",
-		} {
-			peers = append(peers, internStr(genproto+api).any())
-		}
-	} else {
-		for _, a := range args {
-			peers = append(peers, internStr(genproto+a.string()).any())
-		}
-	}
-
-	d.goCommonGoogleApis = peers
-
-	if !slices.Contains(d.protoAddInclGlobal, contribLibsGoogleapisCommonProtos) {
-		d.protoAddInclGlobal = slices.Insert(d.protoAddInclGlobal, 0, contribLibsGoogleapisCommonProtos)
-	}
 }

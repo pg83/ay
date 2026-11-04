@@ -43,16 +43,6 @@ func applyCppTestModule(stmt *ModuleStmt, d *ModuleData, env Environment) {
 			"YQL_MINIRUN_PATH=yql/essentials/tools/minirun/minirun",
 			"YQL_UDFRESOLVER_PATH=yql/essentials/tools/udf_resolver/udf_resolver",
 		)
-	case tokFuzz:
-		if afl, _ := env.lookup("USE_AFL"); afl == "yes" {
-			peers = []string{"contrib/libs/afl"}
-		} else {
-			peers = []string{"contrib/libs/libfuzzer"}
-		}
-
-		if sanitizer, _ := env.lookup("SANITIZER_TYPE"); sanitizer == "" || sanitizer == "no" {
-			peers = append(peers, "library/cpp/testing/nofuzz")
-		}
 	}
 
 	d.peerdirs = append(d.peerdirs, internAnys(peers)...)

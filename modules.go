@@ -169,7 +169,6 @@ type ModuleData struct {
 	goCodegens              []GoCodegenStmt
 	userverProtos           []UserverProtoBatch
 	goEmbeds                []GoEmbed
-	goCommonGoogleApis      []ANY
 	goPluginPeers           []ANY
 	goProtoOpts             []GoProtoOpt
 	cgoSrcs                 []ANY
@@ -260,7 +259,6 @@ type ModuleData struct {
 	useArcadiaLibm          bool
 	useDynamicCuda          bool
 	splitDwarf              bool
-	noPythonIncl            bool
 	pythonModule2           bool
 	pythonModule3           bool
 	python2Headers          bool
@@ -273,8 +271,6 @@ type ModuleData struct {
 	resourcePeerExplicit    bool
 	resourcePeerClosed      bool
 	resourcePassPeers       bool
-	noImportTracing         bool
-	sandboxTaskDeprecation  bool
 	usePython2              bool
 	usePython3              bool
 	pythonSourceCallback    bool
@@ -801,6 +797,7 @@ func collectModuleInto(ctx *GenCtx, instance ModuleInstance, stmts []Stmt, env E
 		(isPythonProtoModule(d) || d.unit.Type == tokPy2Library || d.unit.Type == tokPy3Library || d.unit.Type == tokPy23Library)
 	d.flags.NoCompilerWarnings = env.bool(envNoCompilerWarnings)
 	d.noLint = env.string(envNoLintValue)
+	d.useCommonGoogleAPIs = env.string(envCommonGoogleApis) != "None"
 
 	if env.string(envYqlAbiPeerdirTag) == "YQL_ABI_CURRENT" {
 		d.yqlCurrent = true
@@ -836,7 +833,6 @@ func collectModuleInto(ctx *GenCtx, instance ModuleInstance, stmts []Stmt, env E
 
 	d.srcs = nativeSources
 	finishPythonImportMask(env, d)
-	d.sandboxTaskDeprecation = d.multimodule == tokSandboxTask && env.string(envFAIL_PY2) != "yes" && env.string(envOPENSOURCE) != "yes"
 
 	bindRunProgramCalls(d.runPrograms, env, &d.sourceEnv)
 
@@ -974,9 +970,6 @@ func collectModuleInto(ctx *GenCtx, instance ModuleInstance, stmts []Stmt, env E
 	if plugin := env.string(envArPlugin); plugin != "" {
 		d.arPlugin = ptr(internStr(plugin).any())
 	}
-
-	d.noPythonIncl = env.bool(envNoPythonIncls)
-	d.noImportTracing = !env.bool(envPythonImportTracing)
 
 	if env.bool(envPY3_PROTO) && instance.Language == LangPy {
 		d.usePython3 = true
@@ -3620,18 +3613,6 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 		collectProtoToNamespace(fs, modulePath, v, d, env, onWarn)
 	case tokRegisterYqlPythonUdf:
 		registerYqlPythonUdf(fs, modulePath, v, d, env, onWarn)
-	case tokUseCommonGoogleApis:
-
-		d.useCommonGoogleAPIs = true
-
-		if env.bool(envGO_PROTO) {
-			applyGoCommonGoogleApis(v.Args, d)
-
-			break
-		}
-
-		const googleapisPeer = "contrib/libs/googleapis-common-protos"
-		d.peerdirs = append([]ANY{internStr(googleapisPeer).any()}, d.peerdirs...)
 	case tokClangWarnings:
 		d.clangWarnings = append(d.clangWarnings, expandStmtTokens(v.Args, env)...)
 	case tokFbsNamespace:
@@ -5348,16 +5329,6 @@ func yqlUdfImplicitPeers() []string {
 func isPyLibraryType(name TOK) bool {
 	switch name {
 	case tokPy23NativeLibrary, tokPy3Library, tokPy23Library, tokPy2Library,
-		tokPy2Program, tokPy3Program, tokPy2Test, tokPytestBin, tokPy3Test:
-		return true
-	}
-
-	return false
-}
-
-func pyLibraryAutoPythonPeer(name TOK) bool {
-	switch name {
-	case tokPy3Library, tokPy23Library, tokPy2Library, tokPy3ProgramBin,
 		tokPy2Program, tokPy3Program, tokPy2Test, tokPytestBin, tokPy3Test:
 		return true
 	}

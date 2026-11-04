@@ -185,7 +185,6 @@ var handledMacroTokens = map[TOK]bool{
 	tokTaskletRegExt:                        true,
 	tokTestSrcs:                             true,
 	tokToolchain:                            true,
-	tokUseCommonGoogleApis:                  true,
 	tokUseCxx:                               true,
 	tokUsePython2:                           true,
 	tokUsePython3:                           true,

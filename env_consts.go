@@ -80,6 +80,7 @@ var (
 	envClangTidyBin                           = internEnv("CLANG_TIDY_BIN")
 	envCmakeCurrentBinaryDir                  = internEnv("CMAKE_CURRENT_BINARY_DIR")
 	envComma                                  = internEnv("__COMMA__")
+	envCommonGoogleApis                       = internEnv("_COMMON_GOOGLE_APIS")
 	envCommonLinkSettings                     = internEnv("COMMON_LINK_SETTINGS")
 	envCppAnalysisMode                        = internEnv("CPP_ANALYSIS_MODE")
 	envCppFbs                                 = internEnv("CPP_FBS")

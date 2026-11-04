@@ -1108,18 +1108,6 @@ func applyImplicitPeerdirs(ctx *GenCtx, instance ModuleInstance, d *ModuleData) 
 
 	d.peerdirs = append(d.peerdirs, d.nativeSwigPeerdirs()...)
 
-	pythonProtoVariant := isPythonProtoModule(d)
-
-	if pyLibraryAutoPythonPeer(d.moduleStmt.Name) && !d.noPythonIncl && instance.Path.relString() != "contrib/libs/python" {
-		d.peerdirs = prependAny(d.peerdirs, strContribLibsPython.any())
-	} else if pythonProtoVariant && !d.noPythonIncl && instance.Path.relString() != "contrib/libs/python" {
-		if moduleExcludesTag(d, protoModuleTag(LangCPP, d.moduleStmt.Schema)) {
-			d.peerdirs = prependAny(d.peerdirs, strContribLibsPython.any())
-		} else {
-			d.peerdirs = append(d.peerdirs, strContribLibsPython.any())
-		}
-	}
-
 	if isPyProgramType(d.moduleStmt.Name) {
 		var latePeers []string
 
@@ -1689,10 +1677,7 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 	languageDefaults := e.confPeerdirs()
 	unitTestPeer := unittestForPeerPath(d.moduleStmt)
 
-	const googleapisPeer = "contrib/libs/googleapis-common-protos"
-
 	instance.Path.rel()
-	internStr(googleapisPeer)
 
 	if unitTestPeer != "" {
 		internStr(unitTestPeer)
@@ -1711,7 +1696,7 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 	}()
 
 	var preResolved []ResolvedPeer
-	var resolveCppSelf, resolveGoogleapis bool
+	var resolveCppSelf bool
 
 	frontSet := make(map[ANY]struct{}, len(d.protoCmdPeers))
 
@@ -1728,10 +1713,6 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 			peerSeen(instance.Path.relString())
 
 			resolveCppSelf = true
-		}
-
-		if d.moduleStmt.Name == tokProtoLibrary && d.useCommonGoogleAPIs && (instance.Language == LangCPP || isPythonProtoModule(d)) {
-			resolveGoogleapis = !peerSeen(googleapisPeer)
 		}
 
 		if self := internStr(instance.Path.relString()).any(); slices.Contains(d.peerdirs, self) && !peerSeen(self.string()) {
@@ -1789,10 +1770,6 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 
 		cppSelf.Language = LangCPP
 		preResolved = append(preResolved, ResolvedPeer{path: instance.Path.relString(), result: e.genPeerModule(cppSelf), kind: peerKindImplicit})
-	}
-
-	if resolveGoogleapis {
-		preResolved = append(preResolved, ResolvedPeer{path: googleapisPeer, result: e.genPeerModule(e.derivePeerInstance(googleapisPeer)), kind: peerKindImplicit})
 	}
 
 	peerObjAddLibsGlobal := frame.peerObjAddLibsGlobal[:0]
