@@ -1,9 +1,5 @@
 package main
 
-import (
-	"slices"
-)
-
 var (
 	ldLinkDynLibPath = ldLinkDynLibVFS.string()
 	dynamicLibraryKV = KV{P: pkLD, PC: pcLightBlue, ShowOut: true}
@@ -332,7 +328,6 @@ func (e *EmitContext) emitDynamicLibrary() *ModuleEmitResult {
 		LDRef:                        ref,
 		LDPath:                       ptr(build(instance.Path.relString(), "/", outputName)),
 		AddInclGlobal:                addInclGlobal,
-		OwnAddInclGlobal:             slices.Clone(d.addInclGlobal),
 		CFlagsGlobal:                 cFlagsGlobal,
 		CXXFlagsGlobal:               cxxFlagsGlobal,
 		COnlyFlagsGlobal:             cOnlyFlagsGlobal,

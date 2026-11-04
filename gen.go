@@ -76,7 +76,7 @@ const (
 	variantDemandShift   = 5
 	variantDemandMask    = uint16(0x7) << variantDemandShift
 	variantPIC           = uint16(1) << 14
-	peerKindLangDefault  = 0
+	peerKindImplicit     = 0
 	peerKindUserPeer     = 2
 	peerKindUnitTestPeer = 3
 	KindForeignDescent   = KindJavaTestable + 1
@@ -111,7 +111,6 @@ type ModuleEmitResult struct {
 	WholeArchivePaths               []VFS
 	WholeArchiveCmdPaths            []VFS
 	AddInclGlobal                   []VFS
-	OwnAddInclGlobal                []VFS
 	ProtoInclude                    []VFS
 	RosInclude                      []VFS
 	FbsNamespaces                   []FbsNamespaceVar
@@ -1808,7 +1807,7 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 			peerSeen(p)
 
 			allPeers = append(allPeers, p)
-			peerKinds = append(peerKinds, peerKindLangDefault)
+			peerKinds = append(peerKinds, peerKindImplicit)
 		}
 
 		appendUserPeer := func(p ANY) {
@@ -1846,18 +1845,18 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 		self := instance
 
 		self.Language = language
-		preResolved = append(preResolved, ResolvedPeer{path: instance.Path.relString(), result: e.genPeerModule(self), kind: peerKindLangDefault})
+		preResolved = append(preResolved, ResolvedPeer{path: instance.Path.relString(), result: e.genPeerModule(self), kind: peerKindImplicit})
 	}
 
 	if resolveCppSelf {
 		cppSelf := instance
 
 		cppSelf.Language = LangCPP
-		preResolved = append(preResolved, ResolvedPeer{path: instance.Path.relString(), result: e.genPeerModule(cppSelf), kind: peerKindLangDefault})
+		preResolved = append(preResolved, ResolvedPeer{path: instance.Path.relString(), result: e.genPeerModule(cppSelf), kind: peerKindImplicit})
 	}
 
 	if resolveGoogleapis {
-		preResolved = append(preResolved, ResolvedPeer{path: googleapisPeer, result: e.genPeerModule(e.derivePeerInstance(googleapisPeer)), kind: peerKindLangDefault})
+		preResolved = append(preResolved, ResolvedPeer{path: googleapisPeer, result: e.genPeerModule(e.derivePeerInstance(googleapisPeer)), kind: peerKindImplicit})
 	}
 
 	peerObjAddLibsGlobal := frame.peerObjAddLibsGlobal[:0]
@@ -2275,25 +2274,13 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 
 		for _, rp := range resolved {
 			switch rp.kind {
-			case peerKindLangDefault:
-				for _, p := range rp.result.OwnAddInclGlobal {
-					if deduper.addStable(p.strID()) {
-						peerAddInclGlobal = append(peerAddInclGlobal, p)
-					}
-				}
-
-				for _, p := range rp.result.AddInclGlobal {
-					if deduper.addStable(p.strID()) {
-						peerAddInclGlobal = append(peerAddInclGlobal, p)
-					}
-				}
 			case peerKindUnitTestPeer:
 				for _, p := range rp.result.AddInclGlobal {
 					if deduper.addStable(p.strID()) {
 						peerAddInclGlobal = append(peerAddInclGlobal, p)
 					}
 				}
-			case peerKindUserPeer:
+			case peerKindUserPeer, peerKindImplicit:
 				peerAddInclGlobal, oneLevelOnlyPaths = appendUserPeerAddIncl(deduper, peerAddInclGlobal, oneLevelOnlyPaths, rp.result)
 			}
 		}
@@ -2464,7 +2451,6 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 			FbsNamespaces:                   effectiveFbsNamespaces,
 			isPyLibrary:                     isPyLibraryType(d.moduleStmt.Name),
 			AddInclGlobal:                   effectiveAddInclGlobal,
-			OwnAddInclGlobal:                d.addInclGlobal,
 			ProtoInclude:                    effectiveProtoInclude,
 			RosInclude:                      rosGlobalInclude,
 			SwigInclude:                     effectiveSwigInclude,

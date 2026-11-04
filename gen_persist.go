@@ -25,7 +25,6 @@ func persistResult(ctx *GenCtx, instance ModuleInstance, r *ModuleEmitResult) {
 	r.WholeArchivePaths = ctx.vfsSlices.internCopy(r.WholeArchivePaths)
 	r.WholeArchiveCmdPaths = ctx.vfsSlices.internCopy(r.WholeArchiveCmdPaths)
 	r.AddInclGlobal = ctx.vfsSlices.internCopy(r.AddInclGlobal)
-	r.OwnAddInclGlobal = ctx.vfsSlices.internCopy(r.OwnAddInclGlobal)
 	r.ProtoInclude = ctx.vfsSlices.internCopy(r.ProtoInclude)
 	r.AddInclOneLevel = ctx.vfsSlices.internCopy(r.AddInclOneLevel)
 	r.AddInclUserGlobal = ctx.vfsSlices.internCopy(r.AddInclUserGlobal)
