@@ -1576,17 +1576,35 @@ func (d *ModuleData) moduleBodyDirs(ctx *GenCtx, modulePath string, kind ModuleK
 			text = internStr(env.subst(text.string(), nil, nil))
 		}
 
-		args := platform.conf.state.macroArgs(text)
+		d.bodyDirCall(ctx, modulePath, kind, language, call.name, call.macro, platform.conf.state.macroArgs(text), env, onWarn, platform)
+	}
+}
 
-		var scratch [1]Stmt
+func (d *ModuleData) bodyDirCall(ctx *GenCtx, modulePath string, kind ModuleKind, language Language, name STR, macro *ConfMacro, args []ANY, env Environment, onWarn func(Warn), platform *Platform) {
+	if macro != nil {
+		platform.conf.macroCalls(macro, UnknownStmt{Name: internTokMaybeSTR(name), Raw: name, Args: args}, env, d, onWarn, modulePath, func(callee STR, args []ANY) {
+			if callee == strGhostPeerdir || d.confModule.limits.ignored.has(callee) {
+				return
+			}
 
-		stmts := appendMacroCallStmts(scratch[:0], call.name, args, args, 0, func(format string, a ...any) {
-			throwFmt("%s: %s: "+format, append([]any{modulePath, call.name.string()}, a...)...)
+			if dirStatement(callee) {
+				d.bodyDirCall(ctx, modulePath, kind, language, callee, nil, args, env, onWarn, platform)
+			} else if nested := platform.conf.alias(callee); nested != nil && nested.dirs {
+				d.bodyDirCall(ctx, modulePath, kind, language, callee, nested, args, env, onWarn, platform)
+			}
 		})
 
-		markImplicitPeers(stmts)
-		collectStmts(ctx, modulePath, kind, language, stmts, env, d, onWarn, platform)
+		return
 	}
+
+	var scratch [1]Stmt
+
+	stmts := appendMacroCallStmts(scratch[:0], name, args, args, 0, func(format string, a ...any) {
+		throwFmt("%s: %s: "+format, append([]any{modulePath, name.string()}, a...)...)
+	})
+
+	markImplicitPeers(stmts)
+	collectStmts(ctx, modulePath, kind, language, stmts, env, d, onWarn, platform)
 }
 
 func (d *ModuleData) callConfMacro(ctx *GenCtx, modulePath string, kind ModuleKind, language Language, call UnknownStmt, env Environment, onWarn func(Warn), platform *Platform) {
@@ -1993,10 +2011,6 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 			}
 
 			applyCppTestModule(v, d, env)
-
-			if isYqlUdfStaticModule(v.Name) && (v.Name != tokYqlUdfContrib || kind == KindLib) {
-				d.peerdirs = append(d.peerdirs, internAnys(yqlUdfImplicitPeers())...)
-			}
 
 			if isNotsModule(v.Name) || v.Name == tokProtoLibrary && (language == LangTS || language == LangTSPrepare) {
 				d.nots = newNotsModule(v.Name, language, env)

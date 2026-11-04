@@ -1338,8 +1338,17 @@ func (t *confTables) bodyDirs(module *confModule) []ConfMacroCall {
 
 	for i := len(chain) - 1; i >= 0; i-- {
 		for _, call := range chain[i].body {
-			if call.name == tokPyProgramPlugin.str() || dirStatement(call.name) && call.name != strGhostPeerdir && module.verdicts[call.name]&confMacroIgnored == 0 {
+			switch {
+			case call.name == tokPyProgramPlugin.str():
 				dirs = append(dirs, call)
+			case call.name == strGhostPeerdir || module.limits.ignored.has(call.name):
+			case dirStatement(call.name):
+				dirs = append(dirs, call)
+			default:
+				if macro := t.macros[call.name]; macro != nil && macro.dirs {
+					call.macro = macro
+					dirs = append(dirs, call)
+				}
 			}
 		}
 	}

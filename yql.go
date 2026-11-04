@@ -245,10 +245,6 @@ func finishYqlUdfModule(modulePath string, d *ModuleData, env Environment) {
 	d.yqlUdfProbe = !(env.bool(envSANITIZER_TYPE) || env.string(envUSE_ARCADIA_PYTHON) == "no" || env.string(envUdfNoProbe) == "yes" ||
 		env.string(envMUSL) == "yes" || env.string(envCppAnalysisMode) == "yes")
 
-	if d.yqlPythonUdf {
-		d.peerdirs = append(internAnys(yqlUdfImplicitPeers()), d.peerdirs...)
-	}
-
 	if d.exportsScript == nil && !env.bool(envOS_WINDOWS) {
 		id := envYqlUdfExport
 
