@@ -2704,7 +2704,8 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 				continue
 			}
 
-			if assignment := declarativeMacroAssignment(v, d.multimodule == tokPackage, env); assignment != nil {
+			if v.Name != tokPack && v.Name != tokSetCudaNodeRAMRequirement {
+			} else if assignment := declarativeMacroAssignment(v, d.multimodule == tokPackage, env); assignment != nil {
 				recordHandledMacro(v.Name, expandStmtTokens(v.Args, env))
 				collectStmts(ctx, modulePath, kind, language, []Stmt{assignment}, env, d, onWarn, platform)
 
