@@ -1051,22 +1051,12 @@ func (ctx *GenCtx) autoincludeStmts(dir string) []Stmt {
 
 func applyImplicitPeerdirs(ctx *GenCtx, instance ModuleInstance, d *ModuleData) {
 	needProto := isPythonProtoModule(d)
-	hasGztproto := false
 	hasProto := false
 
 	for _, meta := range d.srcs {
-		src := meta.Source.relOrSelf().string()
-
-		if !hasGztproto && extIsGztproto(src) {
-			d.peerdirs = append(d.peerdirs, strKernelGazetteerProto.any())
-			hasGztproto = true
-		}
-
-		if needProto && !hasProto && extIsProto(src) {
+		if needProto && extIsProto(meta.Source.relOrSelf().string()) {
 			hasProto = true
-		}
 
-		if hasGztproto && (!needProto || hasProto) {
 			break
 		}
 	}
@@ -1122,18 +1112,6 @@ func applyImplicitPeerdirs(ctx *GenCtx, instance ModuleInstance, d *ModuleData) 
 				d.peerdirs = append(d.peerdirs, internStr(peer).any())
 			}
 		}
-	}
-
-	if d.hasFbs && !isGoModuleType(d.moduleStmt.Name) && instance.Path.relString() != "contrib/libs/flatbuffers" {
-		d.peerdirs = append(d.peerdirs, strContribLibsFlatbuffers.any())
-	}
-
-	if d.hasFbs64 && instance.Path.relString() != "contrib/libs/flatbuffers64" {
-		d.peerdirs = append(d.peerdirs, strContribLibsFlatbuffers64.any())
-	}
-
-	if d.hasBisonY && instance.Path.relString() != strBuildInducedByBison.string() {
-		d.peerdirs = append(d.peerdirs, strBuildInducedByBison.any())
 	}
 
 	if ctx.sbomEnabled && !d.flags.NoRuntime && !effectiveNoPlatform(d.flags) && !isGoModuleType(d.moduleStmt.Name) && !strings.HasPrefix(instance.Path.relString(), "contrib/libs/cxxsupp") {

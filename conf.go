@@ -13,6 +13,7 @@ const (
 	confRootRel            = "build/"
 	confRootImport         = `@import "${CONF_ROOT}/`
 	confMacroCallStackSize = 100
+	confCommandDirsMemo    = 8
 )
 
 const (
@@ -97,6 +98,7 @@ type ConfFile struct {
 	calls    map[string][]string
 	body     map[string][]ConfMacroCall
 	inits    map[STR]*ConfMacro
+	commands map[string]*confCommand
 	selfPeer map[string][]string
 	aliases  map[string]map[STR]STR
 	limits   map[string]*confMacroLimits
@@ -961,9 +963,17 @@ type ConfAssignment struct {
 }
 
 type confProgram struct {
-	stmts  []ConfStmtRef
-	macros map[STR]*ConfMacro
-	inits  map[STR]*ConfMacro
+	stmts       []ConfStmtRef
+	macros      map[STR]*ConfMacro
+	inits       map[STR]*ConfMacro
+	commands    map[string]*confCommand
+	commandVars map[string]bool
+}
+
+type confCommand struct {
+	cmd     string
+	peerdir string
+	addincl string
 }
 
 type confTables struct {
@@ -1031,10 +1041,14 @@ func (pm *IncludeParserManager) confProgram(f *ConfFile, walking []string) *conf
 		return f.program
 	}
 
-	p := &confProgram{macros: map[STR]*ConfMacro{}, inits: map[STR]*ConfMacro{}}
+	p := &confProgram{macros: map[STR]*ConfMacro{}, inits: map[STR]*ConfMacro{}, commands: map[string]*confCommand{}}
 
 	for name, macro := range f.macros {
 		p.macros[name] = macro
+	}
+
+	for name, command := range f.commands {
+		p.commands[name] = command
 	}
 
 	for name, macro := range f.inits {
@@ -1081,13 +1095,78 @@ func (pm *IncludeParserManager) confProgram(f *ConfFile, walking []string) *conf
 				p.inits[name] = macro
 			}
 		}
+
+		for name, command := range imported.commands {
+			p.commands[name] = command
+		}
 	}
 
 	p.markDirBodies()
+	p.markCommandVars()
 
 	f.program = p
 
 	return p
+}
+
+func (p *confProgram) markCommandVars() {
+	refs := map[string][]string{}
+
+	p.commandVars = map[string]bool{}
+
+	for _, ref := range p.stmts {
+		name := ref.stmt.name.string()
+
+		scanCommandRefs(ref.stmt.value, func(ident string, call bool) {
+			if !call {
+				refs[name] = append(refs[name], ident)
+			} else if p.commands[ident] != nil {
+				p.commandVars[name] = true
+			}
+		})
+	}
+
+	for grown := true; grown; {
+		grown = false
+
+		for name, used := range refs {
+			if !p.commandVars[name] && slices.ContainsFunc(used, func(v string) bool { return p.commandVars[v] }) {
+				p.commandVars[name] = true
+				grown = true
+			}
+		}
+	}
+}
+
+func scanCommandRefs(text string, visit func(ident string, call bool)) {
+	for i := 0; i < len(text); i++ {
+		if text[i] != '$' {
+			continue
+		}
+
+		rest := text[i+1:]
+
+		if strings.HasPrefix(rest, "{") {
+			end := strings.IndexByte(rest, '}')
+
+			if end < 0 {
+				return
+			}
+
+			if n := cmdIdentLen(rest[1:end]); n > 0 && n == end-1 {
+				visit(rest[1:end], false)
+			}
+
+			i += end
+
+			continue
+		}
+
+		if n := cmdIdentLen(rest); n > 0 {
+			visit(rest[:n], n < len(rest) && rest[n] == '(')
+			i += n
+		}
+	}
 }
 
 func (p *confProgram) markDirBodies() {
@@ -1364,12 +1443,16 @@ func (t *confTables) peerVariants(owner string, variants []string) []confPeerVar
 	for _, name := range variants {
 		module, _ := t.modules.get(internStr(name))
 		sub := internStr(strings.TrimSuffix(name, "__from__"+owner))
-		tag, own := sub, false
+		tag := sub
 
-		for _, step := range t.plan(module).steps {
-			own = own || step.variable == module.variable
+		var steps []confInitStep
 
-			if own && step.variable == envMODULE_TAG && step.value != 0 && !step.expand && !step.appended {
+		for _, call := range module.body {
+			steps, _ = t.callSteps(call.name, call.args.string(), steps, 0)
+		}
+
+		for _, step := range steps {
+			if step.variable == envMODULE_TAG && step.value != 0 && !step.expand && !step.appended {
 				tag = step.value
 			}
 		}
@@ -1710,14 +1793,20 @@ func (t *confTables) plan(module *confModule) *confModule {
 
 	module.planned = true
 
-	if parent := t.module(module.parent, ""); parent != nil {
-		module.steps = append(module.steps, t.plan(parent).steps...)
+	var chain []*confModule
+
+	for base := module; base != nil; base = t.module(base.parent, "") {
+		chain = append(chain, base)
 	}
 
-	module.steps = append(module.steps, confInitStep{variable: module.variable})
+	for i := len(chain) - 1; i >= 0; i-- {
+		module.steps = append(module.steps, confInitStep{variable: chain[i].variable})
+	}
 
-	for _, call := range module.body {
-		module.steps, _ = t.callSteps(call.name, call.args.string(), module.steps, 0)
+	for i := len(chain) - 1; i >= 0; i-- {
+		for _, call := range chain[i].body {
+			module.steps, _ = t.callSteps(call.name, call.args.string(), module.steps, 0)
+		}
 	}
 
 	for _, step := range module.steps {
@@ -1798,6 +1887,7 @@ type Conf struct {
 	recalcs     map[uint64][]confRecalc
 	inputs      []uint64
 	keys        DenseMap[STR, confStatementKey]
+	dirs        map[string][]*confCommandDirs
 }
 
 type confStatementKey struct {
@@ -2226,6 +2316,8 @@ func (c *Conf) runInit(plan *confModule, env Environment, originals *SetVars, re
 				recordConfAssignment(recording, step.variable, env)
 			}
 
+			c.recalcInto(env, step.variable, originals, recording)
+
 			continue
 		case step.appended:
 			value := step.value.string()
@@ -2351,6 +2443,9 @@ type confMacroBody struct {
 	header     string
 	locals     []confMacroLocal
 	calls      []ConfMacroCall
+	cmd        string
+	peerdir    string
+	addincl    string
 	conditions bool
 	command    bool
 	foreach    bool
@@ -2367,6 +2462,22 @@ func (f *ConfFile) addMacro(header string, branch int32, body *confMacroBody) {
 	sig, specialized := f.state.parseMacroSignature(f.rel, params)
 	key := internStr(strings.TrimSpace(name))
 	calls := body.calls
+
+	if body.cmd != "" || body.peerdir != "" || body.addincl != "" {
+		command := key.string()
+
+		if specialized {
+			command += ":" + strings.Trim(splitConfMacroParams(params, nil)[0], `"`)
+		}
+
+		if f.commands == nil {
+			f.commands = map[string]*confCommand{}
+		}
+
+		if _, ok := f.commands[command]; !ok {
+			f.commands[command] = &confCommand{cmd: body.cmd, peerdir: body.peerdir, addincl: body.addincl}
+		}
+	}
 
 	if !specialized && len(calls) != 0 {
 		if f.inits == nil {
@@ -2404,6 +2515,17 @@ func (f *ConfFile) addMacro(header string, branch int32, body *confMacroBody) {
 func (body *confMacroBody) addLine(line string) {
 	if strings.HasPrefix(line, ".") {
 		body.command = body.command || strings.HasPrefix(line, ".CMD=") || strings.HasPrefix(line, ".CMD =")
+
+		if property, value, ok := strings.Cut(line, "="); ok {
+			switch strings.TrimSpace(property) {
+			case ".CMD":
+				body.cmd = strings.TrimSpace(value)
+			case ".PEERDIR":
+				body.peerdir = strings.TrimSpace(value)
+			case ".ADDINCL":
+				body.addincl = strings.TrimSpace(value)
+			}
+		}
 
 		return
 	}
@@ -2908,4 +3030,121 @@ func confVarNameLen(s string) int {
 
 func isConfIdentByte(b byte, first bool) bool {
 	return b >= 'a' && b <= 'z' || b >= 'A' && b <= 'Z' || b == '_' || !first && b >= '0' && b <= '9'
+}
+
+type confCommandDirs struct {
+	vars     []ENV
+	values   []confRawValue
+	peerdirs []string
+	addincls []string
+}
+
+type confRawValue struct {
+	kind  EnvKind
+	value STR
+}
+
+func (c *Conf) commandDirs(name string, env Environment) *confCommandDirs {
+	for _, memo := range c.dirs[name] {
+		if memo.valid(env) {
+			return memo
+		}
+	}
+
+	memo := &confCommandDirs{}
+	seen := map[string]bool{}
+
+	var walk func(text string, depth int)
+
+	call := func(macro string, depth int) {
+		command := c.program.commands[macro]
+
+		if command == nil || seen["("+macro] || depth > confMacroCallStackSize {
+			return
+		}
+
+		seen["("+macro] = true
+
+		if command.peerdir != "" {
+			memo.peerdirs = append(memo.peerdirs, strings.Fields(memo.expand(command.peerdir, env))...)
+		}
+
+		if command.addincl != "" {
+			memo.addincls = append(memo.addincls, strings.Fields(memo.expand(command.addincl, env))...)
+		}
+
+		walk(command.cmd, depth+1)
+	}
+
+	walk = func(text string, depth int) {
+		scanCommandRefs(text, func(ident string, isCall bool) {
+			switch {
+			case isCall:
+				call(ident, depth)
+			case c.program.commandVars[ident]:
+				walk(memo.read(ident, env, seen), depth+1)
+			}
+		})
+	}
+
+	call(name, 0)
+
+	if c.dirs == nil {
+		c.dirs = map[string][]*confCommandDirs{}
+	}
+
+	memos := c.dirs[name]
+
+	if len(memos) == confCommandDirsMemo {
+		memos = memos[1:]
+	}
+
+	c.dirs[name] = append(memos, memo)
+
+	return memo
+}
+
+func (m *confCommandDirs) read(name string, env Environment, seen map[string]bool) string {
+	if seen[name] {
+		return ""
+	}
+
+	seen[name] = true
+
+	key := internEnv(name)
+
+	m.record(key, env)
+
+	value := env.string(key)
+
+	if strings.IndexByte(value, '$') < 0 {
+		return ""
+	}
+
+	return value
+}
+
+func (m *confCommandDirs) record(key ENV, env Environment) {
+	kind, value := env.s.lookup(key)
+
+	m.vars = append(m.vars, key)
+	m.values = append(m.values, confRawValue{kind, value})
+}
+
+func (m *confCommandDirs) expand(text string, env Environment) string {
+	confTextRefs(text, func(key ENV) {
+		m.record(key, env)
+	})
+
+	return env.expandVariable(text)
+}
+
+func (m *confCommandDirs) valid(env Environment) bool {
+	for i, key := range m.vars {
+		if kind, value := env.s.lookup(key); kind != m.values[i].kind || value != m.values[i].value {
+			return false
+		}
+	}
+
+	return true
 }

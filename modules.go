@@ -176,7 +176,6 @@ type ModuleData struct {
 	goLdflags               []ANY
 	goLinkFlags             []ANY
 	cgoCflags               []ANY
-	hasBisonY               bool
 	toolchainName           string
 	srcs                    []SrcMeta
 	pySrcs                  []ANY
@@ -984,10 +983,7 @@ func collectModuleInto(ctx *GenCtx, instance ModuleInstance, stmts []Stmt, env E
 	}
 
 	hasProto := false
-	hasSc := false
-	hasCfgProto := false
 	hasPyGztProto := false
-	hasFortran := false
 
 	for i, meta := range d.srcs {
 		src := meta.Source
@@ -1005,79 +1001,12 @@ func collectModuleInto(ctx *GenCtx, instance ModuleInstance, stmts []Stmt, env E
 			d.hasFbs = true
 		case srcExtFbs64:
 			d.hasFbs64 = true
-		case srcExtY:
-			d.hasBisonY = true
-		case srcExtSc:
-			hasSc = true
-		case srcExtCfgProto:
-			hasCfgProto = true
-		case srcExtFortran:
-			hasFortran = true
 		}
 	}
 
-	generatedProto := hasGeneratedSourceClass(d, srcExtProto)
-	generatedEv := hasGeneratedSourceClass(d, srcExtEv)
+	hasProto = hasProto || hasGeneratedSourceClass(d, srcExtProto)
 
-	hasProto = hasProto || generatedProto
-
-	evInduced, protoInduced, cudaInduced := generatedEv, generatedProto, false
-
-	if !isGoModuleType(d.unit.Type) {
-		if generatedEv {
-			d.peerdirs = append(d.peerdirs, strLibraryCppEventlog.any(), strContribLibsProtobuf.any())
-		}
-
-		if generatedProto {
-			d.peerdirs = append(d.peerdirs, strContribLibsProtobuf.any())
-		}
-	}
-
-	for _, meta := range d.srcs {
-		src := meta.Source
-
-		switch srcExtClassOf(src) {
-		case srcExtCuda:
-			if !cudaInduced {
-				cudaInduced = true
-				d.peerdirs = append(d.peerdirs, internAnys(strings.Fields(env.string(envSrcCuPeerdir)))...)
-			}
-		case srcExtEv:
-			if !evInduced && !isGoModuleType(d.unit.Type) {
-				evInduced = true
-
-				eventPeer := strLibraryCppEventlog
-
-				if isPythonProtoModule(d) && !meta.Global {
-					eventPeer = strLibraryCppEventlogProto
-				}
-
-				d.peerdirs = append(d.peerdirs, eventPeer.any(), strContribLibsProtobuf.any())
-			}
-		case srcExtProto:
-			if !protoInduced {
-				protoInduced = true
-
-				isProtoLibrary := d.moduleStmt != nil && d.moduleStmt.Name == tokProtoLibrary
-
-				if !isGoModuleType(d.unit.Type) && (!isProtoLibrary || !env.bool(envPY3_PROTO) && !env.bool(envPyProto)) {
-					d.peerdirs = append(d.peerdirs, strContribLibsProtobuf.any())
-				}
-			}
-		}
-	}
-
-	if hasFortran || hasGeneratedSourceClass(d, srcExtFortran) {
-		d.peerdirs = append(d.peerdirs, strBuildPlatformFlang.any(), strContribLibsLlvmFlangRt.any())
-	}
-
-	if hasSc {
-		d.peerdirs = append(d.peerdirs, strLibraryCppDomscheme.any())
-	}
-
-	if hasCfgProto {
-		d.peerdirs = append(d.peerdirs, strLibraryCppProtoConfigCodegen.any(), strLibraryCppProtoConfigProtos.any(), strContribLibsProtobuf.any())
-	}
+	d.applySourceCommandPeers(modulePath, env, instance.Platform)
 
 	d.optimizePyProtos = env.string(envOptimizePyProtosFlag) == "yes"
 	d.ignoreCppProtoSelfPeers = env.string(envIgnoreCppProtoSelfPeers) == "yes"
@@ -1099,6 +1028,56 @@ func collectModuleInto(ctx *GenCtx, instance ModuleInstance, stmts []Stmt, env E
 	}
 
 	return d
+}
+
+func (d *ModuleData) applySourceCommandPeers(modulePath string, env Environment, platform *Platform) {
+	if isGoModuleType(d.unit.Type) {
+		return
+	}
+
+	var seen []string
+
+	apply := func(source ANY) {
+		ext := strings.TrimPrefix(filepath.Ext(source.string()), ".")
+
+		if ext == "" || slices.Contains(seen, ext) {
+			return
+		}
+
+		seen = append(seen, ext)
+
+		for _, peer := range platform.conf.commandDirs("_SRC:"+ext, env).peerdirs {
+			if peer != modulePath {
+				d.peerdirs = append(d.peerdirs, internStr(peer).any())
+			}
+		}
+	}
+
+	generated := func(outputs []ANY, stdout *ANY, noAuto bool) {
+		for _, out := range outputs {
+			apply(out)
+		}
+
+		if stdout != nil && !noAuto {
+			apply(*stdout)
+		}
+	}
+
+	for _, stmt := range d.runPrograms {
+		generated(stmt.OUTFiles, stmt.StdoutFile, stmt.StdoutNoAuto)
+	}
+
+	for _, stmt := range d.runPython {
+		generated(stmt.OUTFiles, stmt.StdoutFile, stmt.StdoutNoAuto)
+	}
+
+	for _, stmt := range d.fromArchives {
+		generated(stmt.OUTFiles, nil, true)
+	}
+
+	for _, meta := range d.srcs {
+		apply(meta.Source)
+	}
 }
 
 func applyResourceFiles(fs FS, modulePath string, args []string, line int, d *ModuleData) {
