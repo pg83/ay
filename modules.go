@@ -1352,17 +1352,13 @@ func pyModuleTypeUsesPython3(name TOK) bool {
 	return false
 }
 
-func moduleConfTag(name TOK, kind ModuleKind, language Language, d *ModuleData) string {
-	if name == tokYqlLibrary {
-		if d.yqlCurrent {
-			return "YQL_LIBRARY_CURRENT"
-		}
-
-		return "YQL_LIBRARY_STABLE"
+func moduleConfTag(owner STR, kind ModuleKind, language Language, d *ModuleData) string {
+	if sub := multimoduleSub(owner, kind, language, d.yqlCurrent); sub != 0 {
+		return sub.string()
 	}
 
-	if tag := multimoduleVariantTag(name, kind, language); tag != "" {
-		return tag
+	if owner == tokDynamicLibrary.str() {
+		return "DLL_BIN"
 	}
 
 	return d.unit.Tag.string()
@@ -1968,11 +1964,9 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 
 			d.unit = resolveModuleUnit(v.Name, kind, language)
 
-			if v.Schema && v.Name == tokProtoLibrary {
-				d.confModule = platform.conf.module(strProtoSchema, protoModuleTag(language, true))
-			} else {
-				d.confModule = platform.conf.module(v.Name.str(), moduleConfTag(v.Name, kind, language, d))
-			}
+			owner := multimoduleOwner(v)
+
+			d.confModule = platform.conf.module(owner, moduleConfTag(owner, kind, language, d))
 
 			platform.conf.initModule(env, d.confModule, &d.setVars)
 			d.syncPythonVersion(env)

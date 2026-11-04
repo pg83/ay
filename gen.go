@@ -1295,7 +1295,9 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 
 	var moduleName TOK
 
-	if declaration := ctx.moduleDeclaration(instance); declaration != nil {
+	declaration := ctx.moduleDeclaration(instance)
+
+	if declaration != nil {
 		moduleName = declaration.Name
 	}
 
@@ -1419,12 +1421,6 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 		return result
 	}
 
-	tag := multimoduleVariantTag(d.multimodule, instance.Kind, instance.Language)
-
-	if moduleName == tokPy23Library || moduleName == tokPy23NativeLibrary {
-		tag = d.unit.Tag.string()
-	}
-
 	if isSandboxPythonTask(moduleName) {
 		first := sandboxPythonTaskFirstInstance(instance, moduleName)
 
@@ -1435,22 +1431,15 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 		d.moduleVariants = sandboxVariants
 	}
 
-	if d.moduleStmt != nil && (d.moduleStmt.Schema || d.moduleStmt.Name == tokProtoLibrary && (instance.Language == LangPy || instance.Language == LangPy2)) {
-		tag = protoModuleTag(instance.Language, d.moduleStmt.Schema)
-	}
-
-	if moduleName == tokYqlUdf || moduleName == tokYqlUdfContrib {
-		tag = d.unit.Tag.string()
-	}
-
-	excluded := moduleExcludesTag(d, tag)
+	tag := multimoduleSub(multimoduleOwner(declaration), instance.Kind, instance.Language, instance.YqlCurrent)
+	excluded := tag != 0 && moduleExcludesTag(d, tag.string())
 
 	if isSandboxPythonTask(moduleName) {
 		excluded = d.moduleVariants&sandboxPythonTaskVariantBit(instance) == 0
 	}
 
-	if tag != "" && excluded {
-		result := &ModuleEmitResult{ModuleVariants: d.moduleVariants, excluded: true}
+	if excluded {
+		result := &ModuleEmitResult{ModuleVariants: d.moduleVariants, ModuleStmtName: moduleName, excluded: true}
 
 		ctx.memoPut(instance, result)
 
@@ -1517,20 +1506,8 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 
 	e.prepareUserverProtos()
 
-	if d.moduleStmt.Name == tokProtoLibrary && instance.Language == LangCPP && moduleExcludesTag(d, protoModuleTag(LangCPP, d.moduleStmt.Schema)) {
-		result := &ModuleEmitResult{ModuleVariants: d.moduleVariants, ModuleStmtName: tokProtoLibrary, excluded: true}
-
-		ctx.memoPut(instance, result)
-
-		return result
-	}
-
 	if d.moduleStmt.Name == tokProtoLibrary && instance.Language == LangDescProto {
-		result := &ModuleEmitResult{ModuleStmtName: d.moduleStmt.Name}
-
-		if !moduleExcludesTag(d, protoModuleTag(LangDescProto, d.moduleStmt.Schema)) {
-			result = e.emitDescProtoSubmodule()
-		}
+		result := e.emitDescProtoSubmodule()
 
 		ctx.memoPut(instance, result)
 
@@ -1547,10 +1524,9 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 
 	if d.nots != nil {
 		if d.moduleStmt.Name == tokProtoLibrary {
-			tag := protoModuleTag(instance.Language, d.moduleStmt.Schema)
-			_, included := d.excludeTags[internStr(tag)]
+			_, included := d.excludeTags[internStr(protoModuleTag(instance.Language, d.moduleStmt.Schema))]
 
-			if !included || moduleExcludesTag(d, tag) {
+			if !included {
 				result := &ModuleEmitResult{ModuleStmtName: d.moduleStmt.Name}
 
 				ctx.memoPut(instance, result)

@@ -20,18 +20,6 @@ func hasSandboxPython2Library(name TOK) bool {
 	return isSandboxPython2Task(name) || name == tokSandboxPy233Task
 }
 
-func sandboxPythonTaskVariant(name TOK, kind ModuleKind, language Language) string {
-	if kind == KindBin {
-		return "SB_TASK_BIN"
-	}
-
-	if name == tokSandboxTask || hasSandboxPython2Library(name) && language == LangPy2 {
-		return "PY2"
-	}
-
-	return "PY3"
-}
-
 func sandboxPythonTaskFirstInstance(instance ModuleInstance, name TOK) ModuleInstance {
 	instance.Kind, instance.Language = KindLib, LangCPP
 
@@ -76,7 +64,7 @@ func selectedSandboxPythonTaskVariants(instance ModuleInstance, name TOK, d *Mod
 	var variants uint16
 
 	for _, sub := range sandboxPythonTaskInstances(instance, name) {
-		tag := sandboxPythonTaskVariant(name, sub.Kind, sub.Language)
+		tag := multimoduleSub(name.str(), sub.Kind, sub.Language, false).string()
 
 		if !moduleExcludesTag(d, tag) && !slices.Contains(excluded, tag) {
 			variants |= sandboxPythonTaskVariantBit(sub)
@@ -134,7 +122,7 @@ func setupSandboxPythonTask(name TOK, modulePath string, kind ModuleKind, langua
 	}
 
 	d.multimodule = name
-	d.unit.HashTag = internStr(sandboxPythonTaskVariant(name, kind, language))
+	d.unit.HashTag = multimoduleSub(name.str(), kind, language, false)
 
 	if name == tokSandboxPy233Task && kind == KindLib && language != LangPy2 {
 		prefix := "libpy3"

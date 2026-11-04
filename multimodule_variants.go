@@ -10,24 +10,6 @@ var (
 	shapeLibPackage = variantShape{kind: KindLib, language: LangPackage}
 )
 
-var multimoduleTags = map[TOK]map[string]Language{
-	tokCrate:   {"RUST": LangCPP, "RUST_HOST": LangRustHost},
-	tokPackage: {"PACKAGE_FINAL": LangCPP, "PACKAGE_UNION": LangPackage},
-	tokDllJava: {"JNI_DLL": LangCPP, "JAR_COMPILATION": LangJava},
-	tokProtoLibrary: {
-		"CPP_PROTO": LangCPP, "JAVA_PROTO": LangJava, "PY3_PROTO": LangPy, "GO_PROTO": LangGo,
-		"DESC_PROTO": LangDescProto, "DOCS_PROTO": LangDocsProto, "TS_PROTO": LangTS, "TS_PREPARE_DEPS": LangTSPrepare,
-	},
-	tokFbsLibrary:       {"CPP_FBS": LangCPP, "PY3_FBS": LangPy, "GO_FBS": LangGo, "JAVA_FBS": LangJava},
-	tokRosLibrary:       {"CPP_ROS": LangCPP, "PY3_CPP_ROS": LangRosBindings, "PY3_ROS": LangPy, "GO_ROS": LangGo},
-	tokMlaunchLibrary:   {"CPP_MLAUNCH": LangCPP, "GO_MLAUNCH": LangGo, "UNION_MLAUNCH": LangPackage},
-	tokMlaunchComponent: {"CPP_MLAUNCH": LangCPP, "GO_MLAUNCH": LangGo, "UNION_MLAUNCH": LangPackage},
-	tokMlaunchPipeline:  {"PIPELINE": LangCPP, "GOLAUNCH": LangGo, "DEPLOY": LangPackage},
-	tokSdcDiagsLibrary:  {"CPP_DIAG": LangCPP, "GO_DIAG": LangGo},
-	tokSdcUnion:         {"SDC_INSTALL_ALL": LangCPP, "SDC_INSTALL_SHARE": LangPackage},
-	tokDynamicLibrary:   {"DLL_BIN": LangCPP},
-}
-
 var multimoduleShapes = map[STR]map[STR]variantShape{
 	tokProtoLibrary.str(): shapeTable(map[string]variantShape{
 		"CPP_PROTO": shapeLibCPP, "JAVA_PROTO": shapeJava, "PY3_PROTO": shapeLibPy, "PY_PROTO": shapeLibPy2, "GO_PROTO": shapeLibGo,
@@ -64,9 +46,34 @@ var multimoduleShapes = map[STR]map[STR]variantShape{
 	tokYqlLibrary.str(): shapeTable(map[string]variantShape{
 		"YQL_LIBRARY_STABLE": shapeLibCPP, "YQL_LIBRARY_CURRENT": {kind: KindLib, language: LangCPP, yqlCurrent: true},
 	}),
+	tokDllJava.str(): shapeTable(map[string]variantShape{"JNI_DLL": shapeLibCPP, "JAR_COMPILATION": shapeJava}),
 }
 
 const defaultProtoVariants = 1<<LangCPP | 1<<LangJava | 1<<LangPy | 1<<LangGo | 1<<LangDescProto
+
+func multimoduleOwner(stmt *ModuleStmt) STR {
+	if stmt == nil {
+		return 0
+	}
+
+	if stmt.Schema && stmt.Name == tokProtoLibrary {
+		return strProtoSchema
+	}
+
+	return stmt.Name.str()
+}
+
+func multimoduleSub(owner STR, kind ModuleKind, language Language, yqlCurrent bool) STR {
+	var sub STR
+
+	for name, shape := range multimoduleShapes[owner] {
+		if shape.language == language && shape.yqlCurrent == yqlCurrent && (sub == 0 || (shape.kind == KindLib) == (kind == KindLib)) {
+			sub = name
+		}
+	}
+
+	return sub
+}
 
 func applyMultimoduleVariantTags(v UnknownStmt, d *ModuleData) {
 	name := d.multimodule
@@ -75,39 +82,25 @@ func applyMultimoduleVariantTags(v UnknownStmt, d *ModuleData) {
 		name = tokProtoLibrary
 	}
 
-	tags := multimoduleTags[name]
+	shapes := multimoduleShapes[name.str()]
 
 	if v.Name == tokOnlyTags {
 		d.moduleVariants = 0
 	}
 
 	for _, arg := range v.Args {
-		if language, ok := tags[arg.string()]; ok {
-			if resolveModuleUnit(name, KindLib, language).NoStartTarget {
+		if shape, ok := shapes[arg.str()]; ok {
+			if resolveModuleUnit(name, KindLib, shape.language).NoStartTarget {
 				continue
 			}
 
 			if v.Name == tokExcludeTags {
-				d.moduleVariants &^= 1 << language
+				d.moduleVariants &^= 1 << shape.language
 			} else {
-				d.moduleVariants |= 1 << language
+				d.moduleVariants |= 1 << shape.language
 			}
 		}
 	}
-}
-
-func multimoduleVariantTag(name TOK, kind ModuleKind, language Language) string {
-	if isSandboxPythonTask(name) {
-		return sandboxPythonTaskVariant(name, kind, language)
-	}
-
-	for tag, lang := range multimoduleTags[name] {
-		if lang == language {
-			return tag
-		}
-	}
-
-	return ""
 }
 
 func (ctx *GenCtx) genMultimoduleTargets(target DiscoveredModule, variants uint16, demand ModuleDemand) []*ModuleEmitResult {

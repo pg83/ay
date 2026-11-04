@@ -1,19 +1,11 @@
 package main
 
 func protoModuleTag(language Language, schema bool) string {
-	if language == LangProtoDescriptions {
-		return "PROTO_DESCRIPTIONS_"
+	owner := tokProtoLibrary.str()
+
+	if schema {
+		owner = strProtoSchema
 	}
 
-	tag := multimoduleVariantTag(tokProtoLibrary, KindLib, language)
-
-	if language == LangPy2 {
-		tag = "PY_PROTO"
-	}
-
-	if schema && language != LangTSPrepare {
-		tag += "_FROM_SCHEMA"
-	}
-
-	return tag
+	return multimoduleSub(owner, KindLib, language, false).string()
 }

@@ -172,12 +172,7 @@ func (ctx *GenCtx) selectPeerVariant(peer *ModuleInstance, request ModuleInstanc
 		return nil, false
 	}
 
-	owner := declaration.Name.str()
-
-	if declaration.Schema && declaration.Name == tokProtoLibrary {
-		owner = strProtoSchema
-	}
-
+	owner := multimoduleOwner(declaration)
 	shapes := multimoduleShapes[owner]
 
 	if shapes == nil {

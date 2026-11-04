@@ -174,27 +174,13 @@ func (ctx *GenCtx) selectDependencyInstances(dir string) []ModuleInstance {
 	selected := instances[:0]
 
 	for _, peer := range instances {
-		tag := multimoduleVariantTag(name, peer.Kind, peer.Language)
+		tag := multimoduleSub(multimoduleOwner(declaration), peer.Kind, peer.Language, peer.YqlCurrent)
 
-		if tag == "" {
-			tag = resolveModuleUnit(name, peer.Kind, peer.Language).Tag.string()
+		if tag == 0 {
+			tag = resolveModuleUnit(name, peer.Kind, peer.Language).Tag
 		}
 
-		if peer.YqlCurrent {
-			tag = strYqlUdfStaticCurrent.string()
-		}
-
-		if name == tokProtoLibrary {
-			tag = protoModuleTag(peer.Language, false)
-		}
-
-		if (name == tokPy23Library || name == tokPy23NativeLibrary) && peer.Language == LangPy2 {
-			tag = "PY2"
-		}
-
-		excluded := moduleExcludesTag(d, tag)
-
-		if tag != "" && excluded {
+		if tag != 0 && moduleExcludesTag(d, tag.string()) {
 			continue
 		}
 
