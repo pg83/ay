@@ -27,6 +27,11 @@ const (
 	confKeywordArray
 )
 
+const (
+	confMacroIgnored confMacroVerdict = 1 << iota
+	confMacroRestricted
+)
+
 type ConfState struct {
 	parser     Parser
 	lexer      Lexer
@@ -924,6 +929,7 @@ type confModule struct {
 	own       *confMacroLimits
 	limits    *confMacroLimits
 	renames   map[STR]STR
+	verdicts  map[STR]confMacroVerdict
 	order     int
 	steps     []confInitStep
 	outputs   []ENV
@@ -1301,6 +1307,12 @@ func (t *confTables) build() {
 		}
 	}
 
+	for _, module := range t.modules.vals.s {
+		if module != nil {
+			module.verdicts = module.limits.verdicts(module.renames)
+		}
+	}
+
 	for _, file := range owners {
 		for owner, variants := range file.variants {
 			t.orderVariants(owner, variants, selfPeers)
@@ -1322,6 +1334,46 @@ func (s *confNameSet) add(name STR) {
 	if !s.has(name) {
 		*s = append(*s, name)
 	}
+}
+
+type confMacroVerdict uint8
+
+func (l *confMacroLimits) verdicts(renames map[STR]STR) map[STR]confMacroVerdict {
+	verdict := func(name STR) confMacroVerdict {
+		var v confMacroVerdict
+
+		if l.ignored.has(name) {
+			v |= confMacroIgnored
+		}
+
+		if l.restricted.has(name) && !l.allowed.has(name) {
+			v |= confMacroRestricted
+		}
+
+		return v
+	}
+
+	out := map[STR]confMacroVerdict{}
+
+	for _, names := range [...]confNameSet{l.ignored, l.restricted} {
+		for _, name := range names {
+			if _, renamed := renames[name]; !renamed {
+				if v := verdict(name); v != 0 {
+					out[name] = v
+				}
+			}
+		}
+	}
+
+	for from, to := range renames {
+		if v := verdict(to); v != 0 {
+			out[from] = v
+		} else {
+			delete(out, from)
+		}
+	}
+
+	return out
 }
 
 func confLimitProperty(line string) (string, string, bool) {

@@ -7,13 +7,9 @@ func macroLimit(d *ModuleData, name TOK) (ignored, restricted bool) {
 		return false, false
 	}
 
-	limits, macro := d.confModule.limits, name.str()
+	verdict := d.confModule.verdicts[name.str()]
 
-	if to, ok := d.confModule.renames[macro]; ok {
-		macro = to
-	}
-
-	return limits.ignored.has(macro), limits.restricted.has(macro) && !limits.allowed.has(macro)
+	return verdict&confMacroIgnored != 0, verdict&confMacroRestricted != 0
 }
 
 func policyDrops(d *ModuleData, name TOK) bool {
