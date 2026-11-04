@@ -58,8 +58,8 @@ func (n *Node) buildDeps(fetchRefs *DenseMap[STR, NodeRef]) func(func(NodeRef) b
 		}
 
 		for _, pat := range n.Resources {
-			if ref, ok := n.resourceRef(pat, fetchRefs); ok {
-				yield(ref)
+			if ref, ok := n.resourceRef(pat, fetchRefs); ok && !yield(ref) {
+				return
 			}
 		}
 	}
