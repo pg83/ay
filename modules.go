@@ -971,7 +971,6 @@ func collectModuleInto(ctx *GenCtx, instance ModuleInstance, stmts []Stmt, env E
 		d.usePython3 = true
 	}
 
-	applyPythonAddIncl(modulePath, d, env)
 	applyArchiveAddIncl(modulePath, d)
 	applyCythonHeaderAddIncl(modulePath, d)
 
@@ -1328,33 +1327,6 @@ func (m *confExpansionList) holds(env Environment) bool {
 	}
 
 	return true
-}
-
-func applyPythonAddIncl(modulePath string, d *ModuleData, env Environment) {
-	if d.python2Headers || d.python3NativeIncl {
-		return
-	}
-
-	if d.moduleStmt == nil {
-		return
-	}
-
-	if !d.usePython2 && !d.usePython3 && !pyModuleTypeUsesPython3(d.moduleStmt.Name) {
-		return
-	}
-
-	if modulePath == "contrib/libs/python" {
-		return
-	}
-
-	if d.usePython2 {
-	} else {
-		d.usePython3 = true
-	}
-
-	d.addInclGlobal = append(d.addInclGlobal, pythonIncludeDir)
-	d.addInclUserGlobal = append(d.addInclUserGlobal, pythonIncludeDir)
-	d.addIncl = append(d.addIncl, pythonIncludeDir)
 }
 
 func applyArchiveAddIncl(modulePath string, d *ModuleData) {
