@@ -29,6 +29,7 @@ func confProtoHeaderEpilogue(fs FS) bool {
 }
 
 type Platform struct {
+	cflagsTails           map[STR]*confExpansionList
 	conf                  *Conf
 	ProtoHeaderEpilogue   bool
 	picVariant            *Platform

@@ -12,7 +12,6 @@ import (
 )
 
 var (
-	muslCFlagsChunk     = []ANY{argDMusl.any()}
 	confPluginDepsCache sync.Map
 	dontExpandVars      = [...]ENV{envARCADIA_BUILD_ROOT, envARCADIA_ROOT, envBINDIR, envCURDIR, envPythonBin, envTestCaseRoot, envTestOutRoot, envTestSourceRoot, envTestWorkRoot}
 )
@@ -258,7 +257,6 @@ type ModuleData struct {
 	cuda                    CudaSettings
 	implibs                 []ImplibStmt
 	linkExcludeLibraries    []ANY
-	muslEnabled             bool
 	useArcadiaLibm          bool
 	useDynamicCuda          bool
 	splitDwarf              bool
@@ -285,7 +283,6 @@ type ModuleData struct {
 	useLightPy2cc           bool
 	useCommonGoogleAPIs     bool
 	moduleScopeCFlags       []ANY
-	cFlagsAppend            []ANY
 	pythonSQLite3           bool
 	pyNamespace             *ANY
 	pyNamespacePython2      bool
@@ -412,14 +409,6 @@ func (d *ModuleData) nextDeclSeq() int {
 	d.declSeq++
 
 	return d.declSeq
-}
-
-func muslCFlags(on bool) []ANY {
-	if on {
-		return muslCFlagsChunk
-	}
-
-	return nil
 }
 
 type BundleEntry struct {
@@ -936,7 +925,6 @@ func collectModuleInto(ctx *GenCtx, instance ModuleInstance, stmts []Stmt, env E
 	}
 
 	d.useDynamicCuda = env.bool(envUseDynamicCuda)
-	d.muslEnabled = env.bool(envMUSL)
 	d.useArcadiaLibm = env.bool(envUSE_ARCADIA_LIBM) && !env.bool(envOS_EMSCRIPTEN)
 	d.clangSAEnable = env.bool(envClangSAEnable)
 	d.clangSAConfig = env.string(envClangSAConfig)
@@ -998,20 +986,7 @@ func collectModuleInto(ctx *GenCtx, instance ModuleInstance, stmts []Stmt, env E
 	applyArchiveAddIncl(modulePath, d)
 	applyCythonHeaderAddIncl(modulePath, d)
 
-	musl := muslCFlags(d.muslEnabled && !effectiveNoPlatform(d.flags))
-	sse := sseBaseCFlags(env.bool(envARCH_X86_64) && instance.Language != LangFbsJavaNative, env.bool(envARCH_I386) && instance.Language != LangFbsJavaNative)
-
-	if n := len(d.cFlagsAppend) + len(musl) + len(sse); n > 0 {
-		scope := d.moduleScopeCFlags
-		grown := append(scope, make([]ANY, n)...)
-
-		copy(grown[n:], grown[:len(scope)])
-		copy(grown, d.cFlagsAppend)
-		copy(grown[len(d.cFlagsAppend):], musl)
-		copy(grown[len(d.cFlagsAppend)+len(musl):], sse)
-
-		d.moduleScopeCFlags = grown
-	}
+	d.moduleScopeCFlags = moduleCFlagsTail(env, instance.Platform)
 
 	if len(d.addIncl) > 1 || len(d.addInclGlobal) > 1 {
 		dedupers.with(func(deduper *DeDuper) {
@@ -1295,6 +1270,77 @@ func usePython2(env Environment, d *ModuleData, moduleTag STR) {
 	env.setStringID(envMODULE_TAG, moduleTag)
 }
 
+func moduleCFlagsTail(env Environment, p *Platform) []ANY {
+	module := env.string(envCflags)
+	tail, ok := strings.CutPrefix(module, p.ifEnv.string(envCflags))
+
+	if !ok {
+		throwFmt("module CFLAGS %q does not extend the platform value", module)
+	}
+
+	if tail == "" {
+		return nil
+	}
+
+	key := internStr(tail)
+
+	if memo, ok := p.cflagsTails[key]; ok && memo.holds(env) {
+		return memo.result
+	}
+
+	memo := &confExpansionList{result: expandCompilerConfFlags(env, tail)}
+	seen := map[ENV]bool{}
+
+	var visit func(text string)
+
+	visit = func(text string) {
+		confValueVars(text, func(name string) {
+			k := internEnv(name)
+
+			if seen[k] {
+				return
+			}
+
+			seen[k] = true
+
+			v := confEnvValue(env, k)
+
+			memo.keys = append(memo.keys, k)
+			memo.values = append(memo.values, v)
+
+			if v.kind != envAbsent {
+				visit(v.value.string())
+			}
+		})
+	}
+
+	visit(tail)
+
+	if p.cflagsTails == nil {
+		p.cflagsTails = map[STR]*confExpansionList{}
+	}
+
+	p.cflagsTails[key] = memo
+
+	return memo.result
+}
+
+type confExpansionList struct {
+	keys   []ENV
+	values []ConfValue
+	result []ANY
+}
+
+func (m *confExpansionList) holds(env Environment) bool {
+	for i, k := range m.keys {
+		if confEnvValue(env, k) != m.values[i] {
+			return false
+		}
+	}
+
+	return true
+}
+
 func applyPythonAddIncl(modulePath string, d *ModuleData, env Environment) {
 	if d.python2Headers || d.python3NativeIncl {
 		return
@@ -1313,10 +1359,8 @@ func applyPythonAddIncl(modulePath string, d *ModuleData, env Environment) {
 	}
 
 	if d.usePython2 {
-		d.moduleScopeCFlags = append(d.moduleScopeCFlags, internArg("-DARCADIA_PYTHON_UNICODE_SIZE="+env.string(envArcadiaPythonUnicodeSize)).any())
 	} else {
 		d.usePython3 = true
-		d.moduleScopeCFlags = append(d.moduleScopeCFlags, argDusePython3.any())
 	}
 
 	d.addInclGlobal = append(d.addInclGlobal, pythonIncludeDir)
@@ -1441,6 +1485,10 @@ func multiStatement(name STR) bool {
 }
 
 func (d *ModuleData) deferStmt(ctx *GenCtx, modulePath string, kind ModuleKind, language Language, s Stmt, env Environment, onWarn func(Warn), platform *Platform) bool {
+	if v, ok := s.(*UnknownStmt); ok && policyDrops(d, v.Name) {
+		return false
+	}
+
 	statement := platform.conf.statementKey(platform.conf.moduleAlias(d.confModule, stmtMacroNameID(s)))
 
 	if statement.parse {
@@ -1467,6 +1515,10 @@ func (d *ModuleData) deferStmt(ctx *GenCtx, modulePath string, kind ModuleKind, 
 func (d *ModuleData) bindBody(ctx *GenCtx, modulePath string, kind ModuleKind, language Language, s Stmt, env Environment, onWarn func(Warn), platform *Platform) Stmt {
 	switch v := s.(type) {
 	case *UnknownStmt:
+		if policyDrops(d, v.Name) {
+			return s
+		}
+
 		if handledMacroTokens[v.Name] {
 			d.expandBodyAtParse(ctx, modulePath, kind, language, v.Raw, expandStmtTokens(v.Args, env), v.Line, env, onWarn, platform)
 		} else if name := platform.conf.moduleAlias(d.confModule, v.Raw); platform.conf.alias(name) != nil {
@@ -2705,7 +2757,7 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 						} else {
 							expandConfMacro(ctx, modulePath, kind, language, expanded, false, env, d, onWarn, platform)
 						}
-					} else if d.moduleStmt != nil && !d.moduleEnded && !d.interpreting {
+					} else if d.moduleStmt != nil && !d.moduleEnded && !d.interpreting && !policyDrops(d, expanded.Name) {
 						d.expandBodyAtParse(ctx, modulePath, kind, language, expanded.Raw, expanded.Args, expanded.Line, env, onWarn, platform)
 					}
 
@@ -4162,8 +4214,6 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 				d.cFlags = append(d.cFlags, v.Args[1:]...)
 			case "USER_CXXFLAGS":
 				d.cxxFlags = append(d.cxxFlags, v.Args[1:]...)
-			case "CFLAGS":
-				d.cFlagsAppend = append(d.cFlagsAppend, v.Args[1:]...)
 			case "_PROTOC_FLAGS":
 				d.protocFlags = append(d.protocFlags, v.Args[1:]...)
 			case "RPATH_GLOBAL":

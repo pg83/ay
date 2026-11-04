@@ -69,6 +69,16 @@ func moduleMacroPolicy(d *ModuleData) MacroPolicy {
 	return MacroPolicy{}
 }
 
+func policyDrops(d *ModuleData, name TOK) bool {
+	if d.moduleStmt == nil {
+		return false
+	}
+
+	policy := moduleMacroPolicy(d)
+
+	return slices.Contains(policy.ignored, name) || slices.Contains(policy.restricted, name)
+}
+
 func dropsMacro(d *ModuleData, modulePath string, name TOK, onWarn func(Warn)) bool {
 	if d.moduleStmt == nil {
 		return false

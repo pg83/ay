@@ -64,9 +64,7 @@ func composeASModuleArgs(na *NodeArenas, instance ModuleInstance, in ModuleCCInp
 	bundle := compileFlagBundleFor(instance.Platform)
 	prologueArgs := 2 + len(bundle.ArchArgs) + len(instance.Platform.SysrootArgs)
 	warnBundle := pickWarningFlags(in.Flags.NoCompilerWarnings, in.Flags.NoWShadow)
-	betweenBlocks := len(catboostOpenSourceDefine)
-
-	betweenBlocks += len(in.ModuleScopeCFlags)
+	betweenBlocks := len(in.ModuleScopeCFlags)
 
 	fixed := prologueArgs + 2*len(debugPrefixMapFlags) + 2*len(xclangDebugCompilationDir) +
 		len(bundle.CFlags) + len(warnBundle) + len(bundle.Defines) + len(ownCFlags) +
@@ -82,7 +80,7 @@ func composeASModuleArgs(na *NodeArenas, instance ModuleInstance, in ModuleCCInp
 		cmdArgs = appendAnyLists(cmdArgs, debugPrefixMapFlags, xclangDebugCompilationDir)
 	}
 
-	cmdArgs = appendCompileFlagPipeline(cmdArgs, bundle, warnBundle, bundle.Defines, ownCFlags, in.ModuleScopeCFlags, catboostOpenSourceDefineFor(instance.Platform))
+	cmdArgs = appendCompileFlagPipeline(cmdArgs, bundle, warnBundle, bundle.Defines, ownCFlags, in.ModuleScopeCFlags)
 	cmdArgs = appendAnyLists(cmdArgs, in.SFlags)
 	na.anys.commit(len(cmdArgs))
 

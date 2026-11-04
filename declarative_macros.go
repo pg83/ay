@@ -142,7 +142,6 @@ func finishPythonHeaderConfig(d *ModuleData, env Environment) {
 
 			appendMacroEnv(env, "CFLAGS", flag.string())
 			appendMacroEnv(env, "ADDINCL", "GLOBAL contrib/libs/python/Include")
-			d.moduleScopeCFlags = append(d.moduleScopeCFlags, flag)
 			d.addIncl = append(d.addIncl, pythonIncludeDir)
 			d.addInclGlobal = append(d.addInclGlobal, pythonIncludeDir)
 			d.addInclUserGlobal = append(d.addInclUserGlobal, pythonIncludeDir)
@@ -153,7 +152,6 @@ func finishPythonHeaderConfig(d *ModuleData, env Environment) {
 			flags := expandStmtToken(env.string(envPythonInclude), env)
 
 			appendMacroEnv(env, "CFLAGS", flags)
-			d.moduleScopeCFlags = append(d.moduleScopeCFlags, internAnys(splitShellWords(flags))...)
 		}
 	}
 
@@ -176,7 +174,6 @@ func finishPythonHeaderConfig(d *ModuleData, env Environment) {
 
 			appendMacroEnv(env, "CFLAGS", strings.Join(anyStrs(flags), " "))
 			appendMacroEnv(env, "ADDINCL", "GLOBAL "+include)
-			d.moduleScopeCFlags = append(d.moduleScopeCFlags, flags...)
 
 			paths := expandConfigVFSPaths(internAnys(strings.Fields(include)), env)
 
@@ -190,7 +187,6 @@ func finishPythonHeaderConfig(d *ModuleData, env Environment) {
 			flags := expandStmtToken(env.string(envPythonInclude), env)
 
 			appendMacroEnv(env, "CFLAGS", flags)
-			d.moduleScopeCFlags = append(d.moduleScopeCFlags, internAnys(splitShellWords(flags))...)
 		}
 	}
 }

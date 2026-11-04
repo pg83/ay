@@ -293,7 +293,7 @@ func composeBCCompileCmd(python, clangWrapper, clangBC string, platform *Platfor
 	}
 
 	args = appendAddIncl(args, peerAddIncl, in.InclArgs)
-	args = appendCompileFlagPipeline(args, bundle, warningBundle, bundle.Defines, ownCFlags, in.ModuleScopeCFlags, catboostOpenSourceDefineFor(platform))
+	args = appendCompileFlagPipeline(args, bundle, warningBundle, bundle.Defines, ownCFlags, in.ModuleScopeCFlags)
 
 	if cxx {
 		extras := compilerCommandFlags(in.CXXFlags, in.CompilerEnv)

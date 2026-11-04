@@ -63,16 +63,6 @@ var hostDefines = []ANY{
 	argDLongLongSupported.any(),
 }
 
-var hostSseFeatures = []ANY{
-	argMsse2.any(),
-	argMsse3.any(),
-	argMssse3.any(),
-	argMsse41.any(),
-	argMsse42.any(),
-	argMpopcnt.any(),
-	argMcx16.any(),
-}
-
 var noLibcWarningSuppressions = []ANY{
 	argWnoArrayParameter.any(),
 	argWnoDeprecateLaxVecConvAll.any(),
@@ -134,17 +124,6 @@ const binPath = "/usr/bin"
 func catboostOpenSourceDefineFor(p *Platform) []ANY {
 	if p.Flags[envOPENSOURCE] == strYes {
 		return catboostOpenSourceDefine
-	}
-
-	return nil
-}
-
-func sseBaseCFlags(x8664, i386 bool) []ANY {
-	switch {
-	case x8664:
-		return hostSseFeatures
-	case i386:
-		return hostSseFeatures[:len(hostSseFeatures)-1]
 	}
 
 	return nil

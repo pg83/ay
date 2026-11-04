@@ -9,7 +9,6 @@ func (x *ModuleData) reset() {
 		pyGroupSrcs:          x.pyGroupSrcs[:0],
 		styleChecks:          scrub(x.styleChecks),
 		macroPeerdirs:        x.macroPeerdirs[:0],
-		cFlagsAppend:         x.cFlagsAppend[:0],
 		cgoSrcs:              x.cgoSrcs[:0],
 		cgoLdflags:           x.cgoLdflags[:0],
 		cgoCflags:            x.cgoCflags[:0],

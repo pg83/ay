@@ -73,6 +73,7 @@ var (
 	envCX16_FLAGS                             = internEnv("CX16_FLAGS")
 	envCXX_RT                                 = internEnv("CXX_RT")
 	envCanonizeSubPath                        = internEnv("CANONIZE_SUB_PATH")
+	envCflags                                 = internEnv("CFLAGS")
 	envClangSAConfig                          = internEnv("_CLANG_SA_CONFIG")
 	envClangSAEnable                          = internEnv("CLANG_SA_ENABLE")
 	envClangSAPlugins                         = internEnv("CLANG_SA_PLUGINS")

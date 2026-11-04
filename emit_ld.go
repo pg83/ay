@@ -460,7 +460,7 @@ func composeLDCmdVcsCompileForced(na *NodeArenas, p *Platform, tc ModuleToolchai
 
 	preNoLibcExtras := concat(p.CFlags, moduleCFlags, peerCFlagsGlobal)
 
-	cmdArgs = appendCompileFlagPipeline(cmdArgs, bundle, pickWarningFlags(noCompilerWarnings, noWShadow), bundle.Defines, preNoLibcExtras, moduleScopeCFlags, catboostOpenSourceDefineFor(p))
+	cmdArgs = appendCompileFlagPipeline(cmdArgs, bundle, pickWarningFlags(noCompilerWarnings, noWShadow), bundle.Defines, preNoLibcExtras, moduleScopeCFlags)
 	cmdArgs = append(cmdArgs, cOnlyFlags...)
 	na.anys.commit(len(cmdArgs))
 

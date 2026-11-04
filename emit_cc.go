@@ -640,8 +640,8 @@ func coreCxxFlags(p *Platform) []ANY {
 	return coreCxxNostdinc
 }
 
-func appendCompileFlagPipeline(cmdArgs []ANY, bundle CompileFlagBundle, warningBundle, defineBundle, preNoLibcExtras, moduleScopeCFlags, catboost []ANY) []ANY {
-	return appendAnyLists(cmdArgs, bundle.DebugInfo, bundle.CFlags, warningBundle, defineBundle, preNoLibcExtras, bundle.NoLibcBlock, catboost, moduleScopeCFlags, bundle.NoLibcBlock)
+func appendCompileFlagPipeline(cmdArgs []ANY, bundle CompileFlagBundle, warningBundle, defineBundle, preNoLibcExtras, moduleScopeCFlags []ANY) []ANY {
+	return appendAnyLists(cmdArgs, bundle.DebugInfo, bundle.CFlags, warningBundle, defineBundle, preNoLibcExtras, bundle.NoLibcBlock, moduleScopeCFlags)
 }
 
 type CcModuleArgBlocks struct {
@@ -765,16 +765,14 @@ func composeCCCommandArgBlocks(na *NodeArenas, p *Platform, in *ModuleCompileEnv
 		nf += 2
 	}
 
-	for _, part := range [9][]ANY{
+	for _, part := range [7][]ANY{
 		p.CLDebugInfo,
 		cflagsStr,
 		warnC,
 		p.Defines,
 		na.anyConcat(p.CFlags, in.CFlags, in.PeerCFlagsGlobal, in.OwnCFlagsGlobal),
 		noLibc,
-		catboostStr,
 		na.anyConcat(in.ModuleScopeCFlags),
-		noLibc,
 	} {
 		flagBuf[nf] = part
 		nf++
