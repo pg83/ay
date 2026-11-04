@@ -46,8 +46,18 @@ var multimoduleShapes = map[STR]map[STR]variantShape{
 	tokYqlLibrary.str(): shapeTable(map[string]variantShape{
 		"YQL_LIBRARY_STABLE": shapeLibCPP, "YQL_LIBRARY_CURRENT": {kind: KindLib, language: LangCPP, yqlCurrent: true},
 	}),
-	tokDllJava.str():        shapeTable(map[string]variantShape{"JNI_DLL": shapeLibCPP, "JAR_COMPILATION": shapeJava}),
-	tokDynamicLibrary.str(): shapeTable(map[string]variantShape{"DLL_BIN": shapeBinCPP, "DLL_LIB": shapeLibCPP}),
+	tokDllJava.str():                        shapeTable(map[string]variantShape{"JNI_DLL": shapeLibCPP, "JAR_COMPILATION": shapeJava}),
+	tokDynamicLibrary.str():                 shapeTable(map[string]variantShape{"DLL_BIN": shapeBinCPP, "DLL_LIB": shapeLibCPP}),
+	tokJavaLibrary.str():                    javaLibraryShapes(),
+	tokJavaLibrarySplit.str():               javaLibraryShapes(),
+	tokJavaProgram.str():                    javaProgramShapes(),
+	tokJavaAnnotationProcessor.str():        javaProgramShapes(),
+	tokJavaContribProgram.str():             javaProgramShapes(),
+	tokJavaContribAnnotationProcessor.str(): javaProgramShapes(),
+	tokJunit5.str():                         javaTestShapes("JUNIT5_JAR_COMPILATION"),
+	tokJunit6.str():                         javaTestShapes("JUNIT6_JAR_COMPILATION"),
+	tokJtest.str():                          javaTestShapes("JTEST_JAR_COMPILATION"),
+	tokJtestFor.str():                       javaTestShapes("JTEST_FOR_JAR_COMPILATION"),
 	tokDocs.str(): shapeTable(map[string]variantShape{
 		"DOCSBOOK": shapeBinCPP, "DOCSLIB": {kind: KindDocsLib, language: LangCPP},
 		"DOCSLIB_INTERNAL": {kind: KindDocsInternal, language: LangCPP}, "DOCSLIB_EXTERNAL": shapeLibCPP,
@@ -193,6 +203,18 @@ type variantShape struct {
 	kind       ModuleKind
 	language   Language
 	yqlCurrent bool
+}
+
+func javaLibraryShapes() map[STR]variantShape {
+	return shapeTable(map[string]variantShape{"FULL_JAR_COMPILATION": {kind: KindJavaFull, language: LangJava}, "IJAR": {kind: KindJavaIJar, language: LangJava}})
+}
+
+func javaProgramShapes() map[STR]variantShape {
+	return shapeTable(map[string]variantShape{"JAR_RUNNABLE": {kind: KindJavaRunnable, language: LangJava}, "JAR_COMPILATION": {kind: KindJavaCompilation, language: LangJava}})
+}
+
+func javaTestShapes(compilation string) map[STR]variantShape {
+	return shapeTable(map[string]variantShape{"JAR_TESTABLE": {kind: KindJavaTestable, language: LangJava}, compilation: {kind: KindJavaCompilation, language: LangJava}})
 }
 
 func yqlUdfShapes() map[STR]variantShape {

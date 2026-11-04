@@ -930,6 +930,7 @@ type confModule struct {
 	body      []ConfMacroCall
 	dirs      []ConfMacroCall
 	owner     STR
+	sub       STR
 	selfPeers []STR
 	aliases   map[STR]STR
 	own       *confMacroLimits
@@ -1417,6 +1418,7 @@ func (t *confTables) build() {
 			for _, name := range variants {
 				if module, _ := t.modules.get(internStr(name)); module != nil {
 					module.owner = internStr(owner)
+					module.sub = internStr(strings.TrimSuffix(name, "__from__"+owner))
 
 					for _, sub := range selfPeers[module.variable.string()] {
 						module.selfPeers = append(module.selfPeers, internStr(sub))
@@ -1804,6 +1806,10 @@ func (t *confTables) plan(module *confModule) *confModule {
 	}
 
 	for i := len(chain) - 1; i >= 0; i-- {
+		if chain[i].sub != 0 {
+			module.steps = append(module.steps, confInitStep{variable: envMODULE_TAG, value: chain[i].sub, original: true})
+		}
+
 		for _, call := range chain[i].body {
 			module.steps, _ = t.callSteps(call.name, call.args.string(), module.steps, 0)
 		}

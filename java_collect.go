@@ -175,8 +175,7 @@ func (d *JavaData) expandJavaProtobufPeers() {
 	d.javaProtobufPeers = out
 }
 
-func collectJavaData(ctx *GenCtx, jm *JavaModule, stmts []Stmt, env Environment) *JavaData {
-	d := &JavaData{jdkReal: ctx.javaDefaultJDK(), env: env, lintLevel: "extended", abiJar: true, srcDirs: []VFS{jm.path}, dm: ctx.javaDMBuf[:0], excludes: ctx.javaExclBuf[:0], rawVars: ctx.javaRawVars}
+func javaModulePrologue(ctx *GenCtx, jm *JavaModule, d *JavaData, env Environment) {
 	sourcesJar := env.string(envBUILD_TYPE) == "DEBUG" && env.string(envNO_DEBUGINFO) != "yes"
 	sbom := sbomActive(ctx, jm.instance)
 
@@ -195,12 +194,8 @@ func collectJavaData(ctx *GenCtx, jm *JavaModule, stmts []Stmt, env Environment)
 		}
 	}
 
-	d.javacOpts.base = []string{"-J-XX:ActiveProcessorCount=4"}
-	d.javacOpts.cur = d.javacOpts.base
-
 	javaSetJDK(d, env, d.jdkReal)
 	jm.instance.Platform.conf.set(env, envJdkRealVersion, nil)
-	env.setString(envMODULE_TAG, jm.unit.tag)
 
 	if jm.unit.proto {
 		env.setBool(envJavaProto, true)
@@ -209,7 +204,13 @@ func collectJavaData(ctx *GenCtx, jm *JavaModule, stmts []Stmt, env Environment)
 	if jm.unit.fbs {
 		env.setBool(envJavaFbs, true)
 	}
+}
 
+func collectJavaData(ctx *GenCtx, jm *JavaModule, stmts []Stmt, env Environment) *JavaData {
+	d := &JavaData{jdkReal: ctx.javaDefaultJDK(), env: env, lintLevel: "extended", abiJar: true, srcDirs: []VFS{jm.path}, dm: ctx.javaDMBuf[:0], excludes: ctx.javaExclBuf[:0], rawVars: ctx.javaRawVars}
+
+	d.javacOpts.base = []string{"-J-XX:ActiveProcessorCount=4"}
+	d.javacOpts.cur = d.javacOpts.base
 	clear(d.rawVars)
 	collectJavaStmts(ctx, jm, d, stmts, env)
 
@@ -333,9 +334,11 @@ func collectJavaStmts(ctx *GenCtx, jm *JavaModule, d *JavaData, stmts []Stmt, en
 		case *MissingIncludeStmt:
 			throwFmt("%s:%d: INCLUDE file %s not found", jm.dir, v.Line, v.Path)
 		case *ModuleStmt:
-			if v.Schema {
-				env.setString(envMODULE_TAG, protoModuleTag(LangJava, true))
-			}
+			owner := multimoduleOwner(v)
+			platform := jm.instance.Platform
+
+			platform.conf.initModule(env, platform.conf.module(owner, multimoduleSub(owner, jm.unit.sub, LangJava, false).string()), &d.setVars)
+			javaModulePrologue(ctx, jm, d, env)
 
 			javaModuleArgs(jm, d, expandSourceArguments(v.Args, env))
 			javaConfPrologue(ctx, jm, d)

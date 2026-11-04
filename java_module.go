@@ -257,6 +257,7 @@ type JavaRunProgram struct {
 }
 
 type JavaData struct {
+	setVars                SetVars
 	autoincluded           bool
 	recurses               []string
 	name                   string
