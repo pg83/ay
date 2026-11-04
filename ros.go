@@ -76,12 +76,10 @@ func setupRosModule(stmt *ModuleStmt, module string, language Language, env Envi
 		env.setBool(envGoRos, true)
 		env.setString(envMODULE_TAG, "GO")
 	case LangPy:
-		d.selfPeers = append(d.selfPeers, LangRosBindings)
 		d.peerdirs = append(d.peerdirs, strSdgSdcThirdPartyRosGenpyYamakesPylib.any())
 		d.usePython3 = true
 		env.setBool(envPy3Ros, true)
 	case LangRosBindings:
-		d.selfPeers = append(d.selfPeers, LangCPP)
 
 		d.peerdirs = append(d.peerdirs, internAnys([]string{
 			"contrib/python/numpy/py3",

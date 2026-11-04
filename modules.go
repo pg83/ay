@@ -1970,10 +1970,6 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 			expanded.Args = expandSourceArguments(v.Args, env)
 			v = astOne(astModules, expanded)
 
-			if v.Name == tokPy3Program && kind == KindBin {
-				d.peerdirs = append([]ANY{internStr(modulePath).any()}, d.peerdirs...)
-			}
-
 			applyCppTestModule(v, d, env)
 
 			if isNotsModule(v.Name) || v.Name == tokProtoLibrary && (language == LangTS || language == LangTSPrepare) {
@@ -2073,7 +2069,7 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 
 			setupRosModule(v, modulePath, language, env, d)
 			setupMlaunchModule(v, modulePath, language, env, d)
-			setupPackageModule(v, language, d)
+			setupPackageModule(v, d)
 			setupSdcUnionModule(v, language, env, d)
 			setupSdcDiagsModule(v, language, env, d)
 			setupRustModule(v.Name, language, env, d)

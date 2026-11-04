@@ -67,11 +67,16 @@ func (e *EmitContext) genPackageFinal() *ModuleEmitResult {
 	var globals []ResourceDecl
 
 	seen := map[*ModuleEmitResult]bool{}
+	selves := e.confSelfPeerInstances()
 
 	for _, language := range e.d.selfPeers {
 		self := e.instance
 
 		self.Language = language
+		selves = append(selves, self)
+	}
+
+	for _, self := range selves {
 		self.Demand = max(e.instance.Demand, demandSelf)
 
 		result, built := e.completePackagePeer(self)

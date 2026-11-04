@@ -143,6 +143,7 @@ var (
 	envHostOsWindows                          = internEnv("HOST_OS_WINDOWS")
 	envIS_CROSS_TOOLS                         = internEnv("IS_CROSS_TOOLS")
 	envIgnoreCppProtoSelfPeers                = internEnv("_IGNORE_CPP_PROTO_SELF_PEERS")
+	envIgnorePeerdirSelf                      = internEnv("_IGNORE_PEERDIRSELF")
 	envJavaFbs                                = internEnv("JAVA_FBS")
 	envJavaHome                               = internEnv("JAVA_HOME")
 	envJavaIgnoreClasspathClash               = internEnv("JAVA_IGNORE_CLASSPATH_CLASH_VALUE")

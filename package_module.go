@@ -15,15 +15,11 @@ func packageModuleUnit(language Language) ModuleUnit {
 	return unit
 }
 
-func setupPackageModule(stmt *ModuleStmt, language Language, d *ModuleData) {
+func setupPackageModule(stmt *ModuleStmt, d *ModuleData) {
 	if stmt.Name != tokPackage {
 		return
 	}
 
 	d.multimodule = tokPackage
 	d.moduleVariants = 0
-
-	if language != LangPackage {
-		d.selfPeers = append(d.selfPeers, LangPackage)
-	}
 }

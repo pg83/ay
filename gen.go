@@ -1698,8 +1698,8 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 	}()
 
 	var preResolved []ResolvedPeer
-	var resolveCppSelf bool
 
+	confSelf := e.confSelfPeers()
 	frontSet := make(map[ANY]struct{}, len(d.protoCmdPeers))
 
 	for _, p := range d.protoCmdPeers {
@@ -1711,10 +1711,8 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 			return !deduper.add(internStr(p).any().strID())
 		}
 
-		if isPythonProtoModule(d) && d.optimizePyProtos && !d.ignoreCppProtoSelfPeers && !moduleExcludesTag(d, protoModuleTag(LangCPP, d.moduleStmt.Schema)) {
+		if len(confSelf) > 0 {
 			peerSeen(instance.Path.relString())
-
-			resolveCppSelf = true
 		}
 
 		if self := internStr(instance.Path.relString()).any(); slices.Contains(d.peerdirs, self) && !peerSeen(self.string()) {
@@ -1767,12 +1765,7 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 		preResolved = append(preResolved, ResolvedPeer{path: instance.Path.relString(), result: e.genPeerModule(self), kind: peerKindImplicit})
 	}
 
-	if resolveCppSelf {
-		cppSelf := instance
-
-		cppSelf.Language = LangCPP
-		preResolved = append(preResolved, ResolvedPeer{path: instance.Path.relString(), result: e.genPeerModule(cppSelf), kind: peerKindImplicit})
-	}
+	preResolved = append(preResolved, confSelf...)
 
 	peerObjAddLibsGlobal := frame.peerObjAddLibsGlobal[:0]
 	peerLDFlagsGlobal := frame.peerLDFlagsGlobal[:0]
