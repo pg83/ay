@@ -326,6 +326,7 @@ var tokName = [...]STR{
 	tokPartitionedRecurse:              internStr("PARTITIONED_RECURSE"),
 	tokPartitionedRecurseForTests:      internStr("PARTITIONED_RECURSE_FOR_TESTS"),
 	tokPartitionedRecurseRootRelative:  internStr("PARTITIONED_RECURSE_ROOT_RELATIVE"),
+	tokPyProgramPlugin:                 internStr("_PY_PROGRAM"),
 	tokPySrcs:                          strPySrcs,
 	tokRecurse:                         internStr("RECURSE"),
 	tokRecurseForTests:                 internStr("RECURSE_FOR_TESTS"),
@@ -1026,6 +1027,7 @@ const (
 	tokPartitionedRecurse
 	tokPartitionedRecurseForTests
 	tokPartitionedRecurseRootRelative
+	tokPyProgramPlugin
 )
 
 type TOK uint16

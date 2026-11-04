@@ -163,15 +163,12 @@ func setupSandboxPythonTask(name TOK, modulePath string, kind ModuleKind, langua
 
 	if kind == KindBin {
 		d.pyMain = ptr(strSandboxTaskboxBinaryMain.any())
-		d.peerdirs = append(d.peerdirs, internAnys([]string{"sandbox/bin", "sandbox/sdk2", "sandbox/taskbox/worker"})...)
 
 		for _, mask := range []string{"api.*", "kernel.*", "library.*", "sky*"} {
 			value := appendPythonImportMask(mask, env, d)
 
 			env.setString(internEnv(importMaskVariable), value)
 		}
-	} else {
-		d.peerdirs = append(d.peerdirs, strSandboxSdk2.any())
 	}
 
 	registerSandboxImport(modulePath, modulePath, d)

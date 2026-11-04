@@ -1121,74 +1121,10 @@ func applyImplicitPeerdirs(ctx *GenCtx, instance ModuleInstance, d *ModuleData) 
 	}
 
 	if isPyProgramType(d.moduleStmt.Name) {
-		var earlyPeers []string
-
-		if isPythonTestModule(d.moduleStmt.Name) {
-			earlyPeers = append(earlyPeers, "library/python/pytest")
-		}
-
-		if d.usePython2 {
-			earlyPeers = append(earlyPeers, "library/python/runtime/main", "contrib/deprecated/python/subprocess32")
-
-			if d.pythonSQLite3 {
-				earlyPeers = append(earlyPeers, "contrib/tools/python/src/Modules/_sqlite")
-			}
-		} else {
-			if d.pythonSQLite3 {
-				earlyPeers = append(earlyPeers, "contrib/tools/python3/Modules/_sqlite")
-			}
-
-			earlyPeers = append(earlyPeers, "library/python/runtime_py3/main")
-		}
-
-		if !d.noImportTracing && instance.Path.relString() != "library/python/import_tracing/constructor" {
-			earlyPeers = append(earlyPeers, "library/python/import_tracing/constructor")
-		}
-
-		deprecated := (d.moduleStmt.Name == tokPy2Program || d.moduleStmt.Name == tokPy2Test) && d.multimodule != tokSandboxPy23Task && !instance.Platform.ifEnv.bool(envFAIL_PY2) && !instance.Platform.ifEnv.bool(envOPENSOURCE)
-
-		if d.multimodule == tokSandboxTask {
-			deprecated = d.sandboxTaskDeprecation
-		}
-
-		if deprecated {
-			earlyPeers = append(earlyPeers, "build/rules/py2_deprecation")
-		}
-
 		var latePeers []string
 
 		if !d.noCheckImportsDisabled {
 			latePeers = append(latePeers, "library/python/testing/import_test")
-		}
-
-		if d.moduleStmt.Name != tokPy3Program {
-			insertAt := 0
-
-			if len(d.peerdirs) > 0 && d.peerdirs[0].string() == "contrib/libs/python" {
-				insertAt = 1
-			}
-
-			filteredEarly := earlyPeers[:0]
-
-			for _, peer := range earlyPeers {
-				if instance.Path.relString() != peer {
-					filteredEarly = append(filteredEarly, peer)
-				}
-			}
-
-			spliced := make([]ANY, 0, len(d.peerdirs)+len(filteredEarly))
-
-			spliced = append(spliced, d.peerdirs[:insertAt]...)
-			spliced = append(spliced, internAnys(filteredEarly)...)
-			spliced = append(spliced, d.peerdirs[insertAt:]...)
-
-			d.peerdirs = spliced
-		} else {
-			for _, peer := range earlyPeers {
-				if instance.Path.relString() != peer {
-					d.peerdirs = append(d.peerdirs, internStr(peer).any())
-				}
-			}
 		}
 
 		for _, peer := range latePeers {

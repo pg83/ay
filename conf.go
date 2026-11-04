@@ -925,6 +925,7 @@ type confModule struct {
 	variable  ENV
 	calls     []string
 	body      []ConfMacroCall
+	dirs      []ConfMacroCall
 	aliases   map[STR]STR
 	own       *confMacroLimits
 	limits    *confMacroLimits
@@ -1313,11 +1314,37 @@ func (t *confTables) build() {
 		}
 	}
 
+	for _, module := range t.modules.vals.s {
+		if module != nil {
+			module.dirs = t.bodyDirs(module)
+		}
+	}
+
 	for _, file := range owners {
 		for owner, variants := range file.variants {
 			t.orderVariants(owner, variants, selfPeers)
 		}
 	}
+}
+
+func (t *confTables) bodyDirs(module *confModule) []ConfMacroCall {
+	var chain []*confModule
+
+	for base := module; base != nil; base = t.module(base.parent, "") {
+		chain = append(chain, base)
+	}
+
+	var dirs []ConfMacroCall
+
+	for i := len(chain) - 1; i >= 0; i-- {
+		for _, call := range chain[i].body {
+			if call.name == tokPyProgramPlugin.str() || dirStatement(call.name) && call.name != strGhostPeerdir && module.verdicts[call.name]&confMacroIgnored == 0 {
+				dirs = append(dirs, call)
+			}
+		}
+	}
+
+	return dirs
 }
 
 type confMacroLimits struct {

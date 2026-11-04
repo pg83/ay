@@ -1565,6 +1565,37 @@ func (d *ModuleData) flattenConfMacro(ctx *GenCtx, modulePath string, kind Modul
 	return &c
 }
 
+func (d *ModuleData) moduleBodyDirs(ctx *GenCtx, modulePath string, kind ModuleKind, language Language, env Environment, onWarn func(Warn), platform *Platform) {
+	if d.confModule == nil {
+		return
+	}
+
+	for _, call := range d.confModule.dirs {
+		if call.name == tokPyProgramPlugin.str() {
+			d.deferStmt(ctx, modulePath, kind, language, &UnknownStmt{Name: tokPyProgramPlugin, Raw: call.name}, env, onWarn, platform)
+
+			continue
+		}
+
+		text := call.args
+
+		if strHasDollar(text.any()) {
+			text = internStr(env.subst(text.string(), nil, nil))
+		}
+
+		args := platform.conf.state.macroArgs(text)
+
+		var scratch [1]Stmt
+
+		stmts := appendMacroCallStmts(scratch[:0], call.name, args, args, 0, func(format string, a ...any) {
+			throwFmt("%s: %s: "+format, append([]any{modulePath, call.name.string()}, a...)...)
+		})
+
+		markImplicitPeers(stmts)
+		collectStmts(ctx, modulePath, kind, language, stmts, env, d, onWarn, platform)
+	}
+}
+
 func (d *ModuleData) callConfMacro(ctx *GenCtx, modulePath string, kind ModuleKind, language Language, call UnknownStmt, env Environment, onWarn func(Warn), platform *Platform) {
 	if macro := platform.conf.alias(platform.conf.moduleAlias(d.confModule, call.Raw)); macro != nil {
 		platform.conf.macroCalls(macro, call, env, d, onWarn, modulePath, func(callee STR, args []ANY) {
@@ -1993,6 +2024,12 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 			if moduleType := confModuleType(v.Name, d); moduleType != "" {
 				env.setString(envMODULE_TYPE, moduleType)
 			}
+
+			if (v.Name == tokUnittestFor || v.Name == tokJtestFor) && len(v.Args) > 0 {
+				env.setString(envUnittestDir, v.Args[0].string())
+			}
+
+			d.moduleBodyDirs(ctx, modulePath, kind, language, env, onWarn, platform)
 
 			if isDllModuleType(d.unit.Type) {
 				env.setString(envMODULE_TAG, "DLL")
@@ -4049,6 +4086,8 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 		d.pyMainDeclSeq = d.nextDeclSeq()
 
 		collectPythonSourceEntry(d, env, &d.macroPeerdirs)
+	case tokPyProgramPlugin:
+		pyProgram(d, env)
 	case tokRegisterSandboxImport:
 
 		for _, arg := range v.Args {
@@ -4638,6 +4677,30 @@ func confModuleType(name TOK, d *ModuleData) string {
 	}
 
 	return pythonSourceModuleType(d.unit.Type)
+}
+
+func pyProgram(d *ModuleData, env Environment) {
+	if env.string(envUSE_ARCADIA_PYTHON) != "yes" {
+		return
+	}
+
+	sqlite := env.string(envPYTHON_SQLITE3) != "no"
+
+	if env.string(envPYTHON2) == "yes" {
+		d.peerdirs = append(d.peerdirs, strLibraryPythonRuntimeMain.any())
+
+		if sqlite {
+			d.peerdirs = append(d.peerdirs, strContribToolsPythonSrcModulesSqlite.any())
+		}
+
+		return
+	}
+
+	d.peerdirs = append(d.peerdirs, strLibraryPythonRuntimePy3Main.any())
+
+	if sqlite {
+		d.peerdirs = append(d.peerdirs, internV(env.string(envPYTHON3_TOOL_PEERDIR), "/Modules/_sqlite").any())
+	}
 }
 
 func collectPythonSourceEntry(d *ModuleData, env Environment, peers *[]ANY) {

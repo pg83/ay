@@ -246,29 +246,7 @@ func finishYqlUdfModule(modulePath string, d *ModuleData, env Environment) {
 		env.string(envMUSL) == "yes" || env.string(envCppAnalysisMode) == "yes")
 
 	if d.yqlPythonUdf {
-		peers := yqlUdfImplicitPeers()
-
-		peers = append(peers, "build/platform/python/ldflags", "library/python/type_info")
-		d.peerdirs = append(internAnys(peers), d.peerdirs...)
-		peers = nil
-
-		if env.bool(envUSE_ARCADIA_PYTHON) {
-			if d.usePython2 {
-				peers = append(peers, "library/python/runtime/main")
-
-				if d.pythonSQLite3 {
-					peers = append(peers, "contrib/tools/python/src/Modules/_sqlite")
-				}
-			} else {
-				peers = append(peers, "library/python/runtime_py3/main")
-
-				if d.pythonSQLite3 {
-					peers = append(peers, "contrib/tools/python3/Modules/_sqlite")
-				}
-			}
-		}
-
-		d.peerdirs = append(d.peerdirs, internAnys(peers)...)
+		d.peerdirs = append(internAnys(yqlUdfImplicitPeers()), d.peerdirs...)
 	}
 
 	if d.exportsScript == nil && !env.bool(envOS_WINDOWS) {

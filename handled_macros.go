@@ -1,6 +1,7 @@
 package main
 
 var handledMacroTokens = map[TOK]bool{
+	tokPyProgramPlugin:                      true,
 	tokSplitDwarf:                           true,
 	tokNoSplitDwarf:                         true,
 	tokAddCustomExplicitLinterCheck:         true,

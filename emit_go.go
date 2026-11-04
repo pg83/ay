@@ -80,8 +80,6 @@ const (
 	ldConfRel       = "build/conf/linkers/ld.conf"
 	mergeSdcmetaRel = "build/internal/scripts/merge_sdcmeta.py"
 	goArcPrefix     = "a.yandex-team.ru/"
-	goToolsPeer     = "build/external_resources/go_tools"
-	goYolintPeer    = "build/external_resources/yolint"
 	goVendorPrefix  = "vendor"
 )
 
@@ -289,16 +287,6 @@ func applyGoImplicitPeerdirs(ctx *GenCtx, instance ModuleInstance, d *ModuleData
 			addPeer(std.Prefix + "/runtime/coverage")
 		}
 
-		addPeer(std.Prefix + "/runtime")
-		addPeer("library/go/core/buildinfo")
-
-		if d.moduleStmt.Name == tokGoTest {
-			addPeer(std.Prefix + "/os")
-			addPeer(std.Prefix + "/testing/internal/testdeps")
-			addPeer(std.Prefix + "/testing")
-			addPeer("library/go/test/yatest")
-		}
-
 		for _, p := range user {
 			if !slices.Contains(d.peerdirs, p) {
 				d.peerdirs = append(d.peerdirs, p)
@@ -387,9 +375,6 @@ func applyGoImplicitPeerdirs(ctx *GenCtx, instance ModuleInstance, d *ModuleData
 			addImports(src)
 		}
 	}
-
-	addPeer(goToolsPeer)
-	addPeer(goYolintPeer)
 
 	goIncl := make([]VFS, 0, 3)
 
