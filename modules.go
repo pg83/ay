@@ -139,6 +139,7 @@ type ModuleData struct {
 	yqlUdfShared            bool
 	yqlPythonUdf            bool
 	yqlCurrent              bool
+	dynamicLink             bool
 	macroCalls              []UnknownStmt
 	yqlPrebuiltResource     string
 	yqlPrebuiltAliases      bool
@@ -289,7 +290,6 @@ type ModuleData struct {
 	grpcOutputsBeforeBase   bool
 	excludeTags             map[STR]bool
 	onlyTags                bool
-	dynamicLibraryFrom      []ANY
 	exportsScript           *ANY
 	linkerScripts           []ANY
 	ldPlugins               []ANY
@@ -791,6 +791,7 @@ func collectModuleInto(ctx *GenCtx, instance ModuleInstance, stmts []Stmt, env E
 	d.flags.NoCompilerWarnings = env.bool(envNoCompilerWarnings)
 	d.noLint = env.string(envNoLintValue)
 	d.useCommonGoogleAPIs = env.string(envCommonGoogleApis) != "None"
+	d.dynamicLink = env.bool(envDynamicLink)
 
 	if env.string(envYqlAbiPeerdirTag) == "YQL_ABI_CURRENT" {
 		d.yqlCurrent = true
@@ -1353,10 +1354,6 @@ func moduleConfTag(owner STR, kind ModuleKind, language Language, d *ModuleData)
 		return sub.string()
 	}
 
-	if owner == tokDynamicLibrary.str() {
-		return "DLL_BIN"
-	}
-
 	return d.unit.Tag.string()
 }
 
@@ -1419,7 +1416,7 @@ func multiStatement(name STR) bool {
 }
 
 func (d *ModuleData) deferStmt(ctx *GenCtx, modulePath string, kind ModuleKind, language Language, s Stmt, env Environment, onWarn func(Warn), platform *Platform) bool {
-	if v, ok := s.(*UnknownStmt); ok && policyDrops(d, v.Name) {
+	if v, ok := s.(*UnknownStmt); ok && policyDrops(d, v.macroName()) {
 		return false
 	}
 
@@ -1449,7 +1446,7 @@ func (d *ModuleData) deferStmt(ctx *GenCtx, modulePath string, kind ModuleKind, 
 func (d *ModuleData) bindBody(ctx *GenCtx, modulePath string, kind ModuleKind, language Language, s Stmt, env Environment, onWarn func(Warn), platform *Platform) Stmt {
 	switch v := s.(type) {
 	case *UnknownStmt:
-		if policyDrops(d, v.Name) {
+		if policyDrops(d, v.macroName()) {
 			return s
 		}
 
@@ -2755,7 +2752,7 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 						} else {
 							expandConfMacro(ctx, modulePath, kind, language, expanded, false, env, d, onWarn, platform)
 						}
-					} else if d.moduleStmt != nil && !d.moduleEnded && !d.interpreting && !policyDrops(d, expanded.Name) {
+					} else if d.moduleStmt != nil && !d.moduleEnded && !d.interpreting && !policyDrops(d, expanded.macroName()) {
 						d.expandBodyAtParse(ctx, modulePath, kind, language, expanded.Raw, expanded.Args, expanded.Line, env, onWarn, platform)
 					}
 
@@ -2885,6 +2882,12 @@ func resolveModuleUnitBare(name TOK, kind ModuleKind, language Language) ModuleU
 	case tokSdcDiagsLibrary:
 		return sdcDiagsModuleUnit(language)
 	case tokUdfBase:
+		return ModuleUnit{Type: tokDll, ARPrefix: "lib", GlobalARTag: tagGlobal, SbomLang: unitSbomCpp}
+	case tokDynamicLibrary:
+		if kind == KindLib {
+			return ModuleUnit{Type: tokLibrary, ARPrefix: "lib", GlobalARTag: tagGlobal, SbomLang: unitSbomCpp}
+		}
+
 		return ModuleUnit{Type: tokDll, ARPrefix: "lib", GlobalARTag: tagGlobal, SbomLang: unitSbomCpp}
 	case tokDllJava:
 		return ModuleUnit{Type: tokDll, ARPrefix: "lib", GlobalARTag: tagGlobal, SbomLang: unitSbomCpp, SwigLang: strSwigLangJniCpp}
@@ -3106,7 +3109,7 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 		return true
 	}
 
-	if dropsMacro(d, modulePath, v.Name, onWarn) {
+	if dropsMacro(d, modulePath, v.macroName(), onWarn) {
 		return true
 	}
 
@@ -3836,12 +3839,6 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 	case tokLdPlugin:
 
 		d.ldPlugins = append(d.ldPlugins, v.Args...)
-	case tokDynamicLibraryFrom:
-		if len(v.Args) == 0 {
-			throwFmt("gen: DYNAMIC_LIBRARY_FROM expects at least 1 argument")
-		}
-
-		d.dynamicLibraryFrom = append(d.dynamicLibraryFrom, v.Args...)
 	case tokExportsScript:
 		if len(v.Args) != 1 {
 			throwFmt("gen: EXPORTS_SCRIPT expects exactly 1 argument, got %d", len(v.Args))
@@ -4586,7 +4583,7 @@ func moduleAssignsLang(name TOK) bool {
 }
 
 func pythonSourceModuleType(name TOK) string {
-	if name == tokGoDll || isDllModuleType(name) || name == tokDynamicLibrary {
+	if name == tokGoDll || isDllModuleType(name) {
 		return "DLL"
 	}
 

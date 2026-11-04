@@ -46,7 +46,8 @@ var multimoduleShapes = map[STR]map[STR]variantShape{
 	tokYqlLibrary.str(): shapeTable(map[string]variantShape{
 		"YQL_LIBRARY_STABLE": shapeLibCPP, "YQL_LIBRARY_CURRENT": {kind: KindLib, language: LangCPP, yqlCurrent: true},
 	}),
-	tokDllJava.str(): shapeTable(map[string]variantShape{"JNI_DLL": shapeLibCPP, "JAR_COMPILATION": shapeJava}),
+	tokDllJava.str():        shapeTable(map[string]variantShape{"JNI_DLL": shapeLibCPP, "JAR_COMPILATION": shapeJava}),
+	tokDynamicLibrary.str(): shapeTable(map[string]variantShape{"DLL_BIN": shapeBinCPP, "DLL_LIB": shapeLibCPP}),
 }
 
 const defaultProtoVariants = 1<<LangCPP | 1<<LangJava | 1<<LangPy | 1<<LangGo | 1<<LangDescProto

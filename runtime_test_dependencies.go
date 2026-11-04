@@ -68,7 +68,7 @@ func (e *EmitContext) recordTestDependencyModule(result *ModuleEmitResult, decla
 }
 
 func testDependencySharedObject(name TOK) bool {
-	return name == tokDll || name == tokSoProgram || name == tokDynamicLibrary || name == tokPy2Module || name == tokPy3Module || name == tokGoDll
+	return name == tokDll || name == tokSoProgram || name == tokPy2Module || name == tokPy3Module || name == tokGoDll
 }
 
 func testDependencyBundleRendering(moduleType string) (bool, bool) {

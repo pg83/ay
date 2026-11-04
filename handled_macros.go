@@ -48,7 +48,6 @@ var handledMacroTokens = map[TOK]bool{
 	tokDecimalMd5Lower32Bits:                true,
 	tokDeclareInDirs:                        true,
 	tokDisable:                              true,
-	tokDynamicLibraryFrom:                   true,
 	tokEnable:                               true,
 	tokExcludeTags:                          true,
 	tokExplicitOutputs:                      true,

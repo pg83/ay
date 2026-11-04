@@ -84,6 +84,7 @@ const (
 
 type ModuleEmitResult struct {
 	excluded                        bool
+	dynamicLink                     bool
 	ToolRequired                    bool
 	ToolPath                        ARG
 	ForeignTool                     *ForeignTool
@@ -483,7 +484,7 @@ func (ctx *GenCtx) rootInstanceForDeclaration(dir string, demand ModuleDemand, d
 		}
 	}
 
-	if name == tokPy3Program || isSandboxPythonTask(name) || name == tokYqlUdf || name == tokYqlUdfContrib || name == tokDocs || name == 0 {
+	if name == tokPy3Program || isSandboxPythonTask(name) || name == tokYqlUdf || name == tokYqlUdfContrib || name == tokDynamicLibrary || name == tokDocs || name == 0 {
 		kind = KindBin
 	}
 
@@ -1623,14 +1624,6 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 		}
 	}
 
-	if d.moduleStmt.Name == tokDynamicLibrary {
-		result := e.emitDynamicLibrary()
-
-		ctx.memoPut(instance, result)
-
-		return result
-	}
-
 	unitTestPeer := unittestForPeerPath(d.moduleStmt)
 	allPeers := frame.allPeers[:0]
 	peerKinds := frame.peerKinds[:0]
@@ -1858,7 +1851,7 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 
 		globalCap += len(pr.GlobalObjectPaths)
 
-		if pr.ModuleStmtName == tokDynamicLibrary && pr.LDPath != nil {
+		if pr.dynamicLink && pr.LDPath != nil {
 			dynCap++
 		}
 
@@ -2077,7 +2070,7 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 					}
 				}
 
-				if pr.ModuleStmtName == tokDynamicLibrary && pr.LDPath != nil && deduper.addStable(pr.LDPath.strID()) {
+				if pr.dynamicLink && pr.LDPath != nil && deduper.addStable(pr.LDPath.strID()) {
 					dynBlockR[k] = pr.LDRef
 					dynBlockP[k] = *pr.LDPath
 					k++
@@ -2106,7 +2099,7 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 					}
 				}
 
-				if pr.ModuleStmtName == tokDynamicLibrary && pr.LDPath != nil && deduper.addStable(pr.LDPath.strID()) {
+				if pr.dynamicLink && pr.LDPath != nil && deduper.addStable(pr.LDPath.strID()) {
 					peerLinkCmdPaths = append(peerLinkCmdPaths, *pr.LDPath)
 				}
 
@@ -2326,6 +2319,13 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 			InducedDeps:                     d.inducedDeps,
 			ModuleStmtName:                  d.moduleStmt.Name,
 			CFlagsGlobal:                    effectiveCFlagsGlobal,
+			dynamicLink:                     d.dynamicLink,
+		}
+
+		if d.dynamicLink {
+			r.PeerArchiveClosureRefs, r.PeerArchiveClosurePaths = nil, nil
+			r.PeerGlobalClosureRefs, r.PeerGlobalClosurePaths = nil, nil
+			r.PeerWholeArchiveClosureRefs, r.PeerWholeArchiveClosurePaths, r.PeerWholeArchiveCmdClosurePaths = nil, nil, nil
 		}
 
 		return r

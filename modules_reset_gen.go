@@ -65,7 +65,6 @@ func (x *ModuleData) reset() {
 		cppProtoPlugins:      scrub(x.cppProtoPlugins),
 		pyProtoPlugins:       scrub(x.pyProtoPlugins),
 		excludeTags:          clearedMap(x.excludeTags),
-		dynamicLibraryFrom:   x.dynamicLibraryFrom[:0],
 		ldPlugins:            x.ldPlugins[:0],
 		defaultVars:          clearedMap(x.defaultVars),
 		configureFiles:       scrub(x.configureFiles),

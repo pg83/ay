@@ -226,7 +226,7 @@ func (e *EmitContext) publishModuleIncludes(result *ModuleEmitResult) {
 
 	var peerInputs InputChunks
 
-	passPeers := !isProgramModuleType(e.d.unit.Type) && !isDllModuleType(e.d.unit.Type) && e.d.unit.Type != tokDynamicLibrary
+	passPeers := !isProgramModuleType(e.d.unit.Type) && !isDllModuleType(e.d.unit.Type)
 
 	if value, ok := e.d.setVars.get(strPassPeers), e.d.setVars.has(strPassPeers); ok {
 		passPeers = stringIsTruthy(value.string())

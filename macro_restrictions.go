@@ -2,23 +2,23 @@ package main
 
 import "fmt"
 
-func macroLimit(d *ModuleData, name TOK) (ignored, restricted bool) {
+func macroLimit(d *ModuleData, name STR) (ignored, restricted bool) {
 	if d.moduleStmt == nil || d.confModule == nil {
 		return false, false
 	}
 
-	verdict := d.confModule.verdicts[name.str()]
+	verdict := d.confModule.verdicts[name]
 
 	return verdict&confMacroIgnored != 0, verdict&confMacroRestricted != 0
 }
 
-func policyDrops(d *ModuleData, name TOK) bool {
+func policyDrops(d *ModuleData, name STR) bool {
 	ignored, restricted := macroLimit(d, name)
 
 	return ignored || restricted
 }
 
-func dropsMacro(d *ModuleData, modulePath string, name TOK, onWarn func(Warn)) bool {
+func dropsMacro(d *ModuleData, modulePath string, name STR, onWarn func(Warn)) bool {
 	ignored, restricted := macroLimit(d, name)
 
 	if !ignored && restricted {
@@ -26,4 +26,12 @@ func dropsMacro(d *ModuleData, modulePath string, name TOK, onWarn func(Warn)) b
 	}
 
 	return ignored || restricted
+}
+
+func (v *UnknownStmt) macroName() STR {
+	if v.Name != tokInvalid {
+		return v.Name.str()
+	}
+
+	return v.Raw
 }

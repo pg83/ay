@@ -143,7 +143,7 @@ func (ctx *GenCtx) moduleOutputIncludedDeps(info *GeneratedFileInfo) []IncludeDi
 			continue
 		}
 
-		if isProgramModuleType(r.ModuleStmtName) || isDllModuleType(r.ModuleStmtName) || r.ModuleStmtName == tokDynamicLibrary {
+		if isProgramModuleType(r.ModuleStmtName) || isDllModuleType(r.ModuleStmtName) {
 			return []IncludeDirective{}
 		}
 

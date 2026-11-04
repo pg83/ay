@@ -18,7 +18,7 @@ func (d *ModuleData) finishResourcePeerPolicy() {
 
 	d.resourcePeerClosed = true
 
-	d.resourcePassPeers = (d.unit.Type == tokDynamicLibrary || d.unit.Tag == strYqlUdfStatic || !isLinkingModuleType(d.unit.Type)) &&
+	d.resourcePassPeers = (d.unit.Tag == strYqlUdfStatic || !isLinkingModuleType(d.unit.Type)) &&
 		d.unit.Type != tokDocs && d.unit.Type != tokProtoDescriptions && d.unit.Type != tokProtoRegistry &&
 		d.unit.Type != tokExectest && d.unit.Type != tokPrebuiltProgram
 

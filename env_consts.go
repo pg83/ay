@@ -349,6 +349,7 @@ var (
 	envUseSystemPython                        = internEnv("USE_SYSTEM_PYTHON")
 	envValidateData                           = internEnv("VALIDATE_DATA")
 	envWIN32                                  = internEnv("WIN32")
+	envWholeArchivePeersValue                 = internEnv("_WHOLE_ARCHIVE_PEERS_VALUE")
 	envWithKotlinValue                        = internEnv("WITH_KOTLIN_VALUE")
 	envWithYa1931                             = internEnv("_WITH_YA_1931")
 	envXCODE                                  = internEnv("XCODE")
