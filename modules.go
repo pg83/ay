@@ -2117,7 +2117,7 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 			}
 
 			if v.Name == tokDocs || v.Name == tokDocsLibrary {
-				d.docs = &DocsData{config: modulePath + "/.yfm"}
+				d.docs = &DocsData{}
 			}
 
 			if v.Name == tokProtoLibrary && language == LangGo {

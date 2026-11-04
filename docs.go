@@ -40,18 +40,6 @@ func (d *DocsData) apply(v UnknownStmt, module string, owner *ModuleData) bool {
 	switch v.Name {
 	case tokDocsDir:
 		d.dirs = append(d.dirs, args...)
-	case tokDocsConfig:
-		if len(args) > 0 {
-			d.config = args[0]
-		}
-	case tokDocsVars:
-		d.vars = append(d.vars, args...)
-	case tokDocsIncludeSources:
-		for _, a := range args {
-			d.includes = append(d.includes, docsSource(a))
-		}
-	case tokUsePlantuml:
-		d.plantuml = true
 	case tokDocsCopyFiles:
 		c := DocsCopy{from: source(module).string(), namespace: ".", declSeq: owner.nextDeclSeq()}
 
@@ -164,6 +152,14 @@ func docsGlobMatches(pattern, value string) bool {
 }
 
 func (d *DocsData) finish(fs FS, module string, env Environment) {
+	d.config = env.expandVariable(env.string(envDocsConfigValue))
+	d.vars = strings.Fields(env.expandVariable(env.string(envDocsVarsValue)))
+	d.plantuml = env.bool(envDocsUsePlantuml)
+
+	for _, src := range strings.Fields(env.expandVariable(env.string(envDocsIncludeSourcesValue))) {
+		d.includes = append(d.includes, docsSource(src))
+	}
+
 	if len(d.dirs) == 0 && !d.explicitSources {
 		d.dirs = append(d.dirs, module)
 	} else {

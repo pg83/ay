@@ -1883,6 +1883,7 @@ type Conf struct {
 	inherited   DenseMap[ENV, ConfValue]
 	base        *EnvStore
 	bases       [][]ConfAssignment
+	deepReads   [][]bool
 	sysinclList []string
 	recalcs     map[uint64][]confRecalc
 	inputs      []uint64
@@ -2083,7 +2084,7 @@ func loadConf(pm *IncludeParserManager, root *ConfFile, platformEnv Environment)
 	}
 
 	tables := pm.cache.conf.tablesFor(program)
-	c := &Conf{state: pm.cache.conf, program: program, tables: tables, platformEnv: platformEnv, bases: make([][]ConfAssignment, tables.moduleCount)}
+	c := &Conf{state: pm.cache.conf, program: program, tables: tables, platformEnv: platformEnv, bases: make([][]ConfAssignment, tables.moduleCount), deepReads: make([][]bool, tables.moduleCount)}
 
 	c.sysinclList = strings.Fields(env.expandVariable(env.string(envSYSINCL)))
 
@@ -2253,8 +2254,10 @@ func (c *Conf) initModule(env Environment, module *confModule, originals *SetVar
 	clean = clean && base == c.base
 
 	if clean {
+		read := c.deepRead(plan, base)
+
 		for _, key := range env.s.confWrites {
-			if int(key) < len(plan.read) && plan.read[key] {
+			if int(key) < len(read) && read[key] {
 				clean = false
 
 				break
@@ -2306,6 +2309,44 @@ func (c *Conf) initModule(env Environment, module *confModule, originals *SetVar
 
 	c.runInit(plan, env, originals, recording)
 	c.bases[module.index] = recording
+}
+
+func (c *Conf) deepRead(plan *confModule, base *EnvStore) []bool {
+	if read := c.deepReads[plan.index]; read != nil {
+		return read
+	}
+
+	read := slices.Clone(plan.read)
+
+	var visit func(ENV)
+
+	visit = func(key ENV) {
+		if int(key) >= len(read) {
+			read = append(read, make([]bool, int(key)+1-len(read))...)
+		}
+
+		if read[key] {
+			return
+		}
+
+		read[key] = true
+
+		if _, raw := base.lookup(key); raw != 0 {
+			confTextRefs(raw.string(), visit)
+		}
+	}
+
+	for key, direct := range plan.read {
+		if direct {
+			if _, raw := base.lookup(ENV(key)); raw != 0 {
+				confTextRefs(raw.string(), visit)
+			}
+		}
+	}
+
+	c.deepReads[plan.index] = read
+
+	return read
 }
 
 func (c *Conf) runInit(plan *confModule, env Environment, originals *SetVars, recording []ConfAssignment) {
