@@ -1416,8 +1416,12 @@ func multiStatement(name STR) bool {
 }
 
 func (d *ModuleData) deferStmt(ctx *GenCtx, modulePath string, kind ModuleKind, language Language, s Stmt, env Environment, onWarn func(Warn), platform *Platform) bool {
-	if v, ok := s.(*UnknownStmt); ok && policyDrops(d, v.macroName()) {
-		return false
+	if v, ok := s.(*UnknownStmt); ok {
+		if policyDrops(d, v.macroName()) {
+			return false
+		}
+	} else if dropsMacro(d, modulePath, stmtMacroNameID(s), onWarn) {
+		return true
 	}
 
 	statement := platform.conf.statementKey(platform.conf.moduleAlias(d.confModule, stmtMacroNameID(s)))
@@ -1980,9 +1984,14 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 
 			d.confModule = platform.conf.module(owner, moduleConfTag(owner, kind, language, d))
 
+			_, prjName := env.s.lookup(envREALPRJNAME)
+
 			platform.conf.initModule(env, d.confModule, &d.setVars)
 			d.syncPythonVersion(env)
-			env.setString(envREALPRJNAME, moduleRealPrjName(modulePath, v, d.unit))
+
+			if _, conf := env.s.lookup(envREALPRJNAME); conf == prjName {
+				env.setString(envREALPRJNAME, moduleRealPrjName(modulePath, v, d.unit))
+			}
 
 			if moduleType := confModuleType(v.Name, d); moduleType != "" {
 				env.setString(envMODULE_TYPE, moduleType)
@@ -2883,6 +2892,10 @@ func resolveModuleUnitBare(name TOK, kind ModuleKind, language Language) ModuleU
 		return sdcDiagsModuleUnit(language)
 	case tokUdfBase:
 		return ModuleUnit{Type: tokDll, ARPrefix: "lib", GlobalARTag: tagGlobal, SbomLang: unitSbomCpp}
+	case tokDocs:
+		if kind == KindLib || kind == KindDocsInternal {
+			return ModuleUnit{Type: tokDocsLibrary, ARPrefix: "lib", GlobalARTag: tagGlobal, SbomLang: unitSbomCpp}
+		}
 	case tokDynamicLibrary:
 		if kind == KindLib {
 			return ModuleUnit{Type: tokLibrary, ARPrefix: "lib", GlobalARTag: tagGlobal, SbomLang: unitSbomCpp}

@@ -9,6 +9,11 @@ import (
 
 var docsJSONUnescape = strings.NewReplacer(`\u003c`, "<", `\u003e`, ">", `\u0026`, "&")
 
+const (
+	KindDocsLib ModuleKind = KindForeignDescent + 1 + iota
+	KindDocsInternal
+)
+
 type DocsData struct {
 	dirs            []string
 	sources         []VFS

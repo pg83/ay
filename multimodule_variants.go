@@ -48,6 +48,10 @@ var multimoduleShapes = map[STR]map[STR]variantShape{
 	}),
 	tokDllJava.str():        shapeTable(map[string]variantShape{"JNI_DLL": shapeLibCPP, "JAR_COMPILATION": shapeJava}),
 	tokDynamicLibrary.str(): shapeTable(map[string]variantShape{"DLL_BIN": shapeBinCPP, "DLL_LIB": shapeLibCPP}),
+	tokDocs.str(): shapeTable(map[string]variantShape{
+		"DOCSBOOK": shapeBinCPP, "DOCSLIB": {kind: KindDocsLib, language: LangCPP},
+		"DOCSLIB_INTERNAL": {kind: KindDocsInternal, language: LangCPP}, "DOCSLIB_EXTERNAL": shapeLibCPP,
+	}),
 }
 
 const defaultProtoVariants = 1<<LangCPP | 1<<LangJava | 1<<LangPy | 1<<LangGo | 1<<LangDescProto
@@ -67,9 +71,23 @@ func multimoduleOwner(stmt *ModuleStmt) STR {
 func multimoduleSub(owner STR, kind ModuleKind, language Language, yqlCurrent bool) STR {
 	var sub STR
 
+	best := -1
+
 	for name, shape := range multimoduleShapes[owner] {
-		if shape.language == language && shape.yqlCurrent == yqlCurrent && (sub == 0 || (shape.kind == KindLib) == (kind == KindLib)) {
-			sub = name
+		if shape.language != language || shape.yqlCurrent != yqlCurrent {
+			continue
+		}
+
+		score := 0
+
+		if shape.kind == kind {
+			score = 2
+		} else if (shape.kind == KindLib) == (kind == KindLib) {
+			score = 1
+		}
+
+		if score > best {
+			sub, best = name, score
 		}
 	}
 

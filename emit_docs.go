@@ -9,7 +9,6 @@ var (
 
 func (e *EmitContext) genDocs() *ModuleEmitResult {
 	ctx, instance, d := e.ctx, e.instance, e.d
-	docs := d.docs
 	module := instance.Path.relString()
 
 	var peers []VFS
@@ -17,14 +16,16 @@ func (e *EmitContext) genDocs() *ModuleEmitResult {
 
 	var resourcePeers []string
 
+	for _, self := range e.confSelfPeers() {
+		peers = append(peers, self.result.DocsClosure...)
+		closures = append(closures, self.result.ResourceGlobalClosure)
+	}
+
 	for _, p := range d.peerdirs {
 		peer := p.string()
-		language := instance.Language
 
 		switch ctx.moduleName(peer) {
-		case tokDocs, tokDocsLibrary:
-		case tokProtoLibrary:
-			language = LangDocsProto
+		case tokDocs, tokDocsLibrary, tokProtoLibrary:
 		case tokResourcesLibrary:
 			resourcePeers = append(resourcePeers, peer)
 
@@ -33,18 +34,18 @@ func (e *EmitContext) genDocs() *ModuleEmitResult {
 			continue
 		}
 
-		res := e.genPeerModule(ModuleInstance{Path: source(peer), Kind: KindLib, Language: language, Platform: instance.Platform})
+		res := e.genPeerModule(e.derivePeerInstance(peer))
+
+		if res == nil || res.excluded {
+			continue
+		}
 
 		peers = append(peers, res.DocsClosure...)
 		closures = append(closures, res.ResourceGlobalClosure)
 	}
 
-	if d.moduleStmt.Name == tokDocs {
-		resourcePeers = append(resourcePeers, "build/platform/yfm")
-
-		if docs.plantuml {
-			resourcePeers = append(resourcePeers, "build/platform/java/jdk/jdk21")
-		}
+	if instance.Kind == KindDocsLib && d.docs.plantuml {
+		resourcePeers = append(resourcePeers, "build/platform/java/jdk/jdk21")
 	}
 
 	globals := e.scriptModuleResources(closures, resourcePeers...)
@@ -59,48 +60,25 @@ func (e *EmitContext) genDocs() *ModuleEmitResult {
 
 	peers = dedup(peers)
 
-	name := realPrjName(module)
-
-	if len(d.moduleStmt.Args) > 0 {
-		name = d.moduleStmt.Args[0].string()
-	}
-
+	env := Environment{s: &e.frame.ifEnv}
+	out := build(module, "/", env.string(envREALPRJNAME), env.string(envMODULE_SUFFIX))
 	res := &ModuleEmitResult{ModuleStmtName: d.moduleStmt.Name, ResourceGlobalClosure: globals}
 
-	if d.moduleStmt.Name == tokDocsLibrary {
-		out := build(module, "/", name, ".docslib")
-		ref := e.docsLibrary(out, generated, false)
+	switch instance.Kind {
+	case KindBin:
+		res.LDRef, res.LDPath = e.docsRender(out, peers, true), ptr(out)
+		res.isPROGRAM = true
+	case KindDocsLib:
+		res.LDRef, res.LDPath = e.docsRender(out, peers, false), ptr(out)
+		res.DocsClosure = []VFS{out}
+	default:
+		ref := e.docsLibrary(out, generated, instance.Kind == KindDocsInternal)
 
 		res.ARRef, res.ARPath, res.LDRef, res.LDPath = ref, ptr(out), ref, ptr(out)
-		res.DocsClosure = append(append([]VFS{}, peers...), out)
-	} else {
-		external := build(module, "/__docs_external.docslib")
-		externalRef := e.docsLibrary(external, generated, false)
-		internal := build(module, "/__docs_internal.docslib.fake")
-
-		e.docsLibrary(internal, generated, true)
-
-		pre := build(module, "/_preprocessed.tar.gz")
-
-		e.docsRender(pre, append(append([]VFS{}, peers...), internal), false)
-
-		book := build(module, "/", name, ".tar.gz")
-		bookRef := e.docsRender(book, []VFS{pre}, true)
-
-		res.ARRef, res.ARPath = externalRef, ptr(external)
-		res.LDRef, res.LDPath = bookRef, ptr(book)
-		res.isPROGRAM = true
-		res.DocsClosure = append(append([]VFS{}, peers...), external)
+		res.DocsClosure = append(peers, out)
 	}
 
-	for _, kind := range []ModuleKind{KindLib, KindBin} {
-		for _, demand := range []ModuleDemand{demandNone, demandSelf, demandLinked} {
-			alias := instance
-
-			alias.Kind, alias.Demand = kind, demand
-			ctx.memoPut(alias, res)
-		}
-	}
+	ctx.memoPut(instance, res)
 
 	return res
 }
