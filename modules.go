@@ -321,7 +321,6 @@ type ModuleData struct {
 	cythonCpp               []*CythonStmt
 	swigC                   []SwigSrc
 	bisonGenExt             STR
-	flexAddIncl             bool
 	grpc                    bool
 	yaConfJSON              []ANY
 	archives                []ArchiveEntry
@@ -877,8 +876,10 @@ func collectModuleInto(ctx *GenCtx, instance ModuleInstance, stmts []Stmt, env E
 		d.docs.finish(fs, modulePath, env)
 	}
 
-	if d.flexAddIncl {
-		d.addLocalIncl(prioRuleAddIncl, source(env.string(envFlexToolDir)))
+	sourcePeers, sourceAddIncl := d.sourceCommandDirs(modulePath, env, instance.Platform)
+
+	if len(sourceAddIncl) > 0 {
+		collectStmts(ctx, modulePath, instance.Kind, instance.Language, []Stmt{splitAddInclPaths(internAnys(sourceAddIncl))}, env, d, onWarn, instance.Platform)
 	}
 
 	d.materializeAddIncl()
@@ -1006,8 +1007,7 @@ func collectModuleInto(ctx *GenCtx, instance ModuleInstance, stmts []Stmt, env E
 
 	hasProto = hasProto || hasGeneratedSourceClass(d, srcExtProto)
 
-	d.applySourceCommandPeers(modulePath, env, instance.Platform)
-
+	d.peerdirs = append(d.peerdirs, sourcePeers...)
 	d.optimizePyProtos = env.string(envOptimizePyProtosFlag) == "yes"
 	d.ignoreCppProtoSelfPeers = env.string(envIgnoreCppProtoSelfPeers) == "yes"
 
@@ -1030,9 +1030,9 @@ func collectModuleInto(ctx *GenCtx, instance ModuleInstance, stmts []Stmt, env E
 	return d
 }
 
-func (d *ModuleData) applySourceCommandPeers(modulePath string, env Environment, platform *Platform) {
+func (d *ModuleData) sourceCommandDirs(modulePath string, env Environment, platform *Platform) (peers []ANY, addincls []string) {
 	if isGoModuleType(d.unit.Type) {
-		return
+		return nil, nil
 	}
 
 	var seen []string
@@ -1046,11 +1046,15 @@ func (d *ModuleData) applySourceCommandPeers(modulePath string, env Environment,
 
 		seen = append(seen, ext)
 
-		for _, peer := range platform.conf.commandDirs("_SRC:"+ext, env).peerdirs {
+		dirs := platform.conf.commandDirs("_SRC:"+ext, env)
+
+		for _, peer := range dirs.peerdirs {
 			if peer != modulePath {
-				d.peerdirs = append(d.peerdirs, internStr(peer).any())
+				peers = append(peers, internStr(peer).any())
 			}
 		}
+
+		addincls = append(addincls, dirs.addincls...)
 	}
 
 	generated := func(outputs []ANY, stdout *ANY, noAuto bool) {
@@ -1078,6 +1082,8 @@ func (d *ModuleData) applySourceCommandPeers(modulePath string, env Environment,
 	for _, meta := range d.srcs {
 		apply(meta.Source)
 	}
+
+	return peers, addincls
 }
 
 func applyResourceFiles(fs FS, modulePath string, args []string, line int, d *ModuleData) {
@@ -2240,8 +2246,6 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 					src := srcTok.string()
 
 					addGeneratedOwnHeaderInclude(modulePath, strings.TrimSuffix(src, filepath.Ext(src))+".h", d)
-				case srcExtFlex:
-					d.flexAddIncl = true
 				}
 			}
 
