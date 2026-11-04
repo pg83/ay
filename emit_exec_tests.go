@@ -11,7 +11,7 @@ func (e *EmitContext) genExecTest() *ModuleEmitResult {
 		closures = append(closures, e.genPeerModule(e.derivePeerInstance(p.string())).ResourceGlobalClosure)
 	}
 
-	globals := e.scriptModuleResources(closures, "build/platform/python/ymake_python3")
+	globals := e.scriptModuleResources(closures)
 	name := fullPathTestName(e.instance.Path.relString())
 
 	if len(e.d.moduleStmt.Args) > 0 {

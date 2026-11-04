@@ -26,8 +26,20 @@ func (e *EmitContext) emitDocsProtoSubmodule() *ModuleEmitResult {
 
 	peerDirs = append(peerDirs, anyStrings(d.peerdirs)...)
 
+	var resourcePeers []string
+
 	for _, peer := range peerDirs {
-		if peer == instance.Path.relString() || !isProtoLibraryPeer(ctx, peer) {
+		if peer == instance.Path.relString() {
+			continue
+		}
+
+		if peerYaMakeExists(ctx.fs, source(peer)) && ctx.moduleName(peer) == tokResourcesLibrary {
+			resourcePeers = append(resourcePeers, peer)
+
+			continue
+		}
+
+		if !isProtoLibraryPeer(ctx, peer) {
 			continue
 		}
 
@@ -41,7 +53,7 @@ func (e *EmitContext) emitDocsProtoSubmodule() *ModuleEmitResult {
 
 	protoIncludes := dedup(d.protoAddInclGlobal, includes)
 
-	e.scriptModuleResources(nil, "build/platform/python/ymake_python3")
+	e.scriptModuleResources(nil, resourcePeers...)
 	d.scanCtx = newModuleScanContext(ctx, instance, d, nil, nil, nil, protoIncludes)
 
 	protocRef, protoc := e.tool(argContribToolsProtoc)

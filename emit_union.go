@@ -44,7 +44,7 @@ func (e *EmitContext) genUnion() *ModuleEmitResult {
 		e.globalSources = append(e.globalSources, res.GlobalSources...)
 	}
 
-	globals := e.scriptModuleResources(closures, "build/platform/python/ymake_python3")
+	globals := e.scriptModuleResources(closures)
 
 	e.d.scanCtx.ccPeer = e.ctx.na.vfsList(dedup(peerIncludes)...)
 	e.d.scanCtx.protoInclude = e.ctx.na.vfsList(dedup(e.d.scanCtx.protoInclude, peerProtoIncludes)...)

@@ -15,7 +15,7 @@ func (e *EmitContext) genDocs() *ModuleEmitResult {
 	var peers []VFS
 	var closures [][]ResourceDecl
 
-	resourcePeers := []string{"build/platform/python/ymake_python3"}
+	var resourcePeers []string
 
 	for _, p := range d.peerdirs {
 		peer := p.string()

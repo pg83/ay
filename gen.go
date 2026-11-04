@@ -1917,10 +1917,6 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 
 		d.tc = resolveModuleToolchain(ctx, resourceGlobalsClosure, instance.Platform)
 
-		if d.yqlPrebuiltResource != "" && d.tc.Python3 == 0 {
-			resourceGlobalsClosure = e.scriptModuleResources([][]ResourceDecl{resourceGlobalsClosure}, "build/platform/python/ymake_python3")
-		}
-
 		e.bindCompilerFlagResources(resourceGlobalsClosure)
 
 		deduper.reset()

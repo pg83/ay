@@ -115,7 +115,7 @@ func (e *EmitContext) genPackageFinal() *ModuleEmitResult {
 		closures = append(closures, result.ResourceGlobalClosure)
 	}
 
-	globals := e.scriptModuleResources(closures, "build/platform/python/ymake_python3")
+	globals := e.scriptModuleResources(closures)
 
 	e.emitDeclaredProducers(nil)
 

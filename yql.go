@@ -151,7 +151,7 @@ func (e *EmitContext) genYqlPrebuiltTool() *ModuleEmitResult {
 		throwFmt("gen: %s: YQL_PREBUILT_TOOL requires a resolved PRIMARY_OUTPUT", e.instance.Path.relString())
 	}
 
-	globals := e.scriptModuleResources(nil, "build/platform/python/ymake_python3")
+	globals := e.scriptModuleResources(nil, anyStrings(e.d.peerdirs)...)
 
 	e.emitDeclaredProducers(nil)
 

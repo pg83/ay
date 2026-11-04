@@ -166,7 +166,7 @@ func (e *EmitContext) genCiGroup() *ModuleEmitResult {
 		closures = append(closures, res.ResourceGlobalClosure)
 	}
 
-	globals := e.scriptModuleResources(closures, "build/platform/python/ymake_python3")
+	globals := e.scriptModuleResources(closures)
 
 	e.emitDeclaredProducers(nil)
 
