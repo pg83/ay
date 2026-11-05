@@ -1737,9 +1737,9 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 		kind := peerKinds[i]
 
 		if instance.Language == LangFbsJavaNative {
-			parent := JavaModule{dir: instance.Path.relString(), instance: instance, unit: javaUnitFbs, data: &JavaData{}}
+			parent := JavaModule{dir: instance.Path.relString(), instance: instance, unit: javaUnitFbs, data: &JavaData{peerdirTags: strings.Fields(env.expandVariable(env.string(envPeerdirTags)))}}
 
-			if result := ctx.javaPeerResult(&parent, peerPath, kind == peerKindUserPeer); result != nil {
+			if result := ctx.javaPeerResult(&parent, peerPath, slices.Contains(d.explicitPeers, peerVFS.rel().any())); result != nil {
 				resolved = append(resolved, ResolvedPeer{path: peerPath, result: result, kind: kind})
 			}
 

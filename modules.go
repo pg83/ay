@@ -1476,7 +1476,7 @@ func (d *ModuleData) flattenConfMacro(ctx *GenCtx, modulePath string, kind Modul
 
 	c.Expanded = true
 
-	platform.conf.macroCalls(macro, UnknownStmt{Name: internTokMaybeSTR(name), Raw: name, Args: args, Line: v.Line}, env, d, onWarn, modulePath, func(callee STR, args []ANY) {
+	platform.conf.macroCalls(macro, UnknownStmt{Name: internTokMaybeSTR(name), Raw: name, Args: args, Line: v.Line}, env, &d.confMacroDepth, onWarn, modulePath, func(callee STR, args []ANY) {
 		var scratch [1]Stmt
 
 		stmts := appendMacroCallStmts(scratch[:0], callee, args, args, v.Line, func(format string, a ...any) {
@@ -1524,7 +1524,7 @@ func (d *ModuleData) moduleBodyDirs(ctx *GenCtx, modulePath string, kind ModuleK
 
 func (d *ModuleData) bodyDirCall(ctx *GenCtx, modulePath string, kind ModuleKind, language Language, name STR, macro *ConfMacro, args []ANY, env Environment, onWarn func(Warn), platform *Platform) {
 	if macro != nil {
-		platform.conf.macroCalls(macro, UnknownStmt{Name: internTokMaybeSTR(name), Raw: name, Args: args}, env, d, onWarn, modulePath, func(callee STR, args []ANY) {
+		platform.conf.macroCalls(macro, UnknownStmt{Name: internTokMaybeSTR(name), Raw: name, Args: args}, env, &d.confMacroDepth, onWarn, modulePath, func(callee STR, args []ANY) {
 			if callee == strGhostPeerdir || d.confModule.limits.ignored.has(callee) {
 				return
 			}
@@ -1551,7 +1551,7 @@ func (d *ModuleData) bodyDirCall(ctx *GenCtx, modulePath string, kind ModuleKind
 
 func (d *ModuleData) callConfMacro(ctx *GenCtx, modulePath string, kind ModuleKind, language Language, call UnknownStmt, env Environment, onWarn func(Warn), platform *Platform) {
 	if macro := platform.conf.alias(platform.conf.moduleAlias(d.confModule, call.Raw)); macro != nil {
-		platform.conf.macroCalls(macro, call, env, d, onWarn, modulePath, func(callee STR, args []ANY) {
+		platform.conf.macroCalls(macro, call, env, &d.confMacroDepth, onWarn, modulePath, func(callee STR, args []ANY) {
 			if !baseMacro(callee) && !dirStatement(callee) {
 				d.callConfMacro(ctx, modulePath, kind, language, UnknownStmt{Name: internTokMaybeSTR(callee), Raw: callee, Args: args, Line: call.Line}, env, onWarn, platform)
 

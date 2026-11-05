@@ -2933,7 +2933,7 @@ func expandConfMacro(ctx *GenCtx, modulePath string, kind ModuleKind, language L
 		return
 	}
 
-	platform.conf.macroCalls(macro, v, env, d, onWarn, modulePath, func(name STR, args []ANY) {
+	platform.conf.macroCalls(macro, v, env, &d.confMacroDepth, onWarn, modulePath, func(name STR, args []ANY) {
 		if baseMacro(name) && (handled || d.interpreting) || dirStatement(name) && d.interpreting {
 			return
 		}
@@ -2982,8 +2982,8 @@ func markImplicitPeers(stmts []Stmt) {
 	}
 }
 
-func (c *Conf) macroCalls(macro *ConfMacro, v UnknownStmt, env Environment, d *ModuleData, onWarn func(Warn), modulePath string, visit func(name STR, args []ANY)) {
-	if d.confMacroDepth == confMacroCallStackSize {
+func (c *Conf) macroCalls(macro *ConfMacro, v UnknownStmt, env Environment, depth *int, onWarn func(Warn), modulePath string, visit func(name STR, args []ANY)) {
+	if *depth == confMacroCallStackSize {
 		throwFmt("%s: config error: recursion in the calls of macro %s", modulePath, v.Raw.string())
 	}
 
@@ -2995,9 +2995,9 @@ func (c *Conf) macroCalls(macro *ConfMacro, v UnknownStmt, env Environment, d *M
 		onWarn(Warn{Kind: WarnBadMacroArgs, Message: fmt.Sprintf("%s: macro '%s': %s\n\tArgs: %s", modulePath, v.Raw.string(), failure, strings.Join(anyStrs(v.Args), ", "))})
 	}
 
-	d.confMacroDepth++
+	*depth++
 
-	defer func() { d.confMacroDepth-- }()
+	defer func() { *depth-- }()
 
 	for i, call := range macro.calls {
 		cached := &expansion.calls[i]

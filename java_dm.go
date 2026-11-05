@@ -787,12 +787,7 @@ func (ctx *GenCtx) javaManagedOf(jm *JavaModule) javaManaged {
 
 	byID := ctx.jc.byID
 	sorted := lv.preorder(byID, jm.direct, jm.unit.compileView)
-	excludedTags := jm.unit.dmTagsExclude
-
-	if jm.data.uberjar {
-		excludedTags = javaTagsIJar
-	}
-
+	excludedTags := jm.data.dmTagsExclude
 	n := 0
 
 	for _, m := range sorted {

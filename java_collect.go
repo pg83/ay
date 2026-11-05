@@ -280,6 +280,8 @@ func collectJavaData(ctx *GenCtx, jm *JavaModule, stmts []Stmt, env Environment)
 	d.validateData = resourceValidationEnabled(env)
 	d.fakeModule = env.bool(envFakeModule)
 	d.moduleType = env.string(envMODULE_TYPE)
+	d.peerdirTags = strings.Fields(env.expandVariable(env.string(envPeerdirTags)))
+	d.dmTagsExclude = strings.Fields(env.expandVariable(env.string(envDependencyManagementTagsExclude)))
 	d.sbrUIDExt = env.string(envSbrUIDExt)
 	d.test.parallelWorkers = env.string(envParallelTestsWithinNodeWorkers)
 
@@ -337,7 +339,9 @@ func collectJavaStmts(ctx *GenCtx, jm *JavaModule, d *JavaData, stmts []Stmt, en
 			owner := multimoduleOwner(v)
 			platform := jm.instance.Platform
 
-			platform.conf.initModule(env, platform.conf.module(owner, multimoduleSub(owner, jm.unit.sub, LangJava, false).string()), &d.setVars)
+			d.confModule = platform.conf.module(owner, multimoduleSub(owner, jm.unit.sub, LangJava, false).string())
+
+			platform.conf.initModule(env, d.confModule, &d.setVars)
 			javaModulePrologue(ctx, jm, d, env)
 
 			javaModuleArgs(jm, d, expandSourceArguments(v.Args, env))
@@ -356,7 +360,7 @@ func collectJavaStmts(ctx *GenCtx, jm *JavaModule, d *JavaData, stmts []Stmt, en
 					continue
 				}
 
-				d.peerStmts = append(d.peerStmts, JavaPeerSpec{dir: peerdirModulePath(p).string(), explicit: true})
+				d.peerStmts = append(d.peerStmts, JavaPeerSpec{dir: peerdirModulePath(p).string(), explicit: !v.Implicit})
 			}
 		case *SetStmt:
 			env.setFromString(v.NameEnv, expandSourceScalarVarRef(v.Value, env))
@@ -441,6 +445,18 @@ func collectJavaStmts(ctx *GenCtx, jm *JavaModule, d *JavaData, stmts []Stmt, en
 				}
 			}
 		case *UnknownStmt:
+			if d.confModule != nil {
+				verdict := d.confModule.verdicts[v.macroName()]
+
+				if verdict&confMacroRestricted != 0 && verdict&confMacroIgnored == 0 {
+					ctx.onWarn(Warn{Kind: WarnMisconfiguration, Message: fmt.Sprintf("%s: %s is not allowed for %s modules", jm.dir, v.macroName().string(), jm.stmt.string())})
+				}
+
+				if verdict != 0 {
+					continue
+				}
+			}
+
 			if v.Name == tokBundle || v.Name == tokBundleOutput {
 				expanded := *v
 
@@ -510,9 +526,31 @@ func collectJavaStmts(ctx *GenCtx, jm *JavaModule, d *JavaData, stmts []Stmt, en
 				continue
 			}
 
-			applyJavaMacro(ctx, jm, d, v.Raw.string(), args, rawArgs, env)
+			if !applyJavaMacro(ctx, jm, d, v.Raw.string(), args, rawArgs, env) {
+				expandJavaConfMacro(ctx, jm, d, stmt, env)
+			}
 		}
 	}
+}
+
+func expandJavaConfMacro(ctx *GenCtx, jm *JavaModule, d *JavaData, v UnknownStmt, env Environment) {
+	platform := jm.instance.Platform
+	macro := platform.conf.alias(v.Raw)
+
+	if macro == nil {
+		return
+	}
+
+	platform.conf.macroCalls(macro, v, env, &d.confMacroDepth, ctx.onWarn, jm.dir, func(name STR, args []ANY) {
+		var scratch [1]Stmt
+
+		stmts := appendMacroCallStmts(scratch[:0], name, args, args, v.Line, func(format string, a ...any) {
+			throwFmt("%s: %s: "+format, append([]any{macro.file, name.string()}, a...)...)
+		})
+
+		markImplicitPeers(stmts)
+		collectJavaStmts(ctx, jm, d, stmts, env)
+	})
 }
 
 func javaJNISwigSrcs(srcs []string) []string {
@@ -602,7 +640,7 @@ func parseJavaSrcs(args []string) JavaSrcsSpec {
 	return spec
 }
 
-func applyJavaMacro(ctx *GenCtx, jm *JavaModule, d *JavaData, name string, args, raw []string, env Environment) {
+func applyJavaMacro(ctx *GenCtx, jm *JavaModule, d *JavaData, name string, args, raw []string, env Environment) bool {
 	u := jm.unit
 	arg0 := ""
 
@@ -615,7 +653,7 @@ func applyJavaMacro(ctx *GenCtx, jm *JavaModule, d *JavaData, name string, args,
 			d.files = append(d.files, file)
 		}
 
-		return
+		return true
 	}
 
 	if name != "GENERATE_SCRIPT" {
@@ -637,7 +675,7 @@ func applyJavaMacro(ctx *GenCtx, jm *JavaModule, d *JavaData, name string, args,
 		d.flatcFlags = append(d.flatcFlags, internAnys(args)...)
 	case "SET_APPEND":
 		if len(args) == 0 {
-			return
+			return true
 		}
 
 		value := strings.Join(args[1:], " ")
@@ -730,6 +768,7 @@ func applyJavaMacro(ctx *GenCtx, jm *JavaModule, d *JavaData, name string, args,
 	case "UBERJAR":
 		d.uberjar = true
 		d.recalcKotlincOpts(jm)
+		expandJavaConfMacro(ctx, jm, d, UnknownStmt{Name: internTokMaybeSTR(internStr(name)), Raw: internStr(name), Args: internAnys(args)}, env)
 	case "UBERJAR_HIDING_PREFIX":
 		env.setString(envUberjarPrefixFlag, "--shade-prefix "+arg0)
 	case "UBERJAR_HIDE_EXCLUDE_PATTERN":
@@ -767,7 +806,7 @@ func applyJavaMacro(ctx *GenCtx, jm *JavaModule, d *JavaData, name string, args,
 		d.localSourcesJar = arg0
 	case "JAVA_TEST_PEERDIR", "JAVA_RUNTIME_PEERDIR":
 		if !javaMacroIsAlias(jm, name) {
-			return
+			return true
 		}
 
 		for _, a := range args {
@@ -846,7 +885,7 @@ func applyJavaMacro(ctx *GenCtx, jm *JavaModule, d *JavaData, name string, args,
 		}
 	case "DEFAULT_JAVA_SRCS_LAYOUT", "DEFAULT_JUNIT_JAVA_SRCS_LAYOUT":
 		if u.kind != juJar || u.proto {
-			return
+			return true
 		}
 
 		srcDir, resDir := "src/main/java", "src/main/resources"
@@ -876,7 +915,7 @@ func applyJavaMacro(ctx *GenCtx, jm *JavaModule, d *JavaData, name string, args,
 		if bad := malformedCommandReference(expanded); bad != "" {
 			ctx.onWarn(Warn{Kind: WarnSyntax, Message: fmt.Sprintf("in %s: RUN_JAVA_PROGRAM(%s) was not processed properly: could not parse command at %q. Skip RUN_JAVA_PROGRAM", jm.dir, strings.Join(raw, " "), bad)})
 
-			return
+			return true
 		}
 
 		d.runJavaPrograms = append(d.runJavaPrograms, JavaRunProgram{args: args, raw: expanded})
@@ -1003,7 +1042,11 @@ func applyJavaMacro(ctx *GenCtx, jm *JavaModule, d *JavaData, name string, args,
 		}
 
 		d.styleChecks = append(d.styleChecks, pythonStyleCheck(style, env))
+	default:
+		return false
 	}
+
+	return true
 }
 
 func javaProtoPluginMacro(d *JavaData, args []string) {

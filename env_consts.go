@@ -99,6 +99,7 @@ var (
 	envDefaultAllocator                       = internEnv("DEFAULT_ALLOCATOR")
 	envDefaultJdkSelection                    = internEnv("_JDK_VERSION")
 	envDefaultLinkerId                        = internEnv("_DEFAULT_LINKER_ID")
+	envDependencyManagementTagsExclude        = internEnv("DEPENDENCY_MANAGEMENT_TAGS_EXCLUDE")
 	envDescProto                              = internEnv("DESC_PROTO")
 	envDisableFlake8                          = internEnv("DISABLE_FLAKE8")
 	envDisableFlake8Migrations                = internEnv("DISABLE_FLAKE8_MIGRATIONS")

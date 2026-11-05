@@ -258,6 +258,10 @@ type JavaRunProgram struct {
 
 type JavaData struct {
 	setVars                SetVars
+	confModule             *confModule
+	confMacroDepth         int
+	peerdirTags            []string
+	dmTagsExclude          []string
 	autoincluded           bool
 	recurses               []string
 	name                   string
@@ -721,11 +725,7 @@ func (ctx *GenCtx) javaResolvePeers(jm *JavaModule) {
 }
 
 func (jm *JavaModule) peerdirTags() []string {
-	if jm.data.uberjar {
-		return javaTags(javaTagsJarBase, javaTagsFull)
-	}
-
-	return jm.unit.peerdirTags
+	return jm.data.peerdirTags
 }
 
 func (ctx *GenCtx) javaPeerResult(parent *JavaModule, dir string, explicit bool) *ModuleEmitResult {
