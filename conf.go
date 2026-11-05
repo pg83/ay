@@ -932,6 +932,8 @@ type confModule struct {
 	owner     STR
 	sub       STR
 	selfPeers []STR
+	stmts     []ConfMacroCall
+	stmtsDone bool
 	aliases   map[STR]STR
 	own       *confMacroLimits
 	limits    *confMacroLimits
@@ -1711,6 +1713,29 @@ func (t *confTables) orderVariants(owner string, variants []string, selfPeers ma
 	}
 }
 
+func (t *confTables) varSteps(name STR, depth int) bool {
+	macro := t.inits[name]
+
+	if macro == nil || depth > 8 {
+		return false
+	}
+
+	for _, call := range macro.calls {
+		switch call.name {
+		case tokEnable.str(), tokDisable.str(), kwSET, kwDEFAULT, tokSetAppend.str():
+			if strings.IndexByte(call.args.string(), '"') >= 0 || strings.HasPrefix(call.args.string(), "$") {
+				return false
+			}
+		default:
+			if !t.varSteps(call.name, depth+1) {
+				return false
+			}
+		}
+	}
+
+	return true
+}
+
 func (t *confTables) callSteps(name STR, args string, out []confInitStep, depth int) ([]confInitStep, bool) {
 	words := strings.Fields(args)
 
@@ -1749,27 +1774,32 @@ func (t *confTables) callSteps(name STR, args string, out []confInitStep, depth 
 
 	macro := t.inits[name]
 
-	if macro == nil || depth > 8 || len(macro.sig.keywords) != 0 || len(words) > len(macro.sig.positional) && macro.sig.vararg == 0 {
+	if macro == nil || depth > 8 || len(macro.sig.keywords) == 0 && len(words) > len(macro.sig.positional) && macro.sig.vararg == 0 {
 		return out, false
 	}
 
+	var locals []confMacroBinding
+
+	bound := false
+
 	for _, call := range macro.calls {
-		if next, ok := t.callSteps(call.name, bindConfParams(call.args.string(), macro.sig, words), out, depth+1); ok {
+		text := call.args.string()
+
+		if strings.IndexByte(text, '$') >= 0 {
+			if !bound {
+				locals, _ = macro.sig.bind(internAnys(words), t.state.bindings)
+				bound = true
+			}
+
+			text = substMacroDeeply(text, locals, Environment{}, nil, substVariables)
+		}
+
+		if next, ok := t.callSteps(call.name, text, out, depth+1); ok {
 			out = next
 		}
 	}
 
 	return out, true
-}
-
-func bindConfParams(text string, sig ConfMacroSignature, args []string) string {
-	if strings.IndexByte(text, '$') < 0 {
-		return text
-	}
-
-	locals, _ := sig.bind(internAnys(args), newBumpAllocator[confMacroBinding]())
-
-	return substMacroDeeply(text, locals, Environment{}, nil, substVariables)
 }
 
 func (t *confTables) module(name STR, tag string) *confModule {
@@ -1895,6 +1925,28 @@ type Conf struct {
 	inputs      []uint64
 	keys        DenseMap[STR, confStatementKey]
 	dirs        map[string][]*confCommandDirs
+	argMemo     map[STR][]*confArgsMemo
+	argVolatile map[STR]bool
+}
+
+type confArgsMemo struct {
+	vars   []ENV
+	values []uint64
+	args   []ANY
+}
+
+func confBinding(env Environment, key ENV) (uint64, STR) {
+	kind, raw := env.s.lookup(key)
+
+	if kind == envAbsent {
+		return 0, 0
+	}
+
+	if kind != envStr {
+		return uint64(kind)<<32 | uint64(raw), 0
+	}
+
+	return uint64(kind)<<32 | uint64(raw), raw
 }
 
 type confStatementKey struct {
@@ -2242,18 +2294,111 @@ func (c *Conf) moduleAlias(module *confModule, name STR) STR {
 	return name
 }
 
-func (c *Conf) moduleTag(name STR) string {
+func (c *Conf) bodyCalls(module *confModule) []ConfMacroCall {
+	if module.stmtsDone {
+		return module.stmts
+	}
+
+	module.stmtsDone = true
+
+	var chain []*confModule
+
+	for base := module; base != nil; base = c.tables.module(base.parent, "") {
+		chain = append(chain, base)
+	}
+
+	for i := len(chain) - 1; i >= 0; i-- {
+		for _, call := range chain[i].body {
+			if !baseMacro(call.name) && call.name != strGhostPeerdir && !module.limits.ignored.has(call.name) && !c.tables.varSteps(call.name, 0) {
+				module.stmts = append(module.stmts, call)
+			}
+		}
+	}
+
+	return module.stmts
+}
+
+func (c *Conf) expandArgs(env Environment, text STR) []ANY {
+	if !strHasDollar(text.any()) {
+		return c.state.macroArgs(text)
+	}
+
+	if c.argVolatile[text] {
+		return c.state.macroArgs(internStr(env.expandVariable(text.string())))
+	}
+
+	for _, memo := range c.argMemo[text] {
+		hit := true
+
+		for i, key := range memo.vars {
+			if binding, _ := confBinding(env, key); binding != memo.values[i] {
+				hit = false
+
+				break
+			}
+		}
+
+		if hit {
+			return memo.args
+		}
+	}
+
+	memo := &confArgsMemo{args: c.state.macroArgs(internStr(env.expandVariable(text.string())))}
+
+	var visit func(ENV)
+
+	visit = func(key ENV) {
+		if slices.Contains(memo.vars, key) {
+			return
+		}
+
+		binding, text := confBinding(env, key)
+
+		memo.vars = append(memo.vars, key)
+		memo.values = append(memo.values, binding)
+
+		if text != 0 {
+			confTextRefs(text.string(), visit)
+		}
+	}
+
+	confTextRefs(text.string(), visit)
+
+	if c.argMemo == nil {
+		c.argMemo = map[STR][]*confArgsMemo{}
+	}
+
+	memos := c.argMemo[text]
+
+	if len(memos) == confCommandDirsMemo {
+		if c.argVolatile == nil {
+			c.argVolatile = map[STR]bool{}
+		}
+
+		c.argVolatile[text] = true
+
+		delete(c.argMemo, text)
+
+		return memo.args
+	}
+
+	c.argMemo[text] = append(memos, memo)
+
+	return memo.args
+}
+
+func (c *Conf) moduleTag(name STR) STR {
 	module := c.tables.module(name, "")
 
 	if module == nil {
-		return ""
+		return 0
 	}
 
-	tag := ""
+	tag := STR(0)
 
 	for _, step := range c.tables.plan(module).steps {
 		if step.variable == envMODULE_TAG && step.value != 0 && !step.expand && !step.appended {
-			tag = step.value.string()
+			tag = step.value
 		}
 	}
 

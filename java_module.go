@@ -97,12 +97,20 @@ func (u *javaUnit) confTag(conf *Conf, name TOK) string {
 		}
 	}
 
-	return conf.moduleTag(name.str())
+	return conf.moduleTag(name.str()).string()
 }
 
-func javaTagIn(tag string, tags []string) bool {
+func javaTags(conf *Conf, env Environment, key ENV) []ANY {
+	if raw := env.stringID(key); raw != 0 {
+		return conf.expandArgs(env, raw)
+	}
+
+	return nil
+}
+
+func javaTagIn(tag STR, tags []ANY) bool {
 	for _, t := range tags {
-		if t == tag || t == "__EMPTY__" && tag == "" {
+		if t == tag.any() || t == strEmptyTag.any() && tag.string() == "" {
 			return true
 		}
 	}
@@ -247,9 +255,10 @@ type JavaData struct {
 	setVars                SetVars
 	confModule             *confModule
 	confMacroDepth         int
-	peerdirTags            []string
-	dmTagsExclude          []string
-	moduleTag              string
+	inModuleBody           bool
+	peerdirTags            []ANY
+	dmTagsExclude          []ANY
+	moduleTag              STR
 	autoincluded           bool
 	recurses               []string
 	name                   string
@@ -712,7 +721,7 @@ func (ctx *GenCtx) javaResolvePeers(jm *JavaModule) {
 	}
 }
 
-func (jm *JavaModule) peerdirTags() []string {
+func (jm *JavaModule) peerdirTags() []ANY {
 	return jm.data.peerdirTags
 }
 
@@ -732,7 +741,7 @@ func (ctx *GenCtx) javaPeerResult(parent *JavaModule, dir string, explicit bool)
 		picked := false
 
 		for _, variant := range inst.Platform.conf.peerVariants(name.str()) {
-			if javaTagIn(variant.tag.string(), tags) {
+			if javaTagIn(variant.tag, tags) {
 				inst.Kind, picked = multimoduleShapes[name.str()][variant.sub].kind, true
 
 				break

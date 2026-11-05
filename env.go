@@ -232,6 +232,16 @@ func (e Environment) string(id ENV) string {
 	return ""
 }
 
+func (e Environment) stringID(id ENV) STR {
+	if k, v := e.s.lookup(id); k == envStr || k == envInt {
+		e.recordResourceUse(id)
+
+		return v
+	}
+
+	return 0
+}
+
 func (e Environment) clone() Environment {
 	e.s.settleAll()
 

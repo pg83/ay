@@ -196,7 +196,6 @@ type GenCtx struct {
 	javaDMBuf           []ANY
 	javaExclBuf         []ANY
 	javaRawVars         map[string]string
-	javaPrologue        []ANY
 	javaScratch         []byte
 	javaRuleTokens      map[ANY]javaRuleToken
 	javaRuleExpansions  map[javaRuleExpansion][]ANY
@@ -1737,7 +1736,7 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 		kind := peerKinds[i]
 
 		if instance.Language == LangFbsJavaNative {
-			parent := JavaModule{dir: instance.Path.relString(), instance: instance, unit: javaUnitFbs, data: &JavaData{peerdirTags: strings.Fields(env.expandVariable(env.string(envPeerdirTags)))}}
+			parent := JavaModule{dir: instance.Path.relString(), instance: instance, unit: javaUnitFbs, data: &JavaData{peerdirTags: javaTags(instance.Platform.conf, env, envPeerdirTags)}}
 
 			if result := ctx.javaPeerResult(&parent, peerPath, slices.Contains(d.explicitPeers, peerVFS.rel().any())); result != nil {
 				resolved = append(resolved, ResolvedPeer{path: peerPath, result: result, kind: kind})

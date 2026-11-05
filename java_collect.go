@@ -7,20 +7,6 @@ import (
 	"strings"
 )
 
-var javaKotlinAllowedVersions = []string{
-	"kotlin-allopen", "kotlin-allopen-compiler-plugin", "kotlin-annotation-processing", "kotlin-compiler",
-	"kotlin-compiler-embeddable", "kotlin-daemon-client", "kotlin-daemon-embeddable", "kotlin-gradle-plugin-api",
-	"kotlin-gradle-plugin-model", "kotlin-lombok-compiler-plugin", "kotlin-main-kts", "kotlin-maven-allopen",
-	"kotlin-maven-lombok", "kotlin-maven-noarg", "kotlin-maven-serialization", "kotlin-noarg-compiler-plugin",
-	"kotlin-osgi-bundle", "kotlin-reflect", "kotlin-scripting-common", "kotlin-scripting-compiler-embeddable",
-	"kotlin-scripting-compiler-impl-embeddable", "kotlin-scripting-ide-services", "kotlin-scripting-jsr223",
-	"kotlin-scripting-jvm", "kotlin-scripting-jvm-host", "kotlin-script-runtime", "kotlin-script-util",
-	"kotlin-serialization-compiler-plugin", "kotlin-serialization-compiler-plugin-embeddable", "kotlin-stdlib",
-	"kotlin-stdlib-common", "kotlin-stdlib-jdk7", "kotlin-stdlib-jdk8", "kotlin-stdlib-js", "kotlin-test",
-	"kotlin-test-annotations-common", "kotlin-test-common", "kotlin-test-js", "kotlin-test-junit",
-	"kotlin-test-junit5", "kotlin-test-testng",
-}
-
 var javaConfGlobals = map[string]string{
 	"KOTLIN_VERSION":              javaKotlinVersion,
 	"_KOTLIN_VERSION":             javaKotlinVersion,
@@ -87,60 +73,8 @@ func (u *javaUnit) compilable() bool {
 	return u.kind == juJar || u.kind == juRunnable && !u.contribRunnable || u.kind == juTest
 }
 
-func (ctx *GenCtx) javaPrologueDM() []ANY {
-	if ctx.javaPrologue == nil {
-		ctx.javaPrologue = appendInternAnys(nil, []string{
-			"contrib/java/org/jetbrains/kotlin/kotlin-stdlib-jdk8/" + javaKotlinVersion,
-			"contrib/java/com/google/flatbuffers/flatbuffers-java/" + javaFlatbuffersVersion,
-			"contrib/java/com/google/protobuf/protobuf-java/" + javaProtoRuntimeVersion,
-			"contrib/java/com/google/protobuf/protobuf-javalite/" + javaProtoRuntimeVersion,
-			"contrib/java/com/google/protobuf/protobuf-java-util/" + javaProtoRuntimeVersion,
-			"contrib/java/com/google/protobuf/protobuf-kotlin/" + javaProtoRuntimeVersion,
-		})
-
-		for _, lib := range javaKotlinAllowedVersions {
-			ctx.javaPrologue = append(ctx.javaPrologue, internStr("contrib/java/org/jetbrains/kotlin/"+lib+"/"+javaKotlinVersion).any())
-		}
-	}
-
-	return ctx.javaPrologue
-}
-
 func javaConfPrologue(ctx *GenCtx, jm *JavaModule, d *JavaData) {
 	u := jm.unit
-	prologue := ctx.javaPrologueDM()
-
-	if u.compilable() {
-		d.dm = append(d.dm, prologue[1:]...)
-	}
-
-	if u.kind == juJar {
-		d.dm = append(d.dm, prologue[0])
-		d.peerStmts = append(d.peerStmts, JavaPeerSpec{dir: "build/platform/java/jdk"})
-	}
-
-	if u.kind == juExternal {
-		d.peerStmts = append(d.peerStmts, JavaPeerSpec{dir: "build/platform/java/jdk"})
-	}
-
-	if u.kind == juJar && (jm.stmt == tokJtest || jm.stmt == tokJtestFor) {
-		d.test.depends = append(d.test.depends, "contrib/java/org/sonarsource/scanner/cli/sonar-scanner-cli/2.8")
-	}
-
-	switch {
-	case u.kind == juTest && jm.stmt == tokJtest:
-		d.peerStmts = append(d.peerStmts, JavaPeerSpec{dir: "devtools/junit-runner"}, JavaPeerSpec{dir: "devtools/jtest-annotations/junit4"})
-		d.dm = appendInternAnys(d.dm, []string{"contrib/java/com/google/code/gson/gson/2.10.1", "contrib/java/com/beust/jcommander/1.72", "contrib/java/junit/junit/4.12"})
-	case u.kind == juTest && jm.stmt == tokJtestFor:
-		d.peerStmts = append(d.peerStmts, JavaPeerSpec{dir: d.unittestDir}, JavaPeerSpec{dir: "devtools/junit-runner"})
-		d.dm = appendInternAnys(d.dm, []string{"contrib/java/com/google/code/gson/gson/2.8.6", "contrib/java/com/beust/jcommander/1.72", "contrib/java/junit/junit/4.12"})
-	case u.kind == juTest && jm.stmt == tokJunit5:
-		d.peerStmts = append(d.peerStmts, JavaPeerSpec{dir: "devtools/jtest-annotations/junit5"})
-	case u.kind == juTest && jm.stmt == tokJunit6:
-		d.peerStmts = append(d.peerStmts, JavaPeerSpec{dir: "devtools/jtest-annotations/junit6"})
-	case u.kind == juJar && jm.stmt == tokJtestFor:
-		d.peerStmts = append(d.peerStmts, JavaPeerSpec{dir: "devtools/junit-runner"}, JavaPeerSpec{dir: "build/platform/java/jacoco-agent"}, JavaPeerSpec{dir: d.unittestDir})
-	}
 
 	if u.proto {
 		d.javaProtobufPeers = []string{"contrib/java/com/google/protobuf/protobuf-java/" + javaProtoRuntimeVersion, javaKotlinProtoPeersMarker}
@@ -214,6 +148,17 @@ func collectJavaData(ctx *GenCtx, jm *JavaModule, stmts []Stmt, env Environment)
 	clear(d.rawVars)
 	collectJavaStmts(ctx, jm, d, stmts, env)
 
+	peers, dm := len(d.peerStmts), len(d.dm)
+
+	javaModuleBody(ctx, jm, d, env)
+
+	slices.Reverse(d.peerStmts)
+	slices.Reverse(d.peerStmts[:len(d.peerStmts)-peers])
+	slices.Reverse(d.peerStmts[len(d.peerStmts)-peers:])
+	slices.Reverse(d.dm)
+	slices.Reverse(d.dm[:len(d.dm)-dm])
+	slices.Reverse(d.dm[len(d.dm)-dm:])
+
 	d.rawVars, d.rawBindings = nil, nil
 
 	if !d.autoincluded {
@@ -280,9 +225,9 @@ func collectJavaData(ctx *GenCtx, jm *JavaModule, stmts []Stmt, env Environment)
 	d.validateData = resourceValidationEnabled(env)
 	d.fakeModule = env.bool(envFakeModule)
 	d.moduleType = env.string(envMODULE_TYPE)
-	d.peerdirTags = strings.Fields(env.expandVariable(env.string(envPeerdirTags)))
-	d.moduleTag = env.string(envMODULE_TAG)
-	d.dmTagsExclude = strings.Fields(env.expandVariable(env.string(envDependencyManagementTagsExclude)))
+	d.peerdirTags = javaTags(jm.instance.Platform.conf, env, envPeerdirTags)
+	d.moduleTag = env.stringID(envMODULE_TAG)
+	d.dmTagsExclude = javaTags(jm.instance.Platform.conf, env, envDependencyManagementTagsExclude)
 	d.sbrUIDExt = env.string(envSbrUIDExt)
 	d.test.parallelWorkers = env.string(envParallelTestsWithinNodeWorkers)
 
@@ -346,6 +291,11 @@ func collectJavaStmts(ctx *GenCtx, jm *JavaModule, d *JavaData, stmts []Stmt, en
 			javaModulePrologue(ctx, jm, d, env)
 
 			javaModuleArgs(jm, d, expandSourceArguments(v.Args, env))
+
+			if jm.stmt == tokJtestFor && d.unittestDir != "" {
+				env.setString(envUnittestDir, d.unittestDir)
+			}
+
 			javaConfPrologue(ctx, jm, d)
 		case *EndStmt:
 			collectJavaAutoinclude(ctx, jm, d, env)
@@ -501,17 +451,19 @@ func collectJavaStmts(ctx *GenCtx, jm *JavaModule, d *JavaData, stmts []Stmt, en
 
 			var args []string
 
-			if v.Raw.string() == "RUN_JAVA_PROGRAM" {
-				args = splitJavaCommandWords(expandStmtToken(strings.Join(rawArgs, " "), env))
-			} else if v.Raw.string() == "GENERATE_SCRIPT" {
-				args = anyStrs(expandSourceArguments(raw, env))
-			} else {
-				args = anyStrs(expandStmtTokens(v.Args, env))
-			}
-
 			stmt := *v
 
-			stmt.Args = internAnys(args)
+			if v.Raw.string() == "RUN_JAVA_PROGRAM" {
+				args = splitJavaCommandWords(expandStmtToken(strings.Join(rawArgs, " "), env))
+				stmt.Args = internAnys(args)
+			} else if v.Raw.string() == "GENERATE_SCRIPT" {
+				stmt.Args = expandSourceArguments(raw, env)
+				args = anyStrs(stmt.Args)
+			} else {
+				stmt.Args = expandStmtTokens(v.Args, env)
+				args = anyStrs(stmt.Args)
+			}
+
 			d.recurses = appendConfigurationRecurses(d.recurses, jm.dir, stmt, jm.instance.Platform)
 
 			switch v.Name {
@@ -534,6 +486,31 @@ func collectJavaStmts(ctx *GenCtx, jm *JavaModule, d *JavaData, stmts []Stmt, en
 	}
 }
 
+func javaModuleBody(ctx *GenCtx, jm *JavaModule, d *JavaData, env Environment) {
+	if d.confModule == nil {
+		return
+	}
+
+	platform := jm.instance.Platform
+
+	d.inModuleBody = true
+
+	defer func() { d.inModuleBody = false }()
+
+	for _, call := range platform.conf.bodyCalls(d.confModule) {
+		args := platform.conf.expandArgs(env, call.args)
+
+		var scratch [1]Stmt
+
+		stmts := appendMacroCallStmts(scratch[:0], call.name, args, args, 0, func(format string, a ...any) {
+			throwFmt("%s: %s: "+format, append([]any{jm.dir, call.name.string()}, a...)...)
+		})
+
+		markImplicitPeers(stmts)
+		collectJavaStmts(ctx, jm, d, stmts, env)
+	}
+}
+
 func expandJavaConfMacro(ctx *GenCtx, jm *JavaModule, d *JavaData, v UnknownStmt, env Environment) {
 	platform := jm.instance.Platform
 	macro := platform.conf.alias(v.Raw)
@@ -543,6 +520,10 @@ func expandJavaConfMacro(ctx *GenCtx, jm *JavaModule, d *JavaData, v UnknownStmt
 	}
 
 	platform.conf.macroCalls(macro, v, env, &d.confMacroDepth, ctx.onWarn, jm.dir, func(name STR, args []ANY) {
+		if d.inModuleBody && baseMacro(name) {
+			return
+		}
+
 		var scratch [1]Stmt
 
 		stmts := appendMacroCallStmts(scratch[:0], name, args, args, v.Line, func(format string, a ...any) {
@@ -1545,7 +1526,11 @@ func javaAppendResolved(dst, src, expanded []ANY) []ANY {
 }
 
 func javaDropUnresolved(args []string) []string {
-	out := args[:0:0]
+	if !slices.ContainsFunc(args, func(arg string) bool { return strings.IndexByte(arg, '$') >= 0 }) {
+		return args
+	}
+
+	out := make([]string, 0, len(args))
 
 	for _, arg := range args {
 		a := strings.ReplaceAll(arg, `${"$"}`, "$")

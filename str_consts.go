@@ -272,6 +272,7 @@ var (
 	strDynpackage                                                                            = internStr("-dynpackage")
 	strE                                                                                     = internStr("-E")
 	strEmpty                                                                                 = internStr("")
+	strEmptyTag                                                                              = internStr("__EMPTY__")
 	strEnUsUtf8                                                                              = internStr("en_US.UTF-8")
 	strEnable                                                                                = internStr("ENABLE")
 	strEnableNativeAccessAllUnnamed                                                          = internStr("--enable-native-access=ALL-UNNAMED")
