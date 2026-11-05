@@ -777,21 +777,43 @@ func (c *ConfFile) holds(b int32, env Environment) bool {
 	return true
 }
 
-func (c *ConfFile) condInputs(b int32, add func(ENV), literal *bool) {
+type confRead struct {
+	variable ENV
+	truth    bool
+}
+
+func (c *ConfFile) condInputs(b int32, add func(ENV, bool), literal *bool) {
 	for _, at := range c.conditionChain(b) {
 		if at < 0 {
 			at = -at
 		}
 
-		for _, node := range c.cond(at) {
+		nodes := c.cond(at)
+
+		for i, node := range nodes {
 			switch node.Kind {
-			case ckConfIdent, ckIdent, ckDefined, ckIsNum:
-				add(node.Env)
+			case ckConfIdent, ckDefined:
+				add(node.Env, !condOperand(nodes, int32(i)))
+			case ckIdent, ckIsNum:
+				add(node.Env, false)
 			case ckString:
 				*literal = *literal || strings.IndexByte(node.Name, '$') >= 0
 			}
 		}
 	}
+}
+
+func condOperand(nodes []CondNode, i int32) bool {
+	for _, node := range nodes {
+		switch node.Kind {
+		case ckEq, ckConfEq, ckLt, ckGt, ckConfLt, ckStartsWith, ckEndsWith, ckVersionCmp, ckMatches:
+			if node.L == i || node.R == i {
+				return true
+			}
+		}
+	}
+
+	return false
 }
 
 func (c *ConfFile) condVars(b int32, add func(ENV)) {
@@ -987,7 +1009,7 @@ type confTables struct {
 	byVariable  DenseMap[ENV, []ENV]
 	byTarget    DenseMap[ENV, []ConfStmtRef]
 	targetReads DenseMap[ENV, []ENV]
-	recalcReads DenseMap[ENV, []ENV]
+	recalcReads DenseMap[ENV, []confRead]
 	modules     DenseMap[STR, *confModule]
 	variants    DenseMap[STR, []ConfVariant]
 	peers       DenseMap[STR, []confPeerVariant]
@@ -1357,14 +1379,20 @@ func (t *confTables) build() {
 	t.byTarget.idx.each(func(key, slot uint32) {
 		target := ENV(key)
 
-		var all []ENV
+		var all []confRead
 
 		literal := false
 
 		for _, r := range t.byTarget.vals.s[slot] {
-			r.file.condInputs(r.stmt.branch, func(variable ENV) {
-				if variable != target && !slices.Contains(all, variable) {
-					all = append(all, variable)
+			r.file.condInputs(r.stmt.branch, func(variable ENV, truth bool) {
+				if variable == target {
+					return
+				}
+
+				if i := slices.IndexFunc(all, func(read confRead) bool { return read.variable == variable }); i >= 0 {
+					all[i].truth = all[i].truth && truth
+				} else {
+					all = append(all, confRead{variable: variable, truth: truth})
 				}
 			}, &literal)
 		}
@@ -2240,26 +2268,46 @@ func (c *Conf) recalcInto(env Environment, variable ENV, originals *SetVars, rec
 	}
 }
 
-func (c *Conf) recalcKey(env Environment, target ENV, original STR, reads []ENV) uint64 {
-	c.inputs = c.inputs[:0]
+func (c *Conf) recalcKey(env Environment, target ENV, original STR, reads []confRead) uint64 {
+	s := env.s
 
-	for _, variable := range reads {
-		kind, value := env.s.lookup(variable)
-
-		if kind == envAbsent {
-			value = 0
+	if len(s.appends) != 0 {
+		for _, read := range reads {
+			if s.pending.has(uint32(read.variable)) {
+				s.settle(read.variable)
+			}
 		}
-
-		c.inputs = append(c.inputs, uint64(kind)<<32|uint64(value))
 	}
 
+	inputs := slices.Grow(c.inputs[:0], len(reads))[:len(reads)]
+	kinds, values := s.kind, s.val
 	h := uint64(14695981039346656037)
 
-	for _, x := range append(c.inputs, uint64(target)<<32|uint64(original)) {
-		h = (h ^ x) * 1099511628211
+	for i, read := range reads {
+		input := uint64(0)
+
+		if int(read.variable) < len(kinds) {
+			if kind := kinds[read.variable]; kind != envAbsent {
+				value := values[read.variable]
+
+				switch {
+				case !read.truth:
+					input = uint64(kind)<<32 | uint64(value)
+				case kind == envStr && (value == 0 || value == strEmpty):
+					input = 1
+				default:
+					input = 2
+				}
+			}
+		}
+
+		inputs[i] = input
+		h = (h ^ input) * 1099511628211
 	}
 
-	return h
+	c.inputs = inputs
+
+	return (h ^ (uint64(target)<<32 | uint64(original))) * 1099511628211
 }
 
 func (c *Conf) recalcHit(key uint64, target ENV, original STR) (ConfValue, bool) {

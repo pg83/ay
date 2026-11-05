@@ -49,19 +49,28 @@ var javaUberjarFlagVars = []string{
 	"UBERJAR_SERVICES_RESOURCE_TRANSFORMER_FLAG",
 }
 
+var javaConfGlobalBindings = func() []confMacroBinding {
+	var out []confMacroBinding
+
+	for name, value := range javaConfGlobals {
+		out = append(out, confMacroBinding{name: internStr(name), values: []ANY{internAny(value)}, bound: true})
+	}
+
+	return out
+}()
+
 const (
-	javaKotlinVersion          = "2.3.10"
-	javaProtoRuntimeVersion    = "4.33.0"
-	javaProtoCommonVersion     = "2.63.2"
-	javaGrpcVersion            = "1.51.0"
-	javaKotlinGrpcVersion      = "1.3.1"
-	javaFlatbuffersVersion     = "24.3.25"
-	javaKotlinProtoPeersMarker = "${KOTLIN_PROTO_PEERS}"
-	javaKotlinCompilerGlobal   = "${KOTLIN_COMPILER_RESOURCE_GLOBAL}"
-	javaErrorProneBaseChecks   = "-Xep:FunctionalInterfaceMethodChanged:WARN -Xep:ReturnValueIgnored:WARN"
-	javaErrorProneAddOpens     = "-J--add-opens=jdk.compiler/com.sun.tools.javac.code=ALL-UNNAMED -J--add-opens=jdk.compiler/com.sun.tools.javac.comp=ALL-UNNAMED -J--add-opens=jdk.compiler/com.sun.tools.javac.file=ALL-UNNAMED -J--add-opens=jdk.compiler/com.sun.tools.javac.main=ALL-UNNAMED -J--add-opens=jdk.compiler/com.sun.tools.javac.model=ALL-UNNAMED -J--add-opens=jdk.compiler/com.sun.tools.javac.parser=ALL-UNNAMED -J--add-opens=jdk.compiler/com.sun.tools.javac.processing=ALL-UNNAMED -J--add-opens=jdk.compiler/com.sun.tools.javac.tree=ALL-UNNAMED -J--add-opens=jdk.compiler/com.sun.tools.javac.util=ALL-UNNAMED -J--add-opens=jdk.compiler/com.sun.tools.javac.jvm=ALL-UNNAMED -J--add-opens=jdk.compiler/com.sun.tools.javac.api=ALL-UNNAMED -J--add-opens=jdk.compiler/com.sun.tools.javac.parser=ALL-UNNAMED"
-	javaErrorProne271Forced    = "-Xep:InlineMeInliner:OFF -Xep:SameNameButDifferent:OFF"
-	javaErrorProne2470Forced   = "--should-stop=ifError=FLOW"
+	javaKotlinVersion        = "2.3.10"
+	javaProtoRuntimeVersion  = "4.33.0"
+	javaProtoCommonVersion   = "2.63.2"
+	javaGrpcVersion          = "1.51.0"
+	javaKotlinGrpcVersion    = "1.3.1"
+	javaFlatbuffersVersion   = "24.3.25"
+	javaKotlinCompilerGlobal = "${KOTLIN_COMPILER_RESOURCE_GLOBAL}"
+	javaErrorProneBaseChecks = "-Xep:FunctionalInterfaceMethodChanged:WARN -Xep:ReturnValueIgnored:WARN"
+	javaErrorProneAddOpens   = "-J--add-opens=jdk.compiler/com.sun.tools.javac.code=ALL-UNNAMED -J--add-opens=jdk.compiler/com.sun.tools.javac.comp=ALL-UNNAMED -J--add-opens=jdk.compiler/com.sun.tools.javac.file=ALL-UNNAMED -J--add-opens=jdk.compiler/com.sun.tools.javac.main=ALL-UNNAMED -J--add-opens=jdk.compiler/com.sun.tools.javac.model=ALL-UNNAMED -J--add-opens=jdk.compiler/com.sun.tools.javac.parser=ALL-UNNAMED -J--add-opens=jdk.compiler/com.sun.tools.javac.processing=ALL-UNNAMED -J--add-opens=jdk.compiler/com.sun.tools.javac.tree=ALL-UNNAMED -J--add-opens=jdk.compiler/com.sun.tools.javac.util=ALL-UNNAMED -J--add-opens=jdk.compiler/com.sun.tools.javac.jvm=ALL-UNNAMED -J--add-opens=jdk.compiler/com.sun.tools.javac.api=ALL-UNNAMED -J--add-opens=jdk.compiler/com.sun.tools.javac.parser=ALL-UNNAMED"
+	javaErrorProne271Forced  = "-Xep:InlineMeInliner:OFF -Xep:SameNameButDifferent:OFF"
+	javaErrorProne2470Forced = "--should-stop=ifError=FLOW"
 )
 
 type javaConfGlobal struct {
@@ -76,37 +85,9 @@ func (u *javaUnit) compilable() bool {
 func javaConfPrologue(ctx *GenCtx, jm *JavaModule, d *JavaData) {
 	u := jm.unit
 
-	if u.proto {
-		d.javaProtobufPeers = []string{"contrib/java/com/google/protobuf/protobuf-java/" + javaProtoRuntimeVersion, javaKotlinProtoPeersMarker}
-	}
-
 	if u.fbs {
 		d.peerStmts = append(d.peerStmts, JavaPeerSpec{dir: "contrib/java/com/google/flatbuffers/flatbuffers-java/" + javaFlatbuffersVersion})
 	}
-}
-
-func (d *JavaData) kotlinProtoPeers() []string {
-	if d.kotlinProto {
-		return []string{"contrib/java/com/google/protobuf/protobuf-kotlin/" + javaProtoRuntimeVersion}
-	}
-
-	return nil
-}
-
-func (d *JavaData) expandJavaProtobufPeers() {
-	var out []string
-
-	for _, p := range d.javaProtobufPeers {
-		if p == javaKotlinProtoPeersMarker {
-			out = append(out, d.kotlinProtoPeers()...)
-
-			continue
-		}
-
-		out = append(out, p)
-	}
-
-	d.javaProtobufPeers = out
 }
 
 func javaModulePrologue(ctx *GenCtx, jm *JavaModule, d *JavaData, env Environment) {
@@ -213,8 +194,6 @@ func collectJavaData(ctx *GenCtx, jm *JavaModule, stmts []Stmt, env Environment)
 	}
 
 	if jm.unit.proto {
-		d.expandJavaProtobufPeers()
-
 		if len(d.evSrcs) > 0 {
 			d.peerStmts = append(d.peerStmts, JavaPeerSpec{dir: "library/cpp/eventlog/proto"})
 		}
@@ -225,6 +204,12 @@ func collectJavaData(ctx *GenCtx, jm *JavaModule, stmts []Stmt, env Environment)
 	d.validateData = resourceValidationEnabled(env)
 	d.fakeModule = env.bool(envFakeModule)
 	d.moduleType = env.string(envMODULE_TYPE)
+	d.jarResource = env.string(envJarResourceID)
+	d.srcResource = env.string(envSrcResourceID)
+	d.localJar = env.string(envLocalJarPath)
+	d.localSourcesJar = env.string(envLocalSourcesJarPath)
+	d.commonGoogleAPIs = env.string(envCommonGoogleApis) != "None"
+	d.varPeers = ctx.varWords(internStr(env.expandVariable(env.string(envPeerdir))))
 	d.peerdirTags = javaTags(jm.instance.Platform.conf, env, envPeerdirTags)
 	d.moduleTag = env.stringID(envMODULE_TAG)
 	d.dmTagsExclude = javaTags(jm.instance.Platform.conf, env, envDependencyManagementTagsExclude)
@@ -314,15 +299,21 @@ func collectJavaStmts(ctx *GenCtx, jm *JavaModule, d *JavaData, stmts []Stmt, en
 				d.peerStmts = append(d.peerStmts, JavaPeerSpec{dir: peerdirModulePath(p).string(), explicit: !v.Implicit})
 			}
 		case *SetStmt:
-			env.setFromString(v.NameEnv, expandSourceScalarVarRef(v.Value, env))
+			value := expandSourceScalarVarRef(v.Value, env)
 
+			env.setFromString(v.NameEnv, value)
+			d.setVars.set(internStr(v.Name), internStr(value))
+			jm.instance.Platform.conf.set(env, v.NameEnv, &d.setVars)
 			d.setRawVar(v.Name, d.rawExpand(v.Value))
 		case *DefaultVarStmt:
+			value := expandSourceScalarVarRef(v.Value, env)
 			bound := env.hasBindingID(v.NameEnv)
 
-			env.setDefaultString(v.NameEnv, expandSourceScalarVarRef(v.Value, env))
+			env.setDefaultString(v.NameEnv, value)
 
 			if !bound {
+				d.setVars.set(internStr(v.VarName), internStr(value))
+				jm.instance.Platform.conf.set(env, v.NameEnv, &d.setVars)
 				d.setRawVar(v.VarName, d.rawExpand(v.Value))
 			}
 		case *IfStmt:
@@ -479,11 +470,20 @@ func collectJavaStmts(ctx *GenCtx, jm *JavaModule, d *JavaData, stmts []Stmt, en
 				continue
 			}
 
-			if !applyJavaMacro(ctx, jm, d, v.Raw.string(), args, rawArgs, env) {
+			if !applyJavaMacro(ctx, jm, d, v.Raw.string(), args, rawArgs, env) || javaConfBodyToo(v.Raw) {
 				expandJavaConfMacro(ctx, jm, d, stmt, env)
 			}
 		}
 	}
+}
+
+func javaConfBodyToo(name STR) bool {
+	switch name.string() {
+	case "WITH_KOTLIN", "USE_ERROR_PRONE", "UBERJAR", "WITH_KOTLIN_GRPC", "JAVA_PROTO_PLUGIN":
+		return true
+	}
+
+	return false
 }
 
 func javaModuleBody(ctx *GenCtx, jm *JavaModule, d *JavaData, env Environment) {
@@ -667,6 +667,8 @@ func applyJavaMacro(ctx *GenCtx, jm *JavaModule, d *JavaData, name string, args,
 		}
 
 		env.setString(internEnv(args[0]), value)
+		d.setVars.set(internStr(args[0]), internStr(value))
+		jm.instance.Platform.conf.set(env, internEnv(args[0]), &d.setVars)
 
 		rawValue := d.rawExpand(strings.Join(raw[1:], " "))
 
@@ -680,6 +682,7 @@ func applyJavaMacro(ctx *GenCtx, jm *JavaModule, d *JavaData, name string, args,
 			d.protocFlags = append(d.protocFlags, args[1:]...)
 		}
 	case "JDK_VERSION", "DEFAULT_JDK_VERSION":
+		checkJdkVersion(arg0)
 		javaSetJDK(d, env, arg0)
 		jm.instance.Platform.conf.set(env, envJdkRealVersion, nil)
 
@@ -688,9 +691,6 @@ func applyJavaMacro(ctx *GenCtx, jm *JavaModule, d *JavaData, name string, args,
 	case "WITH_KOTLIN":
 		d.withKotlin = true
 		d.recalcKotlincOpts(jm)
-
-		env.setBool(envWithKotlinValue, true)
-		env.setString(envKotlinDefaultGlob, "**/*.kt")
 	case "WITH_KAPT":
 		d.withKapt = true
 
@@ -750,7 +750,6 @@ func applyJavaMacro(ctx *GenCtx, jm *JavaModule, d *JavaData, name string, args,
 	case "UBERJAR":
 		d.uberjar = true
 		d.recalcKotlincOpts(jm)
-		expandJavaConfMacro(ctx, jm, d, UnknownStmt{Name: internTokMaybeSTR(internStr(name)), Raw: internStr(name), Args: internAnys(args)}, env)
 	case "UBERJAR_HIDING_PREFIX":
 		env.setString(envUberjarPrefixFlag, "--shade-prefix "+arg0)
 	case "UBERJAR_HIDE_EXCLUDE_PATTERN":
@@ -778,14 +777,6 @@ func applyJavaMacro(ctx *GenCtx, jm *JavaModule, d *JavaData, name string, args,
 	case "UBERJAR_SERVICES_RESOURCE_TRANSFORMER":
 		env.setString(envUberjarServicesResourceTransformerFlag, "--service-transformer")
 	case "JAVA_DEPENDENCIES_CONFIGURATION":
-	case "JAR_RESOURCE":
-		d.jarResource = arg0
-	case "SRC_RESOURCE":
-		d.srcResource = arg0
-	case "LOCAL_JAR":
-		d.localJar = arg0
-	case "LOCAL_SOURCES_JAR":
-		d.localSourcesJar = arg0
 	case "JAVA_TEST_PEERDIR", "JAVA_RUNTIME_PEERDIR":
 		if !javaMacroIsAlias(jm, name) {
 			return true
@@ -935,12 +926,12 @@ func applyJavaMacro(ctx *GenCtx, jm *JavaModule, d *JavaData, name string, args,
 		d.ktlintOld = true
 	case "WITH_YA_1931":
 		env.setBool(envWithYa1931, true)
-	case "NO_YMAKE_PYTHON3":
-		d.noYmakePython3 = true
 	case "ENABLE":
 		for _, a := range args {
 			env.setBool(internEnv(a), true)
 			javaEnableFlag(d, a, true)
+			d.setVars.set(internStr(a), strYes)
+			jm.instance.Platform.conf.set(env, internEnv(a), &d.setVars)
 		}
 	case "DISABLE_DATA_VALIDATION":
 		env.setBool(envValidateData, false)
@@ -948,35 +939,17 @@ func applyJavaMacro(ctx *GenCtx, jm *JavaModule, d *JavaData, name string, args,
 		for _, a := range args {
 			env.setBool(internEnv(a), false)
 			javaEnableFlag(d, a, false)
+			d.setVars.set(internStr(a), strNo)
+			jm.instance.Platform.conf.set(env, internEnv(a), &d.setVars)
 		}
-	case "GRPC":
-		d.javaProtoArgs = append(d.javaProtoArgs, JavaProtoPlugin{name: "grpc_java", tool: "build/platform/java/grpc"})
-		d.javaProtobufPeers = append(d.javaProtobufPeers, "contrib/java/io/grpc/grpc-stub/"+javaGrpcVersion, "contrib/java/io/grpc/grpc-protobuf/"+javaGrpcVersion)
-		d.expandJavaProtobufPeers()
-		d.javaProtobufPeers = append(d.javaProtobufPeers, "contrib/java/javax/annotation/javax.annotation-api/1.3.1")
 	case "GO_GRPC_GATEWAY_SWAGGER_SRCS":
 		d.peerStmts = append(d.peerStmts, JavaPeerSpec{dir: goGatewayV1Options, explicit: true})
 	case "GO_GRPC_GATEWAY_V2_OPENAPI_SRCS":
 		d.peerStmts = append(d.peerStmts, JavaPeerSpec{dir: goGatewayV2Options, explicit: true})
 	case "WITH_KOTLIN_GRPC":
-		d.kotlinProto = true
 		d.javaProtoArgs = append(d.javaProtoArgs, JavaProtoPlugin{kotlinGrpc: true})
-
-		env.setBool(envKotlinProto, true)
-
-		d.peerStmts = append(d.peerStmts, JavaPeerSpec{dir: "build/platform/java/kotlin_grpc"})
-		d.javaProtobufPeers = append(d.javaProtobufPeers, "contrib/java/io/grpc/grpc-kotlin-stub/"+javaKotlinGrpcVersion)
-		d.expandJavaProtobufPeers()
-		d.javaProtobufPeers = append(d.javaProtobufPeers, "contrib/java/com/google/protobuf/protobuf-kotlin/"+javaProtoRuntimeVersion)
-		d.expandJavaProtobufPeers()
 	case "JAVA_PROTO_PLUGIN":
 		javaProtoPluginMacro(d, args)
-	case "APPHOST", "APPHOST_JAVA":
-		javaProtoPluginMacro(d, []string{"java_plugin", "apphost/tools/stub_generator/java_plugin", "DEPS", "apphost/api/service/java/apphost/api"})
-	case "ALICE_CAPABILITY":
-		javaProtoPluginMacro(d, []string{"alice_capability_java", "alice/library/go/java_marker_interface_protoc_plugin", "DEPS", "alice/protos/endpoint/java_interface", "alice/megamind/protos/scenarios/java_interface"})
-	case "ALICE_TYPED_CALLBACK":
-		javaProtoPluginMacro(d, []string{"alice_typed_callback_java", "alice/library/go/java_marker_interface_protoc_plugin", "DEPS", "alice/protos/api/typed_callbacks/java_marker_interface"})
 	case "PROTO_NAMESPACE":
 		env.setString(envProtoNamespace, args[len(args)-1])
 		d.addProtoInclude(args, true)
@@ -1012,8 +985,6 @@ func applyJavaMacro(ctx *GenCtx, jm *JavaModule, d *JavaData, name string, args,
 		for _, a := range args {
 			d.excludeTags[a] = name == "EXCLUDE_TAGS"
 		}
-	case "USE_COMMON_GOOGLE_APIS":
-		d.commonGoogleAPIs = true
 	case "TASKLET":
 		d.peerStmts = append(d.peerStmts, JavaPeerSpec{dir: strTaskletV1Api.string(), explicit: true})
 	case "STYLE_RUFF", "STYLE_PYTHON":
@@ -1037,16 +1008,6 @@ func javaProtoPluginMacro(d *JavaData, args []string) {
 	}
 
 	d.javaProtoArgs = append(d.javaProtoArgs, JavaProtoPlugin{name: args[0], tool: args[1]})
-
-	for i := 2; i < len(args); i++ {
-		if args[i] == "DEPS" {
-			continue
-		}
-
-		d.javaProtobufPeers = append(d.javaProtobufPeers, args[i])
-	}
-
-	d.expandJavaProtobufPeers()
 }
 
 func javaEnableFlag(d *JavaData, name string, on bool) {
@@ -1065,85 +1026,6 @@ func javaMacroIsAlias(jm *JavaModule, name string) bool {
 	default:
 		return jm.unit.kind == juTest
 	}
-}
-
-func (jm *JavaModule) varPeers() []string {
-	d, u := jm.data, jm.unit
-	jdkPeer := "build/platform/java/jdk/jdk" + d.jdkReal
-
-	var out []string
-
-	if u.jni {
-		out = append(out, "build/platform/java/jdk", jdkPeer)
-	}
-
-	if !d.noYmakePython3 {
-		out = append(out, "build/platform/python/ymake_python3")
-	}
-
-	switch u.kind {
-	case juContrib:
-		if d.jarResource == "" && d.localJar == "" {
-			out = append(out, "build/platform/java/jdk", jdkPeer)
-		}
-
-		if d.srcResource == "" && d.localSourcesJar == "" {
-			out = append(out, "build/platform/java/jdk", jdkPeer)
-		}
-	case juJar:
-		out = append(out, jdkPeer)
-
-		switch {
-		case jm.stmt == tokJunit5:
-			out = append(out, "devtools/junit5-runner", "build/platform/java/jacoco-agent")
-		case jm.stmt == tokJunit6:
-			out = append(out, "devtools/junit6-runner", "build/platform/java/jacoco-agent")
-		case jm.stmt == tokJtest:
-			out = append(out, "build/platform/java/jacoco-agent")
-		}
-
-		switch jm.stmt {
-		case tokJunit5:
-			out = append(out, "devtools/jtest-annotations/junit5")
-		case tokJunit6:
-			out = append(out, "devtools/jtest-annotations/junit6")
-		case tokJtest:
-			out = append(out, "devtools/jtest-annotations/junit4")
-		}
-
-		if d.withKotlin {
-			out = append(out, "build/platform/java/kotlin", "contrib/java/org/jetbrains/kotlin/kotlin-stdlib-jdk8")
-		}
-
-		if d.uberjar {
-			out = append(out, "build/platform/java/uberjar", "build/platform/java/uberjar/uberjar"+d.jdkReal)
-		}
-
-		if d.errorProne {
-			out = append(out, javaErrorProne(d.jdkReal).peerdir)
-		}
-
-	case juRunnable:
-		if !u.contribRunnable && !d.disableScriptgen {
-			out = append(out, "build/platform/java/scriptgen")
-		}
-	case juExternal:
-		out = append(out, jdkPeer, "build/platform/java/jdk/jdk17")
-
-		if u.proto {
-			out = append(out, d.javaProtobufPeers...)
-
-			if d.commonGoogleAPIs {
-				out = append(out, "contrib/java/com/google/api/grpc/proto-google-common-protos/"+d.javaProtoCommonVersion)
-			}
-		}
-
-		if d.kotlinProto {
-			out = append(out, "build/platform/java/kotlin", "contrib/java/org/jetbrains/kotlin/kotlin-stdlib-jdk8/"+javaKotlinVersion)
-		}
-	}
-
-	return out
 }
 
 type javaErrorProneInfo struct {
@@ -1275,16 +1157,18 @@ func (d *JavaData) addProtoInclude(args []string, exported bool) {
 }
 
 func (d *JavaData) rawExpand(s string) string {
+	if strings.IndexByte(s, '$') < 0 && strings.IndexByte(s, '\\') < 0 {
+		return s
+	}
+
 	if d.rawBindings == nil {
-		d.rawBindings = make([]confMacroBinding, 0, len(d.rawVars)+len(javaConfGlobals))
+		d.rawBindings = make([]confMacroBinding, 0, len(d.rawVars)+len(javaConfGlobalBindings))
 
 		for name, value := range d.rawVars {
 			d.rawBindings = append(d.rawBindings, confMacroBinding{name: internStr(name), values: []ANY{internAny(value)}, bound: true})
 		}
 
-		for name, value := range javaConfGlobals {
-			d.rawBindings = append(d.rawBindings, confMacroBinding{name: internStr(name), values: []ANY{internAny(value)}, bound: true})
-		}
+		d.rawBindings = append(d.rawBindings, javaConfGlobalBindings...)
 	}
 
 	return substMacroDeeply(s, d.rawBindings, Environment{}, nil, &substPolicy{makefile: true, emptyUnknown: true, literal: javaPathVar})

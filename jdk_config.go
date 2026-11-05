@@ -29,11 +29,15 @@ func jdkVersionMacroAssignment(v *UnknownStmt, env Environment) *SetStmt {
 
 	value = expandConfigMacroBody(value, env)
 
+	checkJdkVersion(value)
+
+	return &SetStmt{Name: "JDK_REAL_VERSION", NameEnv: envJdkRealVersion, Value: value, Line: v.Line}
+}
+
+func checkJdkVersion(value string) {
 	switch value {
 	case "11", "17", "21", "22", "23", "24", "25", "26":
 	default:
 		throwFmt("Invalid jdk version: %s", value)
 	}
-
-	return &SetStmt{Name: "JDK_REAL_VERSION", NameEnv: envJdkRealVersion, Value: value, Line: v.Line}
 }

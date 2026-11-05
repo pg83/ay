@@ -302,7 +302,6 @@ type JavaData struct {
 	srcDirs                []VFS
 	srcs                   []string
 	kotlinProto            bool
-	javaProtobufPeers      []string
 	javaProtoCommonVersion string
 	javaProtoArgs          []JavaProtoPlugin
 	protocFlags            []string
@@ -342,7 +341,7 @@ type JavaData struct {
 	sbomComponent          bool
 	cppToolchainPeer       bool
 	modver                 string
-	noYmakePython3         bool
+	varPeers               []ANY
 	validateData           bool
 	fakeModule             bool
 	moduleType             string
@@ -694,8 +693,10 @@ func (ctx *GenCtx) javaResolvePeers(jm *JavaModule) {
 		}
 	}
 
-	for _, p := range jm.varPeers() {
-		add(p, false)
+	for _, p := range jm.data.varPeers {
+		if p.string() != jm.dir {
+			add(p.string(), false)
+		}
 	}
 
 	if jm.unit.ignorePeerdir {
