@@ -346,6 +346,7 @@ type SplitCodegenStmt struct {
 }
 
 type BaseCodegenStmt struct {
+	DeclSeq        int
 	ToolPath       ANY
 	Prefix         ANY
 	Opts           []ANY
@@ -393,9 +394,10 @@ type RunPythonStmt struct {
 }
 
 type ConfigureFileStmt struct {
-	Src  string
-	Dst  string
-	Line int
+	Src     string
+	Dst     string
+	Line    int
+	DeclSeq int
 }
 
 type CreateBuildInfoStmt struct {

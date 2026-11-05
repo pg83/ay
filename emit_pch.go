@@ -3,8 +3,9 @@ package main
 var pchKV = KV{P: pkPC, PC: pcRed}
 
 type PchFileStmt struct {
-	Header ANY
-	Output ANY
+	Header  ANY
+	Output  ANY
+	DeclSeq int
 }
 
 type pchCommand struct {

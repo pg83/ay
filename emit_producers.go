@@ -470,7 +470,7 @@ func (e *EmitContext) producerPositions(cythonPlans []CythonStmtPlan) ([]Produce
 		outEnd := len(backing)
 
 		for _, f := range run.INFiles {
-			if run.DeclSeq != 0 {
+			if run.Python {
 				backing = append(backing, e.sourceInputForScheduling(f.string()))
 			} else if v := rootedBuildCandidate(module, f.string()); v != 0 {
 				backing = append(backing, v)
@@ -563,8 +563,8 @@ func (e *EmitContext) producerPositions(cythonPlans []CythonStmtPlan) ([]Produce
 	}
 
 	for i, token := range d.pireInline {
-		input := e.moduleSourceVFS(token)
-		output, _ := composeCCPaths(e.instance, e.moduleSourceRel(token), input, ModuleCCInputs{}, "")
+		input := e.moduleSourceVFS(token.Value)
+		output, _ := composeCCPaths(e.instance, e.moduleSourceRel(token.Value), input, ModuleCCInputs{}, "")
 		start := len(backing)
 
 		backing = append(backing, output, input)
@@ -749,7 +749,7 @@ func (e *EmitContext) producerPositions(cythonPlans []CythonStmtPlan) ([]Produce
 	}
 
 	for i, srcTok := range d.ymapsSprotoSrcs {
-		protoRelPath := e.protoSourceRelPath(srcTok.string())
+		protoRelPath := e.protoSourceRelPath(srcTok.Value.string())
 		sprotoMark := len(e.prodVFS)
 
 		e.prodVFS = append(e.prodVFS, build(strings.TrimSuffix(protoRelPath, ".proto"), ".sproto.h"))
@@ -758,7 +758,7 @@ func (e *EmitContext) producerPositions(cythonPlans []CythonStmtPlan) ([]Produce
 			kind:  prodSproto,
 			index: i,
 			outs:  e.prodVFSTake(sprotoMark),
-			ins:   e.srcInsCandidate(srcTok),
+			ins:   e.srcInsCandidate(srcTok.Value),
 		})
 	}
 
@@ -902,7 +902,7 @@ func (e *EmitContext) producerPositions(cythonPlans []CythonStmtPlan) ([]Produce
 	for i, conf := range d.checkConfigHeaders {
 		outsMark := len(e.prodVFS)
 
-		e.prodVFS = append(e.prodVFS, checkConfigHGeneratedVFS(module, conf))
+		e.prodVFS = append(e.prodVFS, checkConfigHGeneratedVFS(module, conf.Value))
 
 		positions = append(positions, ProducerPos{
 			kind:  prodCheckConfigH,
@@ -970,7 +970,7 @@ func (e *EmitContext) emitDeclaredProducers(cythonPlans []CythonStmtPlan) {
 
 	positions, srcs := e.producerPositions(cythonPlans)
 
-	positions = e.orderedProducerPositions(positions)
+	positions = e.orderedProducerPositions(positions, cythonPlans)
 	e.prodPos = positions
 
 	if e.producerOutputs == nil {
@@ -1218,7 +1218,7 @@ func (e *EmitContext) drainCommands(cythonPlans []CythonStmtPlan, srcs []SrcMeta
 		case prodArchive:
 			e.emitArchiveStmt(e.d.archives[pos.index])
 		case prodCheckConfigH:
-			e.emitCheckConfigHStmt(e.d.checkConfigHeaders[pos.index])
+			e.emitCheckConfigHStmt(e.d.checkConfigHeaders[pos.index].Value)
 		case prodRagel6:
 			e.emitRagel6Build(e.d.ragel6Builds[pos.index])
 		case prodCython:
@@ -1228,7 +1228,7 @@ func (e *EmitContext) drainCommands(cythonPlans []CythonStmtPlan, srcs []SrcMeta
 		case prodJoinSrcs:
 			e.emitJoinSrcsStmt(e.d.joinSrcs[pos.index])
 		case prodSproto:
-			e.emitYmapsSprotoStmt(e.d.ymapsSprotoSrcs[pos.index])
+			e.emitYmapsSprotoStmt(e.d.ymapsSprotoSrcs[pos.index].Value)
 		case prodLlvmBc:
 			e.emitLlvmBcStmt(e.d.llvmBc[pos.index])
 		case prodPchFile:

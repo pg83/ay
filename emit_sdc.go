@@ -199,8 +199,6 @@ func setupSdcUnionModule(stmt *ModuleStmt, language Language, env Environment, d
 }
 
 func applySdcInstall(module string, tokens []ANY, d *ModuleData, env Environment) {
-	defer d.recordProducerDeclarations()
-
 	packageName := env.string(envSdcPackageName)
 
 	if packageName == "" {
@@ -229,8 +227,6 @@ func applySdcInstall(module string, tokens []ANY, d *ModuleData, env Environment
 	}
 
 	for len(args) > 0 {
-		d.recordProducerDeclarations()
-
 		arg := take()
 
 		if sdcInstallLocation(packageName, arg, "file") != "" {
@@ -264,10 +260,10 @@ func applySdcInstall(module string, tokens []ANY, d *ModuleData, env Environment
 			}
 
 			if arg == "NODE" && supernode {
-				d.runPython = append(d.runPython, &RunPythonStmt{ScriptPath: strSdgTier0ToolsGenerateSupernodeLinkPy.any(), Args: internAnys([]string{name, out}), OUTNoAutoFiles: internAnys([]string{out})})
+				d.runPython = append(d.runPython, &RunPythonStmt{ScriptPath: strSdgTier0ToolsGenerateSupernodeLinkPy.any(), Args: internAnys([]string{name, out}), OUTNoAutoFiles: internAnys([]string{out}), DeclSeq: d.nextDeclSeq()})
 				d.sdcInstallOutputs = append(d.sdcInstallOutputs, copyFileOutputVFS(module, out))
 			} else {
-				d.bundles = append(d.bundles, BundleEntry{Target: target, Name: out}, BundleEntry{Target: target, Name: out + ".sdcmeta", Suffix: ".sdcmeta"})
+				d.bundles = append(d.bundles, BundleEntry{Target: target, Name: out, DeclSeq: d.nextDeclSeq()}, BundleEntry{Target: target, Name: out + ".sdcmeta", Suffix: ".sdcmeta", DeclSeq: d.nextDeclSeq()})
 				d.sdcInstallOutputs = append(d.sdcInstallOutputs, copyFileOutputVFS(module, out), copyFileOutputVFS(module, out+".sdcmeta"))
 			}
 		case "PROGRAM_STARTER":
@@ -276,14 +272,14 @@ func applySdcInstall(module string, tokens []ANY, d *ModuleData, env Environment
 			if enabled {
 				out := sdcInstallLocation(packageName, kind, name)
 
-				d.runPrograms = append(d.runPrograms, &RunProgramStmt{ToolPath: strSdgDevtoolsPyMonobinaryBuilderGenerateProgramStarter.any(), Args: internAnys([]string{src, out}), OUTNoAutoFiles: internAnys([]string{out})})
+				d.runPrograms = append(d.runPrograms, &RunProgramStmt{ToolPath: strSdgDevtoolsPyMonobinaryBuilderGenerateProgramStarter.any(), Args: internAnys([]string{src, out}), OUTNoAutoFiles: internAnys([]string{out}), DeclSeq: d.nextDeclSeq()})
 				d.sdcInstallOutputs = append(d.sdcInstallOutputs, copyFileOutputVFS(module, out))
 			}
 		default:
 			if enabled || arg == "package.xml" && slices.Contains(allowed, "SHARE") {
 				out := sdcInstallLocation(packageName, kind, arg)
 
-				d.copyFiles = append(d.copyFiles, CopyFileEntry{Src: arg, Dst: out})
+				d.copyFiles = append(d.copyFiles, CopyFileEntry{Src: arg, Dst: out, DeclSeq: d.nextDeclSeq()})
 				d.sdcInstallOutputs = append(d.sdcInstallOutputs, copyFileOutputVFS(module, out))
 			}
 		}

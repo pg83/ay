@@ -112,7 +112,7 @@ func collectAntlrPython(pm *IncludeParserManager, module string, source *RunAntl
 
 	lowered := parseRunAntlr(args, Token{id: kwRUN_ANTLR4, line: source.Line})
 
-	run := AntlrRunInfo{DeclSeq: d.nextDeclSeq(), Macro: lowered.Macro, Args: lowered.Args, INFiles: lowered.INFiles,
+	run := AntlrRunInfo{DeclSeq: d.nextDeclSeq(), Python: true, Macro: lowered.Macro, Args: lowered.Args, INFiles: lowered.INFiles,
 		OUTFiles: lowered.OUTFiles, OUTNoAutoFiles: lowered.OUTNoAutoFiles, CWD: lowered.CWD, OutputIncludes: lowered.OutputIncludes,
 		Jar: internStr(antlrPythonConfigValue(env, prefix+"_JAR")).any()}
 

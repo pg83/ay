@@ -3,7 +3,8 @@ package main
 var fromArchiveKV = KV{P: pkFA, PC: pcYellow, ShowOut: true}
 
 type FromArchiveEntry struct {
-	Source ANY
+	DeclSeq int
+	Source  ANY
 	ArchiveExtraction
 }
 

@@ -25,14 +25,14 @@ func (e *EmitContext) emitAntlrRunStmt(run AntlrRunInfo) {
 	for _, inTok := range run.INFiles {
 		vfs := e.requireProducedInput("IN", inTok.string(), copyFileInputVFS(ctx.fs, instance.Path, inTok.string()))
 
-		if run.DeclSeq != 0 {
+		if run.Python {
 			vfs = e.runProgramInputVFS(inTok.string())
 		}
 
 		inVFSByToken[inTok.string()] = vfs
 		inputs = append(inputs, vfs)
 
-		if run.DeclSeq != 0 && inTok != run.Args[0] {
+		if run.Python && inTok != run.Args[0] {
 			hiddenInputs = append(hiddenInputs, vfs)
 		} else if vfs.isBuild() {
 			inputBuilds = append(inputBuilds, vfs)
@@ -78,7 +78,7 @@ func (e *EmitContext) emitAntlrRunStmt(run AntlrRunInfo) {
 
 	pending := e.pendingEmit(pe)
 
-	if run.DeclSeq != 0 {
+	if run.Python {
 		e.collectCPPStyleInputs(inputs...)
 	}
 

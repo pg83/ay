@@ -443,6 +443,8 @@ func (e *EmitContext) collectGoAutoSource(out VFS, seq int) {
 	r := e.goRes
 	i := len(r.AutoSeqs)
 
+	seq &= declSeqText
+
 	for i > 0 && r.AutoSeqs[i-1] > seq {
 		i--
 	}

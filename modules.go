@@ -27,6 +27,8 @@ const (
 	yaffPluginPath      = "library/cpp/yaff/tools/protoc_plugin"
 	yabsConfRel         = "build/internal/conf/project_specific/yabs.conf"
 	declSeqBlock        = 1 << 24
+	declSeqModuleEnd    = 1 << 40
+	declSeqText         = declSeqModuleEnd - 1
 )
 
 const (
@@ -278,7 +280,7 @@ type ModuleData struct {
 	pyNamespace             *ANY
 	pyNamespacePython2      bool
 	protoNamespace          *ANY
-	ymapsSprotoSrcs         []ANY
+	ymapsSprotoSrcs         []DeclaredToken
 	pyProtoMypy             bool
 	noOptimize              bool
 	optimizePyProtos        bool
@@ -314,22 +316,21 @@ type ModuleData struct {
 	fromArchives            []FromArchiveEntry
 	sdcMetas                []SdcMetaEntry
 	sdcInstallOutputs       []VFS
-	pireInline              []ANY
+	pireInline              []DeclaredToken
 	pchFiles                []PchFileStmt
-	checkConfigHeaders      []ANY
+	checkConfigHeaders      []DeclaredToken
 	cythonOptions           []ANY
 	cythonCpp               []*CythonStmt
 	swigC                   []SwigSrc
 	bisonGenExt             STR
 	grpc                    bool
 	yaConfJSON              []ANY
+	yaConfDeclSeq           int
 	archives                []ArchiveEntry
 	archiveAsm              []ArchiveAsmEntry
 	lj21                    *Lj21Archive
 	copyFiles               []CopyFileEntry
 	declSeq                 int
-	producerDeclarations    []producerDeclaration
-	producerCounts          [prodKindCount]int
 	resources               []ResourceEntry
 	bundles                 []BundleEntry
 	pyMain                  *ANY
@@ -353,7 +354,6 @@ type ModuleData struct {
 	consumerTags            STR
 	pending                 []PendingStmt
 	interpreting            bool
-	pendingIndex            int
 	varMacrosApplied        []STR
 	guards                  []STR
 	startPeers              int
@@ -362,10 +362,16 @@ type ModuleData struct {
 	cc                      ModuleCompileEnv
 }
 
+type DeclaredToken struct {
+	Value   ANY
+	DeclSeq int
+}
+
 type PyRegistration struct {
 	Name        STR
 	RenameInit  bool
 	CFlagsStart int
+	DeclSeq     int
 }
 
 type CompileSpec struct {
@@ -473,6 +479,7 @@ func (s PyScope) moduleName(modulePath, src string) string {
 }
 
 type ArchiveEntry struct {
+	DeclSeq      int
 	Name         string
 	DontCompress bool
 	Files        []string
@@ -501,6 +508,7 @@ type CopyFileEntry struct {
 }
 
 type Antlr4GrammarInfo struct {
+	DeclSeq        int
 	IsSplit        bool
 	Lexer          string
 	Parser         string
@@ -513,6 +521,7 @@ type Antlr4GrammarInfo struct {
 
 type AntlrRunInfo struct {
 	DeclSeq        int
+	Python         bool
 	Jar            ANY
 	Macro          string
 	Args           []ANY
@@ -813,7 +822,7 @@ func collectModuleInto(ctx *GenCtx, instance ModuleInstance, stmts []Stmt, env E
 		if extIsPyx(meta.Source.relOrSelf().string()) {
 			native := meta
 
-			d.cythonCpp = append(d.cythonCpp, &CythonStmt{Src: meta.Source.string(), Seq: meta.Seq, Native: &native, Python3: env.bool(envPYTHON3)})
+			d.cythonCpp = append(d.cythonCpp, &CythonStmt{Src: meta.Source.string(), Seq: declSeqModuleEnd | meta.Seq, Native: &native, Python3: env.bool(envPYTHON3)})
 		} else {
 			nativeSources = append(nativeSources, meta)
 		}
@@ -834,14 +843,19 @@ func collectModuleInto(ctx *GenCtx, instance ModuleInstance, stmts []Stmt, env E
 		d.pythonLint.bind(env)
 	}
 
+	last := d.declSeq
+
 	for _, priority := range []int{stmtPrioDefault, stmtPrioSrcs} {
 		for i, group := range d.pySrcGroups {
 			if group.Prio == priority && group.Statement != nil && group.Statement.Name == tokPySrcs {
+				d.declSeq = declSeqModuleEnd | group.DeclSeq
 				collectPySrcGroup(fs, modulePath, *group.Statement, d, env, onWarn, i)
 				d.pySrcGroups[i].Statement = nil
 			}
 		}
 	}
+
+	d.declSeq = last
 
 	finishPyRegisterCFlags(d)
 
@@ -1705,11 +1719,9 @@ func interpretPending(ctx *GenCtx, modulePath string, kind ModuleKind, language 
 	slices.Reverse(d.peerdirs[d.startPeers:])
 
 	last := d.declSeq
-	declared := len(d.producerDeclarations)
 
 	for i := 0; i < len(d.pending); i++ {
 		d.declSeq = d.pending[i].seq
-		d.pendingIndex = int(d.pending[i].seq / declSeqBlock)
 
 		collectStmts(ctx, modulePath, kind, language, []Stmt{d.pending[i].stmt}, env, d, onWarn, platform)
 		d.statementCommandDirs(ctx, modulePath, kind, language, d.pending[i].stmt, env, onWarn, platform)
@@ -1717,11 +1729,7 @@ func interpretPending(ctx *GenCtx, modulePath string, kind ModuleKind, language 
 		applyVarsAsMacros(ctx, modulePath, kind, language, env, d, onWarn, platform)
 	}
 
-	d.recordProducerDeclarations()
-
-	slices.SortStableFunc(d.producerDeclarations[declared:], func(a, b producerDeclaration) int { return cmp.Compare(a.stmt, b.stmt) })
-
-	d.declSeq = last
+	d.declSeq = declSeqModuleEnd | last
 	d.pending = d.pending[:0]
 	d.interpreting = false
 
@@ -1950,15 +1958,7 @@ func stmtMacroNameID(s Stmt) STR {
 func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Language, stmts []Stmt, env Environment, d *ModuleData, onWarn func(Warn), platform *Platform) {
 	fs := ctx.fs
 
-	if d.interpreting {
-		defer d.recordProducerDeclarations()
-	}
-
 	for _, s := range stmts {
-		if d.interpreting {
-			d.recordProducerDeclarations()
-		}
-
 		if d.discarded {
 			return
 		}
@@ -2509,6 +2509,7 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 
 			expanded.Src = expandStmtToken(v.Src, env)
 			expanded.Dst = expandStmtToken(v.Dst, env)
+			expanded.DeclSeq = d.nextDeclSeq()
 
 			d.configureFiles = append(d.configureFiles, &expanded)
 
@@ -2521,6 +2522,7 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 			d.createBuildInfoFor = ptr(internStr(v.OutputHeader).any())
 		case *RunAntlr4CppStmt:
 			d.antlr4Grammars = append(d.antlr4Grammars, Antlr4GrammarInfo{
+				DeclSeq:        d.nextDeclSeq(),
 				IsSplit:        false,
 				Grammar:        expandStmtToken(v.Grammar.string(), env),
 				Options:        anyStrs(expandStmtTokens(v.Options, env)),
@@ -2530,6 +2532,7 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 			})
 		case *RunAntlr4CppSplitStmt:
 			d.antlr4Grammars = append(d.antlr4Grammars, Antlr4GrammarInfo{
+				DeclSeq:        d.nextDeclSeq(),
 				IsSplit:        true,
 				Options:        anyStrs(expandStmtTokens(v.Options, env)),
 				Lexer:          expandStmtToken(v.Lexer.string(), env),
@@ -2542,6 +2545,7 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 			collectAntlrPython(ctx.parsers, modulePath, v, env, d)
 		case *RunAntlrStmt:
 			expanded := AntlrRunInfo{
+				DeclSeq:        d.nextDeclSeq(),
 				Macro:          v.Macro,
 				Args:           expandStmtTokens(v.Args, env),
 				INFiles:        expandStmtTokens(v.INFiles, env),
@@ -2576,6 +2580,7 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 			expanded.Prefix = expandStmtTokenAny(v.Prefix, env)
 			expanded.Opts = expandStmtTokens(v.Opts, env)
 			expanded.OutputIncludes = expandStmtTokens(v.OutputIncludes, env)
+			expanded.DeclSeq = d.nextDeclSeq()
 
 			d.baseCodegens = append(d.baseCodegens, &expanded)
 		case *RunPythonStmt:
@@ -3176,7 +3181,9 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 			throwFmt("PIRE_INLINE_CMD expects one source file")
 		}
 
-		d.pireInline = append(d.pireInline, v.Args...)
+		for _, arg := range v.Args {
+			d.pireInline = append(d.pireInline, DeclaredToken{Value: arg, DeclSeq: d.nextDeclSeq()})
+		}
 	case tokGenerateYtRecord:
 		applyYtRecord(modulePath, v, d, env)
 	case tokRunJavascriptAfterBuildProcessInputs:
@@ -3210,7 +3217,7 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 			throwFmt("GEN_PCH_FILE expects an input header and output file")
 		}
 
-		d.pchFiles = append(d.pchFiles, PchFileStmt{Header: v.Args[0], Output: v.Args[1]})
+		d.pchFiles = append(d.pchFiles, PchFileStmt{Header: v.Args[0], Output: v.Args[1], DeclSeq: d.nextDeclSeq()})
 
 	case tokSdcResourceInfo, tokSdcSbResourceInfo, tokSdcRosnodeInfo, tokSdcSolibInfo:
 		d.sdcMetas = append(d.sdcMetas, parseSdcMeta(v.Name, anyStrs(v.Args)))
@@ -3221,7 +3228,7 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 
 		options := parseFromSandbox(v.Args, v.Line)
 
-		d.fromArchives = append(d.fromArchives, FromArchiveEntry{Source: options.ResourceId, ArchiveExtraction: options.ArchiveExtraction})
+		d.fromArchives = append(d.fromArchives, FromArchiveEntry{DeclSeq: d.nextDeclSeq(), Source: options.ResourceId, ArchiveExtraction: options.ArchiveExtraction})
 	case tokDebVersion:
 		if len(v.Args) != 1 {
 			throwFmt("DEB_VERSION expects one changelog file")
@@ -3273,7 +3280,7 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 			throwFmt("%s requires input and output", v.Name.string())
 		}
 
-		d.llvmCompile = append(d.llvmCompile, LlvmCompileStmt{Kind: v.Name, Source: args[0].string(), Output: args[1].string(), Options: args[2:]})
+		d.llvmCompile = append(d.llvmCompile, LlvmCompileStmt{Kind: v.Name, Source: args[0].string(), Output: args[1].string(), Options: args[2:], DeclSeq: d.nextDeclSeq()})
 		d.peerdirs = append(d.peerdirs, strBuildPlatformClang.any())
 
 		if v.Name == tokBpfStatic {
@@ -3285,7 +3292,7 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 		}
 
 		d.llvmCompile = append(d.llvmCompile, LlvmCompileStmt{
-			Source: v.Args[0].string(), Output: v.Args[1].string(),
+			DeclSeq: d.nextDeclSeq(), Source: v.Args[0].string(), Output: v.Args[1].string(),
 			ClangRoot: env.string(envCLANG_BC_ROOT), Options: v.Args[2:],
 		})
 
@@ -3309,6 +3316,7 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 			stmt.Name = v.Args[2].string()
 		}
 
+		stmt.DeclSeq = d.nextDeclSeq()
 		d.luaCompile = append(d.luaCompile, stmt)
 	case tokSplitDwarf:
 		d.splitDwarf = true
@@ -3520,7 +3528,7 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 			throwFmt("CHECK_CONFIG_H expects exactly 1 argument, got %d", len(v.Args))
 		}
 
-		d.checkConfigHeaders = append(d.checkConfigHeaders, v.Args[0])
+		d.checkConfigHeaders = append(d.checkConfigHeaders, DeclaredToken{Value: v.Args[0], DeclSeq: d.nextDeclSeq()})
 	case tokDecimalMd5Lower32Bits:
 
 		if len(v.Args) == 0 {
@@ -3540,6 +3548,8 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 		}
 
 		stmt.Opts = append([]ANY(nil), rest...)
+		stmt.DeclSeq = d.nextDeclSeq()
+
 		d.decimalMD5 = append(d.decimalMD5, stmt)
 	case tokBuildwithCythonCpp:
 		if len(v.Args) == 0 {
@@ -3681,7 +3691,7 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 				continue
 			}
 
-			d.ymapsSprotoSrcs = append(d.ymapsSprotoSrcs, argTok)
+			d.ymapsSprotoSrcs = append(d.ymapsSprotoSrcs, DeclaredToken{Value: argTok, DeclSeq: d.nextDeclSeq()})
 		}
 
 		if len(d.ymapsSprotoSrcs) > 0 {
@@ -3699,6 +3709,7 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 			}
 		}
 
+		stmt.DeclSeq = d.nextDeclSeq()
 		d.listProtos = append(d.listProtos, stmt)
 	case tokOnlyTags, tokIncludeTags, tokExcludeTags:
 		if d.multimodule != 0 {
@@ -3724,6 +3735,10 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 	case tokYaConfJson:
 		if len(v.Args) != 1 {
 			throwFmt("YA_CONF_JSON expects exactly 1 argument, got %d", len(v.Args))
+		}
+
+		if len(d.yaConfJSON) == 0 {
+			d.yaConfDeclSeq = d.nextDeclSeq()
 		}
 
 		d.yaConfJSON = append(d.yaConfJSON, v.Args[0])
@@ -4046,7 +4061,7 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 			arg += "=init"
 		}
 
-		d.resources = append(d.resources, ResourceEntry{Path: "-", Key: "py/constructors/" + arg, DontCompress: true})
+		d.resources = append(d.resources, ResourceEntry{Path: "-", Key: "py/constructors/" + arg, DontCompress: true, DeclSeq: d.nextDeclSeq()})
 	case tokNoCheckImports:
 
 		value := joinAnys(v.Args, " ")
@@ -4245,7 +4260,11 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 			}
 		}
 	case tokGenerateImplib:
-		d.implibs = append(d.implibs, parseImplib(v.Args))
+		implib := parseImplib(v.Args)
+
+		implib.DeclSeq = d.nextDeclSeq()
+
+		d.implibs = append(d.implibs, implib)
 		d.linkExcludeLibraries = append(d.linkExcludeLibraries, v.Args[0])
 	case tokLinkExcludeLibraries:
 		d.linkExcludeLibraries = append(d.linkExcludeLibraries, v.Args...)
@@ -4297,6 +4316,11 @@ func isLlvmBcKeyword(s string) bool {
 	return false
 }
 
+type pyxDeclaration struct {
+	stmt   *CythonStmt
+	module string
+}
+
 func cythonVariantBucket(s *CythonStmt) int {
 	switch {
 	case s.CMode && !s.Header:
@@ -4314,58 +4338,8 @@ func cythonVariantBucket(s *CythonStmt) int {
 	}
 }
 
-func reorderCythonVariantBuckets(d *ModuleData, start int, regIdx []int) {
-	n := len(d.cythonCpp) - start
-
-	if n < 2 {
-		return
-	}
-
-	perm := make([]int, n)
-
-	for i := range perm {
-		perm[i] = i
-	}
-
-	slices.SortStableFunc(perm, func(a, b int) int {
-		return cythonVariantBucket(d.cythonCpp[start+a]) - cythonVariantBucket(d.cythonCpp[start+b])
-	})
-
-	identity := true
-
-	for i, p := range perm {
-		if i != p {
-			identity = false
-
-			break
-		}
-	}
-
-	if identity {
-		return
-	}
-
-	stmts := make([]*CythonStmt, n)
-
-	for i, p := range perm {
-		stmts[i] = d.cythonCpp[start+p]
-	}
-
-	copy(d.cythonCpp[start:], stmts)
-
-	registrations := make([]PyRegistration, n)
-
-	for i, p := range perm {
-		registrations[i] = d.pyRegister[regIdx[p]]
-	}
-
-	for i, idx := range regIdx {
-		d.pyRegister[idx] = registrations[i]
-	}
-}
-
 func appendPyRegister(d *ModuleData, name string, renameInit bool) {
-	d.pyRegister = append(d.pyRegister, PyRegistration{Name: internStr(name), RenameInit: renameInit})
+	d.pyRegister = append(d.pyRegister, PyRegistration{Name: internStr(name), RenameInit: renameInit, DeclSeq: d.nextDeclSeq()})
 }
 
 func finishPyRegisterCFlags(d *ModuleData) {
@@ -4709,7 +4683,9 @@ func collectPySrcGroup(fs FS, modulePath string, v UnknownStmt, d *ModuleData, e
 
 	var cythonDirectives []string
 
-	var cythonRegIdx []int
+	var pyxs []pyxDeclaration
+
+	var swigs []SwigSrc
 
 	for i := 0; i < len(v.Args); i++ {
 		a := v.Args[i]
@@ -4833,11 +4809,14 @@ func collectPySrcGroup(fs FS, modulePath string, v UnknownStmt, d *ModuleData, e
 			modName := scope.moduleName(modulePath, src)
 
 			d.pyMain = ptr(internV(modName, ":main").any())
+			d.pyMainDeclSeq = d.nextDeclSeq()
+
 			mainNext = false
 		} else if !explicitModule && d.pyMain == nil && d.moduleStmt != nil &&
 			(d.moduleStmt.Name == tokPy3Program || d.moduleStmt.Name == tokPy3ProgramBin || d.pythonSourceEntry && !d.usePython2) &&
 			(src == "__main__.py" || strings.HasSuffix(src, "/__main__.py")) {
 			d.pyMain = ptr(internStr(pythonModuleName(modulePath, src, topLevel, namespace)).any())
+			d.pyMainDeclSeq = d.nextDeclSeq()
 		}
 
 		if d.unit.Tag == unitTagPy3Bin {
@@ -4883,9 +4862,7 @@ func collectPySrcGroup(fs FS, modulePath string, v UnknownStmt, d *ModuleData, e
 				stmt.Generated = ptr(src + ".cpp")
 			}
 
-			d.cythonCpp = append(d.cythonCpp, stmt)
-			appendPyRegister(d, modName, false)
-			cythonRegIdx = append(cythonRegIdx, len(d.pyRegister)-1)
+			pyxs = append(pyxs, pyxDeclaration{stmt: stmt, module: modName})
 			mainNext = false
 
 			continue
@@ -4898,7 +4875,7 @@ func collectPySrcGroup(fs FS, modulePath string, v UnknownStmt, d *ModuleData, e
 				modName = pythonModuleName(modulePath, src, topLevel, namespace)
 			}
 
-			d.cythonCpp = append(d.cythonCpp, &CythonStmt{
+			pyxs = append(pyxs, pyxDeclaration{module: modName, stmt: &CythonStmt{
 				InitialPath: true,
 				Src:         src,
 				CMode:       cythonCMode,
@@ -4911,10 +4888,8 @@ func collectPySrcGroup(fs FS, modulePath string, v UnknownStmt, d *ModuleData, e
 					"--init-suffix", pythonInitSuffix(modName),
 					"--source-root", "$(S)",
 				},
-			})
+			}})
 
-			appendPyRegister(d, modName, false)
-			cythonRegIdx = append(cythonRegIdx, len(d.pyRegister)-1)
 			mainNext = false
 
 			continue
@@ -4927,9 +4902,7 @@ func collectPySrcGroup(fs FS, modulePath string, v UnknownStmt, d *ModuleData, e
 				modName = pythonModuleName(modulePath, strings.TrimSuffix(src, ".swg"), topLevel, namespace)
 			}
 
-			d.swigC = append(d.swigC, SwigSrc{Src: src, Module: modName, CMode: swigCMode})
-			appendPyRegister(d, modName+"_swg", true)
-
+			swigs = append(swigs, SwigSrc{Src: src, Module: modName, CMode: swigCMode})
 			d.peerdirs = append(d.peerdirs, strContribToolsSwigLibPython.any())
 			mainNext = false
 
@@ -4964,13 +4937,25 @@ func collectPySrcGroup(fs FS, modulePath string, v UnknownStmt, d *ModuleData, e
 		d.pyGroupScopes = append(d.pyGroupScopes, scope)
 	}
 
-	if len(cythonDirectives) > 0 {
-		for j := cythonStmtStart; j < len(d.cythonCpp); j++ {
-			d.cythonCpp[j].Directives = append(d.cythonCpp[j].Directives, cythonDirectives...)
-		}
+	slices.SortStableFunc(pyxs, func(a, b pyxDeclaration) int { return cythonVariantBucket(a.stmt) - cythonVariantBucket(b.stmt) })
+
+	for _, pyx := range pyxs {
+		pyx.stmt.Seq = d.nextDeclSeq()
+		pyx.stmt.Directives = append(pyx.stmt.Directives, cythonDirectives...)
+
+		d.cythonCpp = append(d.cythonCpp, pyx.stmt)
+		appendPyRegister(d, pyx.module, false)
 	}
 
-	reorderCythonVariantBuckets(d, cythonStmtStart, cythonRegIdx)
+	for _, cMode := range [...]bool{true, false} {
+		for _, swig := range swigs {
+			if swig.CMode == cMode {
+				swig.DeclSeq = d.nextDeclSeq()
+				d.swigC = append(d.swigC, swig)
+				appendPyRegister(d, swig.Module+"_swg", true)
+			}
+		}
+	}
 
 	d.pySrcGroups[group].Srcs = d.pyGroupSrcs[srcStart:len(d.pyGroupSrcs):len(d.pyGroupSrcs)]
 	d.pySrcGroups[group].Scopes = d.pyGroupScopes[scopeStart:len(d.pyGroupScopes):len(d.pyGroupScopes)]
@@ -5144,6 +5129,7 @@ func applyArchiveStmt(v UnknownStmt, d *ModuleData) {
 		throwFmt("gen: ARCHIVE(NAME ...) missing value after NAME (line %d)", v.Line)
 	}
 
+	entry.DeclSeq = d.nextDeclSeq()
 	d.archives = append(d.archives, entry)
 }
 
@@ -5181,6 +5167,7 @@ func applyArchiveByKeysStmt(v UnknownStmt, d *ModuleData) {
 		throwFmt("gen: ARCHIVE_BY_KEYS(NAME ...) missing value after NAME (line %d)", v.Line)
 	}
 
+	entry.DeclSeq = d.nextDeclSeq()
 	d.archives = append(d.archives, entry)
 }
 
@@ -5239,8 +5226,8 @@ func applyLj21ArchiveStmt(v UnknownStmt, d *ModuleData) {
 	}
 
 	d.archives = append(d.archives,
-		ArchiveEntry{Name: "LuaScripts.inc", DontCompress: true, Files: raws, Keys: []string{strings.Join(luas, ":")}},
-		ArchiveEntry{Name: "LuaSources.inc", DontCompress: true, Files: append([]string(nil), luas...), Keys: []string{strings.Join(luas, ":")}},
+		ArchiveEntry{Name: "LuaScripts.inc", DontCompress: true, Files: raws, Keys: []string{strings.Join(luas, ":")}, DeclSeq: d.nextDeclSeq()},
+		ArchiveEntry{DeclSeq: d.nextDeclSeq(), Name: "LuaSources.inc", DontCompress: true, Files: append([]string(nil), luas...), Keys: []string{strings.Join(luas, ":")}},
 	)
 }
 

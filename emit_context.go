@@ -73,7 +73,7 @@ type EmitContext struct {
 	peerScratch        []string
 	orderedCC          []VFS
 	prodOrder          []int
-	prodRanks          []int
+	prodSeqs           []int
 	protoPaths         []protoPathEntry
 	protoPathPos       int
 	pbEmission         [3]PbModuleEmission
@@ -188,7 +188,7 @@ func newEmitContextIn(frame *ModuleFrame, ctx *GenCtx, instance ModuleInstance, 
 		peerScratch:       scrub(prev.peerScratch),
 		orderedCC:         prev.orderedCC[:0],
 		prodOrder:         prev.prodOrder[:0],
-		prodRanks:         prev.prodRanks[:0],
+		prodSeqs:          prev.prodSeqs[:0],
 		producerOutputs:   clearedMap(prev.producerOutputs),
 		protoPaths:        prev.protoPaths[:0],
 	}

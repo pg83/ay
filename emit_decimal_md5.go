@@ -3,6 +3,7 @@ package main
 var decimalMd5KV = KV{P: pkSV, PC: pcYellow, ShowOut: true}
 
 type DecimalMD5Lower32BitsStmt struct {
+	DeclSeq  int
 	File     string
 	FuncName string
 	Opts     []ANY

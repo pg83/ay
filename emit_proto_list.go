@@ -3,8 +3,9 @@ package main
 import "strings"
 
 type ListProtoStmt struct {
-	Output ANY
-	Files  []ANY
+	Output  ANY
+	Files   []ANY
+	DeclSeq int
 }
 
 func listProtoHeader(output VFS) VFS {

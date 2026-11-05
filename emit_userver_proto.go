@@ -18,6 +18,7 @@ type UserverProtoFile struct {
 }
 
 type UserverProtoBatch struct {
+	DeclSeq          int
 	mode             string
 	structs          bool
 	namespace        string
@@ -121,6 +122,7 @@ func applyUserverProto(v UnknownStmt, d *ModuleData) {
 		batch.addModuleDeps(d)
 	}
 
+	batch.DeclSeq = d.nextDeclSeq()
 	d.userverProtos = append(d.userverProtos, batch)
 }
 

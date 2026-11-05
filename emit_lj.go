@@ -7,6 +7,7 @@ var ljKV = KV{P: pkLJ, PC: pcLightCyan}
 const luajit21CwdRel = "contrib/libs/luajit_21"
 
 type LuaCompileStmt struct {
+	DeclSeq  int
 	Resolved ResolvedSource
 	Source   string
 	Runtime  string

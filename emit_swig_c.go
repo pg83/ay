@@ -20,9 +20,10 @@ var swigConstArgs = []ANY{
 const swigLibRoot = "contrib/tools/swig/Lib"
 
 type SwigSrc struct {
-	Src    string
-	Module string
-	CMode  bool
+	Src     string
+	Module  string
+	CMode   bool
+	DeclSeq int
 }
 
 func (e *EmitContext) emitSwigC() {

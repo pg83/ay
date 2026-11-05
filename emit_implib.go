@@ -5,6 +5,7 @@ import "path/filepath"
 var implibKV = KV{P: pkIL, PC: pcYellow}
 
 type ImplibStmt struct {
+	DeclSeq    int
 	Path       string
 	Soname     string
 	Callback   string

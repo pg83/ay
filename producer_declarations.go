@@ -2,125 +2,107 @@ package main
 
 import (
 	"cmp"
+	"math"
 	"slices"
 )
 
-type producerDeclaration struct {
-	kind  int
-	index int
-	seq   int
-	stmt  int
-}
+func (e *EmitContext) producerSeq(pos ProducerPos, cythonPlans []CythonStmtPlan) int {
+	d := e.d
+	i := pos.index
 
-func (d *ModuleData) recordProducerDeclarations() {
-	if d.moduleStmt == nil {
-		return
-	}
-
-	counts := [prodKindCount]int{
-		prodUsrvFile: len(d.usrvFiles), prodResource: len(d.resources), prodPyGroup: len(d.pySrcGroups), prodPyRegister: len(d.pyRegister),
-		prodPyNoCheck: 1, prodYaConf: min(len(d.yaConfJSON), 1),
-		prodSrc: len(d.srcs), prodRunJava: len(d.runJavaPrograms),
-		prodCuda: len(d.cudaSrcs), prodImplib: len(d.implibs), prodCopyFile: len(d.copyFiles),
-		prodConfigureFile: len(d.configureFiles), prodAntlrRun: len(d.antlrRuns), prodAntlr4Grammar: len(d.antlr4Grammars),
-		prodDecimalMD5: len(d.decimalMD5), prodBuildMn: len(d.buildMns), prodSplitCodegen: len(d.splitCodegens),
-		prodBaseCodegen: len(d.baseCodegens), prodRunProgram: len(d.runPrograms), prodRunPython: len(d.runPython),
-		prodArchiveAsm: len(d.archiveAsm), prodEnum: len(d.enumSrcs), prodArchive: len(d.archives),
-		prodCheckConfigH: len(d.checkConfigHeaders), prodCython: len(d.cythonCpp), prodSwigAll: min(len(d.swigC), 1),
-		prodJoinSrcs: len(d.joinSrcs), prodSproto: len(d.ymapsSprotoSrcs), prodLlvmBc: len(d.llvmBc),
-		prodGoCodegen: len(d.goCodegens), prodLlvmCompile: len(d.llvmCompile), prodLuaCompile: len(d.luaCompile),
-		prodUserverProto: len(d.userverProtos), prodListProto: len(d.listProtos), prodFromArchive: len(d.fromArchives),
-		prodPchFile: len(d.pchFiles), prodProto2Fbs: len(d.proto2Fbs), prodPireInline: len(d.pireInline),
-		prodFromSandbox: len(d.fromSandboxes), prodBundle: len(d.bundles), prodRagel6: len(d.ragel6Builds),
-	}
-
-	if d.pyMain != nil {
-		counts[prodPyMain] = 1
-	}
-
-	if d.docs != nil {
-		counts[prodDocsCopy] = len(d.docs.copies)
-	}
-
-	if counts == d.producerCounts {
-		return
-	}
-
-	start := len(d.producerDeclarations)
-	n := 0
-
-	for kind, count := range counts {
-		n += max(count-d.producerCounts[kind], 0)
-	}
-
-	d.producerDeclarations = slices.Grow(d.producerDeclarations, n)
-
-	for kind, count := range counts {
-		for index := d.producerCounts[kind]; index < count; index++ {
-			d.producerDeclarations = append(d.producerDeclarations, producerDeclaration{kind: kind, index: index})
-		}
-	}
-
-	for i := start; i < len(d.producerDeclarations); i++ {
-		d.producerDeclarations[i].seq = d.producerDeclarationSequence(d.producerDeclarations[i])
-		d.producerDeclarations[i].stmt = d.pendingIndex
-	}
-
-	if n > 1 {
-		slices.SortStableFunc(d.producerDeclarations[start:], func(a, b producerDeclaration) int { return cmp.Compare(a.seq, b.seq) })
-	}
-
-	d.producerCounts = counts
-}
-
-func (d *ModuleData) producerDeclarationSequence(decl producerDeclaration) int {
-	switch decl.kind {
+	switch pos.kind {
 	case prodPyNoCheck:
 		return -1
-	case prodUsrvFile:
-		return d.usrvFiles[decl.index].DeclSeq
-	case prodSrc:
-		return d.srcs[decl.index].Seq
-	case prodResource:
-		return d.resources[decl.index].DeclSeq
-	case prodPyGroup:
-		return d.pySrcGroups[decl.index].DeclSeq
-	case prodRunProgram:
-		return d.runPrograms[decl.index].DeclSeq
-	case prodGoCodegen:
-		return d.goCodegens[decl.index].seq
-	case prodRunPython:
-		return d.runPython[decl.index].DeclSeq
-	case prodRunJava:
-		return d.runJavaPrograms[decl.index].DeclSeq
-	case prodFromSandbox:
-		return d.fromSandboxes[decl.index].DeclSeq
-	case prodBundle:
-		return d.bundles[decl.index].DeclSeq
-	case prodCopyFile:
-		return d.copyFiles[decl.index].DeclSeq
-	case prodJoinSrcs:
-		return d.joinSrcs[decl.index].Seq
-	case prodArchiveAsm:
-		return d.archiveAsm[decl.index].DeclSeq
-	case prodEnum:
-		return d.enumSrcs[decl.index].DeclSeq
 	case prodCuda:
-		return d.cudaSrcs[decl.index].DeclSeq
+		return d.cudaSrcs[i].DeclSeq
+	case prodImplib:
+		return d.implibs[i].DeclSeq
+	case prodCopyFile:
+		return d.copyFiles[i].DeclSeq
+	case prodConfigureFile:
+		return d.configureFiles[i].DeclSeq
+	case prodAntlrRun:
+		return d.antlrRuns[i].DeclSeq
+	case prodAntlr4Grammar:
+		return d.antlr4Grammars[i].DeclSeq
+	case prodDecimalMD5:
+		return d.decimalMD5[i].DeclSeq
+	case prodBuildMn:
+		return d.buildMns[i].Seq
 	case prodSplitCodegen:
-		return d.splitCodegens[decl.index].DeclSeq
+		return d.splitCodegens[i].DeclSeq
+	case prodBaseCodegen:
+		return d.baseCodegens[i].DeclSeq
+	case prodRunProgram:
+		return d.runPrograms[i].DeclSeq
+	case prodRunPython:
+		return d.runPython[i].DeclSeq
+	case prodRunJava:
+		return d.runJavaPrograms[i].DeclSeq
+	case prodArchiveAsm:
+		return d.archiveAsm[i].DeclSeq
+	case prodSrc:
+		return e.prodSrcs[i].Seq
+	case prodEnum:
+		return d.enumSrcs[i].DeclSeq
+	case prodArchive:
+		return d.archives[i].DeclSeq
+	case prodCheckConfigH:
+		return d.checkConfigHeaders[i].DeclSeq
+	case prodCython:
+		return cythonPlans[i].stmt.Seq
+	case prodSwigAll:
+		return d.swigC[0].DeclSeq
+	case prodJoinSrcs:
+		return d.joinSrcs[i].Seq
+	case prodSproto:
+		return d.ymapsSprotoSrcs[i].DeclSeq
 	case prodLlvmBc:
-		return d.llvmBc[decl.index].DeclSeq
+		return d.llvmBc[i].DeclSeq
+	case prodDocsCopy:
+		return d.docs.copies[i].declSeq
+	case prodGoCodegen:
+		return d.goCodegens[i].seq
+	case prodLlvmCompile:
+		return d.llvmCompile[i].DeclSeq
+	case prodLuaCompile:
+		return d.luaCompile[i].DeclSeq
+	case prodUserverProto:
+		return d.userverProtos[i].DeclSeq
+	case prodListProto:
+		return d.listProtos[i].DeclSeq
+	case prodFromArchive:
+		return d.fromArchives[i].DeclSeq
+	case prodPchFile:
+		return d.pchFiles[i].DeclSeq
+	case prodProto2Fbs:
+		return d.proto2Fbs[i].Seq
+	case prodPireInline:
+		return d.pireInline[i].DeclSeq
+	case prodFromSandbox:
+		return d.fromSandboxes[i].DeclSeq
+	case prodBundle:
+		return d.bundles[i].DeclSeq
+	case prodRagel6:
+		return d.ragel6Builds[i].DeclSeq
+	case prodResource:
+		return e.resources[i].DeclSeq
+	case prodPyGroup:
+		return d.pySrcGroups[i].DeclSeq
+	case prodPyRegister:
+		return d.pyRegister[i].DeclSeq
 	case prodPyMain:
 		return d.pyMainDeclSeq
-	case prodRagel6:
-		return d.ragel6Builds[decl.index].DeclSeq
+	case prodYaConf:
+		return d.yaConfDeclSeq
+	case prodUsrvFile:
+		return d.usrvFiles[i].DeclSeq
 	}
 
-	return d.declSeq + 1
+	return math.MaxInt
 }
 
-func (e *EmitContext) orderedProducerPositions(positions []ProducerPos) []ProducerPos {
+func (e *EmitContext) orderedProducerPositions(positions []ProducerPos, cythonPlans []CythonStmtPlan) []ProducerPos {
 	module := e.instance.Path.relString()
 	na := e.ctx.na
 
@@ -231,49 +213,22 @@ func (e *EmitContext) orderedProducerPositions(positions []ProducerPos) []Produc
 		vfsScratches.put(inputs)
 	}
 
-	var counts, starts [prodKindCount]int
-
-	for _, pos := range positions {
-		counts[pos.kind] = max(counts[pos.kind], pos.index+1)
-	}
-
-	for _, decl := range e.d.producerDeclarations {
-		counts[decl.kind] = max(counts[decl.kind], decl.index+1)
-	}
-
-	n := 0
-
-	for kind, count := range counts {
-		starts[kind] = n
-		n += count
-	}
-
-	e.prodRanks = slices.Grow(e.prodRanks[:0], n)[:n]
-
-	ranks := e.prodRanks
-
-	for i, pos := range positions {
-		ranks[starts[pos.kind]+pos.index] = len(e.d.producerDeclarations) + i
-	}
-
-	for i, decl := range e.d.producerDeclarations {
-		ranks[starts[decl.kind]+decl.index] = i
-	}
-
+	e.prodSeqs = slices.Grow(e.prodSeqs[:0], len(positions))[:len(positions)]
 	e.prodOrder = slices.Grow(e.prodOrder[:0], len(positions))[:len(positions)]
 
 	for i := range positions {
+		e.prodSeqs[i] = e.producerSeq(positions[i], cythonPlans)
 		e.prodOrder[i] = i
 	}
 
-	slices.SortStableFunc(e.prodOrder, func(ai, bi int) int {
-		a, b := &positions[ai], &positions[bi]
+	seqs := e.prodSeqs
 
-		if order := cmp.Compare(e.producerPriority(*a), e.producerPriority(*b)); order != 0 {
+	slices.SortStableFunc(e.prodOrder, func(ai, bi int) int {
+		if order := cmp.Compare(e.producerPriority(positions[ai]), e.producerPriority(positions[bi])); order != 0 {
 			return order
 		}
 
-		return cmp.Compare(ranks[starts[a.kind]+a.index], ranks[starts[b.kind]+b.index])
+		return cmp.Compare(seqs[ai], seqs[bi])
 	})
 
 	return positions

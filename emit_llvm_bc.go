@@ -10,6 +10,7 @@ var (
 )
 
 type LlvmCompileStmt struct {
+	DeclSeq   int
 	Kind      TOK
 	Source    string
 	Output    string
