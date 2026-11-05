@@ -791,7 +791,7 @@ func (ctx *GenCtx) javaManagedOf(jm *JavaModule) javaManaged {
 	n := 0
 
 	for _, m := range sorted {
-		if !javaTagIn(m.unit.tag, excludedTags) {
+		if !javaTagIn(m.data.moduleTag, excludedTags) {
 			n++
 		}
 	}
@@ -799,7 +799,7 @@ func (ctx *GenCtx) javaManagedOf(jm *JavaModule) javaManaged {
 	mods := make([]uint32, 0, n)
 
 	for _, m := range sorted {
-		if !javaTagIn(m.unit.tag, excludedTags) {
+		if !javaTagIn(m.data.moduleTag, excludedTags) {
 			mods = append(mods, m.id)
 		}
 	}

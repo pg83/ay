@@ -10,19 +10,16 @@ import (
 )
 
 var (
-	javaTagsJarBase = []string{"JAVA", "JAVA_PROTO", "JAVA_PROTO_FROM_SCHEMA", "JAVA_FBS", "JAVA_IDL", "DLL", "JAR_COMPILATION", "__EMPTY__", "RESOURCE_LIB", "JUNIT6_JAR_COMPILATION", "JUNIT5_JAR_COMPILATION", "JTEST_JAR_COMPILATION", "JTEST_FOR_JAR_COMPILATION", "JAVA_TEST_LIBRARY"}
-	javaTagsIJar    = []string{"IJAR"}
-	javaTagsFull    = []string{"FULL_JAR_COMPILATION"}
-	javaUnitContrib = &javaUnit{kind: juContrib, sub: KindJavaMain, tag: "JAVA", moduleType: "JAVA_CONTRIB", peerdirTags: javaTags(javaTagsJarBase, javaTagsFull), dmTagsExclude: javaTagsIJar, suffix: ".jar"}
-	javaUnitProxy   = &javaUnit{kind: juProxy, sub: KindJavaMain, tag: "JAVA", moduleType: "JAVA_CONTRIB_PROXY", peerdirTags: javaTagsJarBase}
-	javaUnitJar     = &javaUnit{kind: juJar, sub: KindJavaMain, tag: "JAVA", moduleType: "JAVA_LIBRARY", peerdirTags: javaTags(javaTagsJarBase, javaTagsIJar), dmTagsExclude: javaTagsFull, suffix: ".jar", compileView: true}
-	javaUnitTestLib = &javaUnit{kind: juJar, sub: KindJavaMain, tag: "JAVA_TEST_LIBRARY", moduleType: "JAVA_TEST_LIBRARY", peerdirTags: javaTags(javaTagsJarBase, javaTagsIJar, []string{"JAVA_TEST_LIBRARY"}), dmTagsExclude: javaTagsFull, suffix: ".jar", compileView: true}
-	javaUnitFull    = &javaUnit{kind: juJar, sub: KindJavaFull, tag: "FULL_JAR_COMPILATION", moduleType: "JAVA_LIBRARY", peerdirTags: javaTags(javaTagsJarBase, javaTagsIJar), dmTagsExclude: javaTagsFull, suffix: ".jar", compileView: true}
-	javaUnitIJar    = &javaUnit{kind: juIJar, sub: KindJavaIJar, tag: "IJAR", moduleType: "JAVA_LIBRARY", peerdirTags: javaTagsJarBase, suffix: "-interface.jar", transparent: true, ignorePeerdir: true, selfPeers: []ModuleKind{KindJavaFull}}
-	javaUnitExt     = &javaUnit{kind: juExternal, sub: KindJavaMain, tag: "JAVA", moduleType: "EXTERNAL_JAVA_LIBRARY", peerdirTags: []string{"JAVA", "JAVA_PROTO", "JAVA_PROTO_FROM_SCHEMA", "JAVA_FBS", "JAVA_IDL", "PACKAGE_UNION", "IJAR"}, dmTagsExclude: javaTagsFull, nameGen: javaNameThreeDirs, suffix: ".jar"}
-	javaUnitProto   = &javaUnit{kind: juExternal, sub: KindJavaMain, tag: "JAVA_PROTO", moduleType: "PROTO_LIBRARY", peerdirTags: []string{"JAVA", "IJAR", "JAVA_PROTO"}, dmTagsExclude: javaTagsFull, nameGen: javaNameThreeDirs, suffix: ".jar", proto: true}
-	javaUnitFbs     = &javaUnit{kind: juJar, sub: KindJavaMain, tag: "JAVA_FBS", moduleType: "FBS_LIBRARY", peerdirTags: javaTags(javaTagsJarBase, javaTagsIJar), dmTagsExclude: javaTagsFull, suffix: ".jar", fbs: true}
-	javaUnitDllJar  = &javaUnit{kind: juJar, sub: KindJavaMain, tag: "JAR_COMPILATION", moduleType: "JAR_LIBRARY", peerdirTags: javaTags(javaTagsJarBase, javaTagsIJar), dmTagsExclude: javaTagsFull, suffix: ".jar", compileView: true, jni: true}
+	javaUnitContrib = &javaUnit{kind: juContrib, sub: KindJavaMain, suffix: ".jar"}
+	javaUnitProxy   = &javaUnit{kind: juProxy, sub: KindJavaMain}
+	javaUnitJar     = &javaUnit{kind: juJar, sub: KindJavaMain, suffix: ".jar", compileView: true}
+	javaUnitTestLib = &javaUnit{kind: juJar, sub: KindJavaMain, suffix: ".jar", compileView: true}
+	javaUnitFull    = &javaUnit{kind: juJar, sub: KindJavaFull, suffix: ".jar", compileView: true}
+	javaUnitIJar    = &javaUnit{kind: juIJar, sub: KindJavaIJar, suffix: "-interface.jar", transparent: true, ignorePeerdir: true, selfPeers: []ModuleKind{KindJavaFull}}
+	javaUnitExt     = &javaUnit{kind: juExternal, sub: KindJavaMain, nameGen: javaNameThreeDirs, suffix: ".jar"}
+	javaUnitProto   = &javaUnit{kind: juExternal, sub: KindJavaMain, nameGen: javaNameThreeDirs, suffix: ".jar", proto: true}
+	javaUnitFbs     = &javaUnit{kind: juJar, sub: KindJavaMain, suffix: ".jar", fbs: true}
+	javaUnitDllJar  = &javaUnit{kind: juJar, sub: KindJavaMain, suffix: ".jar", compileView: true, jni: true}
 )
 
 var javaModuleUnits = map[TOK][]*javaUnit{
@@ -34,14 +31,14 @@ var javaModuleUnits = map[TOK][]*javaUnit{
 	tokJavaLibrary:                    {javaUnitFull, javaUnitIJar},
 	tokJavaLibrarySplit:               {javaUnitFull, javaUnitIJar},
 	tokExternalJavaLibrary:            {javaUnitExt},
-	tokJavaProgram:                    {javaCompilation("JAVA_PROGRAM"), javaRunnable("JAVA_PROGRAM", false, javaTagsIJar)},
-	tokJavaAnnotationProcessor:        {javaCompilation("JAVA_ANNOTATION_PROCESSOR"), javaRunnable("JAVA_ANNOTATION_PROCESSOR", false, nil)},
-	tokJavaContribProgram:             {javaContribCompilation("JAVA_PROGRAM"), javaRunnable("JAVA_PROGRAM", true, nil)},
-	tokJavaContribAnnotationProcessor: {javaContribCompilation("JAVA_ANNOTATION_PROCESSOR"), javaRunnable("JAVA_ANNOTATION_PROCESSOR", true, nil)},
-	tokJunit5:                         javaTestUnits("JUNIT5", "JUNIT5_JAR_COMPILATION", "junit5", []string{"JUNIT5_JAR_COMPILATION", "JAVA_TEST_LIBRARY"}),
-	tokJunit6:                         javaTestUnits("JUNIT6", "JUNIT6_JAR_COMPILATION", "junit6", []string{"JUNIT6_JAR_COMPILATION", "JAVA_TEST_LIBRARY"}),
-	tokJtest:                          javaTestUnits("JTEST", "JTEST_JAR_COMPILATION", "junit4", []string{"JTEST_JAR_COMPILATION", "JAVA_TEST_LIBRARY"}),
-	tokJtestFor:                       javaTestUnits("JTEST_FOR", "JTEST_FOR_JAR_COMPILATION", "junit4", []string{"JTEST_FOR_JAR_COMPILATION", "JTEST_JAR_COMPILATION", "JAVA_TEST_LIBRARY"}),
+	tokJavaProgram:                    {javaCompilation(), javaRunnable(false)},
+	tokJavaAnnotationProcessor:        {javaCompilation(), javaRunnable(false)},
+	tokJavaContribProgram:             {javaContribCompilation(), javaRunnable(true)},
+	tokJavaContribAnnotationProcessor: {javaContribCompilation(), javaRunnable(true)},
+	tokJunit5:                         javaTestUnits("junit5"),
+	tokJunit6:                         javaTestUnits("junit6"),
+	tokJtest:                          javaTestUnits("junit4"),
+	tokJtestFor:                       javaTestUnits("junit4"),
 	tokDllJava:                        {javaUnitDllJar},
 }
 
@@ -77,10 +74,6 @@ type javaNameGen uint8
 type javaUnit struct {
 	kind                 javaUnitKind
 	sub                  ModuleKind
-	tag                  string
-	moduleType           string
-	peerdirTags          []string
-	dmTagsExclude        []string
 	nameGen              javaNameGen
 	suffix               string
 	transparent          bool
@@ -95,14 +88,16 @@ type javaUnit struct {
 	jni                  bool
 }
 
-func javaTags(groups ...[]string) []string {
-	var out []string
-
-	for _, g := range groups {
-		out = append(out, g...)
+func (u *javaUnit) confTag(conf *Conf, name TOK) string {
+	if sub := multimoduleSub(name.str(), u.sub, LangJava, false); sub != 0 {
+		for _, variant := range conf.peerVariants(name.str()) {
+			if variant.sub == sub {
+				return variant.tag.string()
+			}
+		}
 	}
 
-	return out
+	return conf.moduleTag(name.str())
 }
 
 func javaTagIn(tag string, tags []string) bool {
@@ -115,33 +110,25 @@ func javaTagIn(tag string, tags []string) bool {
 	return false
 }
 
-func javaRunnable(moduleType string, contrib bool, dmExclude []string) *javaUnit {
-	tags := javaTags(javaTagsJarBase, javaTagsFull)
-
-	if contrib {
-		tags = javaTagsJarBase
-	}
-
-	return &javaUnit{kind: juRunnable, sub: KindJavaRunnable, tag: "JAR_RUNNABLE", moduleType: moduleType, peerdirTags: tags, dmTagsExclude: dmExclude, suffix: ".run.cp.jar", consumeNonManageable: true, selfPeers: []ModuleKind{KindJavaCompilation}, contribRunnable: contrib}
+func javaRunnable(contrib bool) *javaUnit {
+	return &javaUnit{kind: juRunnable, sub: KindJavaRunnable, suffix: ".run.cp.jar", consumeNonManageable: true, selfPeers: []ModuleKind{KindJavaCompilation}, contribRunnable: contrib}
 }
 
-func javaCompilation(moduleType string) *javaUnit {
-	return &javaUnit{kind: juJar, sub: KindJavaCompilation, tag: "JAR_COMPILATION", moduleType: moduleType, peerdirTags: javaTags(javaTagsJarBase, javaTagsIJar), dmTagsExclude: javaTagsFull, suffix: ".jar", compileView: true}
+func javaCompilation() *javaUnit {
+	return &javaUnit{kind: juJar, sub: KindJavaCompilation, suffix: ".jar", compileView: true}
 }
 
-func javaContribCompilation(moduleType string) *javaUnit {
+func javaContribCompilation() *javaUnit {
 	u := *javaUnitContrib
 
 	u.sub = KindJavaCompilation
-	u.tag = "JAR_COMPILATION"
-	u.moduleType = moduleType
 
 	return &u
 }
 
-func javaTestUnits(moduleType, compTag, runner string, extraCompTags []string) []*javaUnit {
-	testable := &javaUnit{kind: juTest, sub: KindJavaTestable, tag: "JAR_TESTABLE", moduleType: moduleType, peerdirTags: javaTags(javaTagsJarBase, []string{"JAR_TESTABLE", "JAVA_TEST_LIBRARY", "FULL_JAR_COMPILATION"}), dmTagsExclude: javaTagsIJar, nameGen: javaNameFullPath, suffix: ".test.cp.jar", consumeNonManageable: true, selfPeers: []ModuleKind{KindJavaCompilation}, testRunner: runner}
-	comp := &javaUnit{kind: juJar, sub: KindJavaCompilation, tag: compTag, moduleType: moduleType, peerdirTags: javaTags(javaTagsJarBase, javaTagsIJar, extraCompTags), dmTagsExclude: javaTagsFull, nameGen: javaNameFullPath, suffix: ".jar", compileView: true, testRunner: runner}
+func javaTestUnits(runner string) []*javaUnit {
+	testable := &javaUnit{kind: juTest, sub: KindJavaTestable, nameGen: javaNameFullPath, suffix: ".test.cp.jar", consumeNonManageable: true, selfPeers: []ModuleKind{KindJavaCompilation}, testRunner: runner}
+	comp := &javaUnit{kind: juJar, sub: KindJavaCompilation, nameGen: javaNameFullPath, suffix: ".jar", compileView: true, testRunner: runner}
 
 	return []*javaUnit{comp, testable}
 }
@@ -262,6 +249,7 @@ type JavaData struct {
 	confMacroDepth         int
 	peerdirTags            []string
 	dmTagsExclude          []string
+	moduleTag              string
 	autoincluded           bool
 	recurses               []string
 	name                   string
@@ -741,25 +729,23 @@ func (ctx *GenCtx) javaPeerResult(parent *JavaModule, dir string, explicit bool)
 
 	switch units := javaModuleUnits[name]; {
 	case len(units) > 1:
-		var picked *javaUnit
+		picked := false
 
-		for _, u := range units {
-			if javaTagIn(u.tag, tags) {
-				picked = u
+		for _, variant := range inst.Platform.conf.peerVariants(name.str()) {
+			if javaTagIn(variant.tag.string(), tags) {
+				inst.Kind, picked = multimoduleShapes[name.str()][variant.sub].kind, true
 
 				break
 			}
 		}
 
-		if picked == nil {
+		if !picked {
 			ctx.onWarn(Warn{Kind: WarnModuleFailed, Message: fmt.Sprintf("%s: PEERDIR to %s is prohibited by incompatible tags and skipped", parent.dir, dir)})
 
 			return nil
 		}
-
-		inst.Kind = picked.sub
 	case len(units) == 1:
-		if explicit && !javaTagIn(units[0].tag, tags) {
+		if explicit && !javaTagIn(inst.Platform.conf.moduleTag(name.str()), tags) {
 			ctx.onWarn(Warn{Kind: WarnModuleFailed, Message: fmt.Sprintf("%s: PEERDIR to %s is prohibited by incompatible tags and skipped", parent.dir, dir)})
 
 			return nil

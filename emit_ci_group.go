@@ -16,7 +16,7 @@ func javaPackagePeerInstance(instance ModuleInstance, name TOK) ModuleInstance {
 	units := javaModuleUnits[name]
 
 	for _, unit := range units {
-		if unit.tag == "JAR_RUNNABLE" || unit.tag == "FULL_JAR_COMPILATION" || len(units) == 1 {
+		if tag := unit.confTag(instance.Platform.conf, name); tag == "JAR_RUNNABLE" || tag == "FULL_JAR_COMPILATION" || len(units) == 1 {
 			instance.Kind = unit.sub
 			instance.Language = LangJava
 

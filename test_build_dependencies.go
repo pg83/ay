@@ -63,7 +63,7 @@ func (ctx *GenCtx) selectDependencyInstances(dir string) []ModuleInstance {
 		selection := collectJavaData(ctx, module, moduleStmts(ctx, dir), env)
 
 		for _, unit := range units {
-			excluded, specified := selection.excludeTags[unit.tag]
+			excluded, specified := selection.excludeTags[unit.confTag(instance.Platform.conf, name)]
 
 			if excluded || selection.onlyTags && !specified {
 				continue

@@ -2242,6 +2242,24 @@ func (c *Conf) moduleAlias(module *confModule, name STR) STR {
 	return name
 }
 
+func (c *Conf) moduleTag(name STR) string {
+	module := c.tables.module(name, "")
+
+	if module == nil {
+		return ""
+	}
+
+	tag := ""
+
+	for _, step := range c.tables.plan(module).steps {
+		if step.variable == envMODULE_TAG && step.value != 0 && !step.expand && !step.appended {
+			tag = step.value.string()
+		}
+	}
+
+	return tag
+}
+
 func (c *Conf) initModule(env Environment, module *confModule, originals *SetVars) {
 	defer func() { env.s.confBase = nil }()
 
