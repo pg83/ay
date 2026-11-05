@@ -402,7 +402,7 @@ func (e *EmitContext) emitCythonCppPlanned(plans []CythonStmtPlan) {
 			rare.BuildInputs = buildInputs
 		}
 
-		meta := SrcMeta{Prio: stmtPrioDefault, Seq: p.stmt.Seq}
+		meta := SrcMeta{Prio: stmtPrioDefault}
 
 		if stmt.Native != nil {
 			meta = *stmt.Native

@@ -104,12 +104,12 @@ func (e *EmitContext) emitCudaSrcs(stmt CudaSrcsStmt) {
 		architectures[i] = arch
 	}
 
-	for i, src := range stmt.Sources {
-		e.emitSplitCudaSource(src, architectures, stmt.EmbedPTX, stmt.DeclSeq+i*(len(architectures)+3))
+	for _, src := range stmt.Sources {
+		e.emitSplitCudaSource(src, architectures, stmt.EmbedPTX)
 	}
 }
 
-func (e *EmitContext) emitSplitCudaSource(src ANY, arches []string, embedPTX bool, seq int) {
+func (e *EmitContext) emitSplitCudaSource(src ANY, arches []string, embedPTX bool) {
 	na, d := e.ctx.na, e.d
 	srcVFS := e.resolveModuleSourceVFS(src, d.cc.SrcDirs)
 	base := build(e.instance.Path.relString(), "/", cudaSourceBase(e.moduleSourceRel(src))).string()
@@ -236,7 +236,7 @@ func (e *EmitContext) emitSplitCudaSource(src ANY, arches []string, embedPTX boo
 	parsed := na.dirList(IncludeDirective{kind: includeQuoted, target: includeTarget(stub.rel().any())}, IncludeDirective{kind: includeQuoted, target: includeTarget(fatbin.rel().any())})
 
 	e.register(GeneratedFileSpec{OutputPath: hostOuts[1], ProducerRef: hostRef, OnUse: hostPending, ProducerMainOut: hostOuts[0], ClosureLeaves: na.vfsList(hostOuts[0]), ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: parsed}})
-	e.emitOneSource(SrcMeta{Source: hostOuts[1].any(), Prio: stmtPrioDefault, Seq: seq + len(arches) + 2, Compile: CompileSpec{CFlags: cudaHostFlags, FlatOutput: true}})
+	e.emitOneSource(SrcMeta{Source: hostOuts[1].any(), Prio: stmtPrioDefault, Compile: CompileSpec{CFlags: cudaHostFlags, FlatOutput: true}})
 }
 
 func (e *EmitContext) emitCudaDeviceLink(archiveName string, local CollectedObjs, plugin *VFS) NodeRef {

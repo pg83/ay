@@ -87,5 +87,5 @@ func (e *EmitContext) emitJoinSrcsStmt(js *JoinSrcsStmt) {
 
 	e.register(info)
 
-	e.enqueueSrc(SrcMeta{Source: joinOutVFS.any(), Prio: stmtPrioDefault, Seq: js.Seq})
+	e.enqueueSrc(SrcMeta{Source: joinOutVFS.any(), Prio: stmtPrioDefault})
 }

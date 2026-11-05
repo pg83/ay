@@ -10,7 +10,7 @@ func (e *EmitContext) emitArchiveAsmForAR(a ArchiveAsmEntry) {
 	rodataPath := build(e.instance.Path.relString(), "/", rodataRel)
 
 	e.emitArchiveAsmNode(a, rodataPath, toolBinPath, toolLDRef, reg)
-	e.enqueueSrc(SrcMeta{Source: rodataPath.any(), Prio: stmtPrioDefault, Seq: a.DeclSeq})
+	e.enqueueSrc(SrcMeta{Source: rodataPath.any(), Prio: stmtPrioDefault})
 }
 
 func (e *EmitContext) emitArchiveAsmNode(

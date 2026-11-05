@@ -62,6 +62,6 @@ func (e *EmitContext) emitBuildMnStmt(stmt *BuildMnStmt) {
 		OnUse:          pending,
 	})
 
-	e.enqueueSrc(SrcMeta{Source: cppVFS.any(), Prio: stmtPrioDefault, Seq: stmt.Seq})
-	e.enqueueSrc(SrcMeta{Source: rodataVFS.any(), Prio: stmtPrioDefault, Seq: stmt.Seq})
+	e.enqueueSrc(SrcMeta{Source: cppVFS.any(), Prio: stmtPrioDefault})
+	e.enqueueSrc(SrcMeta{Source: rodataVFS.any(), Prio: stmtPrioDefault})
 }

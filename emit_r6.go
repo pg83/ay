@@ -85,7 +85,7 @@ func (e *EmitContext) emitLibraryRagel6Source(meta SrcMeta) {
 }
 
 func (e *EmitContext) emitRagel6Build(stmt Ragel6BuildStmt) {
-	e.emitRagel6Source(SrcMeta{Source: internStr(stmt.Src).any(), Resolved: stmt.Resolved, Prio: stmtPrioDefault, Seq: stmt.DeclSeq}, stmt.Options, ragel6BuildwithConstArgs)
+	e.emitRagel6Source(SrcMeta{Source: internStr(stmt.Src).any(), Resolved: stmt.Resolved, Prio: stmtPrioDefault}, stmt.Options, ragel6BuildwithConstArgs)
 }
 
 func (e *EmitContext) emitRagel6Source(meta SrcMeta, options, constArgs []ANY) {

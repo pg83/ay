@@ -4275,10 +4275,7 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 			arches = "sm_50"
 		}
 
-		seq := d.declSeq + 1
-
-		d.declSeq += len(v.Args) * (len(strings.Split(arches, ":")) + 3)
-		d.cudaSrcs = append(d.cudaSrcs, CudaSrcsStmt{DeclSeq: seq, Sources: v.Args, Architectures: arches, EmbedPTX: !env.bool(envCUDA_NO_EMBED_PTX)})
+		d.cudaSrcs = append(d.cudaSrcs, CudaSrcsStmt{DeclSeq: d.nextDeclSeq(), Sources: v.Args, Architectures: arches, EmbedPTX: !env.bool(envCUDA_NO_EMBED_PTX)})
 	case tokNvccDeviceLink:
 		d.nvccDeviceSrcs = append(d.nvccDeviceSrcs, v.Args...)
 	default:
