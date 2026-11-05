@@ -1,10 +1,13 @@
 package main
 
+import "strings"
+
 func derefStmt(s Stmt, env Environment) Stmt {
 	switch v := s.(type) {
 	case *UnknownStmt:
 		switch v.Name {
-		case tokEnv, tokAddCustomExplicitLinterCheck, tokRun, tokUseRecipe, tokNoCheckImports, tokPySrcs, tokCopyFile, tokCopyFileWithContext:
+		case tokEnv, tokAddCustomExplicitLinterCheck, tokRun, tokUseRecipe, tokNoCheckImports, tokPySrcs, tokCopyFile, tokCopyFileWithContext,
+			tokSetAppend, tokSetAppendWithGlobal, tokDefault, tokEnable, tokDisable:
 			return s
 		}
 
@@ -206,9 +209,43 @@ func derefArchive(a *ArchiveExtraction, env Environment) bool {
 	return changed
 }
 
+func derefChanges(item ANY) bool {
+	if !strHasDollar(item.str().any()) {
+		return false
+	}
+
+	text := item.string()
+
+	if strings.IndexByte(text, '\\') >= 0 {
+		return true
+	}
+
+	for i := strings.IndexByte(text, '$'); i >= 0; {
+		j := i + 1
+
+		for j < len(text) && isMacroAlnum(text[j]) {
+			j++
+		}
+
+		if j < len(text) && text[j] == '{' {
+			return true
+		}
+
+		next := strings.IndexByte(text[j:], '$')
+
+		if next < 0 {
+			break
+		}
+
+		i = j + next
+	}
+
+	return false
+}
+
 func derefList(items []ANY, env Environment) ([]ANY, bool) {
 	for _, item := range items {
-		if strHasDollar(item.str().any()) {
+		if derefChanges(item) {
 			return expandTokens(items, env, false, tokenExpandStatement), true
 		}
 	}
@@ -217,7 +254,7 @@ func derefList(items []ANY, env Environment) ([]ANY, bool) {
 }
 
 func derefOne(item ANY, env Environment) (ANY, bool) {
-	if item == 0 || !strHasDollar(item.str().any()) {
+	if item == 0 || !derefChanges(item) {
 		return item, false
 	}
 

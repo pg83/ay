@@ -38,6 +38,7 @@ const (
 	tokenExpandAssignment
 	tokenExpandPathArguments
 	tokenExpandStatement
+	tokenExpandRoots
 )
 
 type CppProtoPlugin struct {
@@ -2229,7 +2230,14 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 			routeAllToGlobal := d.moduleStmt != nil && isYqlUdfStaticModule(d.moduleStmt.Name)
 			goSrcs := isGoModuleType(d.unit.Type)
 			globalNext := false
-			srcToks := expandStmtTokens(v.Sources, env)
+			srcToks := v.Sources
+
+			if !d.interpreting {
+				srcToks = expandTokens(srcToks, env, false, tokenExpandStatement)
+			}
+
+			srcToks = expandTokens(srcToks, env, false, tokenExpandRoots)
+
 			stmt := d.nextDeclSeq()
 
 			if d.unit.SwigLang == strSwigLangJniCpp {
@@ -5397,6 +5405,10 @@ func (phase TokenExpansion) policies(track *SourceTextTracker) (deref, render su
 		deref.reserved, render.reserved = pathArgumentsReservedVar, pathArgumentsReservedVar
 	case tokenExpandStatement:
 		deref.literal = pathArgumentsReservedVar
+	case tokenExpandRoots:
+		deref.literal = notRootVar
+
+		return deref, render
 	}
 
 	deref.emptyUnknown, render.emptyUnknown = true, true
@@ -5416,7 +5428,7 @@ func expandTokenTracked(s string, env Environment, phase TokenExpansion, track *
 	deref, render := phase.policies(track)
 	derefed := substMacroDeeply(s, nil, env, nil, &deref)
 
-	if phase == tokenExpandStatement {
+	if phase == tokenExpandStatement || phase == tokenExpandRoots {
 		return derefed
 	}
 
@@ -5425,6 +5437,10 @@ func expandTokenTracked(s string, env Environment, phase TokenExpansion, track *
 
 func keepDeferredOrDontExpandVar(name string) bool {
 	return keepDeferredVar(name) || dontExpandVar(name)
+}
+
+func notRootVar(name string) bool {
+	return !rootVar(name)
 }
 
 func pathArgumentsReservedVar(name string) bool {
