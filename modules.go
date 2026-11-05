@@ -1732,12 +1732,6 @@ func interpretPending(ctx *GenCtx, modulePath string, kind ModuleKind, language 
 	d.declSeq = declSeqModuleEnd | last
 	d.pending = d.pending[:0]
 	d.interpreting = false
-
-	for i := 1; i < len(d.srcs); i++ {
-		if d.srcs[i].Seq == 0 {
-			d.srcs[i].Seq = d.srcs[i-1].Seq
-		}
-	}
 }
 
 func (ctx *GenCtx) varWords(value STR) []ANY {
@@ -3236,7 +3230,7 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 
 		d.runPython = append(d.runPython, &RunPythonStmt{
 			ScriptPath: buildScriptsMkverPy.any(), Args: v.Args, INFiles: v.Args,
-			StdoutFile: ptr(strDebianversionH.any()), KV: &debVersionKV,
+			StdoutFile: ptr(strDebianversionH.any()), KV: &debVersionKV, DeclSeq: d.nextDeclSeq(),
 		})
 	case tokFiles:
 		d.addFiles(v.Args)
@@ -3451,7 +3445,7 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 		}
 
 		for _, name := range goDirSources(fs, dir) {
-			d.srcs = append(d.srcs, SrcMeta{Source: source(dir + "/" + name).any(), Prio: stmtPrioDefault})
+			d.srcs = append(d.srcs, SrcMeta{Source: source(dir + "/" + name).any(), Prio: stmtPrioDefault, Seq: d.nextDeclSeq()})
 		}
 	case tokStyleCpp:
 		d.collectCPPStyle(v, env)
@@ -3633,7 +3627,7 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 			dstVFS := copyFileOutputVFS(modulePath, entry.Dst)
 
 			if isSourceEligibleForCopyAuto(dstVFS.relString()) {
-				d.srcs = append(d.srcs, SrcMeta{Source: dstVFS.any(), Prio: stmtPrioDefault})
+				d.srcs = append(d.srcs, SrcMeta{Source: dstVFS.any(), Prio: stmtPrioDefault, Seq: d.nextDeclSeq()})
 			}
 		}
 	case tokCopy:
@@ -3647,7 +3641,7 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 				dstVFS := copyFileOutputVFS(modulePath, entry.Dst)
 
 				if isSourceEligibleForCopyAuto(dstVFS.relString()) {
-					d.srcs = append(d.srcs, SrcMeta{Source: dstVFS.any(), Prio: stmtPrioDefault})
+					d.srcs = append(d.srcs, SrcMeta{Source: dstVFS.any(), Prio: stmtPrioDefault, Seq: d.nextDeclSeq()})
 				}
 			}
 		}
@@ -5888,7 +5882,7 @@ func applyCompileNlg(modulePath string, v UnknownStmt, d *ModuleData) {
 		d.srcs = append(d.srcs, SrcMeta{Source: str(f), Prio: stmtPrioSrcs, Seq: d.nextDeclSeq()})
 	}
 
-	d.srcs = append(d.srcs, SrcMeta{Source: str("register.cpp"), Prio: stmtPrioDefault, Global: true})
+	d.srcs = append(d.srcs, SrcMeta{Source: str("register.cpp"), Prio: stmtPrioDefault, Seq: d.nextDeclSeq(), Global: true})
 }
 
 type ConfPluginKey struct {

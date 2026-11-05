@@ -88,6 +88,7 @@ func yqlEpilogue(ctx *GenCtx, modulePath string, kind ModuleKind, language Langu
 	prebuilt := path.Base(yqlPrebuiltOutput(instance, d).relString()) + ".prebuilt"
 
 	d.fromSandboxes = append(d.fromSandboxes, &FromSandboxStmt{
+		DeclSeq:    d.nextDeclSeq(),
 		ResourceId: internStr(d.yqlPrebuiltResource).any(), File: true,
 		ArchiveExtraction: ArchiveExtraction{
 			Executable: true, Prefix: ".",
@@ -336,5 +337,6 @@ func registerYqlPythonUdf(fs FS, modulePath string, stmt UnknownStmt, d *ModuleD
 		ScriptPath: strBuildScriptsGenYqlPythonUdfPy.any(),
 		Args:       internAnys([]string{flavor, name, resource, output, flag}),
 		OUTFiles:   internAnys([]string{output}), OutputIncludes: internAnys(includes), Line: stmt.Line,
+		DeclSeq: d.nextDeclSeq(),
 	})
 }

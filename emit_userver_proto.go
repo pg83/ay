@@ -165,7 +165,7 @@ func (batch UserverProtoBatch) addModuleDeps(d *ModuleData) {
 		peer = "taxi/uservices/userver/libraries/proto-structs"
 
 		if batch.descriptorTarget != "" {
-			d.bundles = append(d.bundles, BundleEntry{Target: batch.descriptorTarget, Name: batch.descriptor})
+			d.bundles = append(d.bundles, BundleEntry{Target: batch.descriptorTarget, Name: batch.descriptor, DeclSeq: d.nextDeclSeq()})
 		}
 	} else if batch.structs {
 		peer = "taxi/uservices/userver/libraries/grpc-proto-structs"

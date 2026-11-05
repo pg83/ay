@@ -128,7 +128,7 @@ func applySdcDiagsSplitGenerator(fs FS, modulePath string, stmt UnknownStmt, env
 	appendRunProgram(rp, env, d)
 
 	for _, src := range expandStmtTokens(internAnys(concat(includes, srcs)), env) {
-		d.srcs = append(d.srcs, SrcMeta{Source: src, Prio: stmtPrioDefault, Global: true})
+		d.srcs = append(d.srcs, SrcMeta{Source: src, Prio: stmtPrioDefault, Seq: d.nextDeclSeq(), Global: true})
 	}
 
 	d.peerdirs = append(d.peerdirs, strContribLibsProtobuf.any())

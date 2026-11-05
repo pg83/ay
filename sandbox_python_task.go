@@ -151,6 +151,7 @@ func setupSandboxPythonTask(name TOK, modulePath string, kind ModuleKind, langua
 
 	if kind == KindBin {
 		d.pyMain = ptr(strSandboxTaskboxBinaryMain.any())
+		d.pyMainDeclSeq = d.nextDeclSeq()
 
 		for _, mask := range []string{"api.*", "kernel.*", "library.*", "sky*"} {
 			value := appendPythonImportMask(mask, env, d)

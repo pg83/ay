@@ -251,7 +251,14 @@ type JavaRunProgram struct {
 	raw  []string
 }
 
+func (d *JavaData) nextDeclSeq() int {
+	d.declSeq++
+
+	return d.declSeq
+}
+
 type JavaData struct {
+	declSeq                int
 	setVars                SetVars
 	confModule             *confModule
 	confMacroDepth         int

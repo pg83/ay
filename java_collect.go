@@ -349,9 +349,15 @@ func collectJavaStmts(ctx *GenCtx, jm *JavaModule, d *JavaData, stmts []Stmt, en
 				}
 			}
 		case *RunProgramStmt:
-			d.runPrograms = append(d.runPrograms, captureRunProgram(v, env))
+			rp := captureRunProgram(v, env)
+
+			rp.DeclSeq = d.nextDeclSeq()
+			d.runPrograms = append(d.runPrograms, rp)
 		case *RunPythonStmt:
-			d.runPython = append(d.runPython, expandRunPythonStmt(v, env))
+			rp := expandRunPythonStmt(v, env)
+
+			rp.DeclSeq = d.nextDeclSeq()
+			d.runPython = append(d.runPython, rp)
 		case *FromSandboxStmt:
 			expanded := *v
 
@@ -360,6 +366,7 @@ func collectJavaStmts(ctx *GenCtx, jm *JavaModule, d *JavaData, stmts []Stmt, en
 			expanded.OUTNoAutoFiles = expandStmtTokens(v.OUTNoAutoFiles, env)
 			expanded.Renames = expandStmtTokens(v.Renames, env)
 			expanded.OutputIncludes = expandStmtTokens(v.OutputIncludes, env)
+			expanded.DeclSeq = d.nextDeclSeq()
 
 			d.fromSandboxes = append(d.fromSandboxes, &expanded)
 		case *SrcDirStmt:
@@ -401,15 +408,21 @@ func collectJavaStmts(ctx *GenCtx, jm *JavaModule, d *JavaData, stmts []Stmt, en
 				expanded := *v
 
 				expanded.Args = expandStmtTokens(v.Args, env)
-				d.bundles = append(d.bundles, parseBundleEntries(expanded)...)
+
+				for _, entry := range parseBundleEntries(expanded) {
+					entry.DeclSeq = d.nextDeclSeq()
+					d.bundles = append(d.bundles, entry)
+				}
 
 				continue
 			}
 
 			if v.Name == tokCopyFile || v.Name == tokCopyFileWithContext {
 				args := expandStmtTokens(v.Args, env)
+				entry := parseCopyFileEntry(anyStrs(args), v.Name == tokCopyFileWithContext, v.Line)
 
-				d.copyFiles = append(d.copyFiles, parseCopyFileEntry(anyStrs(args), v.Name == tokCopyFileWithContext, v.Line))
+				entry.DeclSeq = d.nextDeclSeq()
+				d.copyFiles = append(d.copyFiles, entry)
 				recordHandledMacro(v.Name, args)
 
 				continue

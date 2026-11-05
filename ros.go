@@ -243,7 +243,7 @@ func finishRosSources(module string, d *ModuleData, env Environment, msgs, srvs,
 				args = append(args, "--from-import="+partial+"."+kind)
 			}
 
-			d.runPrograms = append(d.runPrograms, &RunProgramStmt{ToolPath: strSdgTier0ToolsGenerateProxyImportFile.any(), Args: internAnys(args), StdoutFile: ptr(out), StdoutNoAuto: true})
+			d.runPrograms = append(d.runPrograms, &RunProgramStmt{ToolPath: strSdgTier0ToolsGenerateProxyImportFile.any(), Args: internAnys(args), StdoutFile: ptr(out), StdoutNoAuto: true, DeclSeq: d.nextDeclSeq()})
 			pys = append(pys, out)
 
 			for _, name := range names {
@@ -268,7 +268,7 @@ func finishRosSources(module string, d *ModuleData, env Environment, msgs, srvs,
 			decls[i].Token = src
 		}
 
-		d.pySrcGroups = append(d.pySrcGroups, PySrcGroup{Srcs: decls, Scopes: scopes})
+		d.pySrcGroups = append(d.pySrcGroups, PySrcGroup{Srcs: decls, Scopes: scopes, DeclSeq: d.nextDeclSeq()})
 	}
 
 	if d.ros.Language == LangRosBindings {

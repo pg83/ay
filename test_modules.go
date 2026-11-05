@@ -20,8 +20,10 @@ func applyCppTestModule(stmt *ModuleStmt, d *ModuleData, env Environment) {
 	switch stmt.Name {
 	case tokPy3Test, tokPy3TestBin, tokPy2Test, tokPy23Test:
 		d.pyMain = ptr(strLibraryPythonPytestMainMain.any())
+		d.pyMainDeclSeq = d.nextDeclSeq()
 	case tokYqlUdfTest:
 		d.pyMain = ptr(strLibraryPythonPytestMainMain.any())
+		d.pyMainDeclSeq = d.nextDeclSeq()
 		d.test.depends = append(d.test.depends, "yql/essentials/tools/astdiff", "yql/tools/yqlrun", "yql/essentials/tools/udf_resolver")
 		d.test.data = append(d.test.data, "arcadia/yql/essentials/cfg/udf_test")
 
@@ -34,6 +36,7 @@ func applyCppTestModule(stmt *ModuleStmt, d *ModuleData, env Environment) {
 		)
 	case tokYqlUdfMinitest:
 		d.pyMain = ptr(strLibraryPythonPytestMainMain.any())
+		d.pyMainDeclSeq = d.nextDeclSeq()
 		d.test.depends = append(d.test.depends, "yql/essentials/tools/astdiff", "yql/essentials/tools/minirun", "yql/essentials/tools/udf_resolver")
 		d.test.data = append(d.test.data, "arcadia/yql/essentials/cfg/tests")
 
