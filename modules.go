@@ -1009,10 +1009,6 @@ func collectModuleInto(ctx *GenCtx, instance ModuleInstance, stmts []Stmt, env E
 		ensureResourcePeer(modulePath, d)
 	}
 
-	if len(d.antlr4Grammars) > 0 || len(d.antlrRuns) > 0 {
-		d.peerdirs = append(d.peerdirs, strBuildPlatformJavaJdk.any(), strBuildPlatformJavaJdkJdk17.any())
-	}
-
 	return d
 }
 
@@ -1454,6 +1450,14 @@ func (d *ModuleData) bindBody(ctx *GenCtx, modulePath string, kind ModuleKind, l
 		if !enumSerializationSkipped(d, language, env, v) {
 			d.expandBodyAtParse(ctx, modulePath, kind, language, v.Macro, []ANY{internAny(v.Header)}, v.Line, env, func(Warn) {}, platform)
 		}
+	case *RunAntlrStmt:
+		d.expandBodyAtParse(ctx, modulePath, kind, language, internStr(v.Macro), nil, v.Line, env, onWarn, platform)
+	case *RunAntlr4CppStmt:
+		d.expandBodyAtParse(ctx, modulePath, kind, language, kwRUN_ANTLR4_CPP, []ANY{v.Grammar}, v.Line, env, onWarn, platform)
+	case *RunAntlr4CppSplitStmt:
+		d.expandBodyAtParse(ctx, modulePath, kind, language, kwRUN_ANTLR4_CPP_SPLIT, []ANY{v.Lexer, v.Parser}, v.Line, env, onWarn, platform)
+	case *RunAntlr4PythonStmt:
+		d.expandBodyAtParse(ctx, modulePath, kind, language, internStr("RUN_ANTLR4_PYTHON"+v.Version), v.Args, v.Line, env, onWarn, platform)
 	}
 
 	return s
@@ -2519,8 +2523,6 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 		case *CreateBuildInfoStmt:
 			d.createBuildInfoFor = ptr(internStr(v.OutputHeader).any())
 		case *RunAntlr4CppStmt:
-			d.peerdirs = append(d.peerdirs, strContribLibsAntlr4CppRuntime.any())
-
 			d.antlr4Grammars = append(d.antlr4Grammars, Antlr4GrammarInfo{
 				IsSplit:        false,
 				Grammar:        expandStmtToken(v.Grammar.string(), env),
@@ -2530,8 +2532,6 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 				OutputIncludes: anyStrs(expandStmtTokens(v.OutputIncludes, env)),
 			})
 		case *RunAntlr4CppSplitStmt:
-			d.peerdirs = append(d.peerdirs, strContribLibsAntlr4CppRuntime.any())
-
 			d.antlr4Grammars = append(d.antlr4Grammars, Antlr4GrammarInfo{
 				IsSplit:        true,
 				Options:        anyStrs(expandStmtTokens(v.Options, env)),

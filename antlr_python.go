@@ -117,5 +117,4 @@ func collectAntlrPython(pm *IncludeParserManager, module string, source *RunAntl
 		Jar: internStr(antlrPythonConfigValue(env, prefix+"_JAR")).any()}
 
 	d.antlrRuns = append(d.antlrRuns, run)
-	d.peerdirs = append(d.peerdirs, internStr(antlrPythonConfigValue(env, prefix+"_PYTHON_RUNTIME")).any())
 }
