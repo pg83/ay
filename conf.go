@@ -1940,21 +1940,22 @@ func (t *confTables) plan(module *confModule) *confModule {
 }
 
 type Conf struct {
-	state       *ConfState
-	program     *confProgram
-	tables      *confTables
-	platformEnv Environment
-	inherited   DenseMap[ENV, ConfValue]
-	base        *EnvStore
-	bases       [][]ConfAssignment
-	deepReads   [][]bool
-	sysinclList []string
-	recalcs     map[uint64][]confRecalc
-	inputs      []uint64
-	keys        DenseMap[STR, confStatementKey]
-	dirs        map[string][]*confCommandDirs
-	argMemo     map[STR][]*confArgsMemo
-	argVolatile map[STR]bool
+	state         *ConfState
+	program       *confProgram
+	tables        *confTables
+	platformEnv   Environment
+	inherited     DenseMap[ENV, ConfValue]
+	base          *EnvStore
+	bases         [][]ConfAssignment
+	deepReads     [][]bool
+	sysinclList   []string
+	recalcs       map[uint64][]confRecalc
+	inputs        []uint64
+	keys          DenseMap[STR, confStatementKey]
+	dirs          map[string][]*confCommandDirs
+	noCommandDirs BitSet
+	argMemo       map[STR][]*confArgsMemo
+	argVolatile   map[STR]bool
 }
 
 type confArgsMemo struct {

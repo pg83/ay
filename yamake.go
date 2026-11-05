@@ -71,11 +71,6 @@ var structCodegenOutputIncludes = anysOf(
 	"kernel/struct_codegen/reflection/floats.h",
 )
 
-var structCodegenPeerdirs = anysOf(
-	"kernel/struct_codegen/metadata",
-	"kernel/struct_codegen/reflection",
-)
-
 var includeStatePool = sync.Pool{New: func() any {
 	return &IncludeState{once: newIntSet(16)}
 }}
@@ -355,7 +350,7 @@ type BaseCodegenStmt struct {
 	Prefix         ANY
 	Opts           []ANY
 	OutputIncludes []ANY
-	Peerdirs       []ANY
+	Macro          STR
 	Line           int
 }
 
@@ -1789,7 +1784,7 @@ func parseStructCodegen(prefix ANY, line int) *BaseCodegenStmt {
 		ToolPath:       internStr(structCodegenTool).any(),
 		Prefix:         prefix,
 		OutputIncludes: structCodegenOutputIncludes,
-		Peerdirs:       structCodegenPeerdirs,
+		Macro:          tokStructCodegen.str(),
 		Line:           line,
 	}
 }

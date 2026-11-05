@@ -73,7 +73,6 @@ func registerKnownGlobalChunks() {
 	registerOwnedSlice(rodataConstArgs)
 	registerOwnedSlice(rodataYasmConstArgs)
 	registerOwnedSlice(structCodegenOutputIncludes)
-	registerOwnedSlice(structCodegenPeerdirs)
 	registerOwnedSlice(swigAddIncls)
 	registerOwnedSlice(swigConstArgs)
 	registerOwnedSlice(taskletRegistrationIncludes)

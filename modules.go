@@ -832,11 +832,6 @@ func collectModuleInto(ctx *GenCtx, instance ModuleInstance, stmts []Stmt, env E
 
 	if len(d.runJavaPrograms) > 0 {
 		d.runJavaJdk = env.string(envJdkRealVersion)
-		d.peerdirs = append(d.peerdirs, strBuildPlatformJavaJdk.any())
-
-		for _, peer := range strings.Fields(env.string(envJdkResourcePeerdir)) {
-			d.peerdirs = append(d.peerdirs, internStr(peer).any())
-		}
 	}
 
 	d.test.expandValues(env)
@@ -1653,6 +1648,34 @@ func (d *ModuleData) deferCallGuards(platform *Platform, name STR, seen []STR) [
 	return seen
 }
 
+func (d *ModuleData) statementCommandDirs(ctx *GenCtx, modulePath string, kind ModuleKind, language Language, s Stmt, env Environment, onWarn func(Warn), platform *Platform) {
+	if isGoModuleType(d.unit.Type) {
+		return
+	}
+
+	name := stmtMacroNameID(s)
+
+	if platform.conf.noCommandDirs.has(uint32(name)) {
+		return
+	}
+
+	dirs := platform.conf.commandDirs(name.string(), env)
+
+	if len(dirs.peerdirs) == 0 && len(dirs.addincls) == 0 && len(dirs.vars) == 0 {
+		platform.conf.noCommandDirs.add(uint32(name))
+
+		return
+	}
+
+	if len(dirs.peerdirs) != 0 {
+		collectStmts(ctx, modulePath, kind, language, []Stmt{&PeerdirStmt{Paths: appendInternAnys(nil, dirs.peerdirs), Implicit: true}}, env, d, onWarn, platform)
+	}
+
+	if len(dirs.addincls) != 0 {
+		collectStmts(ctx, modulePath, kind, language, []Stmt{splitAddInclPaths(appendInternAnys(nil, dirs.addincls))}, env, d, onWarn, platform)
+	}
+}
+
 func interpretPending(ctx *GenCtx, modulePath string, kind ModuleKind, language Language, env Environment, d *ModuleData, onWarn func(Warn), platform *Platform) {
 	var seen [32]STR
 
@@ -1691,6 +1714,7 @@ func interpretPending(ctx *GenCtx, modulePath string, kind ModuleKind, language 
 		d.pendingIndex = int(d.pending[i].seq / declSeqBlock)
 
 		collectStmts(ctx, modulePath, kind, language, []Stmt{d.pending[i].stmt}, env, d, onWarn, platform)
+		d.statementCommandDirs(ctx, modulePath, kind, language, d.pending[i].stmt, env, onWarn, platform)
 		platform.conf.setGuard(env, d.pending[i].macro, &d.setVars)
 		applyVarsAsMacros(ctx, modulePath, kind, language, env, d, onWarn, platform)
 	}
@@ -1828,6 +1852,10 @@ func stmtMacroName(s Stmt) string {
 	case *SplitCodegenStmt:
 		return "SPLIT_CODEGEN"
 	case *BaseCodegenStmt:
+		if v.Macro != 0 {
+			return v.Macro.string()
+		}
+
 		return "BASE_CODEGEN"
 	case *ConfigureFileStmt:
 		return "CONFIGURE_FILE"
@@ -1899,6 +1927,10 @@ func stmtMacroNameID(s Stmt) STR {
 	case *SplitCodegenStmt:
 		return strSplitCodegen
 	case *BaseCodegenStmt:
+		if v.Macro != 0 {
+			return v.Macro
+		}
+
 		return strBaseCodegen
 	case *ConfigureFileStmt:
 		return kwCONFIGURE_FILE
@@ -2555,7 +2587,6 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 			expanded.OutputIncludes = expandStmtTokens(v.OutputIncludes, env)
 
 			d.baseCodegens = append(d.baseCodegens, &expanded)
-			d.macroPeerdirs = append(d.macroPeerdirs, v.Peerdirs...)
 		case *RunPythonStmt:
 			expanded := expandRunPythonStmt(v, env)
 
@@ -3304,7 +3335,6 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 		}
 
 		d.luaCompile = append(d.luaCompile, stmt)
-		d.peerdirs = append(d.peerdirs, internStr(runtime).any())
 	case tokSplitDwarf:
 		d.splitDwarf = true
 	case tokNoSplitDwarf:
@@ -4261,10 +4291,6 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 		d.cudaSrcs = append(d.cudaSrcs, CudaSrcsStmt{DeclSeq: seq, Sources: v.Args, Architectures: arches, EmbedPTX: !env.bool(envCUDA_NO_EMBED_PTX)})
 	case tokNvccDeviceLink:
 		d.nvccDeviceSrcs = append(d.nvccDeviceSrcs, v.Args...)
-
-		if fs.isFilePathClean("build/internal/platform/cuda/ya.make") {
-			d.macroPeerdirs = append(d.macroPeerdirs, strBuildInternalPlatformCuda.any())
-		}
 	default:
 
 		handled = false

@@ -170,7 +170,7 @@ func derefStmt(s Stmt, env Environment) Stmt {
 		c := *v
 		changed := false
 
-		for _, list := range [...]*[]ANY{&c.Opts, &c.OutputIncludes, &c.Peerdirs} {
+		for _, list := range [...]*[]ANY{&c.Opts, &c.OutputIncludes} {
 			if items, ok := derefList(*list, env); ok {
 				*list, changed = items, true
 			}
