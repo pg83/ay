@@ -4,6 +4,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"unsafe"
 )
 
 var (
@@ -190,7 +191,19 @@ type EnvVar struct {
 
 type EnvVars []EnvVar
 
-func appendEnv(buf []byte, env EnvVars) []byte {
+func (c *jsonWriteCache) appendEnv(buf []byte, env EnvVars) []byte {
+	if len(env) == 0 {
+		return append(buf, '{', '}')
+	}
+
+	key := jsonSliceKey{unsafe.Pointer(&env[0]), len(env)}
+
+	if next, ok := c.cached(buf, key); ok {
+		return next
+	}
+
+	start := len(buf)
+
 	buf = append(buf, '{')
 
 	for i, e := range env {
@@ -208,7 +221,10 @@ func appendEnv(buf []byte, env EnvVars) []byte {
 		}
 	}
 
-	return append(buf, '}')
+	buf = append(buf, '}')
+	c.remember(key, buf[start:])
+
+	return buf
 }
 
 type NetworkMode uint8

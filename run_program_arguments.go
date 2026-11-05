@@ -1,6 +1,9 @@
 package main
 
-import "strings"
+import (
+	"slices"
+	"strings"
+)
 
 var runProgramEnvVars struct {
 	classified uint32
@@ -132,7 +135,17 @@ func bindRunProgramCalls(programs []*RunProgramStmt, env Environment, scratch *E
 }
 
 func prepareRunProgramArguments(args []ANY, env Environment) []ANY {
+	if !slices.ContainsFunc(args, runProgramArgumentExpands) {
+		return args
+	}
+
 	text := expandConfigMacroBody(strings.Join(anyStrs(args), " "), env)
 
 	return internAnys(strings.FieldsFunc(text, func(r rune) bool { return r == ' ' || r == ',' }))
+}
+
+func runProgramArgumentExpands(arg ANY) bool {
+	text := arg.relOrSelf().string()
+
+	return text == "" || strings.ContainsAny(text, "$ ,") || arg.vfs() == 0 && vfsHasPrefix(text)
 }

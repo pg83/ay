@@ -159,3 +159,12 @@ func (v VFS) cwd() ANY {
 func (v VFS) any() ANY {
 	return ANY(uint32(v)<<1 | 1)
 }
+
+func appendVFSText(out *strings.Builder, v VFS) {
+	if rel := v.relString(); rel != "" {
+		out.WriteString(v.prefix())
+		out.WriteString(rel)
+	} else {
+		out.WriteString(v.prefix()[:vfsPrefixLen-1])
+	}
+}

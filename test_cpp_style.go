@@ -148,7 +148,7 @@ func (e *EmitContext) cppStyleSource(src ANY) ANY {
 }
 
 func (e *EmitContext) cppStyleSourceResolved(src ANY, input VFS) ANY {
-	if !e.ctx.testMode || !cppLinterSource(src.string()) {
+	if !e.ctx.testMode || !cppLinterSource(src.relOrSelf().string()) {
 		return src
 	}
 

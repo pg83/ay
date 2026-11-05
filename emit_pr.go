@@ -114,7 +114,7 @@ func (e *EmitContext) emitRunProgram(stmt *RunProgramStmt) {
 	inBuilds := make([]VFS, 0, len(stmt.INFiles))
 
 	for _, f := range stmt.INFiles {
-		v := e.runProgramInputVFS(f.string())
+		v := e.runProgramInputVFSOf(f)
 
 		inVFSs = append(inVFSs, v)
 
@@ -474,6 +474,14 @@ func replaceAuxToolArg(arg ANY, tools []PrFileToken) (ANY, bool) {
 	}
 
 	return internStr(rooted).any(), true
+}
+
+func (e *EmitContext) runProgramInputVFSOf(input ANY) VFS {
+	if v := input.vfs(); v != 0 && v.rel().cleanPath() {
+		return e.requireProducedInput("IN", "", v)
+	}
+
+	return e.runProgramInputVFS(input.string())
 }
 
 func (e *EmitContext) runProgramInputVFS(rel string) VFS {

@@ -4,12 +4,14 @@ import (
 	"crypto/md5"
 	"fmt"
 	"os"
+	"slices"
 	"strings"
 )
 
 var (
 	substVariables = &substPolicy{literal: rootVar}
 	substCommand   = &substPolicy{emptyUnknown: true, command: true}
+	rootVarNames   = [...]string{envBINDIR.string(), envCURDIR.string(), envARCADIA_ROOT.string(), envARCADIA_BUILD_ROOT.string()}
 )
 
 var macroModifierNames = map[string]macroFlags{
@@ -91,12 +93,7 @@ type substPolicy struct {
 }
 
 func rootVar(name string) bool {
-	switch name {
-	case envBINDIR.string(), envCURDIR.string(), envARCADIA_ROOT.string(), envARCADIA_BUILD_ROOT.string():
-		return true
-	}
-
-	return false
+	return slices.Contains(rootVarNames[:], name)
 }
 
 type macroFlags uint64
@@ -356,6 +353,7 @@ func scanMakefileRef(text string, i int) (macroRef, bool) {
 type macroValues struct {
 	list   []ANY
 	single string
+	vfs    VFS
 	one    bool
 }
 
@@ -368,6 +366,10 @@ func (v macroValues) count() int {
 }
 
 func (v macroValues) at(i int) string {
+	if v.vfs != 0 {
+		return v.vfs.string()
+	}
+
 	if v.one {
 		return v.single
 	}
@@ -394,13 +396,13 @@ func macroLookup(name string, locals []confMacroBinding, env Environment, consta
 		*constant = false
 	}
 
-	value, bound := env.lookup(name)
+	value, vfs, bound := env.lookupValue(name)
 
 	if !bound {
 		return macroValues{}, false
 	}
 
-	return macroValues{single: value, one: true}, true
+	return macroValues{single: value, vfs: vfs, one: true}, true
 }
 
 func applyMacroMods(ref *macroRef, value, prefix, suffix string) (string, bool) {
@@ -602,6 +604,15 @@ func substMacro(text string, locals []confMacroBinding, env Environment, constan
 		first := true
 
 		for k := 0; k < values.count(); k++ {
+			if values.vfs != 0 && ref.flags == 0 && ref.ext == "" && ref.skipExt == "" {
+				out.WriteString(prefix)
+				appendVFSText(&out, values.vfs)
+				out.WriteString(suffix)
+				first = false
+
+				continue
+			}
+
 			value, keep := applyMacroMods(&ref, values.at(k), prefix, suffix)
 
 			if !keep {

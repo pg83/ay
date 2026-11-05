@@ -23,6 +23,10 @@ var (
 	testAgentProcessNames    = []string{"opencode", "claude", "claude-code", "copilot", "codex-app", "codex", "hermes", "openclaw", "droid", "pi"}
 	testNoPlatform           = &Platform{}
 	testSecretRequirements   = []string{"sb_vault", "yav"}
+	testToolHostPathArg      = internStr(testToolHostPath).any()
+	testCmdFileStartArg      = internStr(testCmdFileStart).any()
+	testGDBPathArg           = internStr(testGDBPath).any()
+	testPythonBinArg         = internStr(testPythonBin).any()
 )
 
 const (
@@ -270,14 +274,18 @@ func testArgs(ss []string) []ANY {
 
 func testArgsInto(out []ANY, ss []string) []ANY {
 	for _, s := range ss {
-		if strings.HasPrefix(s, "$(S)/") || strings.HasPrefix(s, "$(B)/") {
-			out = append(out, intern(s).any())
-		} else {
-			out = append(out, internStr(s).any())
-		}
+		out = append(out, testArg(s))
 	}
 
 	return out
+}
+
+func testArg(s string) ANY {
+	if strings.HasPrefix(s, "$(S)/") || strings.HasPrefix(s, "$(B)/") {
+		return intern(s).any()
+	}
+
+	return internStr(s).any()
 }
 
 func (o *TestOpts) sizeRequested(size string) bool {
@@ -623,66 +631,62 @@ func (ctx *GenCtx) testNode(s *TestSuite, chunk TestChunk) *Node {
 	meta, trace, log := work+"/meta.json", work+"/ytest.report.trace", work+"/run_test.log"
 	tar := work + "/testing_out_stuff.tar.zstd"
 	outputs := []VFS{intern(meta), intern(trace), intern(log)}
-	strs := append(ctx.testStrs[:0], testToolHostPath, "run_test")
+	head := append(ctx.testAnys[:0], testToolHostPathArg, strRunTest.any())
 
 	if o.commandFile {
-		strs = append(strs, testCmdFileStart)
+		head = append(head, testCmdFileStartArg)
 	}
 
-	strs = append(strs,
-		"--meta", meta, "--trace", trace, "--timeout", strconv.Itoa(s.timeout), "--log-path", log,
-		"--test-size", s.size, "--test-type", s.testType, "--test-ci-type", s.ciType,
-		"--context-filename", bldCommonTestContext.string(),
-		"--source-root", "$(S)", "--build-root", "$(B)", "--test-suite-name", s.name, "--project-path", s.projectPath)
+	head = append(head, strMeta.any(), outputs[0].any(), strTrace.any(), outputs[1].any(), strTimeout.any(), testArg(strconv.Itoa(s.timeout)), strLogPath.any(), outputs[2].any(), strTestSize.any(), testArg(s.size), strTestType.any(), testArg(s.testType), strTestCiType.any(), testArg(s.ciType), strContextFilename.any(), bldCommonTestContext.any(), strSourceRoot2.any(), strS.any(), strBuildRoot2.any(), strB.any(), strTestSuiteName.any(), testArg(s.name), strProjectPath.any(), testArg(s.projectPath))
 
 	related := dedupKeepOrder(s.relatedPaths)
 
 	for _, p := range related {
-		strs = append(strs, "--test-related-path", p)
+		head = append(head, strTestRelatedPath.any(), testArg(p))
 	}
 
 	if s.noCleanEnvironment || slices.Contains(s.tags, "ya:dirty") {
-		strs = append(strs, "--no-clean-environment")
+		head = append(head, strNoCleanEnvironment.any())
 	}
 
-	strs = append(strs, "--target-platform-descriptor", o.descriptor)
+	head = append(head, strTargetPlatformDescriptor.any(), testArg(o.descriptor))
 
 	if o.removeTos {
-		strs = append(strs, "--remove-tos")
+		head = append(head, strRemoveTos.any())
 	}
 
-	strs = append(strs, "--gdb-path", testGDBPath)
+	head = append(head, strGdbPath.any(), testGDBPathArg)
 
 	if o.dist {
-		strs = append(strs, "--log-level", "DEBUG", "--result-max-file-size", strconv.Itoa(testDistResultFileLimit), "--disable-memory-snippet", "--truncate-files", "--propagate-timeout-info")
+		head = append(head, strLogLevel.any(), strDebug.any(), strResultMaxFileSize.any(), testArg(strconv.Itoa(testDistResultFileLimit)), strDisableMemorySnippet.any(), strTruncateFiles.any(), strPropagateTimeoutInfo.any())
 	} else {
-		strs = append(strs, "--result-max-file-size", "0")
+		head = append(head, strResultMaxFileSize.any(), strZero.any())
 	}
 
-	strs = append(strs, "--verify-results")
+	head = append(head, strVerifyResults.any())
 
 	if slices.Contains(s.tags, "ya:copydataro") {
-		strs = append(strs, "--data-to-environment", "copyro")
+		head = append(head, strDataToEnvironment.any(), strCopyro.any())
 	} else if slices.Contains(s.tags, "ya:copydata") {
-		strs = append(strs, "--data-to-environment", "copy")
+		head = append(head, strDataToEnvironment.any(), strCopy.any())
 	}
 
-	strs = append(strs, "--tests-limit-in-chunk", strconv.Itoa(testDefaultTestsLimit), "--output-style", o.outputStyle, "--python-bin", testPythonBin)
+	head = append(head, strTestsLimitInChunk.any(), testArg(strconv.Itoa(testDefaultTestsLimit)), strOutputStyle.any(), testArg(o.outputStyle), strPythonBin.any(), testPythonBinArg)
 
 	if chunk.retry > 0 {
-		strs = append(strs, "--retry", strconv.Itoa(chunk.retry))
+		head = append(head, strRetry.any(), testArg(strconv.Itoa(chunk.retry)))
 	}
 
 	if s.runCwd != "" {
-		strs = append(strs, "--test-run-cwd", s.runCwd)
+		head = append(head, strTestRunCwd.any(), testArg(s.runCwd))
 	}
 
 	for _, tag := range s.tags {
-		strs = append(strs, "--tag", tag)
+		head = append(head, strTag.any(), testArg(tag))
 	}
 
 	if _, ok := s.requirements["ram_disk"]; ok {
-		strs = append(strs, "--requires-ram-disk")
+		head = append(head, strRequiresRamDisk.any())
 	}
 
 	for _, e := range s.env {
@@ -702,38 +706,34 @@ func (ctx *GenCtx) testNode(s *TestSuite, chunk TestChunk) *Node {
 			e += "=" + v
 		}
 
-		strs = append(strs, "--env", e)
+		head = append(head, strEnv.any(), testArg(e))
 	}
 
 	if s.setupPythonpathEnv {
-		strs = append(strs, "--setup-pythonpath-env")
+		head = append(head, strSetupPythonpathEnv.any())
 	}
 
 	if s.supportsCanonization {
-		strs = append(strs, "--supports-canonization")
+		head = append(head, strSupportsCanonization.any())
 	}
 
 	if s.supportsTestParameters {
-		strs = append(strs, "--supports-test-parameters")
+		head = append(head, strSupportsTestParameters.any())
 	}
 
 	for _, sig := range s.smoothShutdown {
-		strs = append(strs, "--smooth-shutdown-signals", sig)
+		head = append(head, strSmoothShutdownSignals.any(), testArg(sig))
 	}
 
 	if chunk.split > 1 {
-		strs = append(strs, "--split-count", strconv.Itoa(chunk.split), "--split-index", strconv.Itoa(chunk.index))
+		head = append(head, strSplitCount.any(), testArg(strconv.Itoa(chunk.split)), strSplitIndex.any(), testArg(strconv.Itoa(chunk.index)))
 	}
 
 	if chunk.file != "" {
-		strs = append(strs, "--split-file", chunk.file)
+		head = append(head, strSplitFile.any(), testArg(chunk.file))
 	}
 
-	strs = append(strs, "--compression-filter", "zstd", "--compression-level", "1")
-
-	head := testArgsInto(ctx.testAnys[:0], strs)
-
-	ctx.testStrs = strs[:0]
+	head = append(head, strCompressionFilter.any(), strZstd.any(), strCompressionLevel.any(), strOne.any())
 
 	for _, g := range sortedResourceGlobals(s.globals) {
 		head = append(head, argGlobalResource.any(), g.Token.any())

@@ -107,6 +107,14 @@ func (e *EmitContext) sourceInputForScheduling(name string) VFS {
 	return e.schedulingSource(name, resolveSource(e.ctx, e.instance, name, e.d.srcDirs))
 }
 
+func (e *EmitContext) sourceInputForSchedulingOf(input ANY) VFS {
+	if v := input.vfs(); v != 0 && v.rel().cleanPath() {
+		return v
+	}
+
+	return e.sourceInputForScheduling(input.string())
+}
+
 func relUnderDir(rel, dir string) bool {
 	return len(rel) > len(dir) && rel[len(dir)] == '/' && rel[:len(dir)] == dir
 }
@@ -123,6 +131,10 @@ func (e *EmitContext) requireProducedInput(kind, token string, vfs VFS) VFS {
 	module := e.instance.Path.relString()
 
 	if vfs.isBuild() && e.codegen.lookup(vfs) == nil && relUnderDir(vfs.relString(), module) {
+		if token == "" {
+			token = vfs.string()
+		}
+
 		e.ctx.onWarn(Warn{Kind: WarnMissingProducer, Message: fmt.Sprintf("%s: %s %q resolves to build file %s that no declared macro produces", module, kind, token, vfs.string())})
 	}
 
@@ -471,7 +483,7 @@ func (e *EmitContext) producerPositions(cythonPlans []CythonStmtPlan) ([]Produce
 
 		for _, f := range run.INFiles {
 			if run.Python {
-				backing = append(backing, e.sourceInputForScheduling(f.string()))
+				backing = append(backing, e.sourceInputForSchedulingOf(f))
 			} else if v := rootedBuildCandidate(module, f.string()); v != 0 {
 				backing = append(backing, v)
 			}
@@ -540,7 +552,7 @@ func (e *EmitContext) producerPositions(cythonPlans []CythonStmtPlan) ([]Produce
 
 	runIns := func(inFiles []ANY) {
 		for _, f := range inFiles {
-			backing = append(backing, e.sourceInputForScheduling(f.string()))
+			backing = append(backing, e.sourceInputForSchedulingOf(f))
 		}
 	}
 

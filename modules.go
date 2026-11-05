@@ -14,7 +14,16 @@ import (
 var (
 	confPluginDepsCache sync.Map
 	dontExpandVars      = [...]ENV{envARCADIA_BUILD_ROOT, envARCADIA_ROOT, envBINDIR, envCURDIR, envPythonBin, envTestCaseRoot, envTestOutRoot, envTestSourceRoot, envTestWorkRoot}
+	pbRuntimeBaseString = pbRuntimeBaseVFS.string()
 )
+
+var dontExpandVarNames = func() (names [len(dontExpandVars)]string) {
+	for i, id := range dontExpandVars {
+		names[i] = id.string()
+	}
+
+	return names
+}()
 
 const (
 	event2cppPluginName = "event2cpp"
@@ -750,7 +759,7 @@ func collectModuleInto(ctx *GenCtx, instance ModuleInstance, stmts []Stmt, env E
 	env.setVFS(envBINDIR, build(modulePath))
 	env.setVFS(envCmakeCurrentBinaryDir, build(modulePath))
 	env.setDefaultString(envCythonOptions, cythonDefaultOptions(instance.Platform))
-	env.setDefaultString(envProtobufIncludePath, pbRuntimeBaseVFS.string())
+	env.setDefaultString(envProtobufIncludePath, pbRuntimeBaseString)
 	env.setDefaultString(envPyProtoMypyEnabled, "yes")
 
 	d.reset()
@@ -2764,8 +2773,10 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 						expanded.Args = expandRootDeferredTokens(v.Args, env, tokenExpandLazy)
 					} else if v.Name == tokCopyFile || v.Name == tokCopyFileWithContext {
 						expanded.Args = expandRootDeferredTokens(v.Args, env, tokenExpandPathArguments)
-					} else if v.Name == tokSetAppend {
+					} else if v.Name == tokSetAppend && textAppend != nil {
 						expanded.Args = expandRootDeferredTokens(v.Args, env, tokenExpandLazy)
+					} else if v.Name == tokSetAppend {
+						expanded.Args, _ = derefList(v.Args, env)
 					} else {
 						expanded.Args = expandStmtTokens(v.Args, env)
 					}
@@ -5368,13 +5379,7 @@ func expandStmtToken(s string, env Environment) string {
 type TokenExpansion uint8
 
 func dontExpandVar(name string) bool {
-	for _, id := range dontExpandVars {
-		if id.string() == name {
-			return true
-		}
-	}
-
-	return false
+	return slices.Contains(dontExpandVarNames[:], name)
 }
 
 func keepDeferredVar(name string) bool {

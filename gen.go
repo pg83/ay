@@ -237,7 +237,6 @@ type GenCtx struct {
 	rootPaths           map[VFS]bool
 	resourceEnv         resourceEnvScratch
 	testEnvTemplates    map[testEnvKey]testEnvTemplate
-	testStrs            []string
 	testAnys            []ANY
 	testInputs          []VFS
 	targetDirs          map[string]bool

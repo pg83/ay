@@ -442,33 +442,33 @@ func (ctx *GenCtx) styleSuite(check StyleCheck, project string, env []string, re
 	s.mergeStyleFiles(nil)
 
 	s.runCmd = func(work string, chunk TestChunk) []ANY {
-		args := []string{testToolHostPath, "run_custom_lint", "--source-root", testSourceRoot, "--build-root", testBuildRoot, "--project-path", source(project).string(), "--trace-path", work + "/ytest.report.trace", "--out-path", work + "/testing_out_stuff", "--lint-name", check.Name, "--wrapper-script", check.Wrapper}
+		args := []ANY{testToolHostPathArg, strRunCustomLint.any(), strSourceRoot2.any(), testArg(testSourceRoot), strBuildRoot2.any(), testArg(testBuildRoot), strProjectPath.any(), source(project).any(), strTracePath.any(), testArg(work + "/ytest.report.trace"), strOutPath.any(), testArg(work + "/testing_out_stuff"), strLintName.any(), testArg(check.Name), strWrapperScript.any(), testArg(check.Wrapper)}
 
 		for _, dependency := range sortedUnique(append(slices.Clone(s.depends), project)) {
-			args = append(args, "--depends", dependency)
+			args = append(args, strDepends.any(), testArg(dependency))
 		}
 
 		if check.Config != "" {
-			args = append(args, "--config", source(check.Config).string())
+			args = append(args, strConfig.any(), source(check.Config).any())
 		}
 
 		for _, config := range check.ExtraConfigs {
-			args = append(args, "--config", source(config).string())
+			args = append(args, strConfig.any(), source(config).any())
 		}
 
 		for _, r := range sortedResourceGlobals(resources) {
-			args = append(args, "--global-resource", r.Token.string())
+			args = append(args, strGlobalResource.any(), testArg(r.Token.string()))
 		}
 
 		for _, param := range check.ExtraParams {
-			args = append(args, "--extra-param", param)
+			args = append(args, strExtraParam.any(), testArg(param))
 		}
 
 		for i := chunk.index; i < len(check.Files); i += max(chunk.split, 1) {
-			args = append(args, source(check.Files[i]).string())
+			args = append(args, source(check.Files[i]).any())
 		}
 
-		return testArgs(args)
+		return args
 	}
 
 	return s

@@ -416,6 +416,28 @@ func (e Environment) lookup(name string) (string, bool) {
 	return v.string(), true
 }
 
+func (e Environment) lookupValue(name string) (string, VFS, bool) {
+	id := internedEnv(name)
+
+	if id == 0 {
+		return "", 0, false
+	}
+
+	k, v := e.s.lookup(id)
+
+	if k == envAbsent {
+		return "", 0, false
+	}
+
+	e.recordResourceUse(id)
+
+	if k == envVFS {
+		return "", VFS(uint32(v)), true
+	}
+
+	return v.string(), 0, true
+}
+
 func (e Environment) setDefaultString(id ENV, v string) {
 	if e.hasBindingID(id) {
 		return

@@ -121,14 +121,20 @@ func (e *EmitContext) goSymabisHeadFor() []ANY {
 }
 
 type GoStd struct {
-	Version        string
-	Prefix         string
-	Runtime        VFS
-	AsmIncludeDirs []VFS
-	HeadLib        []ANY
-	HeadExe        []ANY
-	HeadTest       []ANY
-	HeadDll        []ANY
+	Version         string
+	Prefix          string
+	Runtime         VFS
+	AsmIncludeDirs  []VFS
+	HeadLib         []ANY
+	HeadExe         []ANY
+	HeadTest        []ANY
+	HeadDll         []ANY
+	RuntimeCgo      STR
+	CoverageCfile   STR
+	RuntimeCoverage STR
+	Bytes           STR
+	Strconv         STR
+	ProtobufImports []STR
 }
 
 func confGoStdVersion(fs FS, parsers *IncludeParserManager) string {
@@ -153,6 +159,16 @@ func newGoStd(version string) *GoStd {
 	}
 
 	g.Runtime = source(g.Prefix + "/runtime")
+	g.RuntimeCgo = internStr(g.Prefix + "/runtime/cgo")
+	g.CoverageCfile = internStr(g.Prefix + "/internal/coverage/cfile")
+	g.RuntimeCoverage = internStr(g.Prefix + "/runtime/coverage")
+	g.Bytes = internStr(g.Prefix + "/bytes")
+	g.Strconv = internStr(g.Prefix + "/strconv")
+
+	for _, imp := range goProtobufImports(g) {
+		g.ProtobufImports = append(g.ProtobufImports, internStr(imp))
+	}
+
 	g.AsmIncludeDirs = []VFS{g.Runtime, goFakeIncludeVFS, contribLibsLinuxHeaders, contribLibsLinuxHeadersNf}
 	g.HeadLib = g.toolCmdHead("lib")
 	g.HeadExe = g.toolCmdHead("exe")
@@ -257,20 +273,15 @@ func goImportDir(ctx *GenCtx, std *GoStd, importerDir, imp string) string {
 
 func applyGoImplicitPeerdirs(ctx *GenCtx, instance ModuleInstance, d *ModuleData) {
 	dir := instance.Path.relString()
+	dirID := instance.Path.rel()
 	std := instance.Platform.Go
 
-	addPeer := func(p string) {
-		if p == "" || p == dir {
+	addPeer := func(p STR) {
+		if p == 0 || p == dirID || slices.Contains(d.peerdirs, p.any()) {
 			return
 		}
 
-		for _, have := range d.peerdirs {
-			if have.string() == p {
-				return
-			}
-		}
-
-		d.peerdirs = append(d.peerdirs, internStr(p).any())
+		d.peerdirs = append(d.peerdirs, p.any())
 	}
 
 	if isGoExeModuleType(d.moduleStmt.Name) {
@@ -278,11 +289,11 @@ func applyGoImplicitPeerdirs(ctx *GenCtx, instance ModuleInstance, d *ModuleData
 
 		d.peerdirs = d.peerdirs[:d.startPeers]
 
-		addPeer(std.Prefix + "/runtime/cgo")
+		addPeer(std.RuntimeCgo)
 
 		if d.moduleStmt.Name == tokGoTest {
-			addPeer(std.Prefix + "/internal/coverage/cfile")
-			addPeer(std.Prefix + "/runtime/coverage")
+			addPeer(std.CoverageCfile)
+			addPeer(std.RuntimeCoverage)
 		}
 
 		for _, p := range user {
@@ -293,25 +304,25 @@ func applyGoImplicitPeerdirs(ctx *GenCtx, instance ModuleInstance, d *ModuleData
 	}
 
 	if d.hasFbs {
-		addPeer(std.Prefix + "/bytes")
-		addPeer(std.Prefix + "/strconv")
-		addPeer("vendor/github.com/google/flatbuffers/go")
+		addPeer(std.Bytes)
+		addPeer(std.Strconv)
+		addPeer(strVendorGithubComGoogleFlatbuffersGo)
 	}
 
 	if goModuleHasProtos(d) {
-		for _, p := range goProtobufImports(std) {
+		for _, p := range std.ProtobufImports {
 			addPeer(p)
 		}
 	}
 
 	for _, p := range d.goPluginPeers {
-		addPeer(p.string())
+		addPeer(p.str())
 	}
 
 	if len(d.cgoSrcs) > 0 {
-		addPeer("build/internal/platform/clang_toolchain_info")
-		addPeer("build/platform/lld")
-		addPeer(std.Prefix + "/runtime/cgo")
+		addPeer(strBuildInternalPlatformClangToolchainInfo)
+		addPeer(strBuildPlatformLld)
+		addPeer(std.RuntimeCgo)
 	}
 
 	addImports := func(src ANY) {
@@ -332,8 +343,12 @@ func applyGoImplicitPeerdirs(ctx *GenCtx, instance ModuleInstance, d *ModuleData
 		for _, imp := range parseGoImports(concatChunks(ctx.fs.read(path.relString()))) {
 			peer := goImportDir(ctx, std, dir, imp.string())
 
-			if peer != "" && instance.Platform.allowPeer(instance.Path.rel(), internStr(peer), ctx.onWarn) {
-				addPeer(peer)
+			if peer == "" {
+				continue
+			}
+
+			if id := internStr(peer); instance.Platform.allowPeer(dirID, id, ctx.onWarn) {
+				addPeer(id)
 			}
 		}
 	}

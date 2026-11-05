@@ -5,6 +5,7 @@ import (
 	"io"
 	"strconv"
 	"unicode/utf8"
+	"unsafe"
 )
 
 var (
@@ -35,6 +36,9 @@ const (
 	strJSONEscaped      = 2
 	vfsEscapeBlockShift = 20
 	hex                 = "0123456789abcdef"
+	jsonCachePageBits   = 20
+	jsonCachePage       = 1 << jsonCachePageBits
+	jsonCacheSeenBits   = 25
 )
 
 func appendSTRComma(buf []byte, id STR) []byte {
@@ -139,8 +143,69 @@ func appendRefNumSlice(buf []byte, refs []NodeRef) []byte {
 	return append(buf, ']')
 }
 
+type jsonSliceKey struct {
+	first unsafe.Pointer
+	n     int
+}
+
+type jsonWriteCache struct {
+	seen  []uint64
+	spans map[jsonSliceKey]uint64
+	pages [][]byte
+}
+
+func newJSONWriteCache() *jsonWriteCache {
+	return &jsonWriteCache{seen: make([]uint64, 1<<jsonCacheSeenBits/64), spans: map[jsonSliceKey]uint64{}}
+}
+
+func (c *jsonWriteCache) cached(buf []byte, key jsonSliceKey) ([]byte, bool) {
+	span, ok := c.spans[key]
+
+	if !ok {
+		return buf, false
+	}
+
+	page, off, n := span>>(2*jsonCachePageBits), span>>jsonCachePageBits&(jsonCachePage-1), span&(jsonCachePage-1)
+
+	return append(buf, c.pages[page][off:off+n]...), true
+}
+
+func (c *jsonWriteCache) remember(key jsonSliceKey, serialized []byte) {
+	h := uint64(uintptr(key.first))*0x9e3779b97f4a7c15 ^ uint64(key.n)*0xc2b2ae3d27d4eb4f
+	fresh := false
+
+	for i := range 3 {
+		bit := h >> (64 - jsonCacheSeenBits)
+		word, mask := bit/64, uint64(1)<<(bit%64)
+
+		if c.seen[word]&mask == 0 {
+			c.seen[word] |= mask
+			fresh = true
+		}
+
+		h = h*0xff51afd7ed558ccd + uint64(i) + 1
+	}
+
+	if fresh || len(serialized) >= jsonCachePage {
+		return
+	}
+
+	last := len(c.pages) - 1
+
+	if last < 0 || len(c.pages[last])+len(serialized) > jsonCachePage {
+		c.pages = append(c.pages, make([]byte, 0, jsonCachePage))
+		last++
+	}
+
+	off := len(c.pages[last])
+
+	c.pages[last] = append(c.pages[last], serialized...)
+	c.spans[key] = uint64(last)<<(2*jsonCachePageBits) | uint64(off)<<jsonCachePageBits | uint64(len(serialized))
+}
+
 func writeGraphCompact(w io.Writer, g *Graph, dropSrcInputs bool) {
 	buf := make([]byte, 0, 1<<20)
+	cache := newJSONWriteCache()
 
 	buf = append(buf, `{"graph":[`...)
 
@@ -152,7 +217,7 @@ func writeGraphCompact(w io.Writer, g *Graph, dropSrcInputs bool) {
 		}
 
 		first = false
-		buf = appendNode(buf, node, node.Inputs, g.fetchRefs, dropSrcInputs)
+		buf = appendNode(buf, node, node.Inputs, g.fetchRefs, dropSrcInputs, cache)
 
 		if len(buf) >= 1<<20 {
 			throw2(w.Write(buf))
@@ -167,7 +232,7 @@ func writeGraphCompact(w io.Writer, g *Graph, dropSrcInputs bool) {
 	throw2(w.Write(buf))
 }
 
-func appendNode(buf []byte, n *Node, inputs InputChunks, fetchRefs *DenseMap[STR, NodeRef], dropSrcInputs bool) []byte {
+func appendNode(buf []byte, n *Node, inputs InputChunks, fetchRefs *DenseMap[STR, NodeRef], dropSrcInputs bool, cache *jsonWriteCache) []byte {
 	buf = append(buf, '{')
 
 	if n.disableCache() || n.KV.DisableCache {
@@ -175,11 +240,11 @@ func appendNode(buf []byte, n *Node, inputs InputChunks, fetchRefs *DenseMap[STR
 	}
 
 	buf = append(buf, `"cmds":`...)
-	buf = appendCmdSlice(buf, n.Cmds)
+	buf = appendCmdSlice(buf, n.Cmds, cache)
 	buf = append(buf, `,"deps":`...)
 	buf = appendRefNumsSeq(buf, n.buildDeps(fetchRefs))
 	buf = append(buf, `,"env":`...)
-	buf = appendEnv(buf, n.Env)
+	buf = cache.appendEnv(buf, n.Env)
 
 	if len(n.ForeignDepRefs) > 0 {
 		buf = append(buf, `,"foreign_deps":{"tool":`...)
@@ -246,7 +311,7 @@ func appendNode(buf []byte, n *Node, inputs InputChunks, fetchRefs *DenseMap[STR
 	return append(buf, '}')
 }
 
-func appendCmdSlice(buf []byte, cmds []Cmd) []byte {
+func appendCmdSlice(buf []byte, cmds []Cmd, cache *jsonWriteCache) []byte {
 	buf = append(buf, '[')
 
 	for i, c := range cmds {
@@ -255,7 +320,7 @@ func appendCmdSlice(buf []byte, cmds []Cmd) []byte {
 		}
 
 		buf = append(buf, `{"cmd_args":`...)
-		buf = appendStrChunks(buf, c.CmdArgs)
+		buf = cache.appendStrChunks(buf, c.CmdArgs)
 
 		if c.Cwd != 0 {
 			buf = append(buf, `,"cwd":`...)
@@ -269,7 +334,7 @@ func appendCmdSlice(buf []byte, cmds []Cmd) []byte {
 
 		if len(c.Env) > 0 {
 			buf = append(buf, `,"env":`...)
-			buf = appendEnv(buf, c.Env)
+			buf = cache.appendEnv(buf, c.Env)
 		}
 
 		if c.Stdout != 0 {
@@ -283,10 +348,24 @@ func appendCmdSlice(buf []byte, cmds []Cmd) []byte {
 	return append(buf, ']')
 }
 
-func appendStrChunks(buf []byte, chunks ArgChunks) []byte {
+func (c *jsonWriteCache) appendStrChunks(buf []byte, chunks ArgChunks) []byte {
 	buf = append(buf, '[')
 
 	for _, ch := range chunks {
+		if len(ch) == 0 {
+			continue
+		}
+
+		key := jsonSliceKey{unsafe.Pointer(&ch[0]), len(ch)}
+
+		if next, ok := c.cached(buf, key); ok {
+			buf = next
+
+			continue
+		}
+
+		start := len(buf)
+
 		for _, a := range ch {
 			if v := a.vfs(); v != 0 {
 				buf = appendVFSComma(buf, v)
@@ -294,6 +373,8 @@ func appendStrChunks(buf []byte, chunks ArgChunks) []byte {
 				buf = appendSTRComma(buf, a.str())
 			}
 		}
+
+		c.remember(key, buf[start:])
 	}
 
 	return appendArrayEnd(buf)
