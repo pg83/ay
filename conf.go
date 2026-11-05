@@ -3313,25 +3313,32 @@ func (c *Conf) commandDirs(name string, env Environment) *confCommandDirs {
 	seen := map[string]bool{}
 
 	var walk func(text string, depth int)
+	var call func(macro string, depth int)
 
-	call := func(macro string, depth int) {
-		command := c.program.commands[macro]
-
-		if command == nil || seen["("+macro] || depth > confMacroCallStackSize {
+	call = func(macro string, depth int) {
+		if seen["("+macro] || depth > confMacroCallStackSize {
 			return
 		}
 
 		seen["("+macro] = true
 
-		if command.peerdir != "" {
-			memo.peerdirs = append(memo.peerdirs, strings.Fields(memo.expand(command.peerdir, env))...)
+		if command := c.program.commands[macro]; command != nil {
+			if command.peerdir != "" {
+				memo.peerdirs = append(memo.peerdirs, strings.Fields(memo.expand(command.peerdir, env))...)
+			}
+
+			if command.addincl != "" {
+				memo.addincls = append(memo.addincls, strings.Fields(memo.expand(command.addincl, env))...)
+			}
+
+			walk(command.cmd, depth+1)
 		}
 
-		if command.addincl != "" {
-			memo.addincls = append(memo.addincls, strings.Fields(memo.expand(command.addincl, env))...)
+		if body := c.program.macros[internStr(macro)]; body != nil {
+			for _, nested := range body.calls {
+				call(nested.name.string(), depth+1)
+			}
 		}
-
-		walk(command.cmd, depth+1)
 	}
 
 	walk = func(text string, depth int) {

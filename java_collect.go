@@ -82,11 +82,19 @@ func (u *javaUnit) compilable() bool {
 	return u.kind == juJar || u.kind == juRunnable && !u.contribRunnable || u.kind == juTest
 }
 
-func javaConfPrologue(ctx *GenCtx, jm *JavaModule, d *JavaData) {
-	u := jm.unit
+func (d *JavaData) sourceCommandPeers(jm *JavaModule, source string, env Environment) {
+	ext := strings.TrimPrefix(path.Ext(source), ".")
 
-	if u.fbs {
-		d.peerStmts = append(d.peerStmts, JavaPeerSpec{dir: "contrib/java/com/google/flatbuffers/flatbuffers-java/" + javaFlatbuffersVersion})
+	if ext == "" || slices.Contains(d.commandExts, ext) {
+		return
+	}
+
+	d.commandExts = append(d.commandExts, ext)
+
+	for _, peer := range jm.instance.Platform.conf.commandDirs("_SRC:"+ext, env).peerdirs {
+		if peer != jm.dir {
+			d.commandPeers = append(d.commandPeers, peer)
+		}
 	}
 }
 
@@ -193,12 +201,6 @@ func collectJavaData(ctx *GenCtx, jm *JavaModule, stmts []Stmt, env Environment)
 		}
 	}
 
-	if jm.unit.proto {
-		if len(d.evSrcs) > 0 {
-			d.peerStmts = append(d.peerStmts, JavaPeerSpec{dir: "library/cpp/eventlog/proto"})
-		}
-	}
-
 	bindRunProgramCalls(d.runPrograms, env, &ctx.frames[ctx.frameDepth-1].d.sourceEnv)
 
 	d.validateData = resourceValidationEnabled(env)
@@ -281,7 +283,6 @@ func collectJavaStmts(ctx *GenCtx, jm *JavaModule, d *JavaData, stmts []Stmt, en
 				env.setString(envUnittestDir, d.unittestDir)
 			}
 
-			javaConfPrologue(ctx, jm, d)
 		case *EndStmt:
 			collectJavaAutoinclude(ctx, jm, d, env)
 		case *PeerdirStmt:
@@ -336,10 +337,7 @@ func collectJavaStmts(ctx *GenCtx, jm *JavaModule, d *JavaData, stmts []Stmt, en
 					continue
 				}
 
-				if !d.cppToolchainPeer && srcExtClassOf(internStr(ss).any()) == srcExtCSource && sbomActive(ctx, jm.instance) && env.bool(envCLANG) {
-					d.cppToolchainPeer = true
-					d.peerStmts = append(d.peerStmts, JavaPeerSpec{dir: clangToolchainInfoRel})
-				}
+				d.sourceCommandPeers(jm, ss, env)
 
 				switch {
 				case jm.unit.proto && (extIsProto(ss) || extIsGztproto(ss)):
@@ -892,6 +890,7 @@ func applyJavaMacro(ctx *GenCtx, jm *JavaModule, d *JavaData, name string, args,
 		}
 
 		d.runJavaPrograms = append(d.runJavaPrograms, JavaRunProgram{args: args, raw: expanded})
+		d.commandPeers = append(d.commandPeers, jm.instance.Platform.conf.commandDirs(name, env).peerdirs...)
 	case "GENERATE_SCRIPT":
 		d.generateScripts = append(d.generateScripts, args)
 	case "WITH_JDK":

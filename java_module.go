@@ -339,7 +339,8 @@ type JavaData struct {
 	embedSbom              bool
 	needSbomInfo           bool
 	sbomComponent          bool
-	cppToolchainPeer       bool
+	commandExts            []string
+	commandPeers           []string
 	modver                 string
 	varPeers               []ANY
 	validateData           bool
@@ -895,38 +896,16 @@ func (jm *JavaModule) macroPeers() []string {
 		out = append(out, "build/platform/java/jdk/jdk"+javaConfGlobals["JDK_LATEST_VERSION"])
 	}
 
-	if jm.unit.kind == juJar && len(d.runJavaPrograms) > 0 {
-		out = append(out, "build/platform/java/jdk", "build/platform/java/jdk/jdk"+d.jdkReal)
-	}
-
 	for _, check := range d.styleChecks {
 		if !check.Python && check.Peer != "" {
 			out = append(out, check.Peer)
 		}
 	}
 
-	if jm.unit.proto && len(d.protoSrcs) > 0 {
-		out = append(out, "build/platform/java/protoc")
-
-		for _, src := range d.protoSrcs {
-			if extIsGztproto(src) {
-				out = append(out, strKernelGazetteerProto.string())
-
-				break
-			}
-		}
-	}
+	out = append(out, d.commandPeers...)
 
 	for _, l := range d.customLints {
 		out = append(out, l.linter.resourcePeer)
-	}
-
-	if jm.unit.jni && len(d.swigSrcs()) > 0 {
-		out = append(out, strContribToolsSwigLibJava.string())
-
-		if !d.env.bool(envUSE_SYSTEM_JDK) && !d.env.bool(envOS_ANDROID) {
-			out = append(out, strContribLibsJdk.string())
-		}
 	}
 
 	for _, check := range d.styleChecks {
