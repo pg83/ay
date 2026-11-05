@@ -22,6 +22,10 @@ func expandResourceFileArgs(args []ANY, env Environment) []string {
 }
 
 func expandRootDeferredTokens(args []ANY, env Environment, phase TokenExpansion) []ANY {
+	if !slices.ContainsFunc(args, func(arg ANY) bool { return strHasDollar(arg.str().any()) }) {
+		return args
+	}
+
 	bindir, curdir := env.unbind(envBINDIR), env.unbind(envCURDIR)
 	arcadia, build := env.unbind(envARCADIA_ROOT), env.unbind(envARCADIA_BUILD_ROOT)
 	expanded := expandTokens(args, env, false, phase)
