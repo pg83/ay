@@ -37,6 +37,7 @@ const (
 	tokenExpandFinal
 	tokenExpandAssignment
 	tokenExpandPathArguments
+	tokenExpandStatement
 )
 
 type CppProtoPlugin struct {
@@ -5394,6 +5395,8 @@ func (phase TokenExpansion) policies(track *SourceTextTracker) (deref, render su
 		deref.reserved, render.reserved = dontExpandVar, dontExpandVar
 	case tokenExpandPathArguments:
 		deref.reserved, render.reserved = pathArgumentsReservedVar, pathArgumentsReservedVar
+	case tokenExpandStatement:
+		deref.literal = pathArgumentsReservedVar
 	}
 
 	deref.emptyUnknown, render.emptyUnknown = true, true
@@ -5411,8 +5414,13 @@ func expandTokenTracked(s string, env Environment, phase TokenExpansion, track *
 	}
 
 	deref, render := phase.policies(track)
+	derefed := substMacroDeeply(s, nil, env, nil, &deref)
 
-	return substMacroDeeply(substMacroDeeply(s, nil, env, nil, &deref), nil, env, nil, &render)
+	if phase == tokenExpandStatement {
+		return derefed
+	}
+
+	return substMacroDeeply(derefed, nil, env, nil, &render)
 }
 
 func keepDeferredOrDontExpandVar(name string) bool {

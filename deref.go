@@ -209,7 +209,7 @@ func derefArchive(a *ArchiveExtraction, env Environment) bool {
 func derefList(items []ANY, env Environment) ([]ANY, bool) {
 	for _, item := range items {
 		if strHasDollar(item.str().any()) {
-			return expandRootDeferredTokens(items, env, tokenExpandLazy), true
+			return expandTokens(items, env, false, tokenExpandStatement), true
 		}
 	}
 
@@ -221,7 +221,7 @@ func derefOne(item ANY, env Environment) (ANY, bool) {
 		return item, false
 	}
 
-	expanded := expandRootDeferredTokens([]ANY{item}, env, tokenExpandLazy)
+	expanded := expandTokens([]ANY{item}, env, false, tokenExpandStatement)
 
 	if len(expanded) != 1 {
 		return internAny(joinAnys(expanded, " ")), true
