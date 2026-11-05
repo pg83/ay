@@ -625,7 +625,7 @@ func (e *EmitContext) producerPositions(cythonPlans []CythonStmtPlan) ([]Produce
 	for i := range d.srcs {
 		meta := &d.srcs[i]
 
-		if e.deferCC || isCodegenProducingSrcID(meta.Source) {
+		if !meta.Auto && (e.deferCC || isCodegenProducingSrcID(meta.Source)) {
 			e.resolveSrc(meta)
 			srcs = append(srcs, *meta)
 		}

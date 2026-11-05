@@ -533,51 +533,43 @@ type AntlrRunInfo struct {
 }
 
 func parseCopyFileEntry(args []string, withContext bool, line int) CopyFileEntry {
-	i := 0
-	auto := false
-
-	for i < len(args) {
-		switch args[i] {
-		case "AUTO":
-			auto = true
-			i++
-		case "TEXT":
-			i++
-		default:
-			goto parsedFlags
-		}
-	}
-
-parsedFlags:
-	if len(args)-i < 2 {
-		throwFmt("gen: COPY_FILE at line %d expects at least source and destination, got %d args", line, len(args))
-	}
-
-	entry := CopyFileEntry{
-		Src:         args[i],
-		Dst:         args[i+1],
-		Auto:        auto,
-		WithContext: withContext,
-	}
-
-	i += 2
-
+	entry := CopyFileEntry{WithContext: withContext}
+	positional := 0
 	section := ""
 
-	for i < len(args) {
-		switch args[i] {
+	for _, arg := range args {
+		switch arg {
+		case "AUTO":
+			entry.Auto = true
+			section = ""
+
+			continue
+		case "TEXT":
+			section = ""
+
+			continue
 		case "OUTPUT_INCLUDES", "INDUCED_DEPS":
-			section = args[i]
-			i++
+			section = arg
 
 			continue
 		}
 
-		if section == "OUTPUT_INCLUDES" || section == "INDUCED_DEPS" {
-			entry.OutputIncludes = append(entry.OutputIncludes, args[i])
+		switch {
+		case section != "":
+			entry.OutputIncludes = append(entry.OutputIncludes, arg)
+		case positional == 0:
+			entry.Src = arg
+		case positional == 1:
+			entry.Dst = arg
 		}
 
-		i++
+		if section == "" {
+			positional++
+		}
+	}
+
+	if positional < 2 {
+		throwFmt("gen: COPY_FILE at line %d expects at least source and destination, got %d args", line, len(args))
 	}
 
 	return entry
@@ -3627,7 +3619,7 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 			dstVFS := copyFileOutputVFS(modulePath, entry.Dst)
 
 			if isSourceEligibleForCopyAuto(dstVFS.relString()) {
-				d.srcs = append(d.srcs, SrcMeta{Source: dstVFS.any(), Prio: stmtPrioDefault, Seq: d.nextDeclSeq()})
+				d.srcs = append(d.srcs, SrcMeta{Source: dstVFS.any(), Prio: stmtPrioDefault, Seq: d.nextDeclSeq(), Auto: true})
 			}
 		}
 	case tokCopy:
@@ -3641,7 +3633,7 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 				dstVFS := copyFileOutputVFS(modulePath, entry.Dst)
 
 				if isSourceEligibleForCopyAuto(dstVFS.relString()) {
-					d.srcs = append(d.srcs, SrcMeta{Source: dstVFS.any(), Prio: stmtPrioDefault, Seq: d.nextDeclSeq()})
+					d.srcs = append(d.srcs, SrcMeta{Source: dstVFS.any(), Prio: stmtPrioDefault, Seq: d.nextDeclSeq(), Auto: true})
 				}
 			}
 		}

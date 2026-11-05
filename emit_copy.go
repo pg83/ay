@@ -35,6 +35,10 @@ func (e *EmitContext) emitCopyFileStmt(entry CopyFileEntry) {
 		e.collectObj(st.ref, st.dstVFS, SrcMeta{Prio: stmtPrioDefault})
 	}
 
+	if entry.Auto && isSourceEligibleForCopyAuto(st.dstVFS.relString()) {
+		e.enqueueSrc(SrcMeta{Source: st.dstVFS.any(), Prio: stmtPrioDefault, Auto: true})
+	}
+
 	pe := func() {
 		e.emitCopyFileNodeSnap(entry, st)
 	}
