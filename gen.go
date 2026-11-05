@@ -1099,8 +1099,6 @@ func applyImplicitPeerdirs(ctx *GenCtx, instance ModuleInstance, d *ModuleData) 
 		}
 	}
 
-	d.peerdirs = append(d.peerdirs, d.nativeSwigPeerdirs()...)
-
 	if isPyProgramType(d.moduleStmt.Name) {
 		var latePeers []string
 

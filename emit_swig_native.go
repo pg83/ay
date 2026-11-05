@@ -118,22 +118,3 @@ func (d *ModuleData) finishNativeSwigConfig(env Environment) {
 		d.unit.SwigLang = internStr(value)
 	}
 }
-
-func (d *ModuleData) nativeSwigPeerdirs() []ANY {
-	for _, meta := range d.srcs {
-		if !extIsSwg(meta.Source.relOrSelf().string()) {
-			continue
-		}
-
-		switch d.unit.SwigLang.string() {
-		case "python":
-			return []ANY{strContribToolsSwigLibPython.any()}
-		case "perl":
-			return []ANY{strContribToolsSwigLibPerl5.any(), strBuildPlatformPerl.any()}
-		case "":
-			throwFmt("gen: SWIG_LANG is empty and _SWIG_PEERDIR is not defined")
-		}
-	}
-
-	return nil
-}

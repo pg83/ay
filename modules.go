@@ -2247,9 +2247,6 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 
 			if d.unit.SwigLang == strSwigLangJniCpp {
 				srcToks = jniCppSwigSrcs(srcToks)
-
-				d.peerdirs = append(d.peerdirs, swigJNIPeerdirs(srcToks, env)...)
-				d.peerdirs = append(d.peerdirs, strContribToolsSwigLibJava.any())
 			}
 
 			for _, srcTok := range srcToks {
@@ -2830,22 +2827,6 @@ type ModuleUnit struct {
 	ObjectSuffixStem string
 	TestLD           bool
 	NoStartTarget    bool
-}
-
-func swigJNIPeerdirs(srcs []ANY, env Environment) []ANY {
-	for _, src := range srcs {
-		if !extIsSwg(src.string()) {
-			continue
-		}
-
-		if env.bool(envUSE_SYSTEM_JDK) || env.bool(envOS_ANDROID) {
-			return []ANY{strContribToolsSwigLibJava.any()}
-		}
-
-		return []ANY{strContribToolsSwigLibJava.any(), strContribLibsJdk.any()}
-	}
-
-	return nil
 }
 
 func jniCppSwigSrcs(srcs []ANY) []ANY {
