@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -145,6 +146,12 @@ const (
 const (
 	termTopLevel StmtTerminator = iota
 	termIfBody
+)
+
+const (
+	includeSeen includeEventKind = iota
+	includeUnseen
+	includeOnce
 )
 
 func strKeySet(words ...string) BitSet {
@@ -481,13 +488,13 @@ func (e *ParseError) Error() string {
 	return e.error()
 }
 
-func parseFileClean(fs FS, rel string) (mf *MakeFile, err error) {
+func parseFileClean(fs FS, rel string, memos *IncludeMemos) (mf *MakeFile, err error) {
 	exc := try(func() {
 		bp := readForParse(fs, rel)
 
 		defer releaseParseBuf(bp)
 
-		mf = throw2(parse(fs, rel, *bp))
+		mf = throw2(parse(fs, rel, *bp, memos))
 	})
 
 	if exc != nil {
@@ -517,10 +524,27 @@ func releaseParseBuf(bp *[]byte) {
 type TokKind int
 
 type Token struct {
-	kind TokKind
-	id   STR
-	line int
-	col  int
+	kind      TokKind
+	id        STR
+	line      int
+	col       int
+	n         int
+	lead      byte
+	backslash bool
+}
+
+func newToken(kind TokKind, text []byte, line, col int) Token {
+	tok := Token{kind: kind, id: internBytes(text), line: line, col: col, n: len(text)}
+
+	if len(text) != 0 {
+		tok.lead = text[0]
+	}
+
+	if kind == tokString {
+		tok.backslash = bytes.IndexByte(text, '\\') >= 0
+	}
+
+	return tok
 }
 
 func (t Token) string() string {
@@ -711,7 +735,7 @@ func (l *Lexer) readString(startLine, startCol int, quote byte) Token {
 			l.col += pos - start + 1
 			l.prevByte = quote
 
-			return Token{kind: tokString, id: internBytes(l.src[start:pos]), line: startLine, col: startCol}
+			return newToken(tokString, l.src[start:pos], startLine, startCol)
 		case '\\', '\n', '\r':
 			goto slow
 		}
@@ -733,7 +757,7 @@ slow:
 
 			l.tokBuf = buf
 
-			return Token{kind: tokString, id: internBytes(buf), line: startLine, col: startCol}
+			return newToken(tokString, buf, startLine, startCol)
 		}
 
 		if b == '\\' && l.pos+1 < len(l.src) {
@@ -816,7 +840,7 @@ func (l *Lexer) readIdentOrWord(startLine, startCol int) Token {
 			kind = tokWord
 		}
 
-		return Token{kind: kind, id: internBytes(l.src[start:pos]), line: startLine, col: startCol}
+		return newToken(kind, l.src[start:pos], startLine, startCol)
 	}
 
 	buf := l.tokBuf[:0]
@@ -860,14 +884,13 @@ func (l *Lexer) readIdentOrWord(startLine, startCol int) Token {
 
 	l.tokBuf = buf
 
-	id := internBytes(buf)
 	kind := tokIdent
 
 	if !pureIdent {
 		kind = tokWord
 	}
 
-	return Token{kind: kind, id: id, line: startLine, col: startCol}
+	return newToken(kind, buf, startLine, startCol)
 }
 
 func (l *Lexer) dollarParenPrefix() int {
@@ -918,7 +941,7 @@ func (l *Lexer) readWord(startLine, startCol int) Token {
 		l.col += pos - start
 		l.prevByte = l.src[pos-1]
 
-		return Token{kind: tokWord, id: internBytes(l.src[start:pos]), line: startLine, col: startCol}
+		return newToken(tokWord, l.src[start:pos], startLine, startCol)
 	}
 
 	buf := l.tokBuf[:0]
@@ -952,7 +975,7 @@ func (l *Lexer) readWord(startLine, startCol int) Token {
 
 	l.tokBuf = buf
 
-	return Token{kind: tokWord, id: internBytes(buf), line: startLine, col: startCol}
+	return newToken(tokWord, buf, startLine, startCol)
 }
 
 func (l *Lexer) readNumberOrWord(startLine, startCol int) Token {
@@ -981,12 +1004,12 @@ func (l *Lexer) readNumberOrWord(startLine, startCol int) Token {
 	l.col += pos - start
 	l.prevByte = l.src[pos-1]
 
-	return Token{kind: kind, id: internBytes(l.src[start:pos]), line: startLine, col: startCol}
+	return newToken(kind, l.src[start:pos], startLine, startCol)
 }
 
-func parse(fs FS, name string, src []byte) (mf *MakeFile, err error) {
+func parse(fs FS, name string, src []byte, memos *IncludeMemos) (mf *MakeFile, err error) {
 	exc := try(func() {
-		mf = parseInternal(fs, name, src)
+		mf = parseInternal(fs, name, src, memos)
 	})
 
 	if exc != nil {
@@ -997,12 +1020,12 @@ func parse(fs FS, name string, src []byte) (mf *MakeFile, err error) {
 	return mf, err
 }
 
-func parseInternal(fs FS, name string, src []byte) *MakeFile {
-	return parseInternalWithStack(fs, name, src, nil)
+func parseInternal(fs FS, name string, src []byte, memos *IncludeMemos) *MakeFile {
+	return parseInternalWithStack(fs, name, src, nil, memos)
 }
 
-func parseInternalWithStack(fs FS, name string, src []byte, stack []string) *MakeFile {
-	st := acquireIncludeState()
+func parseInternalWithStack(fs FS, name string, src []byte, stack []string, memos *IncludeMemos) *MakeFile {
+	st := acquireIncludeState(memos)
 
 	defer releaseIncludeState(st)
 
@@ -1024,27 +1047,91 @@ func parseInternalWithState(fs FS, name string, src []byte, stack []string, incl
 
 	argScratch := p.argScratch
 	stmtScratch := scrubCap(p.stmtScratch)
+	nameID := internStr(name)
 
-	*p = Parser{lex: lex, name: name, includeStack: stack, includes: includes, fs: fs, condScratch: condScratch[:0], condTokBuf: condTokBuf[:0], argScratch: argScratch[:0], stmtScratch: stmtScratch}
+	*p = Parser{lex: lex, name: name, nameID: nameID, includeStack: stack, includes: includes, fs: fs, condScratch: condScratch[:0], condTokBuf: condTokBuf[:0], argScratch: argScratch[:0], stmtScratch: stmtScratch}
+	includes.chain = append(includes.chain, nameID)
+
+	defer func() { includes.chain = includes.chain[:len(includes.chain)-1] }()
 
 	mf := astOne(astFiles, MakeFile{Path: name})
 
 	mf.Stmts, _ = p.parseStmts(termTopLevel)
-	mf.IncludeOnce, _ = includes.once.get(uint64(internStr(name).strID()))
+	mf.IncludeOnce, _ = includes.once.get(uint64(nameID.strID()))
 
 	return mf
 }
 
 type IncludeState struct {
-	once *IntSet
+	once   *IntSet
+	memos  *IncludeMemos
+	events []includeEvent
+	chain  []STR
+	added  []STR
 }
 
-func acquireIncludeState() *IncludeState {
+type includeEventKind uint8
+
+type includeEvent struct {
+	file STR
+	kind includeEventKind
+}
+
+type includeMemo struct {
+	stmts  []Stmt
+	events []includeEvent
+}
+
+type IncludeMemos struct {
+	byTarget map[STR][]*includeMemo
+}
+
+func newIncludeMemos() *IncludeMemos {
+	return &IncludeMemos{byTarget: map[STR][]*includeMemo{}}
+}
+
+func acquireIncludeState(memos *IncludeMemos) *IncludeState {
 	st := includeStatePool.Get().(*IncludeState)
 
 	st.once.reset()
 
+	st.memos = memos
+	st.events = st.events[:0]
+	st.chain = st.chain[:0]
+
 	return st
+}
+
+func (st *IncludeState) note(file STR, kind includeEventKind) {
+	st.events = append(st.events, includeEvent{file: file, kind: kind})
+}
+
+func (st *IncludeState) replay(m *includeMemo) bool {
+	st.added = st.added[:0]
+
+	for _, e := range m.events {
+		if e.kind == includeOnce {
+			st.added = append(st.added, e.file)
+
+			continue
+		}
+
+		seen, _ := st.once.get(uint64(e.file.strID()))
+
+		seen = seen || slices.Contains(st.added, e.file)
+
+		if seen != (e.kind == includeSeen) || !seen && slices.Contains(st.chain, e.file) {
+			return false
+		}
+	}
+
+	for _, f := range st.added {
+		st.once.put(uint64(f.strID()), true)
+	}
+
+	st.events = append(st.events, m.events...)
+
+	return true
 }
 
 func releaseIncludeState(st *IncludeState) {
@@ -1114,7 +1201,7 @@ func (p *Parser) parseMacroInto(nameTok Token) {
 		p.lex.throwParse(nameTok.line, nameTok.col, format, a...)
 	})
 
-	if nameTok.string()[0] != '_' {
+	if nameTok.lead != '_' {
 		return
 	}
 
@@ -1124,7 +1211,7 @@ func (p *Parser) parseMacroInto(nameTok Token) {
 }
 
 func capturesLexicalArgs(nameID STR) bool {
-	return nameID.string() == "RUN_JAVA_PROGRAM" || nameID == kwSET || nameID == tokSetAppend.str() || nameID == tokNoCheckImports.str()
+	return nameID == strRunJavaProgram || nameID == kwSET || nameID == tokSetAppend.str() || nameID == tokNoCheckImports.str()
 }
 
 func appendMacroCallStmts(out []Stmt, nameID STR, args, lexical []ANY, line int, fail func(format string, a ...any)) []Stmt {
@@ -1171,7 +1258,8 @@ func (p *Parser) applyIncludeOnce(nameTok Token) {
 		return
 	}
 
-	p.includes.once.put(uint64(internStr(p.name).strID()), true)
+	p.includes.once.put(uint64(p.nameID.strID()), true)
+	p.includes.note(p.nameID, includeOnce)
 }
 
 func (p *Parser) parseMacroArgs(nameTok Token) []ANY {
@@ -1193,7 +1281,7 @@ func (p *Parser) parseMacroArgsLexical(nameTok Token, lexical *[]ANY) []ANY {
 
 	defer func() { p.lex.inArgs = false }()
 
-	lexicalArgs := nameTok.id == kwIF || nameTok.id == kwELSEIF || nameTok.id == kwCFLAGS || nameTok.id == tokGlobalCflags.str() || nameTok.id == kwCXXFLAGS || nameTok.id == kwCONLYFLAGS || nameTok.id == kwLDFLAGS || nameTok.id == kwRESOURCE || nameTok.id == tokUseRecipe.str() || nameTok.id == tokEnv.str() || nameTok.string() == "RUN_PROGRAM" || nameTok.string() == "RUN_PY3_PROGRAM" || nameTok.id == tokRun.str() || nameTok.id == tokDeclareInDirs.str()
+	lexicalArgs := nameTok.id == kwIF || nameTok.id == kwELSEIF || nameTok.id == kwCFLAGS || nameTok.id == tokGlobalCflags.str() || nameTok.id == kwCXXFLAGS || nameTok.id == kwCONLYFLAGS || nameTok.id == kwLDFLAGS || nameTok.id == kwRESOURCE || nameTok.id == tokUseRecipe.str() || nameTok.id == tokEnv.str() || nameTok.id == kwRUN_PROGRAM || nameTok.id == kwRUN_PY3_PROGRAM || nameTok.id == tokRun.str() || nameTok.id == tokDeclareInDirs.str()
 
 	for {
 		start := 0
@@ -1219,10 +1307,10 @@ func (p *Parser) parseMacroArgsLexical(nameTok Token, lexical *[]ANY) []ANY {
 
 			if lexical != nil || lexicalArgs {
 				if tok.kind == tokString {
-					if strings.ContainsRune(tok.string(), '\\') {
+					if tok.backslash {
 						value = internStr(strings.ReplaceAll(tok.string(), "\\", ""))
 					}
-				} else if p.lex.pos-start != len(tok.string()) {
+				} else if p.lex.pos-start != tok.n {
 					value = internBytes(p.lex.src[start:p.lex.pos])
 				}
 			}
@@ -1267,6 +1355,7 @@ func isIdentShapedName(s string) bool {
 type Parser struct {
 	lex          *Lexer
 	name         string
+	nameID       STR
 	includeStack []string
 	includes     *IncludeState
 	fs           FS
@@ -1319,7 +1408,7 @@ func buildStmtForID(nameID STR, args []ANY, line int, fail func(format string, a
 			value = strings.Join(anyStrs(args[1:]), " ")
 		}
 
-		return astOne(astSets, SetStmt{Name: args[0].string(), NameEnv: internEnv(args[0].string()), Value: internStr(value).string(), Line: line})
+		return astOne(astSets, SetStmt{Name: args[0].string(), NameEnv: internEnvSTR(args[0].str()), Value: value, Line: line})
 	case "END":
 		return astOne(astEnds, EndStmt{Line: line})
 	case "JOIN_SRCS":
@@ -2463,9 +2552,15 @@ func (p *Parser) expandOneInclude(nameTok Token, rel string) {
 		target = cleanRel(joinRel(pathDir(p.name), rel))
 	}
 
-	if seen, _ := p.includes.once.get(uint64(internStr(target).strID())); seen {
+	targetID := internStr(target)
+
+	if seen, _ := p.includes.once.get(uint64(targetID.strID())); seen {
+		p.includes.note(targetID, includeSeen)
+
 		return
 	}
+
+	p.includes.note(targetID, includeUnseen)
 
 	chain := append(p.includeStack, p.name)
 
@@ -2486,6 +2581,14 @@ func (p *Parser) expandOneInclude(nameTok Token, rel string) {
 		}
 	}
 
+	for _, m := range p.includes.memos.byTarget[targetID] {
+		if p.includes.replay(m) {
+			p.stmtScratch = append(p.stmtScratch, m.stmts...)
+
+			return
+		}
+	}
+
 	if present, _ := p.fs.exists(srcRootRel, target); !present {
 		p.stmtScratch = append(p.stmtScratch, &MissingIncludeStmt{Path: target, Line: nameTok.line})
 
@@ -2496,8 +2599,10 @@ func (p *Parser) expandOneInclude(nameTok Token, rel string) {
 
 	defer releaseParseBuf(bp)
 
+	start := len(p.includes.events)
 	included := parseInternalWithState(p.fs, target, *bp, chain, p.includes)
 
+	p.includes.memos.byTarget[targetID] = append(p.includes.memos.byTarget[targetID], &includeMemo{stmts: included.Stmts, events: slices.Clone(p.includes.events[start:])})
 	p.stmtScratch = append(p.stmtScratch, included.Stmts...)
 }
 

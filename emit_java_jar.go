@@ -546,7 +546,7 @@ func (ctx *GenCtx) javaKaptCmds(jm *JavaModule, b *javaNodeBuilder, compileKt []
 }
 
 func (ctx *GenCtx) javaToolJar(jm *JavaModule, b *javaNodeBuilder, dir string) VFS {
-	res := ctx.javaPeerResult(jm, dir, false)
+	res := ctx.javaPeerResult(jm, internStr(dir), false)
 
 	if res == nil || res.java == nil {
 		return 0

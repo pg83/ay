@@ -230,7 +230,9 @@ type GenCtx struct {
 	sbomEnabled         bool
 	autoincludeIdx      *AutoincludeIndex
 	parsedFiles         map[string]*MakeFile
+	includeMemos        *IncludeMemos
 	goEnvMemo           map[[2]STR]EnvVars
+	goImportDirs        map[goImportKey]STR
 	frameSerial         uint32
 	scannerTargetPIC    *IncludeScanner
 	roots               map[ModuleInstance]bool
@@ -379,6 +381,8 @@ func newGenCtx(fs FS, parsers *IncludeParserManager, hostP, targetP *Platform, e
 
 		autoincludeIdx: loadAutoincludeIndex(fs),
 		parsedFiles:    map[string]*MakeFile{},
+		includeMemos:   newIncludeMemos(),
+		goImportDirs:   map[goImportKey]STR{},
 	}
 
 	ctx.inclArgs = InclArgMemo{m: &ctx.inclArgValues}
@@ -432,15 +436,17 @@ type dirEvaluationKey struct {
 }
 
 func (ctx *GenCtx) evaluateDir(dir string, platform *Platform) *DirEvaluation {
-	dir = filepath.Clean(dir)
+	return ctx.evaluateDirVFS(source(filepath.Clean(dir)), platform)
+}
 
-	key := dirEvaluationKey{source(dir), platform}
+func (ctx *GenCtx) evaluateDirVFS(dir VFS, platform *Platform) *DirEvaluation {
+	key := dirEvaluationKey{dir, platform}
 
 	if evaluation, ok := ctx.dirs[key]; ok {
 		return evaluation
 	}
 
-	instance := ctx.rootInstanceForDeclaration(dir, demandNone, nil)
+	instance := ctx.rootInstanceForDeclarationVFS(dir, demandNone, nil)
 
 	instance.Platform = platform
 
@@ -457,7 +463,11 @@ func (ctx *GenCtx) evaluateDir(dir string, platform *Platform) *DirEvaluation {
 }
 
 func (ctx *GenCtx) moduleName(dir string) TOK {
-	if declaration := ctx.evaluateDir(dir, ctx.target).declaration; declaration != nil {
+	return ctx.moduleNameVFS(source(filepath.Clean(dir)))
+}
+
+func (ctx *GenCtx) moduleNameVFS(dir VFS) TOK {
+	if declaration := ctx.evaluateDirVFS(dir, ctx.target).declaration; declaration != nil {
 		return declaration.Name
 	}
 
@@ -469,6 +479,10 @@ func (ctx *GenCtx) rootInstance(dir string, demand ModuleDemand) ModuleInstance 
 }
 
 func (ctx *GenCtx) rootInstanceForDeclaration(dir string, demand ModuleDemand, decl *ModuleStmt) ModuleInstance {
+	return ctx.rootInstanceForDeclarationVFS(source(filepath.Clean(dir)), demand, decl)
+}
+
+func (ctx *GenCtx) rootInstanceForDeclarationVFS(dir VFS, demand ModuleDemand, decl *ModuleStmt) ModuleInstance {
 	kind := KindLib
 	language := LangCPP
 
@@ -493,7 +507,7 @@ func (ctx *GenCtx) rootInstanceForDeclaration(dir string, demand ModuleDemand, d
 	}
 
 	return ModuleInstance{
-		Path:     source(filepath.Clean(dir)),
+		Path:     dir,
 		Kind:     kind,
 		Language: language,
 		Platform: platform,
@@ -558,7 +572,7 @@ func (ctx *GenCtx) recurseClosure(root string) []string {
 	var walk func(dir string)
 
 	walk = func(dir string) {
-		if seen[dir] || !ctx.fs.isFile(internStr(dir), "ya.make") {
+		if seen[dir] || !ctx.fs.isFileID(internStr(dir), strYaMake) {
 			return
 		}
 
@@ -576,7 +590,7 @@ func (ctx *GenCtx) recurseClosure(root string) []string {
 }
 
 func (ctx *GenCtx) moduleDeclaration(instance ModuleInstance) *ModuleStmt {
-	return ctx.evaluateDir(instance.Path.relString(), instance.Platform).declaration
+	return ctx.evaluateDirVFS(instance.Path, instance.Platform).declaration
 }
 
 func (ctx *GenCtx) scanModuleConfiguration(instance ModuleInstance) (*ModuleStmt, []string) {
@@ -894,7 +908,7 @@ func discoverRecursedTargets(ctx *GenCtx, targetDir string) DiscoveredTargets {
 	for at := 0; at < len(queue); at++ {
 		dir := queue[at]
 
-		if at != 0 && !ctx.fs.isFile(internStr(dir), "ya.make") {
+		if at != 0 && !ctx.fs.isFileID(internStr(dir), strYaMake) {
 			continue
 		}
 
@@ -1015,6 +1029,18 @@ func programSourceDir(moduleStmt *ModuleStmt) *string {
 	return &peerPath
 }
 
+func unittestForPeer(moduleStmt *ModuleStmt) STR {
+	if moduleStmt == nil || moduleStmt.Name != tokUnittestFor || len(moduleStmt.Args) == 0 {
+		return 0
+	}
+
+	if a := moduleStmt.Args[0].str(); a.cleanPath() {
+		return a
+	}
+
+	return internStr(path.Clean(moduleStmt.Args[0].string()))
+}
+
 func unittestForPeerPath(moduleStmt *ModuleStmt) string {
 	if moduleStmt == nil || moduleStmt.Name != tokUnittestFor || len(moduleStmt.Args) == 0 {
 		return ""
@@ -1030,7 +1056,7 @@ func (ctx *GenCtx) parseFileCached(id STR) []Stmt {
 		return mf.Stmts
 	}
 
-	mf := throw2(parseFileClean(ctx.fs, rel))
+	mf := throw2(parseFileClean(ctx.fs, rel, ctx.includeMemos))
 
 	ctx.parsedFiles[rel] = mf
 
@@ -1146,7 +1172,7 @@ func appendUserPeerAddIncl(deduper *DeDuper, out []VFS, oneLevelOnly map[VFS]str
 }
 
 type ResolvedPeer struct {
-	path   string
+	path   STR
 	result *ModuleEmitResult
 	kind   int
 }
@@ -1618,7 +1644,7 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 		}
 	}
 
-	unitTestPeer := unittestForPeerPath(d.moduleStmt)
+	unitTestPeer := unittestForPeer(d.moduleStmt)
 	allPeers := frame.allPeers[:0]
 	peerKinds := frame.peerKinds[:0]
 
@@ -1637,16 +1663,16 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 	}
 
 	dedupers.with(func(deduper *DeDuper) {
-		peerSeen := func(p string) bool {
-			return !deduper.add(internStr(p).any().strID())
+		peerSeen := func(p STR) bool {
+			return !deduper.add(p.any().strID())
 		}
 
 		if len(confSelf) > 0 {
-			peerSeen(instance.Path.relString())
+			peerSeen(instance.Path.rel())
 		}
 
-		if self := internStr(instance.Path.relString()).any(); slices.Contains(d.peerdirs, self) && !peerSeen(self.string()) {
-			allPeers = append(allPeers, self.string())
+		if self := instance.Path.rel().any(); slices.Contains(d.peerdirs, self) && !peerSeen(self.str()) {
+			allPeers = append(allPeers, self.str())
 			peerKinds = append(peerKinds, peerKindUserPeer)
 		}
 
@@ -1655,7 +1681,7 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 				return
 			}
 
-			peer := p.string()
+			peer := p.str()
 			kind := peerKindUserPeer
 
 			if peer == unitTestPeer && !d.unitTestPeerExplicit {
@@ -1689,7 +1715,7 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 		self := instance
 
 		self.Language = language
-		preResolved = append(preResolved, ResolvedPeer{path: instance.Path.relString(), result: e.genPeerModule(self), kind: peerKindImplicit})
+		preResolved = append(preResolved, ResolvedPeer{path: instance.Path.rel(), result: e.genPeerModule(self), kind: peerKindImplicit})
 	}
 
 	preResolved = append(preResolved, confSelf...)
@@ -1728,15 +1754,18 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 	defer func() { frame.resolved = resolved[:0] }()
 
 	for i, p := range allPeers {
-		peerPath := filepath.Clean(p)
-		peerVFS := source(peerPath)
+		if !p.cleanPath() {
+			p = internStr(filepath.Clean(p.string()))
+		}
+
+		peerVFS := p.source()
 		kind := peerKinds[i]
 
 		if instance.Language == LangFbsJavaNative {
 			parent := JavaModule{dir: instance.Path.relString(), instance: instance, unit: javaUnitFbs, data: &JavaData{peerdirTags: javaTags(instance.Platform.conf, env, envPeerdirTags)}}
 
-			if result := ctx.javaPeerResult(&parent, peerPath, slices.Contains(d.explicitPeers, peerVFS.rel().any())); result != nil {
-				resolved = append(resolved, ResolvedPeer{path: peerPath, result: result, kind: kind})
+			if result := ctx.javaPeerResult(&parent, p, slices.Contains(d.explicitPeers, p.any())); result != nil {
+				resolved = append(resolved, ResolvedPeer{path: p, result: result, kind: kind})
 			}
 
 			continue
@@ -1762,14 +1791,14 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 
 		if peerResult.isPROGRAM && !(isRustModule(d.moduleStmt.Name) && peerResult.ModuleStmtName == tokCrateProcMacro) {
 			if kind == peerKindUserPeer {
-				ctx.onWarn(Warn{Kind: WarnModuleFailed, Message: fmt.Sprintf("PEERDIR from %s to %s is not allowed and skipped: module types are incompatible", instance.Path.relString(), peerPath)})
+				ctx.onWarn(Warn{Kind: WarnModuleFailed, Message: fmt.Sprintf("PEERDIR from %s to %s is not allowed and skipped: module types are incompatible", instance.Path.relString(), p.string())})
 			}
 
 			continue
 		}
 
 		e.recordPeerModule(peerResult)
-		resolved = append(resolved, ResolvedPeer{path: peerPath, result: peerResult, kind: kind})
+		resolved = append(resolved, ResolvedPeer{path: p, result: peerResult, kind: kind})
 	}
 
 	ownResourceGlobals := e.resourceDeclarations()
@@ -3014,7 +3043,7 @@ type ModuleFrame struct {
 	emitCtx              EmitContext
 	peerCtx              PeerContext
 	ifEnv                EnvStore
-	allPeers             []string
+	allPeers             []STR
 	peerKinds            []int
 	resolved             []ResolvedPeer
 	peerAddInclGlobal    []VFS

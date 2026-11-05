@@ -25,7 +25,7 @@ var pluginMacroNames = map[STR]bool{
 	internStr("CUDA_SRCS"):                                  true,
 	internStr("ENABLE_KOTLIN_ABI_JAR"):                      true,
 	kwFILES:                                                 true,
-	internStr("GENERATE_SCRIPT"):                            true,
+	strGenerateScript:                                       true,
 	internStr("IOS_APP_SETTINGS"):                           true,
 	internStr("IOS_ASSETS"):                                 true,
 	internStr("JAVAC_FLAGS"):                                true,

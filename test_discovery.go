@@ -56,7 +56,7 @@ func (ctx *GenCtx) prepareDiscoveredModuleTests(discovered []DiscoveredTargets) 
 	}
 
 	visitRoot := func(result *ModuleEmitResult) {
-		if result.ModuleStmtName == tokPy2Library && ctx.moduleName(result.testProject.relString()) == tokPy23Library &&
+		if result.ModuleStmtName == tokPy2Library && ctx.moduleNameVFS(result.testProject) == tokPy23Library &&
 			(result.ARRef == 0 || !live.has(uint32(result.ARRef))) && (result.GlobalRef == nil || !live.has(uint32(*result.GlobalRef))) {
 			return
 		}

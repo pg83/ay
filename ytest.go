@@ -25,6 +25,10 @@ var (
 	testSecretRequirements   = []string{"sb_vault", "yav"}
 	testToolHostPathArg      = internStr(testToolHostPath).any()
 	testCmdFileStartArg      = internStr(testCmdFileStart).any()
+	testCmdFileEndArg        = internStr(testCmdFileEnd).any()
+	testBasetempArg          = intern("$(B)/tmp").any()
+	testBuildRootArg         = internStr(testBuildRoot).any()
+	testSourceRootArg        = internStr(testSourceRoot).any()
 	testGDBPathArg           = internStr(testGDBPath).any()
 	testPythonBinArg         = internStr(testPythonBin).any()
 )

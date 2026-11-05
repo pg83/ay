@@ -6,6 +6,8 @@ import (
 	"strings"
 )
 
+var importMaskVariableSTR = internStr(importMaskVariable)
+
 const importMaskVariable = "NO_CHECK_IMPORTS_FOR_VALUE"
 
 type pythonImportMask struct {

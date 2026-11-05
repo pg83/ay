@@ -22,7 +22,7 @@ func aggregateSbomComponents(deduper *DeDuper, e *EmitContext, name TOK, linkTar
 			}
 		}
 
-		if rp.path == "build/platform/lld" && name == tokPy3Program {
+		if rp.path == strBuildPlatformLld && name == tokPy3Program {
 			ownInsertIdx = len(paths)
 		}
 

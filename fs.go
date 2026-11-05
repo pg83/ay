@@ -9,6 +9,7 @@ type FS interface {
 	exists(prefix STR, suffix string) (present bool, isDir bool)
 	isFile(prefix STR, suffix string) bool
 	isFileClean(prefix STR, suffix string) bool
+	isFileID(dir, name STR) bool
 	isFilePathClean(rel string) bool
 	isFileVFS(v VFS) bool
 	noteFile(v VFS)

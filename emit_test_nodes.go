@@ -90,7 +90,7 @@ func (e *EmitContext) testRunSuites(binary VFS, ref NodeRef, globals []ResourceD
 	opts := e.ctx.tests
 
 	s.runCmd = func(work string, chunk TestChunk) []ANY {
-		return testInnerCommand(s, meta, binary.string(), work, chunk, opts)
+		return testInnerCommand(s, meta, binary, work, chunk, opts)
 	}
 
 	return []*TestSuite{s}

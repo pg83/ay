@@ -387,12 +387,12 @@ func (ctx *GenCtx) javaJunitSuite(jm *JavaModule) *TestSuite {
 		s.relatedPaths = append(s.relatedPaths, "$(S)/"+rel)
 	}
 
-	classpath := make([]string, 0, ctx.javaManagedLen(jm))
+	classpath := make([]ANY, 0, ctx.javaManagedLen(jm))
 	testDeps := make([]JavaClosureEntry, 0, ctx.javaManagedLen(jm))
 
 	for e := range closure {
-		if rel := e.path.relString(); strings.HasSuffix(rel, ".jar") {
-			classpath = append(classpath, rel)
+		if strings.HasSuffix(e.path.relString(), ".jar") {
+			classpath = append(classpath, e.path.rel().any())
 			testDeps = append(testDeps, e)
 		}
 	}
@@ -424,7 +424,7 @@ func (ctx *GenCtx) javaJunitSuite(jm *JavaModule) *TestSuite {
 	s.prepare = [][]ANY{
 		{py, buildScriptsMkdirPy.any(), internStr(path.Dir(cpf.string())).any()},
 		append(append([]ANY{py, buildScriptsWriterPy.any(), strFile.any(), cpf.any(), strM.any(), strYaStartCommandFile.any()},
-			testArgs(classpath)...), strYaEndCommandFile.any()),
+			classpath...), strYaEndCommandFile.any()),
 	}
 
 	for _, f := range []string{"mkdir.py", "run_junit.py", "writer.py", "process_command_files.py"} {
@@ -460,42 +460,52 @@ func (ctx *GenCtx) javaJunitSuite(jm *JavaModule) *TestSuite {
 		}
 	}
 
+	cpTypeArg, propsArg := testArg(cpType), testArg(props)
+	jarBin, javaBin := testArg(jdkForTests.string()+"/bin/jar"), testArg(jdkForTests.string()+"/bin/java")
+	cpfArg := testArg("@" + cpf.string())
+	jvmArgs := testArgs(jvm)
+
+	var libArgs []ANY
+
+	if len(libpath) != 0 {
+		libs := strings.Join(dedupKeepOrder(libpath), ":")
+
+		libArgs = []ANY{testArg("-Djava.library.path=" + libs), testArg("-Djna.library.path=" + libs)}
+	}
+
 	s.runCmd = func(work string, chunk TestChunk) []ANY {
-		strs := []string{testYMakePython3, "$(S)/build/scripts/run_junit.py", testYMakePython3, "$(S)/build/scripts/unpacking_jtest_runner.py",
-			"--classpath-option-type", cpType, "--trace-file", work + "/ytest.report.trace",
-			"--jar-binary", jdkForTests.string() + "/bin/jar", "--tests-jar-path", testJar.string(), jdkForTests.string() + "/bin/java",
-			"-Djava.io.tmpdir=" + work + "/tests_tmp_dir"}
+		trace := testArg(work + "/ytest.report.trace")
 
-		if len(libpath) != 0 {
-			libs := strings.Join(dedupKeepOrder(libpath), ":")
+		args := []ANY{py, buildScriptsRunJunitPy.any(), py, buildScriptsUnpackingJtestRunnerPy.any(),
+			strClasspathOptionType.any(), cpTypeArg, strTraceFile.any(), trace,
+			strJarBinary.any(), jarBin, strTestsJarPath.any(), testJar.any(), javaBin,
+			testArg("-Djava.io.tmpdir=" + work + "/tests_tmp_dir")}
 
-			strs = append(strs, "-Djava.library.path="+libs, "-Djna.library.path="+libs)
-		}
+		args = append(args, libArgs...)
+		args = append(args, jvmArgs...)
 
-		strs = append(strs, jvm...)
-
-		strs = append(strs, "-classpath", "@"+cpf.string(), "ru.yandex.devtools.test.Runner", "--tests-jar", testJar.string(),
-			"--source-root", "$(S)", "--modulo", strconv.Itoa(chunk.split), "--modulo-index", strconv.Itoa(chunk.index))
+		args = append(args, strClasspath.any(), cpfArg, strRuYandexDevtoolsTestRunner.any(), strTestsJar.any(), testJar.any(),
+			strSourceRoot2.any(), testSourceRootArg, strModulo.any(), testArg(strconv.Itoa(chunk.split)), strModuloIndex.any(), testArg(strconv.Itoa(chunk.index)))
 
 		if t.experimentalFork {
-			strs = append(strs, "--experimental-fork")
+			args = append(args, strExperimentalFork.any())
 		}
 
-		strs = append(strs, "--build-root", "$(B)", "--sandbox-resources-root", work, "--test-outputs-root", work+"/testing_out_stuff",
-			"--output", work+"/ytest.report.trace")
+		args = append(args, strBuildRoot2.any(), testBuildRootArg, strSandboxResourcesRoot.any(), testArg(work), strTestOutputsRoot.any(), testArg(work+"/testing_out_stuff"),
+			strOutput.any(), trace)
 
 		if t.forkMode == "subtests" {
-			strs = append(strs, "--fork-subtests")
+			args = append(args, strForkSubtests.any())
 		}
 
-		strs = append(strs, "--runner-log-path", work+"/testing_out_stuff/run.log", "--properties", props)
+		args = append(args, strRunnerLogPath.any(), testArg(work+"/testing_out_stuff/run.log"), strProperties.any(), propsArg)
 
 		if workers > 1 {
-			strs = append([]string{testToolHostPath, "run_jtest", "--worker-count", strconv.Itoa(workers),
-				"--temp-tracefile-dir", work + "/temporary_traces"}, strs...)
+			args = append([]ANY{testToolHostPathArg, strRunJtest.any(), strWorkerCount.any(), testArg(strconv.Itoa(workers)),
+				strTempTracefileDir.any(), testArg(work + "/temporary_traces")}, args...)
 		}
 
-		return testArgs(strs)
+		return args
 	}
 
 	return s
@@ -585,44 +595,46 @@ func (ctx *GenCtx) javaClasspathClashSuite(jm *JavaModule) *TestSuite {
 		}
 	}
 
-	paths := make([]string, len(jars))
+	paths := make([]ANY, len(jars))
 	reg := ctx.javaReg(jm)
 
 	for i, jar := range jars {
-		paths[i] = jar.relString()
+		paths[i] = jar.rel().any()
 
 		if info := reg.use(jar); info != nil {
 			s.deps = append(s.deps, info.ProducerRef)
 		}
 	}
 
-	var ignored []string
+	var ignored []ANY
 
 	for _, c := range sortedUnique(d.test.ignoreClasspathClash) {
-		ignored = append(ignored, "ignore_class:"+c)
+		ignored = append(ignored, internStr("ignore_class:"+c).any())
 	}
 
-	s.runCmd = func(work string, _ TestChunk) []ANY {
-		strs := append(make([]string, 0, 24+len(paths)+len(ignored)), testToolHostPath, "run_check", "--source-root", "$(S)", "--checker", "run_classpath_clash", "--check-name", "classpath.clash",
-			"--trace-path", work+"/ytest.report.trace", "--out-path", work+"/testing_out_stuff",
-			"--log-path", work+"/testing_out_stuff/run_check.log", "--no-snippet-from-stderr", "--batch", "--batch-name", name,
-			"$(B)", testCmdFileStart)
+	nameArg := testArg(name)
 
-		strs = append(append(append(strs, paths...), testCmdFileEnd), ignored...)
+	s.runCmd = func(work string, _ TestChunk) []ANY {
+		args := append(make([]ANY, 0, 24+len(paths)+len(ignored)), testToolHostPathArg, strRunCheck.any(), strSourceRoot2.any(), strS.any(), strChecker.any(), strRunClasspathClash.any(), strCheckName.any(), strClasspathClash.any(),
+			strTracePath.any(), testArg(work+"/ytest.report.trace"), strOutPath.any(), testArg(work+"/testing_out_stuff"),
+			strLogPath.any(), testArg(work+"/testing_out_stuff/run_check.log"), strNoSnippetFromStderr.any(), strBatch.any(), strBatchName.any(), nameArg,
+			strB.any(), testCmdFileStartArg)
+
+		args = append(append(append(args, paths...), testCmdFileEndArg), ignored...)
 
 		if ctx.tests.dist || d.checkJavaDeps == "strict" {
-			strs = append(strs, "--")
+			args = append(args, str3.any())
 		}
 
 		if ctx.tests.dist {
-			strs = append(strs, "--verbose")
+			args = append(args, strVerbose.any())
 		}
 
 		if d.checkJavaDeps == "strict" {
-			strs = append(strs, "--strict")
+			args = append(args, strStrict.any())
 		}
 
-		return testArgs(strs)
+		return args
 	}
 
 	return s

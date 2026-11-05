@@ -203,6 +203,18 @@ func (fs *OsFS) isFileClean(prefix STR, suffix string) bool {
 	return p && !d
 }
 
+func (fs *OsFS) isFileID(dir, name STR) bool {
+	v := fs.listdir(dir)
+
+	if !v.listable() {
+		return false
+	}
+
+	present, isDir := fs.dirHasID(v, name)
+
+	return present && !isDir
+}
+
 func (fs *OsFS) isFilePathClean(rel string) bool {
 	dir, name := splitDirName(rel)
 	v := fs.listdir(internStr(dir))

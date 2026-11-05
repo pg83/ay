@@ -9,7 +9,7 @@ func (e *EmitContext) packagePeer(dir string) (*ModuleEmitResult, []VFS) {
 
 	instance.Demand = demandLinked
 
-	return e.completePackagePeer(javaPackagePeerInstance(instance, e.ctx.moduleName(instance.Path.relString())))
+	return e.completePackagePeer(javaPackagePeerInstance(instance, e.ctx.moduleNameVFS(instance.Path)))
 }
 
 func javaPackagePeerInstance(instance ModuleInstance, name TOK) ModuleInstance {
@@ -28,7 +28,7 @@ func javaPackagePeerInstance(instance ModuleInstance, name TOK) ModuleInstance {
 }
 
 func (e *EmitContext) completePackagePeer(instance ModuleInstance) (*ModuleEmitResult, []VFS) {
-	if isLinkingModuleType(e.ctx.moduleName(instance.Path.relString())) {
+	if isLinkingModuleType(e.ctx.moduleNameVFS(instance.Path)) {
 		instance.Demand = demandSelf
 	}
 
@@ -64,7 +64,7 @@ func (e *EmitContext) completePackagePeer(instance ModuleInstance) (*ModuleEmitR
 			for _, peer := range info.collectionPeers().Modules {
 				peer.Demand = demandLinked
 
-				if isLinkingModuleType(e.ctx.moduleName(peer.Path.relString())) {
+				if isLinkingModuleType(e.ctx.moduleNameVFS(peer.Path)) {
 					peer.Demand = demandSelf
 				}
 
@@ -89,7 +89,7 @@ func (e *EmitContext) appendPackagePeer(out []VFS, res *ModuleEmitResult, seen m
 		for _, peer := range info.collectionPeers().Modules {
 			peer.Demand = demandLinked
 
-			if isLinkingModuleType(e.ctx.moduleName(peer.Path.relString())) {
+			if isLinkingModuleType(e.ctx.moduleNameVFS(peer.Path)) {
 				peer.Demand = demandSelf
 			}
 

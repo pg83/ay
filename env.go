@@ -5,12 +5,13 @@ import (
 	"slices"
 )
 
+var emptyAppendArgs = []ANY{strEmpty.any()}
+
 type EnvKind uint8
 
 type envAppend struct {
-	id     ENV
-	parts  []STR
-	length int
+	id    ENV
+	parts []ANY
 }
 
 type EnvStore struct {
@@ -134,40 +135,43 @@ func (s *EnvStore) dropAppend(e ENV) {
 	}
 }
 
-func (e Environment) appendString(id ENV, v string) {
-	e.appendSTR(id, internStr(v))
-}
+func (e Environment) appendANYs(id ENV, args []ANY) {
+	if len(args) == 0 {
+		args = emptyAppendArgs
+	}
 
-func (e Environment) appendSTR(id ENV, v STR) {
 	s := e.s
 
 	for i := range s.appends {
 		if s.appends[i].id == id {
-			s.appends[i].parts = append(s.appends[i].parts, v)
-			s.appends[i].length += 1 + len(v.string())
+			s.appends[i].parts = append(s.appends[i].parts, args...)
 
 			return
 		}
 	}
 
-	var prev STR
+	var prev ANY
 
 	if int(id) < len(s.kind) {
 		switch s.kind[id] {
 		case envVFS:
-			prev = internStr(VFS(uint32(s.val[id])).string())
+			prev = VFS(uint32(s.val[id])).any()
 		case envStr, envInt:
-			prev = s.val[id]
+			prev = s.val[id].any()
 		}
 	}
 
-	if prev == 0 || prev.string() == "" {
-		e.setFromString(id, v.string())
+	if prev == 0 || prev == strEmpty.any() {
+		if len(args) == 1 {
+			e.setFromANY(id, args[0])
+		} else {
+			e.setFromSTR(id, joinAnysSTR(args, " "))
+		}
 
 		return
 	}
 
-	s.appends = append(s.appends, envAppend{id: id, parts: append(make([]STR, 0, 8), prev, v), length: len(prev.string()) + 1 + len(v.string())})
+	s.appends = append(s.appends, envAppend{id: id, parts: append(append(make([]ANY, 0, max(8, len(args)+1)), prev), args...)})
 	s.pending.add(uint32(id))
 }
 
@@ -199,7 +203,13 @@ func (e Environment) stringLen(id ENV) int {
 	if len(s.appends) != 0 && s.pending.has(uint32(id)) {
 		for i := range s.appends {
 			if s.appends[i].id == id {
-				return s.appends[i].length
+				n := -1
+
+				for _, part := range s.appends[i].parts {
+					n += 1 + len(part.string())
+				}
+
+				return n
 			}
 		}
 	}
@@ -258,7 +268,7 @@ func (e Environment) cloneInto(dst *EnvStore) Environment {
 	dst.appends = dst.appends[:0]
 
 	for _, a := range e.s.appends {
-		dst.appends = append(dst.appends, envAppend{id: a.id, parts: slices.Clone(a.parts), length: a.length})
+		dst.appends = append(dst.appends, envAppend{id: a.id, parts: slices.Clone(a.parts)})
 	}
 
 	dst.pending.copyFrom(&e.s.pending)
@@ -360,6 +370,28 @@ func (e Environment) setFromString(id ENV, v string) {
 	default:
 		e.setString(id, v)
 	}
+}
+
+func (e Environment) setFromSTR(id ENV, v STR) {
+	if strHasDollar(v.any()) {
+		if s := v.string(); vfsHasPrefix(s) {
+			e.setVFS(id, intern(s))
+
+			return
+		}
+	}
+
+	e.setStrID(id, v)
+}
+
+func (e Environment) setFromANY(id ENV, v ANY) {
+	if f := v.vfs(); f != 0 {
+		e.setVFS(id, f)
+
+		return
+	}
+
+	e.setFromSTR(id, v.str())
 }
 
 func (e Environment) setFromStringID(id ENV, v STR) {

@@ -688,7 +688,7 @@ func (ctx *GenCtx) javaResolvePeers(jm *JavaModule) {
 
 		seen[dir] = true
 
-		res := ctx.javaPeerResult(jm, dir, explicit)
+		res := ctx.javaPeerResult(jm, internStr(dir), explicit)
 
 		if res == nil {
 			return
@@ -734,16 +734,16 @@ func (jm *JavaModule) peerdirTags() []ANY {
 	return jm.data.peerdirTags
 }
 
-func (ctx *GenCtx) javaPeerResult(parent *JavaModule, dir string, explicit bool) *ModuleEmitResult {
-	if !ctx.fs.isFile(internStr(dir), "ya.make") {
-		ctx.onWarn(Warn{Kind: WarnModuleFailed, Message: fmt.Sprintf("%s: PEERDIR to directory without ya.make: %s", parent.dir, dir)})
+func (ctx *GenCtx) javaPeerResult(parent *JavaModule, dir STR, explicit bool) *ModuleEmitResult {
+	if !ctx.fs.isFileID(dir, strYaMake) {
+		ctx.onWarn(Warn{Kind: WarnModuleFailed, Message: fmt.Sprintf("%s: PEERDIR to directory without ya.make: %s", parent.dir, dir.string())})
 
 		return nil
 	}
 
-	name := ctx.moduleName(dir)
+	inst := ModuleInstance{Path: dir.source(), Language: LangJava, Platform: parent.instance.Platform, Demand: demandSelf}
+	name := ctx.moduleNameVFS(inst.Path)
 	tags := parent.peerdirTags()
-	inst := ModuleInstance{Path: source(dir), Language: LangJava, Platform: parent.instance.Platform, Demand: demandSelf}
 
 	switch units := javaModuleUnits[name]; {
 	case len(units) > 1:
@@ -758,13 +758,13 @@ func (ctx *GenCtx) javaPeerResult(parent *JavaModule, dir string, explicit bool)
 		}
 
 		if !picked {
-			ctx.onWarn(Warn{Kind: WarnModuleFailed, Message: fmt.Sprintf("%s: PEERDIR to %s is prohibited by incompatible tags and skipped", parent.dir, dir)})
+			ctx.onWarn(Warn{Kind: WarnModuleFailed, Message: fmt.Sprintf("%s: PEERDIR to %s is prohibited by incompatible tags and skipped", parent.dir, dir.string())})
 
 			return nil
 		}
 	case len(units) == 1:
 		if explicit && !javaTagIn(inst.Platform.conf.moduleTag(name.str()), tags) {
-			ctx.onWarn(Warn{Kind: WarnModuleFailed, Message: fmt.Sprintf("%s: PEERDIR to %s is prohibited by incompatible tags and skipped", parent.dir, dir)})
+			ctx.onWarn(Warn{Kind: WarnModuleFailed, Message: fmt.Sprintf("%s: PEERDIR to %s is prohibited by incompatible tags and skipped", parent.dir, dir.string())})
 
 			return nil
 		}
@@ -803,11 +803,13 @@ func (ctx *GenCtx) javaPeerResult(parent *JavaModule, dir string, explicit bool)
 }
 
 func (ctx *GenCtx) javaContrib(parent *JavaModule, dir string) *JavaModule {
-	if !ctx.fs.isFile(internStr(dir), "ya.make") {
+	dirID := internStr(dir)
+
+	if !ctx.fs.isFileID(dirID, strYaMake) {
 		return nil
 	}
 
-	res := ctx.javaPeerResult(parent, dir, false)
+	res := ctx.javaPeerResult(parent, dirID, false)
 
 	if res == nil {
 		return nil

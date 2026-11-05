@@ -49,13 +49,13 @@ func (e *EmitContext) linkerFlagExports(seen *DeDuper, peers []ResolvedPeer, cap
 	}
 
 	for _, peer := range peers {
-		if peer.path == e.instance.Path.relString() {
+		if peer.path == e.instance.Path.rel() {
 			collect(peer)
 		}
 	}
 
 	for _, peer := range peers {
-		if peer.path != e.instance.Path.relString() {
+		if peer.path != e.instance.Path.rel() {
 			collect(peer)
 		}
 	}

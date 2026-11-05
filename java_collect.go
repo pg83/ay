@@ -301,9 +301,10 @@ func collectJavaStmts(ctx *GenCtx, jm *JavaModule, d *JavaData, stmts []Stmt, en
 			}
 		case *SetStmt:
 			value := expandSourceScalarVarRef(v.Value, env)
+			valueID := internStr(value)
 
-			env.setFromString(v.NameEnv, value)
-			d.setVars.set(internStr(v.Name), internStr(value))
+			env.setFromSTR(v.NameEnv, valueID)
+			d.setVars.set(v.NameEnv.str(), valueID)
 			jm.instance.Platform.conf.set(env, v.NameEnv, &d.setVars)
 			d.setRawVar(v.Name, d.rawExpand(v.Value))
 		case *DefaultVarStmt:
@@ -449,16 +450,14 @@ func collectJavaStmts(ctx *GenCtx, jm *JavaModule, d *JavaData, stmts []Stmt, en
 				raw = v.LexicalArgs
 			}
 
-			rawArgs := anyStrs(raw)
-
 			var args []string
 
 			stmt := *v
 
-			if v.Raw.string() == "RUN_JAVA_PROGRAM" {
-				args = splitJavaCommandWords(expandStmtToken(strings.Join(rawArgs, " "), env))
+			if v.Raw == strRunJavaProgram {
+				args = splitJavaCommandWords(expandStmtToken(strings.Join(anyStrs(raw), " "), env))
 				stmt.Args = internAnys(args)
-			} else if v.Raw.string() == "GENERATE_SCRIPT" {
+			} else if v.Raw == strGenerateScript {
 				stmt.Args = expandSourceArguments(raw, env)
 				args = anyStrs(stmt.Args)
 			} else {
@@ -481,7 +480,7 @@ func collectJavaStmts(ctx *GenCtx, jm *JavaModule, d *JavaData, stmts []Stmt, en
 				continue
 			}
 
-			if !applyJavaMacro(ctx, jm, d, v.Raw.string(), args, rawArgs, env) || javaConfBodyToo(v.Raw) {
+			if !applyJavaMacro(ctx, jm, d, v.Raw.string(), args, raw, env) || javaConfBodyToo(v.Raw) {
 				expandJavaConfMacro(ctx, jm, d, stmt, env)
 			}
 		}
@@ -633,7 +632,7 @@ func parseJavaSrcs(args []string) JavaSrcsSpec {
 	return spec
 }
 
-func applyJavaMacro(ctx *GenCtx, jm *JavaModule, d *JavaData, name string, args, raw []string, env Environment) bool {
+func applyJavaMacro(ctx *GenCtx, jm *JavaModule, d *JavaData, name string, args []string, raw []ANY, env Environment) bool {
 	u := jm.unit
 	arg0 := ""
 
@@ -681,7 +680,7 @@ func applyJavaMacro(ctx *GenCtx, jm *JavaModule, d *JavaData, name string, args,
 		d.setVars.set(internStr(args[0]), internStr(value))
 		jm.instance.Platform.conf.set(env, internEnv(args[0]), &d.setVars)
 
-		rawValue := d.rawExpand(strings.Join(raw[1:], " "))
+		rawValue := d.rawExpand(strings.Join(anyStrs(raw[1:]), " "))
 
 		if prev := d.rawVars[args[0]]; prev != "" {
 			rawValue = prev + " " + rawValue
@@ -850,7 +849,7 @@ func applyJavaMacro(ctx *GenCtx, jm *JavaModule, d *JavaData, name string, args,
 	case "DEPENDS":
 		d.test.depends = append(d.test.depends, args...)
 	case "DOCKER_IMAGE":
-		applyJavaMacro(ctx, jm, d, "SET_APPEND", append([]string{envDockerImagesValue.string()}, args...), append([]string{envDockerImagesValue.string()}, raw...), env)
+		applyJavaMacro(ctx, jm, d, "SET_APPEND", append([]string{envDockerImagesValue.string()}, args...), append([]ANY{envDockerImagesValue.str().any()}, raw...), env)
 	case "DATA":
 		d.test.data = append(d.test.data, args...)
 	case "DATA_FILES":
@@ -860,7 +859,7 @@ func applyJavaMacro(ctx *GenCtx, jm *JavaModule, d *JavaData, name string, args,
 	case "JAVA_SRCS", "FULL_JAVA_SRCS":
 		if u.kind == juJar && !u.proto {
 			spec := parseJavaSrcs(args)
-			rawSpec := parseJavaSrcs(d.javaRawArgs(raw))
+			rawSpec := parseJavaSrcs(d.javaRawArgs(anyStrs(raw)))
 
 			spec.salt = javaSrcsSalt(rawSpec)
 			spec.varSrcDir = strings.HasPrefix(rawSpec.srcDir, "$") && !strings.HasPrefix(rawSpec.srcDir, "$S")
@@ -894,10 +893,10 @@ func applyJavaMacro(ctx *GenCtx, jm *JavaModule, d *JavaData, name string, args,
 			d.javaSrcs = append(d.javaSrcs, spec)
 		}
 	case "RUN_JAVA_PROGRAM":
-		expanded := javaRunProgramRawArgs(raw, env, d.rawVars)
+		expanded := javaRunProgramRawArgs(anyStrs(raw), env, d.rawVars)
 
 		if bad := malformedCommandReference(expanded); bad != "" {
-			ctx.onWarn(Warn{Kind: WarnSyntax, Message: fmt.Sprintf("in %s: RUN_JAVA_PROGRAM(%s) was not processed properly: could not parse command at %q. Skip RUN_JAVA_PROGRAM", jm.dir, strings.Join(raw, " "), bad)})
+			ctx.onWarn(Warn{Kind: WarnSyntax, Message: fmt.Sprintf("in %s: RUN_JAVA_PROGRAM(%s) was not processed properly: could not parse command at %q. Skip RUN_JAVA_PROGRAM", jm.dir, strings.Join(anyStrs(raw), " "), bad)})
 
 			return true
 		}
@@ -917,9 +916,9 @@ func applyJavaMacro(ctx *GenCtx, jm *JavaModule, d *JavaData, name string, args,
 	case "JAVA_IGNORE_CLASSPATH_CLASH_FOR":
 		property := []string{envJavaIgnoreClasspathClash.string()}
 
-		applyJavaMacro(ctx, jm, d, "SET_APPEND", append(property, args...), append([]string{envJavaIgnoreClasspathClash.string()}, raw...), env)
+		applyJavaMacro(ctx, jm, d, "SET_APPEND", append(property, args...), append([]ANY{envJavaIgnoreClasspathClash.str().any()}, raw...), env)
 	case "ENV":
-		d.testEnv = append(d.testEnv, splitShellWords(`"`+strings.Join(raw, " ")+`"`)...)
+		d.testEnv = append(d.testEnv, splitShellWords(`"`+strings.Join(anyStrs(raw), " ")+`"`)...)
 	case "LINT":
 		d.lintLevel = arg0
 	case "NO_LINT":

@@ -9,12 +9,14 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"unicode"
 )
 
 var (
 	confPluginDepsCache sync.Map
 	dontExpandVars      = [...]ENV{envARCADIA_BUILD_ROOT, envARCADIA_ROOT, envBINDIR, envCURDIR, envPythonBin, envTestCaseRoot, envTestOutRoot, envTestSourceRoot, envTestWorkRoot}
 	pbRuntimeBaseString = pbRuntimeBaseVFS.string()
+	strExpandsToSelf    [tokenExpandRoots + 1]BitSet
 )
 
 var dontExpandVarNames = func() (names [len(dontExpandVars)]string) {
@@ -2304,6 +2306,12 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 
 			addInclNext := false
 
+			var fromID STR
+
+			if !v.Implicit {
+				fromID = internStr(modulePath)
+			}
+
 			for _, pTok := range expandStmtTokens(v.Paths, env) {
 				if pTok == kwADDINCL.any() {
 					addInclNext = true
@@ -2321,7 +2329,7 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 
 				pTok = peerdirModulePath(pTok).any()
 
-				if !v.Implicit && !platform.allowPeer(internStr(modulePath), pTok.str(), onWarn) {
+				if !v.Implicit && !platform.allowPeer(fromID, pTok.str(), onWarn) {
 					addInclNext = false
 
 					continue
@@ -2338,7 +2346,7 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 					d.explicitPeers = append(d.explicitPeers, pTok)
 				}
 
-				if !v.Implicit && pTok.string() == unittestForPeerPath(d.moduleStmt) {
+				if !v.Implicit && pTok.str() == unittestForPeer(d.moduleStmt) {
 					d.unitTestPeerExplicit = true
 				}
 
@@ -2355,8 +2363,9 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 			}
 
 			value, textInputs := expandSourceScalarInputValue(sourceValue, env)
+			valueID := internStr(value)
 
-			env.setFromString(v.NameEnv, value)
+			env.setFromSTR(v.NameEnv, valueID)
 			env.setTextInputs(v.NameEnv, textInputs)
 			d.captureResourcePeerPolicy(v.Name, env)
 
@@ -2372,11 +2381,11 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 				d.syncPythonVersion(env)
 			}
 
-			d.setVars.set(internStr(v.Name), internStr(value))
+			d.setVars.set(v.NameEnv.str(), valueID)
 			platform.conf.set(env, v.NameEnv, &d.setVars)
 
 			if v.Name == "SWIG_LANG" {
-				d.unit.SwigLang = internStr(value)
+				d.unit.SwigLang = valueID
 			}
 
 			if v.Name == "PROTOC_TRANSITIVE_HEADERS" {
@@ -2387,7 +2396,7 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 				d.protoNamespace = nil
 
 				if value != "" {
-					d.protoNamespace = ptr(internStr(value).any())
+					d.protoNamespace = ptr(valueID.any())
 				}
 			}
 
@@ -2701,7 +2710,7 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 				continue
 			}
 
-			if v.Raw.string() == "RUN_JAVA_PROGRAM" {
+			if v.Raw == strRunJavaProgram {
 				raw := v.Args
 
 				if v.LexicalArgs != nil {
@@ -2760,7 +2769,7 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 			} else {
 				if v.Name == tokNoCheckImports {
 					expanded.Args = prepareRunProgramArguments(runProgramSourceArguments(v.LexicalArgs, env), runProgramSourceEnv(env, &d.sourceEnv))
-				} else if v.Name == tokSetAppend && len(v.Args) > 0 && v.Args[0].string() == importMaskVariable {
+				} else if v.Name == tokSetAppend && len(v.Args) > 0 && v.Args[0].str() == importMaskVariableSTR {
 					expanded.Args = runProgramSourceArguments(v.LexicalArgs, env)
 				} else if v.Name == tokRun {
 					expanded.Args = expandSourceArguments(v.Args, env)
@@ -2768,7 +2777,7 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 					expanded.Args = expandListPreSufArgs(v.Args, env)
 				} else if v.Name == tokUseRecipe {
 					expanded.Args = []ANY{internStr(collectTestRecipe(v.Args, env)).any()}
-				} else if v.Name != tokEnv && v.Name != tokAddCustomExplicitLinterCheck && !(v.Name == tokSetAppend && len(v.Args) > 0 && v.Args[0].string() == "TEST_ENV_VALUE") {
+				} else if v.Name != tokEnv && v.Name != tokAddCustomExplicitLinterCheck && !(v.Name == tokSetAppend && len(v.Args) > 0 && v.Args[0].str() == strTestEnvValue) {
 					if v.Name == tokPySrcs && d.usePython2 {
 						expanded.Args = expandRootDeferredTokens(v.Args, env, tokenExpandLazy)
 					} else if v.Name == tokCopyFile || v.Name == tokCopyFileWithContext {
@@ -2816,7 +2825,9 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 							break
 						}
 
-						platform.conf.set(env, internEnv(arg.string()), &d.setVars)
+						if st := arg.str(); st != 0 {
+							platform.conf.set(env, internEnvSTR(st), &d.setVars)
+						}
 					}
 				}
 			}
@@ -3935,7 +3946,7 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 		enabled := false
 
 		for _, arg := range args {
-			enabled = enabled || env.bool(internEnv(arg.string()))
+			enabled = enabled || arg.str() != 0 && env.bool(internEnvSTR(arg.str()))
 		}
 
 		if strict && enabled == (v.Name == tokNoBuildIf) {
@@ -4186,35 +4197,43 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 			throwFmt("gen: SET_LIST_PRE_SUF expects an output, prefix and suffix (line %d)", v.Line)
 		}
 
-		values := make([]string, 0, len(v.Args)-3)
+		prefix, suffix := v.Args[1].string(), v.Args[2].string()
 
-		for _, value := range v.Args[3:] {
-			values = append(values, v.Args[1].string()+value.string()+v.Args[2].string())
+		var joined []byte
+
+		for i, value := range v.Args[3:] {
+			if i > 0 {
+				joined = append(joined, ' ')
+			}
+
+			joined = append(append(append(joined, prefix...), value.string()...), suffix...)
 		}
 
-		value := strings.Join(values, " ")
-		name := v.Args[0].string()
+		valueID := internBytes(joined)
+		name := v.Args[0].str()
 
-		env.setFromString(internEnv(name), value)
+		env.setFromSTR(internEnvSTR(name), valueID)
 
-		d.setVars.set(internStr(name), internStr(value))
+		d.setVars.set(name, valueID)
 	case tokSetAppend:
 		if len(v.Args) >= 1 {
-			switch v.Args[0].string() {
-			case "GO_PROTO_OPTS":
+			nameID := v.Args[0].str()
+
+			switch nameID {
+			case strGoProtoOpts:
 				for _, a := range v.Args[1:] {
 					d.goProtoOpts = append(d.goProtoOpts, GoProtoOpt{arg: a})
 				}
-			case "SFLAGS":
+			case strSflags:
 				d.sFlags = append(d.sFlags, v.Args[1:]...)
-			case "USER_CFLAGS":
+			case strUserCflags:
 
 				d.cFlags = append(d.cFlags, v.Args[1:]...)
-			case "USER_CXXFLAGS":
+			case strUserCxxflags:
 				d.cxxFlags = append(d.cxxFlags, v.Args[1:]...)
-			case "_PROTOC_FLAGS":
+			case strProtocFlags:
 				d.protocFlags = append(d.protocFlags, v.Args[1:]...)
-			case "RPATH_GLOBAL":
+			case strRpathGlobal:
 				for _, argTok := range v.Args[1:] {
 					arg := argTok.string()
 
@@ -4223,29 +4242,28 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 				}
 			}
 
-			name := v.Args[0].string()
-			nameEnv := internEnvSTR(v.Args[0].str())
-			value := joinAnysSTR(v.Args[1:], " ")
+			nameEnv := internEnvSTR(nameID)
+			args := v.Args[1:]
 
-			if name == "TEST_ENV_VALUE" {
-				value = internStr(expandSourceScalarVarRef(value.string(), env))
+			if nameID == strTestEnvValue {
+				args = []ANY{internStr(expandSourceScalarVarRef(joinAnysSTR(args, " ").string(), env)).any()}
 			}
 
-			original := value.string()
-
-			if name == importMaskVariable {
-				env.setFromString(nameEnv, appendPythonImportMask(original, env, d))
+			if nameID == importMaskVariableSTR {
+				env.setFromString(nameEnv, appendPythonImportMask(joinAnysSTR(args, " ").string(), env, d))
 			} else {
-				env.appendSTR(nameEnv, value)
+				env.appendANYs(nameEnv, args)
 			}
 
-			d.captureResourcePeerPolicy(name, env)
+			if nameID == strPassPeers {
+				d.captureResourcePeerPolicy("PASS_PEERS", env)
+			}
 
-			if name == "SANITIZER_TYPE" {
+			if nameID == strSanitizerType {
 				setupPythonImportMask(env, d)
 			}
 
-			d.setVars.append(internStr(name), original)
+			d.setVars.append(nameID, args)
 		}
 	case tokInducedDeps:
 
@@ -5365,8 +5383,8 @@ func peerdirModulePath(path ANY) STR {
 		path = peer.rel().any()
 	}
 
-	if s := path.string(); s != "" && s[0] != '/' && s[len(s)-1] != '/' && path.str().cleanPath() {
-		return path.str()
+	if st := path.str(); st.cleanPath() {
+		return st
 	}
 
 	return internStr(cleanRel(strings.Trim(path.string(), "/")))
@@ -5422,6 +5440,10 @@ func (phase TokenExpansion) policies(track *SourceTextTracker) (deref, render su
 }
 
 func expandTokenTracked(s string, env Environment, phase TokenExpansion, track *SourceTextTracker) string {
+	return expandTokenWith(s, env, phase, track, nil)
+}
+
+func expandTokenWith(s string, env Environment, phase TokenExpansion, track *SourceTextTracker, constant *bool) string {
 	if s == "$S" {
 		return "$(S)"
 	}
@@ -5431,13 +5453,13 @@ func expandTokenTracked(s string, env Environment, phase TokenExpansion, track *
 	}
 
 	deref, render := phase.policies(track)
-	derefed := substMacroDeeply(s, nil, env, nil, &deref)
+	derefed := substMacroDeeply(s, nil, env, constant, &deref)
 
 	if phase == tokenExpandStatement || phase == tokenExpandRoots {
 		return derefed
 	}
 
-	return substMacroDeeply(derefed, nil, env, nil, &render)
+	return substMacroDeeply(derefed, nil, env, constant, &render)
 }
 
 func keepDeferredOrDontExpandVar(name string) bool {
@@ -5506,13 +5528,22 @@ func expandTokens(items []ANY, env Environment, command bool, phase TokenExpansi
 	out := make([]ANY, 0, len(items))
 
 	for _, item := range items {
-		if !strHasDollar(item.str().any()) {
+		if !strHasDollar(item.str().any()) || !command && strExpandsToSelf[phase].has(uint32(item.str())) {
 			out = append(out, item)
 
 			continue
 		}
 
-		expanded := expandToken(item.string(), env, phase)
+		text := item.string()
+		constant := true
+		expanded := expandTokenWith(text, env, phase, nil, &constant)
+
+		if !command && constant && expanded == text && !vfsHasPrefix(text) && strings.IndexFunc(text, unicode.IsSpace) < 0 {
+			strExpandsToSelf[phase].add(uint32(item.str()))
+			out = append(out, item)
+
+			continue
+		}
 
 		if !command {
 			for f := range strings.FieldsSeq(expanded) {
@@ -5750,7 +5781,7 @@ func allPySrcArgs(fs FS, modulePath string, v UnknownStmt) []ANY {
 				}
 
 				if isDir {
-					return !fs.isFile(dirKey(rel), "ya.make")
+					return !fs.isFileID(dirKey(rel), strYaMake)
 				}
 
 				if pathDir(rel) != walkRoot {
@@ -6058,7 +6089,7 @@ func compilerFlagRootValue(value string, env Environment) string {
 
 type SetVars struct {
 	vals    map[STR]STR
-	appends map[STR][]string
+	appends map[STR][]ANY
 }
 
 func (v *SetVars) len() int {
@@ -6077,7 +6108,13 @@ func (v *SetVars) get(k STR) STR {
 	}
 
 	if chunks := v.appends[k]; chunks != nil {
-		v.vals[k] = internStr(v.vals[k].string() + " " + strings.Join(chunks, " "))
+		b := []byte(v.vals[k].string())
+
+		for _, c := range chunks {
+			b = append(append(b, ' '), c.string()...)
+		}
+
+		v.vals[k] = internBytes(b)
 
 		delete(v.appends, k)
 	}
@@ -6097,16 +6134,20 @@ func (v *SetVars) set(k, val STR) {
 	v.vals[k] = val
 }
 
-func (v *SetVars) append(k STR, chunk string) {
+func (v *SetVars) append(k STR, args []ANY) {
+	if len(args) == 0 {
+		args = emptyAppendArgs
+	}
+
 	if v.vals[k] == 0 {
-		v.set(k, internStr(chunk))
+		v.set(k, joinAnysSTR(args, " "))
 
 		return
 	}
 
 	if v.appends == nil {
-		v.appends = map[STR][]string{}
+		v.appends = map[STR][]ANY{}
 	}
 
-	v.appends[k] = append(v.appends[k], chunk)
+	v.appends[k] = append(v.appends[k], args...)
 }

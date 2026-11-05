@@ -49,7 +49,7 @@ func (e *EmitContext) confSelfPeers() []ResolvedPeer {
 
 	for _, self := range e.confSelfPeerInstances() {
 		if result := e.genPeerModule(self); !result.excluded {
-			out = append(out, ResolvedPeer{path: e.instance.Path.relString(), result: result, kind: peerKindImplicit})
+			out = append(out, ResolvedPeer{path: e.instance.Path.rel(), result: result, kind: peerKindImplicit})
 		}
 	}
 
@@ -65,5 +65,5 @@ func effectiveNoPlatform(f FlagSet) bool {
 }
 
 func peerYaMakeExists(fs FS, peerDir VFS) bool {
-	return fs.isFile(peerDir.rel(), "ya.make")
+	return fs.isFileID(peerDir.rel(), strYaMake)
 }

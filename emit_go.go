@@ -72,7 +72,7 @@ var goSymabisDefs = []ANY{
 	strI.any(), strGoToolsPkgInclude.any(),
 	strD2.any(), internStr("GOOS_linux").any(),
 	strD2.any(), internStr("GOARCH_amd64").any(),
-	internStr("-p").any(),
+	strP2.any(),
 }
 
 const (
@@ -247,34 +247,51 @@ func (g *GoStd) importPath(dir string) string {
 	return goArcPrefix + dir
 }
 
-func goImportDir(ctx *GenCtx, std *GoStd, importerDir, imp string) string {
-	if imp == "unsafe" || imp == "C" {
-		return ""
+type goImportKey struct {
+	std   *GoStd
+	imp   STR
+	inStd bool
+}
+
+func goImportDir(ctx *GenCtx, std *GoStd, inStd bool, impID STR) STR {
+	key := goImportKey{std: std, imp: impID, inStd: inStd}
+
+	if dir, ok := ctx.goImportDirs[key]; ok {
+		return dir
 	}
 
-	if rest, ok := strings.CutPrefix(imp, goArcPrefix); ok {
-		imp = rest
-	}
+	var dir STR
 
-	candidates := []string{goVendorPrefix + "/" + imp, std.Prefix + "/" + imp, imp}
+	if imp := impID.string(); imp != "unsafe" && imp != "C" {
+		if rest, ok := strings.CutPrefix(imp, goArcPrefix); ok {
+			imp = rest
+		}
 
-	if strings.HasPrefix(importerDir, std.Prefix+"/") {
-		candidates = []string{std.Prefix + "/vendor/" + imp, std.Prefix + "/" + imp, imp}
-	}
+		candidates := []string{goVendorPrefix + "/" + imp, std.Prefix + "/" + imp, imp}
 
-	for _, cand := range candidates {
-		if ctx.fs.isFile(internStr(cand), "ya.make") {
-			return cand
+		if inStd {
+			candidates = []string{std.Prefix + "/vendor/" + imp, std.Prefix + "/" + imp, imp}
+		}
+
+		for _, cand := range candidates {
+			if id := internStr(cand); ctx.fs.isFileID(id, strYaMake) {
+				dir = id
+
+				break
+			}
 		}
 	}
 
-	return ""
+	ctx.goImportDirs[key] = dir
+
+	return dir
 }
 
 func applyGoImplicitPeerdirs(ctx *GenCtx, instance ModuleInstance, d *ModuleData) {
 	dir := instance.Path.relString()
 	dirID := instance.Path.rel()
 	std := instance.Platform.Go
+	inStd := strings.HasPrefix(dir, std.Prefix+"/")
 
 	addPeer := func(p STR) {
 		if p == 0 || p == dirID || slices.Contains(d.peerdirs, p.any()) {
@@ -341,13 +358,7 @@ func applyGoImplicitPeerdirs(ctx *GenCtx, instance ModuleInstance, d *ModuleData
 		}
 
 		for _, imp := range parseGoImports(concatChunks(ctx.fs.read(path.relString()))) {
-			peer := goImportDir(ctx, std, dir, imp.string())
-
-			if peer == "" {
-				continue
-			}
-
-			if id := internStr(peer); instance.Platform.allowPeer(dirID, id, ctx.onWarn) {
+			if id := goImportDir(ctx, std, inStd, imp); id != 0 && instance.Platform.allowPeer(dirID, id, ctx.onWarn) {
 				addPeer(id)
 			}
 		}

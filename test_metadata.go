@@ -218,98 +218,98 @@ func continueConfigMacroBodyTracked(value string, env Environment, parameters ma
 	return substMacroDeeply(value, bindingsOf(parameters), env, nil, &substPolicy{keepModifiers: true, track: track})
 }
 
-func testInnerCommand(s *TestSuite, meta TestMeta, binary, work string, chunk TestChunk, opts *TestOpts) []ANY {
-	trace := work + "/ytest.report.trace"
-	out := work + "/testing_out_stuff"
-	args := []string{testToolHostPath}
+func testInnerCommand(s *TestSuite, meta TestMeta, binary VFS, work string, chunk TestChunk, opts *TestOpts) []ANY {
+	trace := testArg(work + "/ytest.report.trace")
+	out := testArg(work + "/testing_out_stuff")
+	args := []ANY{testToolHostPathArg}
 
 	switch s.testType {
 	case "py3test", "pytest", "exectest":
-		command := []string{binary}
+		command := []ANY{binary.any()}
 
 		if s.testType == "exectest" {
-			command = []string{"--test-param", "commands=" + base64.StdEncoding.EncodeToString([]byte(meta.commands)), testToolHostPath, "run_exectest"}
+			command = []ANY{strTestParam.any(), testArg("commands=" + base64.StdEncoding.EncodeToString([]byte(meta.commands))), testToolHostPathArg, strRunExectest.any()}
 		}
 
-		command = append(command, "--basetemp", "$(B)/tmp", "--capture", "no", "-c", "pkg:library.python.pytest:pytest.yatest.ini", "-p", "no:factor", "--doctest-modules", "--ya-trace", trace, "--build-root", testBuildRoot, "--source-root", testSourceRoot, "--output-dir", out, "--durations", "0", "--project-path", s.projectPath, "--test-tool-bin", testToolHostPath, "--ya-version", "2")
+		command = append(command, strBasetemp.any(), testBasetempArg, strCapture.any(), strNo.any(), strC2.any(), strPkgLibraryPythonPytestPytestYatestIni.any(), strP2.any(), strNoFactor.any(), strDoctestModules.any(), strYaTrace.any(), trace, strBuildRoot2.any(), testBuildRootArg, strSourceRoot2.any(), testSourceRootArg, strOutputDir.any(), out, strDurations.any(), strZero.any(), strProjectPath.any(), testArg(s.projectPath), strTestToolBin.any(), testToolHostPathArg, strYaVersion.any(), str22.any())
 
 		if !opts.dist {
-			command = append(command, "--collect-cores")
+			command = append(command, strCollectCores.any())
 		}
 
 		buildType := opts.buildType
 
-		command = append(command, "--build-type", buildType)
+		command = append(command, strBuildType.any(), testArg(buildType))
 
 		if opts.traceback != "" {
-			command = append(command, "--tb", opts.traceback)
+			command = append(command, strTb.any(), testArg(opts.traceback))
 		}
 
 		if chunk.split > 1 {
-			command = append(command, "--modulo", strconv.Itoa(chunk.split), "--modulo-index", strconv.Itoa(chunk.index), "--partition-mode", cmp.Or(meta.partition, "SEQUENTIAL"))
+			command = append(command, strModulo.any(), testArg(strconv.Itoa(chunk.split)), strModuloIndex.any(), testArg(strconv.Itoa(chunk.index)), strPartitionMode.any(), testArg(cmp.Or(meta.partition, "SEQUENTIAL")))
 		}
 
 		if meta.forkMode == "subtests" {
-			command = append(command, "--split-by-tests")
+			command = append(command, strSplitByTests.any())
 		}
 
 		for _, directory := range s.pytestOutputDirs {
-			command = append(command, "--dep-root", directory)
+			command = append(command, strDepRoot.any(), testArg(directory))
 		}
 
 		for _, flag := range opts.flags {
-			command = append(command, "--flags", flag)
+			command = append(command, strFlags.any(), testArg(flag))
 		}
 
 		for _, flag := range opts.flags {
 			if sanitizer, found := strings.CutPrefix(flag, "SANITIZER_TYPE="); found && sanitizer != "" {
-				command = append(command, "--sanitize", sanitizer)
+				command = append(command, strSanitize.any(), testArg(sanitizer))
 
 				break
 			}
 		}
 
 		if chunk.file != "" {
-			command = append(command, "--test-file-filter", chunk.file)
+			command = append(command, strTestFileFilter.any(), testArg(chunk.file))
 		}
 
 		if s.testType == "exectest" {
-			command = append(command, "--noconftest")
+			command = append(command, strNoconftest.any())
 		}
 
-		return testArgs(command)
+		return command
 
 	case "g_benchmark", "benchmark":
-		runner := "run_g_benchmark"
+		runner := strRunGBenchmark.any()
 
 		if s.testType == "benchmark" {
-			runner = "run_y_benchmark"
+			runner = strRunYBenchmark.any()
 		}
 
-		args = append(args, runner, "--binary", binary, "--tracefile", trace, "--output-dir", out, "--project-path", s.projectPath, "--verbose", "--gdb-path", testGDBPath)
+		args = append(args, runner, strBinary.any(), binary.any(), strTracefile.any(), trace, strOutputDir.any(), out, strProjectPath.any(), testArg(s.projectPath), strVerbose.any(), strGdbPath.any(), testGDBPathArg)
 
 		if opts.dist {
-			args = append(args, "--truncate-logs")
+			args = append(args, strTruncateLogs.any())
 		}
 
 		for _, a := range meta.binaryArgs {
-			args = append(args, "--test-binary-args="+a)
+			args = append(args, testArg("--test-binary-args="+a))
 		}
 	case "boost_test":
-		args = append(args, "run_boost_test", "--binary", binary, "--tracefile", trace, "--output-dir", out, "--project-path", s.projectPath, "--verbose", "--gdb-path", testGDBPath)
+		args = append(args, strRunBoostTest.any(), strBinary.any(), binary.any(), strTracefile.any(), trace, strOutputDir.any(), out, strProjectPath.any(), testArg(s.projectPath), strVerbose.any(), strGdbPath.any(), testGDBPathArg)
 	case "fuzz":
-		args = append(args, "run_fuzz", "--binary", binary, "--tracefile", trace, "--modulo", strconv.Itoa(max(chunk.split, 1)), "--modulo-index", strconv.Itoa(chunk.index), "--output-dir", out, "--project-path", s.projectPath, "--source-root", testSourceRoot, "--verbose", "--gdb-path", testGDBPath)
+		args = append(args, strRunFuzz.any(), strBinary.any(), binary.any(), strTracefile.any(), trace, strModulo.any(), testArg(strconv.Itoa(max(chunk.split, 1))), strModuloIndex.any(), testArg(strconv.Itoa(chunk.index)), strOutputDir.any(), out, strProjectPath.any(), testArg(s.projectPath), strSourceRoot2.any(), testSourceRootArg, strVerbose.any(), strGdbPath.any(), testGDBPathArg)
 
 		if opts.dist {
-			args = append(args, "--truncate-logs")
+			args = append(args, strTruncateLogs.any())
 		}
 
 		if len(meta.binaryArgs) > 0 {
-			args = append(args, "--fuzz-opts="+strings.Join(meta.binaryArgs, " "))
+			args = append(args, testArg("--fuzz-opts="+strings.Join(meta.binaryArgs, " ")))
 		}
 
 		if s.corpusPartsExceeded > 0 {
-			args = append(args, "--corpus-parts-limit-exceeded", strconv.Itoa(s.corpusPartsExceeded))
+			args = append(args, strCorpusPartsLimitExceeded.any(), testArg(strconv.Itoa(s.corpusPartsExceeded)))
 		}
 	default:
 		partition := meta.partition
@@ -318,18 +318,18 @@ func testInnerCommand(s *TestSuite, meta TestMeta, binary, work string, chunk Te
 			partition = "SEQUENTIAL"
 		}
 
-		args = append(args, "run_ut", "--binary", binary, "--trace-path", trace, "--output-dir", out, "--modulo", strconv.Itoa(max(chunk.split, 1)), "--modulo-index", strconv.Itoa(chunk.index), "--partition-mode", partition, "--project-path", s.projectPath, "--list-timeout", strconv.Itoa(s.timeout/2), "--verbose", "--gdb-path", testGDBPath)
+		args = append(args, strRunUt.any(), strBinary.any(), binary.any(), strTracePath.any(), trace, strOutputDir.any(), out, strModulo.any(), testArg(strconv.Itoa(max(chunk.split, 1))), strModuloIndex.any(), testArg(strconv.Itoa(chunk.index)), strPartitionMode.any(), testArg(partition), strProjectPath.any(), testArg(s.projectPath), strListTimeout.any(), testArg(strconv.Itoa(s.timeout/2)), strVerbose.any(), strGdbPath.any(), testGDBPathArg)
 
 		if opts.dist {
-			args = append(args, "--truncate-logs")
+			args = append(args, strTruncateLogs.any())
 		}
 
 		if meta.forkMode == "subtests" {
-			args = append(args, "--split-by-tests")
+			args = append(args, strSplitByTests.any())
 		}
 	}
 
-	return testArgs(args)
+	return args
 }
 
 func testCommandLine(args []string) string {

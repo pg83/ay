@@ -79,7 +79,7 @@ func (ctx *GenCtx) configureDependencies() {
 	var configure func(string)
 
 	configure = func(dir string) {
-		if seen[dir] || !ctx.fs.isFile(internStr(dir), "ya.make") {
+		if seen[dir] || !ctx.fs.isFileID(internStr(dir), strYaMake) {
 			return
 		}
 

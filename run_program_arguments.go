@@ -21,6 +21,16 @@ func runProgramSourceArgumentValues(args []ANY, env Environment, withText bool) 
 	var text []bool
 
 	for _, arg := range args {
+		if st := arg.str(); st != 0 && st != strEmpty && st != str6 && st != str7 && !strHasDollar(arg) {
+			values = append(values, arg)
+
+			if withText {
+				text = append(text, false)
+			}
+
+			continue
+		}
+
 		value := arg.string()
 
 		var track SourceTextTracker

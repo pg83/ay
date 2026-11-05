@@ -18,6 +18,7 @@ func registerKnownGlobalChunks() {
 	registerOwnedSlice(cythonPy2SysIncludes)
 	registerOwnedSlice(cythonPy3SysIncludes)
 	registerOwnedSlice(debugPrefixMapFlags)
+	registerOwnedSlice(emptyAppendArgs)
 	registerOwnedSlice(envVarsVCS)
 	registerOwnedSlice(envVarsVCSCuda)
 	registerOwnedSlice(envVarsVCSPyHash)

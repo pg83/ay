@@ -256,11 +256,28 @@ func selectResourceDescriptor(descriptor ResourceDescriptor, hostPlatform string
 }
 
 func sortedResourceGlobals(in []ResourceDecl) []ResourceDecl {
-	out := append([]ResourceDecl(nil), in...)
+	if len(in) < 2 {
+		return append([]ResourceDecl(nil), in...)
+	}
 
-	slices.SortFunc(out, func(a, b ResourceDecl) int {
-		return strings.Compare(a.GlobalVar.string(), b.GlobalVar.string())
-	})
+	type keyed struct {
+		key  string
+		decl ResourceDecl
+	}
+
+	items := make([]keyed, len(in))
+
+	for i, decl := range in {
+		items[i] = keyed{decl.GlobalVar.string(), decl}
+	}
+
+	slices.SortFunc(items, func(a, b keyed) int { return strings.Compare(a.key, b.key) })
+
+	out := make([]ResourceDecl, len(items))
+
+	for i, item := range items {
+		out[i] = item.decl
+	}
 
 	return slices.Compact(out)
 }
@@ -569,9 +586,9 @@ func (e *EmitContext) resourcesLibraryPeerClosure(own []ResourceDecl) ResourcesL
 	peers := make([]ResolvedPeer, 0, len(e.d.peerdirs))
 
 	for _, peer := range e.d.peerdirs {
-		path := peerdirModulePath(peer).string()
+		path := peerdirModulePath(peer)
 
-		peers = append(peers, ResolvedPeer{path: path, result: e.genPeerModule(e.derivePeerInstance(path)), kind: peerKindUserPeer})
+		peers = append(peers, ResolvedPeer{path: path, result: e.genPeerModule(e.derivePeerInstanceVFS(path.source())), kind: peerKindUserPeer})
 	}
 
 	dedupers.with(func(dd *DeDuper) {

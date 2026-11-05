@@ -3,7 +3,11 @@ package main
 import (
 	"slices"
 	"strings"
+
+	"github.com/zeebo/xxh3"
 )
+
+const splitBucketBits = 18
 
 type GeneratedFileInfo struct {
 	attributes      *GeneratedFileAttributes
@@ -230,6 +234,7 @@ type CodegenRegistry struct {
 	bySplit         *IntMap[splitLookup]
 	textTemplates   DenseMap[VFS, []VFS]
 	splitGeneration uint32
+	splitGens       []uint32
 	na              *NodeArenas
 
 	moduleOutputDeps func(*GeneratedFileInfo) []IncludeDirective
@@ -241,7 +246,21 @@ type splitLookup struct {
 }
 
 func newCodegenRegistry(na *NodeArenas) *CodegenRegistry {
-	return &CodegenRegistry{na: na}
+	return &CodegenRegistry{na: na, splitGens: make([]uint32, 1<<splitBucketBits)}
+}
+
+func splitBucketOf(rel string) uint32 {
+	return uint32(xxh3.HashString(rel[strings.LastIndexByte(rel, '/')+1:])) & (1<<splitBucketBits - 1)
+}
+
+func (r *CodegenRegistry) putRel(info *GeneratedFileInfo) {
+	r.byRel.put(info.OutputPath.rel(), info)
+	r.splitChanged(info.OutputPath)
+}
+
+func (r *CodegenRegistry) splitChanged(output VFS) {
+	r.splitGeneration++
+	r.splitGens[splitBucketOf(output.relString())]++
 }
 
 func (r *CodegenRegistry) use(path VFS) *GeneratedFileInfo {
@@ -268,7 +287,7 @@ func (r *CodegenRegistry) register(info GeneratedFileSpec) *GeneratedFileInfo {
 			info.ClosureLeaves = r.na.dedupClosure(info.ClosureLeaves, [][]VFS{existing.closureLeaves()})
 			r.store(existing, info)
 			r.noteOwner(existing)
-			r.splitGeneration++
+			r.splitChanged(existing.OutputPath)
 
 			return existing
 		}
@@ -289,9 +308,8 @@ func (r *CodegenRegistry) register(info GeneratedFileSpec) *GeneratedFileInfo {
 
 	r.store(stored, info)
 
-	r.byRel.put(stored.OutputPath.rel(), stored)
+	r.putRel(stored)
 	r.noteOwner(stored)
-	r.splitGeneration++
 
 	return stored
 }
@@ -317,7 +335,7 @@ func (r *CodegenRegistry) forwardTemplateInputs(output VFS, templates, textTempl
 	if !ok {
 		info = r.na.geninfos.one()
 		r.store(info, GeneratedFileSpec{OutputPath: output, InputsOnly: true})
-		r.byRel.put(output.rel(), info)
+		r.putRel(info)
 	}
 
 	info.rareFields().ClosureLeaves = r.na.dedupClosure(info.closureLeaves(), [][]VFS{templates})
@@ -334,7 +352,7 @@ func (r *CodegenRegistry) forwardModuleIncludedDeps(output VFS, deps *ModuleIncl
 	if !ok {
 		info = r.na.geninfos.one()
 		r.store(info, GeneratedFileSpec{OutputPath: output, InputsOnly: true})
-		r.byRel.put(output.rel(), info)
+		r.putRel(info)
 	}
 
 	info.attributes.moduleIncludedDeps.put(info.id, deps)
@@ -486,7 +504,7 @@ func (r *CodegenRegistry) setModuleInputs(output VFS, moduleType TOK, includes, 
 	if !ok {
 		info = r.na.geninfos.one()
 		r.store(info, GeneratedFileSpec{OutputPath: output, InputsOnly: true, ModuleType: moduleType})
-		r.byRel.put(output.rel(), info)
+		r.putRel(info)
 	}
 
 	inputs := info.moduleInputs()
@@ -510,7 +528,7 @@ func (r *CodegenRegistry) lookupSTR(id STR) *GeneratedFileInfo {
 }
 
 func (r *CodegenRegistry) lookupSplit(prefix VFS, suffixID STR) *GeneratedFileInfo {
-	info := r.lookupSplitAny(prefix, suffixID)
+	info := r.lookupSplitAny(prefix, suffixID, splitBucketOf(suffixID.string()))
 
 	if info != nil && info.InputsOnly {
 		return nil
@@ -533,8 +551,8 @@ func (r *CodegenRegistry) lookupIncludeSTR(id STR) *GeneratedFileInfo {
 	return info
 }
 
-func (r *CodegenRegistry) lookupIncludeSplit(prefix VFS, suffixID STR) *GeneratedFileInfo {
-	info := r.lookupSplitAny(prefix, suffixID)
+func (r *CodegenRegistry) lookupIncludeSplit(prefix VFS, suffixID STR, bucket uint32) *GeneratedFileInfo {
+	info := r.lookupSplitAny(prefix, suffixID, bucket)
 
 	if info != nil && !info.includable() {
 		return nil
@@ -560,7 +578,15 @@ func (r *CodegenRegistry) moduleOutputIncludes(path VFS) ([]IncludeDirective, bo
 	return set[parsedIncludesLocal], true
 }
 
-func (r *CodegenRegistry) lookupSplitAny(prefix VFS, suffixID STR) *GeneratedFileInfo {
+func (r *CodegenRegistry) lookupSplitAny(prefix VFS, suffixID STR, bucket uint32) *GeneratedFileInfo {
+	generation := r.splitGeneration
+
+	if suffixID.cleanPath() {
+		if generation = r.splitGens[bucket]; generation == 0 {
+			return nil
+		}
+	}
+
 	key := splitMix64(uint32(prefix.rel()), uint32(suffixID))
 
 	if r.bySplit != nil {
@@ -569,7 +595,7 @@ func (r *CodegenRegistry) lookupSplitAny(prefix VFS, suffixID STR) *GeneratedFil
 				return *unsafeAt(r.byRel.vals.s, uint64(cached.slot))
 			}
 
-			if cached.generation == r.splitGeneration {
+			if cached.generation == generation {
 				return nil
 			}
 		}
@@ -588,7 +614,7 @@ func (r *CodegenRegistry) lookupSplitAny(prefix VFS, suffixID STR) *GeneratedFil
 		info, _ = r.byRel.get(rel)
 	}
 
-	if (info == nil || info.InputsOnly) && suffixID.string() != "" && !suffixID.cleanPath() {
+	if (info == nil || info.InputsOnly) && suffixID != strEmpty && !suffixID.cleanPath() {
 		joined := suffixID.string()
 
 		if prefixRel != "" {
@@ -612,7 +638,7 @@ func (r *CodegenRegistry) lookupSplitAny(prefix VFS, suffixID STR) *GeneratedFil
 		slot = r.byRel.idx.get(uint32(info.OutputPath.rel()))
 	}
 
-	r.bySplit.put(key, splitLookup{slot: slot, generation: r.splitGeneration})
+	r.bySplit.put(key, splitLookup{slot: slot, generation: generation})
 
 	return info
 }
