@@ -691,12 +691,6 @@ func (d *ModuleData) addLocalIncl(prio int, v VFS) {
 	d.addInclP = append(d.addInclP, PrioVFS{prio: prio, vfs: v})
 }
 
-func (d *ModuleData) addCythonSysIncl() {
-	for _, path := range cythonNumpyAddIncl {
-		d.addLocalIncl(prioAddIncl, path)
-	}
-}
-
 func (d *ModuleData) materializeAddIncl() {
 	slices.SortStableFunc(d.addInclP, func(a, b PrioVFS) int {
 		return cmp.Compare(a.prio, b.prio)
@@ -3576,8 +3570,6 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 			Options: anyStrs(v.Args[1:]),
 			Seq:     d.nextDeclSeq(),
 		})
-
-		d.addCythonSysIncl()
 	case tokBuildwithCythonC:
 		if len(v.Args) == 0 {
 			throwFmt("BUILDWITH_CYTHON_C expects at least 1 argument")
@@ -3589,8 +3581,6 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 			CMode:   true,
 			Seq:     d.nextDeclSeq(),
 		})
-
-		d.addCythonSysIncl()
 	case tokBuildwithRagel6:
 		args := expandStmtTokens(v.Args, env)
 
