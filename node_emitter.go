@@ -24,6 +24,8 @@ type StreamingEmitter struct {
 	keepGoing                bool
 	onWarn                   func(Warn)
 	nodes                    Vec[*Node]
+	resourceScratch          []STR
+	resourceJoined           []STR
 	modules                  BitSet
 	resolved                 BitSet
 	results                  []NodeRef

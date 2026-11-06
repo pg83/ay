@@ -70,6 +70,7 @@ var (
 	decimalMD5PyVFS                          = source("build/scripts/decimal_md5.py")
 	descRawprotoWrapperVFS                   = source("build/scripts/desc_rawproto_wrapper.py")
 	domschemeRuntimeVFS                      = source("library/cpp/domscheme/runtime.h")
+	editorconfig                             = source(".editorconfig")
 	evEventlogIncludeVFS                     = source("library/cpp/eventlog")
 	flatc64RuntimeVFS                        = source("contrib/libs/flatbuffers64/include/flatbuffers/flatbuffers.h")
 	flatcRuntimeVFS                          = source("contrib/libs/flatbuffers/include/flatbuffers/flatbuffers.h")

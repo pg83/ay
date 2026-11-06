@@ -51,7 +51,7 @@ func (e *EmitContext) testRunSuites(binary VFS, ref NodeRef, globals []ResourceD
 
 	if testType == "fuzz" {
 		for _, file := range meta.fuzzDicts {
-			s.relatedPaths = append(s.relatedPaths, source(file).string())
+			s.relatedPaths = append(s.relatedPaths, source(file).any())
 		}
 
 		corpus, ok := os.LookupEnv("YA_TEST_CORPUS_DATA_PATH")
@@ -62,11 +62,15 @@ func (e *EmitContext) testRunSuites(binary VFS, ref NodeRef, globals []ResourceD
 
 		s.corpus = corpus
 
-		if !path.IsAbs(corpus) {
-			corpus = source(corpus).string()
+		var corpusArg ANY
+
+		if path.IsAbs(corpus) {
+			corpusArg = internStr(corpus).any()
+		} else {
+			corpusArg = source(corpus).any()
 		}
 
-		s.relatedPaths = append([]string{corpus}, s.relatedPaths...)
+		s.relatedPaths = append([]ANY{corpusArg}, s.relatedPaths...)
 	}
 
 	python := testType == "pytest" || testType == "py3test" || testType == "exectest"
@@ -174,15 +178,15 @@ func (s *TestSuite) applyTestMeta(meta TestMeta, addSource bool) {
 	slices.Sort(s.data)
 	s.data = slices.Compact(s.data)
 
-	var dataPaths []string
+	var dataPaths []ANY
 
 	for _, entry := range s.data {
 		if rel, ok := strings.CutPrefix(entry, "arcadia/"); ok {
-			dataPaths = append(dataPaths, source(path.Clean(rel)).string())
+			dataPaths = append(dataPaths, source(path.Clean(rel)).any())
 		}
 	}
 
-	s.relatedPaths = append(s.relatedPaths, sortedUnique(dataPaths)...)
+	s.relatedPaths = append(s.relatedPaths, sortedUniqueByText(dataPaths)...)
 
 	if meta.cwd != "" {
 		s.runCwd = source(meta.cwd).string()

@@ -104,13 +104,17 @@ func dedupRefs(refs []NodeRef) []NodeRef {
 type InputChunks [][]VFS
 
 type NodeExtra struct {
-	InputNames   []STR
-	ResourceURIs []STR
-	InputFixes   []FixID
-	KVExts       []KVExt
-	PresetUID    *UID
-	UIDSalt      STR
-	DisableCache bool
+	InputNames    []STR
+	ResourceURIs  []STR
+	InputFixes    []FixID
+	KVExts        []KVExt
+	PresetUID     *UID
+	UIDSalt       STR
+	DisableCache  bool
+	KVPath        string
+	SplitFile     string
+	SplitIndex    int
+	HasSplitIndex bool
 }
 
 func (n *Node) extra() *NodeExtra {

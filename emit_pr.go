@@ -291,7 +291,7 @@ func prInputClosure(s *prSnap, stmt *RunProgramStmt) PrInputClosure {
 	var sources, builds []VFS
 
 	for i, f := range stmt.INFiles[:len(stmt.INFiles)-stmt.INNoParse] {
-		if s.inVFSs[i].isBuild() || !s.ctx.parsers.registry.scansIncludes(f.string()) {
+		if s.inVFSs[i].isBuild() || !s.ctx.parsers.registry.scansIncludes(f.relOrSelf().string()) {
 			continue
 		}
 

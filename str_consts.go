@@ -444,6 +444,7 @@ var (
 	strLowerBits                                                                             = internStr("--lower-bits")
 	strM                                                                                     = internStr("-m")
 	strMain                                                                                  = internStr("__main__")
+	strMainPy                                                                                = internStr("__main__.py")
 	strMap                                                                                   = internStr("--map")
 	strMapsLibsSproto                                                                        = internStr("maps/libs/sproto")
 	strMd                                                                                    = internStr("md")

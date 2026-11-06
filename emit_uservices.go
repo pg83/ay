@@ -70,16 +70,13 @@ func (e *EmitContext) emitUsrvFile(file UsrvFile) {
 
 	if file.DepsFile != "NO_DEPS" {
 		depFile := copyFileInputVFS(e.ctx.fs, e.instance.Path, file.DepsFile)
-		object := e.ctx.parsers.notsJSON(depFile.relString())
-		deps, ok := object[file.File].([]any)
+		deps, ok := e.ctx.parsers.usrvDeps(depFile.relString()).deps(file.File)
 
 		if !ok {
 			throwFmt("USRV_BUILD: dependencies for %s missing in %s", file.File, file.DepsFile)
 		}
 
-		for _, dep := range deps {
-			parsed = append(parsed, IncludeDirective{kind: includeQuoted, target: includeTarget(internStr(dep.(string)).any())})
-		}
+		parsed = deps
 	}
 
 	inputs := na.vfsList(src)

@@ -103,6 +103,10 @@ func expandMakeExpression(value string, env Environment, reserved func(string) b
 	return expandMakeExpressionTracked(value, env, reserved, nil)
 }
 
+func expandMakeExpressionView(value string, env Environment, reserved func(string) bool, track *SourceTextTracker) string {
+	return substMacroDeeplyInto(value, nil, env, nil, &substPolicy{makefile: true, emptyUnknown: true, literal: reserved, track: track}, &makeExprSubstBufs)
+}
+
 func expandMakeExpressionTracked(value string, env Environment, reserved func(string) bool, track *SourceTextTracker) string {
 	return substMacroDeeply(value, nil, env, nil, &substPolicy{makefile: true, emptyUnknown: true, literal: reserved, track: track})
 }
@@ -227,11 +231,11 @@ func expandAllResourceFiles(d *ModuleData, out []ResourceEntry, fs FS, modulePat
 				continue
 			}
 
-			for _, match := range globMatch(fs, rel+"/*"+suffix) {
+			globVisit(fs, rel+"/*"+suffix, func(match string, _ bool) {
 				if deduper.add(internStr(match).strID()) {
 					rfArgs = append(rfArgs, d.resStr2("${ARCADIA_ROOT}/", match))
 				}
-			}
+			})
 		}
 	})
 
@@ -254,14 +258,31 @@ func allResourceDir(modulePath, dir string) (rel string, ok bool) {
 }
 
 func globMatch(fs FS, pattern string) []string {
-	segs := strings.Split(pattern, "/")
-	dirs := []string{""}
-
 	var matches []string
 
-	for i, seg := range segs {
-		last := i == len(segs)-1
+	globVisit(fs, pattern, func(file string, view bool) {
+		if view {
+			file = strings.Clone(file)
+		}
+
+		matches = append(matches, file)
+	})
+
+	return matches
+}
+
+func globVisit(fs FS, pattern string, visit func(file string, view bool)) {
+	dirs := []string{""}
+
+	var joinBuf [256]byte
+
+	for i := 0; i <= len(pattern); {
+		segEnd := pathSegmentEnd(pattern, i)
+		seg := pattern[i:segEnd]
+		last := segEnd == len(pattern)
 		wild := strings.ContainsAny(seg, "*?")
+
+		i = segEnd + 1
 
 		var next []string
 
@@ -285,7 +306,7 @@ func globMatch(fs FS, pattern string) []string {
 
 				fs.walk(d, func(rel string, isDir bool) bool {
 					if !isDir {
-						matches = append(matches, rel)
+						visit(rel, false)
 					}
 
 					return true
@@ -295,8 +316,8 @@ func globMatch(fs FS, pattern string) []string {
 			}
 
 			if !wild {
-				child := joinRel(d, seg)
-				present, isDir := fs.exists(srcRootRel, child)
+				child := joinRelInto(joinBuf[:0], d, seg)
+				present, isDir := fs.exists(srcRootRel, bytesString(child))
 
 				if !present {
 					continue
@@ -304,10 +325,10 @@ func globMatch(fs FS, pattern string) []string {
 
 				if last {
 					if !isDir {
-						matches = append(matches, child)
+						visit(bytesString(child), true)
 					}
 				} else if isDir {
-					next = append(next, child)
+					next = append(next, string(child))
 				}
 
 				continue
@@ -326,7 +347,7 @@ func globMatch(fs FS, pattern string) []string {
 
 				if last {
 					if !isDir {
-						matches = append(matches, joinRel(d, name))
+						visit(bytesString(joinRelInto(joinBuf[:0], d, name)), true)
 					}
 				} else if isDir {
 					next = append(next, joinRel(d, name))
@@ -336,8 +357,6 @@ func globMatch(fs FS, pattern string) []string {
 
 		dirs = next
 	}
-
-	return matches
 }
 
 func globSegMatch(pat, name string) bool {

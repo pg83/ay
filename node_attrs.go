@@ -260,16 +260,12 @@ func (c PColor) string() string {
 }
 
 type KV struct {
-	SplitFile        string
-	SplitIndex       int
-	HasSplitIndex    bool
 	P                ProcKind
 	PC               PColor
 	ShowOut          bool
 	ShowOutBool      bool
 	Soe              bool
 	Name             string
-	Path             string
 	DisableCache     bool
 	SpecialRunner    string
 	HasSpecialRunner bool
@@ -379,8 +375,16 @@ func appendRequirements(buf []byte, r *Requirements) []byte {
 	return append(o.buf, '}')
 }
 
-func appendKV(buf []byte, kv KV, exts []KVExt) []byte {
+func appendKV(buf []byte, kv KV, extra *NodeExtra) []byte {
 	o := JsonObj{buf: append(buf, '{')}
+
+	var exts []KVExt
+
+	path, splitFile := "", ""
+
+	if extra != nil {
+		exts, path, splitFile = extra.KVExts, extra.KVPath, extra.SplitFile
+	}
 
 	if kv.DisableCache {
 		o.forceStr("disable_cache", "yes")
@@ -396,7 +400,7 @@ func appendKV(buf []byte, kv KV, exts []KVExt) []byte {
 
 	o.str("name", kv.Name)
 	o.str("p", kv.P.string())
-	o.str("path", kv.Path)
+	o.str("path", path)
 	o.str("pc", kv.PC.string())
 	o.boolTrue("run_test_node", kv.RunTestNode)
 
@@ -414,10 +418,10 @@ func appendKV(buf []byte, kv KV, exts []KVExt) []byte {
 		o.forceStr("special_runner", kv.SpecialRunner)
 	}
 
-	o.str("split_file", kv.SplitFile)
+	o.str("split_file", splitFile)
 
-	if kv.HasSplitIndex {
-		o.num("split_index", float64(kv.SplitIndex))
+	if extra != nil && extra.HasSplitIndex {
+		o.num("split_index", float64(extra.SplitIndex))
 	}
 
 	return append(o.buf, '}')

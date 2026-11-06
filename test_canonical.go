@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"path"
@@ -15,51 +16,33 @@ func (ctx *GenCtx) canonicalTestResources(s *TestSuite) []string {
 		return nil
 	}
 
-	parsed := ctx.parsers.parsedJSON(file)
+	key := internStr(file)
 
-	if parsed.Error != nil {
-		fmt.Fprintf(os.Stderr, "malformed canonical data in %s: %s (%s)\n", s.projectPath, parsed.Error, file)
-
-		return nil
+	if resources, ok := ctx.canonicalResources[key]; ok {
+		return resources
 	}
 
-	var resources []string
+	data := concatChunks(ctx.fs.readPath(key))
 
-	var visit func(any)
+	if !json.Valid(data) {
+		if parsed := ctx.parsers.parsedJSON(file); parsed.Error != nil {
+			fmt.Fprintf(os.Stderr, "malformed canonical data in %s: %s (%s)\n", s.projectPath, parsed.Error, file)
 
-	visit = func(data any) {
-		switch value := data.(type) {
-		case map[string]any:
-			uri, uriPresent := value["uri"]
-			_, checksumPresent := value["checksum"]
-
-			if uriPresent && checksumPresent {
-				uri, ok := uri.(string)
-
-				if !ok {
-					throwFmt("canonical resource URI must be a string in %s", file)
-				}
-
-				if resource := canonicalTestResource(uri); resource != "" {
-					resources = append(resources, resource)
-				}
-
-				return
-			}
-
-			for _, child := range value {
-				visit(child)
-			}
-		case []any:
-			for _, child := range value {
-				visit(child)
-			}
+			return nil
 		}
 	}
 
-	visit(parsed.Value)
+	scan := canonicalResourceScan{data: data}
 
-	return sortedUnique(resources)
+	if _, bad := scan.value(0); bad {
+		throwFmt("canonical resource URI must be a string in %s", file)
+	}
+
+	resources := sortedUnique(scan.resources)
+
+	ctx.canonicalResources[key] = resources
+
+	return resources
 }
 
 func canonicalTestResource(uri string) string {

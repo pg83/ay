@@ -159,7 +159,7 @@ func (e *EmitContext) goFmtSuite(files []VFS, globals []ResourceDecl) *TestSuite
 	}
 
 	for _, f := range files {
-		s.relatedPaths = append(s.relatedPaths, f.string())
+		s.relatedPaths = append(s.relatedPaths, f.any())
 	}
 
 	s.runCmd = func(work string, _ TestChunk) []ANY {

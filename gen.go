@@ -164,6 +164,7 @@ func protoResultWholeArchiveCmdPaths(res *ProtoSrcsResult) []VFS {
 type GenCtx struct {
 	peerTagSets         map[STR][]STR
 	varWordCache        map[STR][]ANY
+	varMacroStmtCache   map[varMacroKey][]Stmt
 	scanData            ModuleData
 	dirs                map[dirEvaluationKey]*DirEvaluation
 	dependencyInstances map[string][]ModuleInstance
@@ -234,6 +235,8 @@ type GenCtx struct {
 	goEnvMemo           map[[2]STR]EnvVars
 	goImportDirs        map[goImportKey]STR
 	runtimeTestSeen     map[*ModuleEmitResult]bool
+	canonicalResources  map[STR][]string
+	javaSetVars         SetVars
 	frameSerial         uint32
 	scannerTargetPIC    *IncludeScanner
 	roots               map[ModuleInstance]bool
@@ -244,6 +247,8 @@ type GenCtx struct {
 	testInputs          []VFS
 	testOutputs         []VFS
 	testCmds            []Cmd
+	testDeps            []NodeRef
+	javaGlobKeys        []javaGlobKey
 	targetDirs          map[string]bool
 	rootDemand          ModuleDemand
 }
@@ -382,11 +387,14 @@ func newGenCtx(fs FS, parsers *IncludeParserManager, hostP, targetP *Platform, e
 
 		sbomEnabled: fs.isFile(srcRootRel, sbomConfRel),
 
-		autoincludeIdx:  loadAutoincludeIndex(fs),
-		parsedFiles:     map[string]*MakeFile{},
-		includeMemos:    newIncludeMemos(),
-		goImportDirs:    map[goImportKey]STR{},
-		runtimeTestSeen: map[*ModuleEmitResult]bool{},
+		autoincludeIdx:     loadAutoincludeIndex(fs),
+		parsedFiles:        map[string]*MakeFile{},
+		includeMemos:       newIncludeMemos(),
+		goImportDirs:       map[goImportKey]STR{},
+		runtimeTestSeen:    map[*ModuleEmitResult]bool{},
+		canonicalResources: map[STR][]string{},
+		javaSetVars:        SetVars{vals: map[STR]STR{}, appends: map[STR]setVarChain{}},
+		varMacroStmtCache:  map[varMacroKey][]Stmt{},
 	}
 
 	ctx.inclArgs = InclArgMemo{m: &ctx.inclArgValues}
@@ -873,7 +881,7 @@ func mergeCheckSuite(suites []*TestSuite, s *TestSuite) bool {
 		if prev.testType == s.testType && prev.projectPath == s.projectPath && prev.name == s.name && len(prev.checkFiles) > 0 {
 			prev.checkFiles = append(prev.checkFiles, s.checkFiles...)
 			prev.deps = append(prev.deps, s.deps...)
-			prev.relatedPaths = sortedUnique(append(prev.relatedPaths, s.relatedPaths...))
+			prev.relatedPaths = sortedUniqueByText(append(prev.relatedPaths, s.relatedPaths...))
 
 			slices.SortFunc(prev.checkFiles, vfsCompare)
 

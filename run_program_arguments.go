@@ -41,9 +41,9 @@ func runProgramSourceArgumentValues(args []ANY, env Environment, withText bool) 
 
 		if strings.ContainsRune(value, '$') {
 			if withText {
-				value = expandMakeExpressionTracked(value, env, runProgramReservedVariable, &track)
+				value = expandMakeExpressionView(value, env, runProgramReservedVariable, &track)
 			} else {
-				value = expandMakeExpression(value, env, runProgramReservedVariable)
+				value = expandMakeExpressionView(value, env, runProgramReservedVariable, nil)
 			}
 
 			spans = appendSourceWordSpans(spanBuf[:0], value, func(r rune) bool { return r == ' ' })

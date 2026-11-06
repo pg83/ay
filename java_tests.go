@@ -164,7 +164,7 @@ func (ctx *GenCtx) javaStyleSuite(jm *JavaModule) *TestSuite {
 	s.timeout = 240
 	s.requirements = map[string]string{"ram": "16"}
 	s.supportsTestParameters = true
-	s.relatedPaths = append([]string{"$(S)/" + javaStyleMigrations}, sortedUnique(dirs)...)
+	s.relatedPaths = append([]ANY{source(javaStyleMigrations).any()}, sortedUniqueByText(testArgs(dirs))...)
 	s.runInputs = append(s.runInputs, srclst)
 	s.deps = []NodeRef{ctx.javaProducer(jm, srclst)}
 	s.env = append(slices.Clone(d.testEnv), javaStyleServerEnv)
@@ -207,11 +207,11 @@ func (ctx *GenCtx) javaKtlintSuite(jm *JavaModule) *TestSuite {
 		folder = "ktlint_old"
 	}
 
-	editorconfig := "$(S)/build/platform/java/" + folder + "/.editorconfig"
+	editorconfigPath := "$(S)/build/platform/java/" + folder + "/.editorconfig"
 	binary := "$(" + strings.ToUpper(folder) + ")/run.bat"
 	srclist := build(jm.dir, "/all-kt-sources.txt")
 	s := ctx.javaSuiteBase(jm, "ktlint", "ktlint", "style")
-	dirs := []string{editorconfig}
+	dirs := []string{editorconfigPath}
 
 	if !d.ktlintSkipSourceDirs {
 		dirs = append(dirs, ctx.javaSrcDirsTestData(jm)...)
@@ -219,7 +219,7 @@ func (ctx *GenCtx) javaKtlintSuite(jm *JavaModule) *TestSuite {
 
 	s.timeout = 120
 	s.requirements = map[string]string{"cpu": "2"}
-	s.relatedPaths = append([]string{"$(S)/" + jm.dir, "$(S)/.editorconfig"}, sortedUnique(dirs)...)
+	s.relatedPaths = append([]ANY{source(jm.dir).any(), editorconfig.any()}, sortedUniqueByText(testArgs(dirs))...)
 	s.runInputs = append(s.runInputs, srclist)
 	s.projectBuildDeps = true
 	s.deps = []NodeRef{ctx.javaProducer(jm, srclist)}
@@ -228,7 +228,7 @@ func (ctx *GenCtx) javaKtlintSuite(jm *JavaModule) *TestSuite {
 	s.runCmd = func(work string, _ TestChunk) []ANY {
 		return testArgs([]string{testToolHostPath, "run_ktlint_test", "--srclist-path", srclist.string(), "--binary", binary,
 			"--trace-path", work + "/ytest.report.trace", "--source-root", "$(S)", "--build-root", "$(B)",
-			"--project-path", jm.dir, "--output-dir", work + "/testing_out_stuff", "--editorconfig", editorconfig})
+			"--project-path", jm.dir, "--output-dir", work + "/testing_out_stuff", "--editorconfig", editorconfigPath})
 	}
 
 	return s
@@ -282,7 +282,7 @@ func (ctx *GenCtx) javaKotlinLintFiles(jm *JavaModule) []string {
 
 	for _, p := range patterns {
 		for _, f := range ctx.javaGlob(jm.dir, p, ex) {
-			files = append(files, f)
+			files = append(files, f.string())
 		}
 	}
 
@@ -384,7 +384,7 @@ func (ctx *GenCtx) javaJunitSuite(jm *JavaModule) *TestSuite {
 	}
 
 	for _, rel := range sortedUnique(data) {
-		s.relatedPaths = append(s.relatedPaths, "$(S)/"+rel)
+		s.relatedPaths = append(s.relatedPaths, source(rel).any())
 	}
 
 	classpath := make([]ANY, 0, ctx.javaManagedLen(jm))

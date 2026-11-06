@@ -280,25 +280,31 @@ func collectStyleFiles(fs FS, module string, stmt UnknownStmt) []string {
 		patterns = append(patterns, path.Join(module, dir)+"/**")
 	}
 
+	modulePrefix := module + "/"
+
 	for _, pattern := range patterns {
-		for _, file := range globMatch(fs, pattern) {
-			rel := strings.TrimPrefix(file, module+"/")
+		globVisit(fs, pattern, func(file string, view bool) {
+			rel := strings.TrimPrefix(file, modulePrefix)
 
 			if rel == "ya.make" || strings.HasPrefix(rel, "canondata/") || globExcluded(excludes, rel, false) {
-				continue
+				return
 			}
 
 			if path.Base(file) == "ya.make" {
 			} else if yaml {
 				if stmt.Name == tokStyleYAML && (path.Base(file) == "a.yaml" || path.Base(file) == "t.yaml") || (path.Ext(file) != ".yaml" && path.Ext(file) != ".yml") {
-					continue
+					return
 				}
 			} else if path.Ext(file) != ext {
-				continue
+				return
+			}
+
+			if view {
+				file = strings.Clone(file)
 			}
 
 			files = append(files, file)
-		}
+		})
 	}
 
 	return sortedUnique(files)
@@ -481,18 +487,18 @@ func (s *TestSuite) mergeStyleFiles(files []string) {
 	s.relatedPaths = nil
 
 	for _, file := range check.Files {
-		s.relatedPaths = append(s.relatedPaths, source(file).string())
+		s.relatedPaths = append(s.relatedPaths, source(file).any())
 	}
 
 	if check.Config != "" {
-		s.relatedPaths = append(s.relatedPaths, source(check.Config).string())
+		s.relatedPaths = append(s.relatedPaths, source(check.Config).any())
 	}
 
 	for _, config := range check.ExtraConfigs {
-		s.relatedPaths = append(s.relatedPaths, source(config).string())
+		s.relatedPaths = append(s.relatedPaths, source(config).any())
 	}
 
-	s.relatedPaths = append(s.relatedPaths, source(check.Wrapper).string())
+	s.relatedPaths = append(s.relatedPaths, source(check.Wrapper).any())
 
 	if check.FileProcessingTime > 0 {
 		s.split = max(1, int(math.Ceil(check.FileProcessingTime*float64(len(check.Files))/float64(s.timeout))))

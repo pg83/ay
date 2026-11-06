@@ -246,7 +246,7 @@ func testInnerCommand(s *TestSuite, meta TestMeta, binary VFS, work string, chun
 		}
 
 		if chunk.split > 1 {
-			command = append(command, strModulo.any(), testArg(strconv.Itoa(chunk.split)), strModuloIndex.any(), testArg(strconv.Itoa(chunk.index)), strPartitionMode.any(), testArg(cmp.Or(meta.partition, "SEQUENTIAL")))
+			command = append(command, strModulo.any(), intArg(chunk.split), strModuloIndex.any(), intArg(chunk.index), strPartitionMode.any(), testArg(cmp.Or(meta.partition, "SEQUENTIAL")))
 		}
 
 		if meta.forkMode == "subtests" {
@@ -298,7 +298,7 @@ func testInnerCommand(s *TestSuite, meta TestMeta, binary VFS, work string, chun
 	case "boost_test":
 		args = append(args, strRunBoostTest.any(), strBinary.any(), binary.any(), strTracefile.any(), trace, strOutputDir.any(), out, strProjectPath.any(), testArg(s.projectPath), strVerbose.any(), strGdbPath.any(), testGDBPathArg)
 	case "fuzz":
-		args = append(args, strRunFuzz.any(), strBinary.any(), binary.any(), strTracefile.any(), trace, strModulo.any(), testArg(strconv.Itoa(max(chunk.split, 1))), strModuloIndex.any(), testArg(strconv.Itoa(chunk.index)), strOutputDir.any(), out, strProjectPath.any(), testArg(s.projectPath), strSourceRoot2.any(), testSourceRootArg, strVerbose.any(), strGdbPath.any(), testGDBPathArg)
+		args = append(args, strRunFuzz.any(), strBinary.any(), binary.any(), strTracefile.any(), trace, strModulo.any(), intArg(max(chunk.split, 1)), strModuloIndex.any(), intArg(chunk.index), strOutputDir.any(), out, strProjectPath.any(), testArg(s.projectPath), strSourceRoot2.any(), testSourceRootArg, strVerbose.any(), strGdbPath.any(), testGDBPathArg)
 
 		if opts.dist {
 			args = append(args, strTruncateLogs.any())
@@ -309,7 +309,7 @@ func testInnerCommand(s *TestSuite, meta TestMeta, binary VFS, work string, chun
 		}
 
 		if s.corpusPartsExceeded > 0 {
-			args = append(args, strCorpusPartsLimitExceeded.any(), testArg(strconv.Itoa(s.corpusPartsExceeded)))
+			args = append(args, strCorpusPartsLimitExceeded.any(), intArg(s.corpusPartsExceeded))
 		}
 	default:
 		partition := meta.partition
@@ -318,7 +318,7 @@ func testInnerCommand(s *TestSuite, meta TestMeta, binary VFS, work string, chun
 			partition = "SEQUENTIAL"
 		}
 
-		args = append(args, strRunUt.any(), strBinary.any(), binary.any(), strTracePath.any(), trace, strOutputDir.any(), out, strModulo.any(), testArg(strconv.Itoa(max(chunk.split, 1))), strModuloIndex.any(), testArg(strconv.Itoa(chunk.index)), strPartitionMode.any(), testArg(partition), strProjectPath.any(), testArg(s.projectPath), strListTimeout.any(), testArg(strconv.Itoa(s.timeout/2)), strVerbose.any(), strGdbPath.any(), testGDBPathArg)
+		args = append(args, strRunUt.any(), strBinary.any(), binary.any(), strTracePath.any(), trace, strOutputDir.any(), out, strModulo.any(), intArg(max(chunk.split, 1)), strModuloIndex.any(), intArg(chunk.index), strPartitionMode.any(), testArg(partition), strProjectPath.any(), testArg(s.projectPath), strListTimeout.any(), intArg(s.timeout/2), strVerbose.any(), strGdbPath.any(), testGDBPathArg)
 
 		if opts.dist {
 			args = append(args, strTruncateLogs.any())

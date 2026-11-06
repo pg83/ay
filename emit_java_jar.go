@@ -69,7 +69,7 @@ func (ctx *GenCtx) javaSrcsGlobs(jm *JavaModule) []javaSrcsGlob {
 				}
 
 				for _, f := range ctx.javaGlob(jm.dir, pattern, ex) {
-					g.files = append(g.files, source(f))
+					g.files = append(g.files, f.source())
 				}
 			}
 		}

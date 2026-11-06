@@ -87,6 +87,7 @@ func (p ParsedSource) walkable(cache *SharedParseCache) []IncludeDirective {
 
 type SharedParseCache struct {
 	notsJSON     DenseMap[STR, ParsedJSON]
+	usrvDeps     DenseMap[STR, *usrvDepsIndex]
 	notsYAML     DenseMap[STR, map[string]any]
 	notsLocks    DenseMap[STR, *NotsLockfile]
 	directives   *BumpAllocator[IncludeDirective]

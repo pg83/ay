@@ -132,6 +132,10 @@ func javaModulePrologue(ctx *GenCtx, jm *JavaModule, d *JavaData, env Environmen
 func collectJavaData(ctx *GenCtx, jm *JavaModule, stmts []Stmt, env Environment) *JavaData {
 	d := &JavaData{jdkReal: ctx.javaDefaultJDK(), env: env, lintLevel: "extended", abiJar: true, srcDirs: []VFS{jm.path}, dm: ctx.javaDMBuf[:0], excludes: ctx.javaExclBuf[:0], rawVars: ctx.javaRawVars}
 
+	d.setVars = SetVars{vals: clearedMap(ctx.javaSetVars.vals), appends: clearedMap(ctx.javaSetVars.appends), parts: ctx.javaSetVars.parts[:0]}
+
+	defer func() { ctx.javaSetVars.parts = d.setVars.parts[:0] }()
+
 	d.javacOpts.base = []string{"-J-XX:ActiveProcessorCount=4"}
 	d.javacOpts.cur = d.javacOpts.base
 	clear(d.rawVars)

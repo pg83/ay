@@ -149,7 +149,7 @@ func expandSourceInputTokens(args []ANY, env Environment, phase TokenExpansion) 
 
 		var track SourceTextTracker
 
-		value := expandTokenTracked(arg.string(), env, phase, &track)
+		value := expandTokenTrackedView(arg.string(), env, phase, &track)
 
 		for _, span := range appendSourceWordSpans(spanBuf[:0], value, unicode.IsSpace) {
 			word := internAny(value[span.Start:span.End])
@@ -199,7 +199,7 @@ func captureSourceTextAppend(v *UnknownStmt, env Environment) *sourceTextAppend 
 
 		var track SourceTextTracker
 
-		value := expandTokenTracked(arg.string(), env, tokenExpandLazy, &track)
+		value := expandTokenTrackedView(arg.string(), env, tokenExpandLazy, &track)
 
 		for _, span := range appendSourceWordSpans(spanBuf[:0], value, unicode.IsSpace) {
 			size := span.End - span.Start

@@ -139,6 +139,7 @@ type peerPolicySide struct {
 	anySet  BitSet
 	matches DenseMap[STR, []int]
 	scratch []int
+	store   []int
 }
 
 type peerPolicySideBuilder struct {
@@ -302,8 +303,9 @@ func (side *peerPolicySide) matching(rules []PeerPolicyRule, dir STR, self func(
 
 	var out []int
 
-	if len(matches) != 0 {
-		out = slices.Clone(matches)
+	if n := len(matches); n != 0 {
+		side.store = append(side.store, matches...)
+		out = side.store[len(side.store)-n : len(side.store) : len(side.store)]
 	}
 
 	side.matches.put(dir, out)

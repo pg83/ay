@@ -597,7 +597,7 @@ func (ctx *GenCtx) emitJavaRunProgram(dir string, platform *Platform, jdk string
 		}
 
 		for _, f := range ctx.javaGlob(dir, pattern, newJavaExcludeMatcher(dir, nil)) {
-			file := source(f)
+			file := f.source()
 
 			b.input(file)
 			b.inputRoots = append(b.inputRoots, file)

@@ -17,6 +17,8 @@ type NodeArenas struct {
 	geninfos      *BumpAllocator[GeneratedFileInfo]
 	moduleInputs  *BumpAllocator[ModuleInputInfo]
 	genRares      *BumpAllocator[GeneratedFileRare]
+	extras        *BumpAllocator[NodeExtra]
+	reqs          *BumpAllocator[Requirements]
 	pending       *BumpAllocator[PendingEmit]
 	protoPBC      *BumpAllocator[protoPBCommon]
 	protoPB       *BumpAllocator[protoPBPending]
@@ -42,6 +44,8 @@ func (na *NodeArenas) resetWindows() {
 	na.geninfos.open = false
 	na.moduleInputs.open = false
 	na.genRares.open = false
+	na.extras.open = false
+	na.reqs.open = false
 	na.pending.open = false
 	na.protoPBC.open = false
 	na.protoPB.open = false
@@ -67,6 +71,8 @@ func (na *NodeArenas) markStrict() {
 	na.geninfos.markStrict()
 	na.moduleInputs.markStrict()
 	na.genRares.markStrict()
+	na.extras.markStrict()
+	na.reqs.markStrict()
 	na.pending.markStrict()
 	na.protoPBC.markStrict()
 	na.protoPB.markStrict()
@@ -91,6 +97,8 @@ func newNodeArenas() *NodeArenas {
 		geninfos:      newBumpAllocator[GeneratedFileInfo](),
 		moduleInputs:  newBumpAllocator[ModuleInputInfo](),
 		genRares:      newBumpAllocator[GeneratedFileRare](),
+		extras:        newBumpAllocator[NodeExtra](),
+		reqs:          newBumpAllocator[Requirements](),
 		pending:       newBumpAllocator[PendingEmit](),
 		protoPBC:      newBumpAllocator[protoPBCommon](),
 		protoPB:       newBumpAllocator[protoPBPending](),

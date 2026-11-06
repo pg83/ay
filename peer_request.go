@@ -119,7 +119,7 @@ func consumerPeerTags(d *ModuleData, env Environment) STR {
 
 	joined := buf[:0]
 
-	for f := range strings.FieldsSeq(env.expandVariable(env.string(envPeerdirTags))) {
+	for f := range strings.FieldsSeq(env.expandVariableView(env.string(envPeerdirTags))) {
 		if len(joined) != 0 {
 			joined = append(joined, ' ')
 		}

@@ -94,6 +94,6 @@ func (x *ModuleData) reset() {
 		pyRegister:           x.pyRegister[:0],
 		ragel6Flags:          x.ragel6Flags[:0],
 		resourceDeclStmts:    scrub(x.resourceDeclStmts),
-		setVars:              SetVars{vals: clearedMap(x.setVars.vals)},
+		setVars:              SetVars{vals: clearedMap(x.setVars.vals), appends: clearedMap(x.setVars.appends), parts: x.setVars.parts[:0]},
 	}
 }

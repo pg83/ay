@@ -11,26 +11,29 @@ import (
 )
 
 var (
-	testContextAllowedFlags  = []string{"AUTOCHECK", "TESTS_REQUESTED", "USE_ARCADIA_PYTHON", "USE_SYSTEM_PYTHON"}
-	testDescriptorExtraFlags = []string{"MUSL", "ALLOCATOR", "FAKEID", "RACE"}
-	testDescriptorFlagTags   = map[string]string{"USE_LTO": "lto", "USE_THINLTO": "thinlto", "MUSL": "musl", "USE_AFL": "AFL", "RACE": "race"}
-	testSizeTimeouts         = map[string]int{"small": 60, "medium": 600, "large": 3600}
-	testSizeKinds            = map[string]ProcKind{"small": pkTS, "medium": pkTM, "large": pkTL}
-	testCommonEnvSkip        = []string{"YA_CACHE_DIR", "YA_TIMEOUT", "YA_TOKEN", "YA_SOURCE_ROOT"}
-	testSanitizerOptVars     = []string{"LSAN_OPTIONS", "ASAN_OPTIONS", "UBSAN_OPTIONS", "MSAN_OPTIONS", "TSAN_OPTIONS"}
-	testSymbolizerVars       = []string{"ASAN_SYMBOLIZER_PATH", "LSAN_SYMBOLIZER_PATH", "MSAN_SYMBOLIZER_PATH", "TSAN_SYMBOLIZER_PATH", "UBSAN_SYMBOLIZER_PATH"}
-	testAgentEnvSignatures   = []string{"OPENCODE", "CLAUDECODE", "CODEX_THREAD_ID", "CURSOR_TRACE_ID", "CODEIUM_EDITOR_APP_ROOT", "AIDER_API_KEY", "AMP_CURRENT_THREAD_ID", "ANTIGRAVITY_AGENT", "AUGMENT_AGENT", "GEMINI_CLI", "QWEN_CODE", "REPL_ID"}
-	testAgentProcessNames    = []string{"opencode", "claude", "claude-code", "copilot", "codex-app", "codex", "hermes", "openclaw", "droid", "pi"}
-	testNoPlatform           = &Platform{}
-	testSecretRequirements   = []string{"sb_vault", "yav"}
-	testToolHostPathArg      = internStr(testToolHostPath).any()
-	testCmdFileStartArg      = internStr(testCmdFileStart).any()
-	testCmdFileEndArg        = internStr(testCmdFileEnd).any()
-	testBasetempArg          = intern("$(B)/tmp").any()
-	testBuildRootArg         = internStr(testBuildRoot).any()
-	testSourceRootArg        = internStr(testSourceRoot).any()
-	testGDBPathArg           = internStr(testGDBPath).any()
-	testPythonBinArg         = internStr(testPythonBin).any()
+	testContextAllowedFlags    = []string{"AUTOCHECK", "TESTS_REQUESTED", "USE_ARCADIA_PYTHON", "USE_SYSTEM_PYTHON"}
+	testDescriptorExtraFlags   = []string{"MUSL", "ALLOCATOR", "FAKEID", "RACE"}
+	testDescriptorFlagTags     = map[string]string{"USE_LTO": "lto", "USE_THINLTO": "thinlto", "MUSL": "musl", "USE_AFL": "AFL", "RACE": "race"}
+	testSizeTimeouts           = map[string]int{"small": 60, "medium": 600, "large": 3600}
+	testSizeKinds              = map[string]ProcKind{"small": pkTS, "medium": pkTM, "large": pkTL}
+	testNodeKVs                = map[ProcKind]*KV{0: testNodeKV(0), pkTS: testNodeKV(pkTS), pkTM: testNodeKV(pkTM), pkTL: testNodeKV(pkTL)}
+	testCommonEnvSkip          = []string{"YA_CACHE_DIR", "YA_TIMEOUT", "YA_TOKEN", "YA_SOURCE_ROOT"}
+	testSanitizerOptVars       = []string{"LSAN_OPTIONS", "ASAN_OPTIONS", "UBSAN_OPTIONS", "MSAN_OPTIONS", "TSAN_OPTIONS"}
+	testSymbolizerVars         = []string{"ASAN_SYMBOLIZER_PATH", "LSAN_SYMBOLIZER_PATH", "MSAN_SYMBOLIZER_PATH", "TSAN_SYMBOLIZER_PATH", "UBSAN_SYMBOLIZER_PATH"}
+	testAgentEnvSignatures     = []string{"OPENCODE", "CLAUDECODE", "CODEX_THREAD_ID", "CURSOR_TRACE_ID", "CODEIUM_EDITOR_APP_ROOT", "AIDER_API_KEY", "AMP_CURRENT_THREAD_ID", "ANTIGRAVITY_AGENT", "AUGMENT_AGENT", "GEMINI_CLI", "QWEN_CODE", "REPL_ID"}
+	testAgentProcessNames      = []string{"opencode", "claude", "claude-code", "copilot", "codex-app", "codex", "hermes", "openclaw", "droid", "pi"}
+	testNoPlatform             = &Platform{}
+	testSecretRequirements     = []string{"sb_vault", "yav"}
+	testToolHostPathArg        = internStr(testToolHostPath).any()
+	testCmdFileStartArg        = internStr(testCmdFileStart).any()
+	testCmdFileEndArg          = internStr(testCmdFileEnd).any()
+	testBasetempArg            = intern("$(B)/tmp").any()
+	testBuildRootArg           = internStr(testBuildRoot).any()
+	testDistResultFileLimitArg = internStr(strconv.Itoa(testDistResultFileLimit)).any()
+	testDefaultTestsLimitArg   = internStr(strconv.Itoa(testDefaultTestsLimit)).any()
+	testSourceRootArg          = internStr(testSourceRoot).any()
+	testGDBPathArg             = internStr(testGDBPath).any()
+	testPythonBinArg           = internStr(testPythonBin).any()
 )
 
 const (
@@ -284,6 +287,82 @@ func testArgsInto(out []ANY, ss []string) []ANY {
 	return out
 }
 
+func anyTextParts(a ANY) (string, string) {
+	v := a.vfs()
+
+	if v == 0 {
+		return a.str().string(), ""
+	}
+
+	if rel := v.relString(); rel != "" {
+		return v.prefix(), rel
+	}
+
+	return v.prefix()[:vfsPrefixLen-1], ""
+}
+
+func anyTextCompare(a, b ANY) int {
+	a1, a2 := anyTextParts(a)
+	b1, b2 := anyTextParts(b)
+	n, m := len(a1)+len(a2), len(b1)+len(b2)
+
+	for i := 0; i < n && i < m; i++ {
+		ca, cb := concatByte(a1, a2, i), concatByte(b1, b2, i)
+
+		if ca != cb {
+			return int(ca) - int(cb)
+		}
+	}
+
+	return n - m
+}
+
+func concatByte(head, tail string, i int) byte {
+	if i < len(head) {
+		return head[i]
+	}
+
+	return tail[i-len(head)]
+}
+
+func dedupRelatedPaths(paths []ANY) []ANY {
+	out := paths[:0]
+
+	dedupers.with(func(deduper *DeDuper) {
+		for _, p := range paths {
+			if v := p.vfs(); v != 0 {
+				if deduper.addStable(uint32(v)) {
+					out = append(out, p)
+				}
+			} else if !slices.Contains(out, p) {
+				out = append(out, p)
+			}
+		}
+	})
+
+	return out
+}
+
+func sortedUniqueByText(in []ANY) []ANY {
+	out := slices.Clone(in)
+
+	slices.SortFunc(out, anyTextCompare)
+
+	return slices.Compact(out)
+}
+
+func testNodeKV(kind ProcKind) *KV {
+	return &KV{P: kind, PC: pcYellow, RunTestNode: true, ShowOutBool: true, HasSpecialRunner: true}
+}
+
+func intArg(n int) ANY {
+	if n >= 0 && n < len(intSTR) {
+		return intSTR[n].any()
+	}
+
+	return internStr(strconv.Itoa(n)).any()
+}
+
 func testArg(s string) ANY {
 	if strings.HasPrefix(s, "$(S)/") || strings.HasPrefix(s, "$(B)/") {
 		return intern(s).any()
@@ -321,10 +400,13 @@ type TestSuite struct {
 	ciType                 string
 	size                   string
 	timeout                int
-	relatedPaths           []string
+	relatedPaths           []ANY
 	runInputs              []VFS
 	inputNames             []string
 	uidSalt                string
+	uidSaltID              STR
+	workBase               string
+	kvPath                 string
 	noCleanEnvironment     bool
 	clearEnvironment       bool
 	noRetries              bool
@@ -357,7 +439,11 @@ type TestChunk struct {
 }
 
 func (s *TestSuite) workDir(chunk TestChunk) string {
-	dir := path.Join("$(B)", s.projectPath, "test-results", s.name)
+	if s.workBase == "" {
+		s.workBase = path.Join("$(B)", s.projectPath, "test-results", s.name)
+	}
+
+	dir := s.workBase
 
 	if chunk.retry > 0 {
 		dir += "/run" + strconv.Itoa(chunk.retry)
@@ -641,12 +727,12 @@ func (ctx *GenCtx) testNode(s *TestSuite, chunk TestChunk) *Node {
 		head = append(head, testCmdFileStartArg)
 	}
 
-	head = append(head, strMeta.any(), outputs[0].any(), strTrace.any(), outputs[1].any(), strTimeout.any(), testArg(strconv.Itoa(s.timeout)), strLogPath.any(), outputs[2].any(), strTestSize.any(), testArg(s.size), strTestType.any(), testArg(s.testType), strTestCiType.any(), testArg(s.ciType), strContextFilename.any(), bldCommonTestContext.any(), strSourceRoot2.any(), strS.any(), strBuildRoot2.any(), strB.any(), strTestSuiteName.any(), testArg(s.name), strProjectPath.any(), testArg(s.projectPath))
+	head = append(head, strMeta.any(), outputs[0].any(), strTrace.any(), outputs[1].any(), strTimeout.any(), intArg(s.timeout), strLogPath.any(), outputs[2].any(), strTestSize.any(), testArg(s.size), strTestType.any(), testArg(s.testType), strTestCiType.any(), testArg(s.ciType), strContextFilename.any(), bldCommonTestContext.any(), strSourceRoot2.any(), strS.any(), strBuildRoot2.any(), strB.any(), strTestSuiteName.any(), testArg(s.name), strProjectPath.any(), testArg(s.projectPath))
 
-	related := dedupKeepOrder(s.relatedPaths)
+	related := dedupRelatedPaths(s.relatedPaths)
 
 	for _, p := range related {
-		head = append(head, strTestRelatedPath.any(), testArg(p))
+		head = append(head, strTestRelatedPath.any(), p)
 	}
 
 	if s.noCleanEnvironment || slices.Contains(s.tags, "ya:dirty") {
@@ -662,7 +748,7 @@ func (ctx *GenCtx) testNode(s *TestSuite, chunk TestChunk) *Node {
 	head = append(head, strGdbPath.any(), testGDBPathArg)
 
 	if o.dist {
-		head = append(head, strLogLevel.any(), strDebug.any(), strResultMaxFileSize.any(), testArg(strconv.Itoa(testDistResultFileLimit)), strDisableMemorySnippet.any(), strTruncateFiles.any(), strPropagateTimeoutInfo.any())
+		head = append(head, strLogLevel.any(), strDebug.any(), strResultMaxFileSize.any(), testDistResultFileLimitArg, strDisableMemorySnippet.any(), strTruncateFiles.any(), strPropagateTimeoutInfo.any())
 	} else {
 		head = append(head, strResultMaxFileSize.any(), strZero.any())
 	}
@@ -675,10 +761,10 @@ func (ctx *GenCtx) testNode(s *TestSuite, chunk TestChunk) *Node {
 		head = append(head, strDataToEnvironment.any(), strCopy.any())
 	}
 
-	head = append(head, strTestsLimitInChunk.any(), testArg(strconv.Itoa(testDefaultTestsLimit)), strOutputStyle.any(), testArg(o.outputStyle), strPythonBin.any(), testPythonBinArg)
+	head = append(head, strTestsLimitInChunk.any(), testDefaultTestsLimitArg, strOutputStyle.any(), testArg(o.outputStyle), strPythonBin.any(), testPythonBinArg)
 
 	if chunk.retry > 0 {
-		head = append(head, strRetry.any(), testArg(strconv.Itoa(chunk.retry)))
+		head = append(head, strRetry.any(), intArg(chunk.retry))
 	}
 
 	if s.runCwd != "" {
@@ -730,7 +816,7 @@ func (ctx *GenCtx) testNode(s *TestSuite, chunk TestChunk) *Node {
 	}
 
 	if chunk.split > 1 {
-		head = append(head, strSplitCount.any(), testArg(strconv.Itoa(chunk.split)), strSplitIndex.any(), testArg(strconv.Itoa(chunk.index)))
+		head = append(head, strSplitCount.any(), intArg(chunk.split), strSplitIndex.any(), intArg(chunk.index))
 	}
 
 	if chunk.file != "" {
@@ -744,7 +830,7 @@ func (ctx *GenCtx) testNode(s *TestSuite, chunk TestChunk) *Node {
 	}
 
 	if o.dist {
-		head = append(head, argNodeTimeout.any(), internStr(strconv.Itoa(s.timeout+testNodeFinishingTime)).any())
+		head = append(head, argNodeTimeout.any(), intArg(s.timeout+testNodeFinishingTime))
 	}
 
 	if s.recipes != "" {
@@ -763,10 +849,10 @@ func (ctx *GenCtx) testNode(s *TestSuite, chunk TestChunk) *Node {
 		head = append(head, strSandboxResource.any(), internStr(resource).any())
 	}
 
-	req := testRequirements(s)
+	req := testRequirements(na, s)
 
 	if req.RAM != 0 {
-		head = append(head, argRamLimitGb.any(), internStr(strconv.Itoa(int(req.RAM))).any())
+		head = append(head, argRamLimitGb.any(), intArg(int(req.RAM)))
 	}
 
 	if s.canonizeSubPath != "" {
@@ -801,25 +887,21 @@ func (ctx *GenCtx) testNode(s *TestSuite, chunk TestChunk) *Node {
 	inputNames := s.inputNames
 
 	for _, p := range related {
-		if path.IsAbs(p) {
-			inputNames = append(inputNames, p)
+		if v := p.vfs(); v != 0 {
+			inputs = append(inputs, v)
 		} else {
-			inputs = append(inputs, intern(p))
+			inputNames = append(inputNames, p.string())
 		}
 	}
 
 	slices.SortFunc(inputs, vfsCompare)
 	ctx.testInputs = inputs[:0]
 
-	kv := &KV{P: testSizeKinds[s.size], Path: s.projectPath + "/" + s.name, PC: pcYellow, RunTestNode: true, ShowOutBool: true, HasSpecialRunner: true}
-
-	if chunk.split > 1 {
-		kv.SplitIndex, kv.HasSplitIndex = chunk.index, true
+	if s.kvPath == "" {
+		s.kvPath = s.projectPath + "/" + s.name
 	}
 
-	kv.SplitFile = chunk.file
-
-	deps := append([]NodeRef{ctx.testContext()}, s.deps...)
+	deps := append(append(ctx.testDeps[:0], ctx.testContext()), s.deps...)
 	names := na.strs.alloc(len(inputNames))[:len(inputNames):len(inputNames)]
 
 	for i, name := range inputNames {
@@ -840,23 +922,36 @@ func (ctx *GenCtx) testNode(s *TestSuite, chunk TestChunk) *Node {
 		cmds[len(cmds)-1].Resources = resources
 	}
 
-	ctx.testCmds, ctx.testOutputs = cmds[:0], outputs[:0]
+	if s.uidSaltID == 0 {
+		s.uidSaltID = internStr(s.uidSalt)
+	}
 
-	return &Node{
+	extra := na.extras.one()
+
+	*extra = NodeExtra{InputNames: names, UIDSalt: s.uidSaltID, KVPath: s.kvPath, SplitFile: chunk.file, SplitIndex: chunk.index, HasSplitIndex: chunk.split > 1}
+
+	node := na.nodes.one()
+
+	*node = Node{
 		Platform: s.p,
 		Cmds:     na.cmdList(cmds...),
-		Env:      ctx.testEnv(s), Inputs: na.inputList(na.vfsList(slices.Compact(inputs)...)), Extra: &NodeExtra{InputNames: names, UIDSalt: internStr(s.uidSalt)},
-		KV:           kv,
+		Env:      ctx.testEnv(s), Inputs: na.inputList(na.vfsList(slices.Compact(inputs)...)), Extra: extra,
+		KV:           testNodeKVs[testSizeKinds[s.size]],
 		Outputs:      na.vfsList(outputs...),
 		Requirements: req,
 		DepRefs:      na.refList(dedupRefs(deps)...),
 	}
+
+	ctx.testCmds, ctx.testOutputs, ctx.testDeps = cmds[:0], outputs[:0], deps[:0]
+
+	return node
 }
 
-func testRequirements(s *TestSuite) *Requirements {
+func testRequirements(na *NodeArenas, s *TestSuite) *Requirements {
 	cpu, ram := 1, 8
-	r := &Requirements{Network: nwRestricted, HasRAMDisk: true}
+	r := na.reqs.one()
 
+	*r = Requirements{Network: nwRestricted, HasRAMDisk: true}
 	r.DNS = s.requirements["dns"]
 
 	if s.network == "full" || s.size == "large" {

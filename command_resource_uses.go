@@ -51,7 +51,7 @@ func compilerValueResourceKeys(values []CompilerFlagValue) []STR {
 }
 
 func (e *StreamingEmitter) commandResources(n *Node) {
-	var resources []STR
+	resources := e.resourceScratch[:0]
 
 	for _, cmd := range n.Cmds {
 		for _, key := range cmd.Resources {
@@ -75,8 +75,13 @@ func (e *StreamingEmitter) commandResources(n *Node) {
 	}
 
 	if len(resources) > 0 {
-		n.Resources = e.na.strs.list(append(append([]STR(nil), n.Resources...), resources...)...)
+		joined := append(append(e.resourceJoined[:0], n.Resources...), resources...)
+
+		n.Resources = e.na.strs.list(joined...)
+		e.resourceJoined = joined[:0]
 	}
+
+	e.resourceScratch = resources[:0]
 }
 
 func commonCompilerFlagValue(in ModuleCCInputs, p *Platform) CompilerFlagValue {

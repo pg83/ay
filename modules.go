@@ -18,6 +18,8 @@ var (
 	pbRuntimeBaseString = pbRuntimeBaseVFS.string()
 	strExpandsToSelf    [tokenExpandRoots + 1]BitSet
 	tokenSubstBufs      [2][2][]byte
+	listPreSufScratch   []byte
+	trackedSubstBufs    [2][2][]byte
 )
 
 var dontExpandVarNames = func() (names [len(dontExpandVars)]string) {
@@ -1045,7 +1047,7 @@ func (d *ModuleData) sourceCommandDirs(modulePath string, env Environment, platf
 	var seen []string
 
 	apply := func(source ANY) {
-		ext := strings.TrimPrefix(filepath.Ext(source.string()), ".")
+		ext := strings.TrimPrefix(filepath.Ext(source.relOrSelf().string()), ".")
 
 		if ext == "" || slices.Contains(seen, ext) {
 			return
@@ -1618,8 +1620,18 @@ func (d *ModuleData) deferGuardOf(platform *Platform, name STR, macro *ConfMacro
 	d.guards = append(d.guards, name)
 
 	statement := platform.conf.statementKey(name)
+	guard := platform.conf.guardStmts[statement.name]
 
-	d.pending = append(d.pending, PendingStmt{key: statement.prio << 32, seq: d.declSeq, name: statement.name, macro: macro, stmt: &MacroGuardStmt{Name: statement.name}})
+	if guard == nil {
+		if platform.conf.guardStmts == nil {
+			platform.conf.guardStmts = map[STR]*MacroGuardStmt{}
+		}
+
+		guard = &MacroGuardStmt{Name: statement.name}
+		platform.conf.guardStmts[statement.name] = guard
+	}
+
+	d.pending = append(d.pending, PendingStmt{key: statement.prio << 32, seq: d.declSeq, name: statement.name, macro: macro, stmt: guard})
 	d.declSeq += declSeqBlock
 }
 
@@ -1771,25 +1783,46 @@ func applyVarsAsMacros(ctx *GenCtx, modulePath string, kind ModuleKind, language
 
 		d.varMacrosApplied = append(d.varMacrosApplied, raw)
 
-		words := ctx.varWords(env.expandVariableSTR(env.string(key)))
-
-		var stmt Stmt
-
-		switch key {
-		case envPeerdir:
-			if own := internStr(modulePath).any(); slices.Contains(words, own) {
-				words = slices.DeleteFunc(slices.Clone(words), func(w ANY) bool { return w == own })
-			}
-
-			stmt = &PeerdirStmt{Paths: words, Implicit: true}
-		case envSrcdir:
-			stmt = &SrcDirStmt{Dirs: words}
-		default:
-			stmt = splitAddInclPaths(words)
-		}
-
-		collectStmts(ctx, modulePath, kind, language, []Stmt{stmt}, env, d, onWarn, platform)
+		collectStmts(ctx, modulePath, kind, language, ctx.varMacroStmts(key, env.expandVariableSTR(env.string(key)), modulePath), env, d, onWarn, platform)
 	}
+}
+
+type varMacroKey struct {
+	key   ENV
+	value STR
+}
+
+func (ctx *GenCtx) varMacroStmts(key ENV, value STR, modulePath string) []Stmt {
+	words := ctx.varWords(value)
+
+	if key == envPeerdir {
+		if own := internStr(modulePath).any(); slices.Contains(words, own) {
+			return []Stmt{&PeerdirStmt{Paths: slices.DeleteFunc(slices.Clone(words), func(w ANY) bool { return w == own }), Implicit: true}}
+		}
+	}
+
+	k := varMacroKey{key: key, value: value}
+
+	if stmts, ok := ctx.varMacroStmtCache[k]; ok {
+		return stmts
+	}
+
+	var stmt Stmt
+
+	switch key {
+	case envPeerdir:
+		stmt = &PeerdirStmt{Paths: words, Implicit: true}
+	case envSrcdir:
+		stmt = &SrcDirStmt{Dirs: words}
+	default:
+		stmt = splitAddInclPaths(words)
+	}
+
+	stmts := []Stmt{stmt}
+
+	ctx.varMacroStmtCache[k] = stmts
+
+	return stmts
 }
 
 func allowedOutsideModule(s Stmt) bool {
@@ -4002,7 +4035,7 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 		}
 
 		for _, a := range args {
-			if a.string() == "NAMESPACE" || a.string() == "TOP_LEVEL" || a.string() == "__main__.py" {
+			if st := a.str(); st == kwNAMESPACE || st == kwTOP_LEVEL || st == strMainPy {
 				throwFmt("TEST_SRCS: %s is not allowed", a.string())
 			}
 		}
@@ -4204,10 +4237,7 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 		}
 
 		prefix, suffix := v.Args[1].string(), v.Args[2].string()
-
-		var buf [256]byte
-
-		joined := buf[:0]
+		joined := listPreSufScratch[:0]
 
 		for i, value := range v.Args[3:] {
 			if i > 0 {
@@ -4219,6 +4249,8 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 
 		valueID := internBytes(joined)
 		name := v.Args[0].str()
+
+		listPreSufScratch = joined[:0]
 
 		env.setFromSTR(internEnvSTR(name), valueID)
 
@@ -5336,7 +5368,7 @@ func expandConfigVFSPaths(paths []ANY, env Environment) []VFS {
 	out := make([]VFS, 0, len(expanded))
 
 	for _, path := range expanded {
-		if path.string() == "$(B)" {
+		if path == strB.any() {
 			out = append(out, bldRootDirVFS)
 
 			continue
@@ -5452,6 +5484,14 @@ func expandTokenTracked(s string, env Environment, phase TokenExpansion, track *
 }
 
 func expandTokenView(s string, env Environment, phase TokenExpansion, constant *bool) string {
+	return expandTokenInto(s, env, phase, nil, constant, &tokenSubstBufs)
+}
+
+func expandTokenTrackedView(s string, env Environment, phase TokenExpansion, track *SourceTextTracker) string {
+	return expandTokenInto(s, env, phase, track, nil, &trackedSubstBufs)
+}
+
+func expandTokenInto(s string, env Environment, phase TokenExpansion, track *SourceTextTracker, constant *bool, bufs *[2][2][]byte) string {
 	if s == "$S" {
 		return "$(S)"
 	}
@@ -5460,14 +5500,14 @@ func expandTokenView(s string, env Environment, phase TokenExpansion, constant *
 		return "$(B)"
 	}
 
-	deref, render := phase.policies(nil)
-	derefed := substMacroDeeplyInto(s, nil, env, constant, &deref, &tokenSubstBufs[0])
+	deref, render := phase.policies(track)
+	derefed := substMacroDeeplyInto(s, nil, env, constant, &deref, &bufs[0])
 
 	if phase == tokenExpandStatement || phase == tokenExpandRoots {
 		return derefed
 	}
 
-	return substMacroDeeplyInto(derefed, nil, env, constant, &render, &tokenSubstBufs[1])
+	return substMacroDeeplyInto(derefed, nil, env, constant, &render, &bufs[1])
 }
 
 func expandTokenWith(s string, env Environment, phase TokenExpansion, track *SourceTextTracker, constant *bool) string {
@@ -5735,7 +5775,11 @@ func expandAssignedScalarVarRef(s string, env Environment) string {
 }
 
 func expandSourceScalarVarRefSTR(s string, env Environment) STR {
-	return internStr(substMacroDeeplyInto(s, nil, env, nil, scalarVarRefPolicy, &strSubstBufs))
+	return internStr(expandSourceScalarVarRefView(s, env))
+}
+
+func expandSourceScalarVarRefView(s string, env Environment) string {
+	return substMacroDeeplyInto(s, nil, env, nil, scalarVarRefPolicy, &strSubstBufs)
 }
 
 func expandSourceScalarVarRef(s string, env Environment) string {
@@ -6119,7 +6163,17 @@ func compilerFlagRootValue(value string, env Environment) string {
 
 type SetVars struct {
 	vals    map[STR]STR
-	appends map[STR][]ANY
+	appends map[STR]setVarChain
+	parts   []setVarPart
+}
+
+type setVarChain struct {
+	head, tail int32
+}
+
+type setVarPart struct {
+	part ANY
+	next int32
 }
 
 func (v *SetVars) len() int {
@@ -6137,11 +6191,13 @@ func (v *SetVars) get(k STR) STR {
 		return 0
 	}
 
-	if chunks := v.appends[k]; chunks != nil {
-		b := []byte(v.vals[k].string())
+	if chain, ok := v.appends[k]; ok {
+		var buf [256]byte
 
-		for _, c := range chunks {
-			b = appendANYText(append(b, ' '), c)
+		b := append(buf[:0], v.vals[k].string()...)
+
+		for i := chain.head; i >= 0; i = v.parts[i].next {
+			b = appendANYText(append(b, ' '), v.parts[i].part)
 		}
 
 		v.vals[k] = internBytes(b)
@@ -6157,7 +6213,7 @@ func (v *SetVars) set(k, val STR) {
 		v.vals = map[STR]STR{}
 	}
 
-	if v.appends != nil {
+	if len(v.appends) != 0 {
 		delete(v.appends, k)
 	}
 
@@ -6176,8 +6232,23 @@ func (v *SetVars) append(k STR, args []ANY) {
 	}
 
 	if v.appends == nil {
-		v.appends = map[STR][]ANY{}
+		v.appends = map[STR]setVarChain{}
 	}
 
-	v.appends[k] = append(v.appends[k], args...)
+	chain, ok := v.appends[k]
+
+	for _, a := range args {
+		i := int32(len(v.parts))
+
+		v.parts = append(v.parts, setVarPart{part: a, next: -1})
+
+		if ok {
+			v.parts[chain.tail].next = i
+			chain.tail = i
+		} else {
+			chain, ok = setVarChain{head: i, tail: i}, true
+		}
+	}
+
+	v.appends[k] = chain
 }

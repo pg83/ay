@@ -50,6 +50,30 @@ func (pm *IncludeParserManager) parsedJSON(rel string) ParsedJSON {
 	return v
 }
 
+func (pm *IncludeParserManager) usrvDeps(rel string) *usrvDepsIndex {
+	key := internStr(rel)
+
+	if v, ok := pm.cache.usrvDeps.get(key); ok {
+		return v
+	}
+
+	data := concatChunks(pm.fs.readPath(key))
+
+	var index *usrvDepsIndex
+
+	if !json.Valid(data) || data[jsonSkipSpace(data, 0)] != '{' {
+		pm.notsJSON(rel)
+
+		index = &usrvDepsIndex{}
+	} else {
+		index = newUsrvDepsIndex(data)
+	}
+
+	pm.cache.usrvDeps.put(key, index)
+
+	return index
+}
+
 func (pm *IncludeParserManager) notsJSON(rel string) map[string]any {
 	parsed := pm.parsedJSON(rel)
 

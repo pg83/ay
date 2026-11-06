@@ -176,14 +176,14 @@ func (e *EmitContext) notsCheckSuites(target string, globals []ResourceDecl, fil
 	var suites []*TestSuite
 
 	var names []string
-	var related []string
+	var related []ANY
 
 	for _, file := range files {
 		names = append(names, strings.TrimPrefix(file.relString(), target+"/"))
-		related = append(related, file.string())
+		related = append(related, file.any())
 	}
 
-	related = sortedUnique(append(related, source(target, "/package.json").string()))
+	related = sortedUniqueByText(append(related, source(target, "/package.json").any()))
 
 	deps := e.notsSuiteDependencies(target)
 
@@ -232,7 +232,7 @@ func (e *EmitContext) notsCheckSuites(target string, globals []ResourceDecl, fil
 			}
 		}
 
-		s.relatedPaths = append(slices.Clone(related), sortedUnique(s.relatedPaths)...)
+		s.relatedPaths = append(slices.Clone(related), sortedUniqueByText(s.relatedPaths)...)
 		s.recipes = e.notsRecipes(target, head, globals, e.d.nots.Hermetic, true, true)
 		s.runCmd = func(work string, _ TestChunk) []ANY {
 			args := []string{testToolHostPath, "run_ts_check", "--source-root", testSourceRoot, "--build-root", testBuildRoot, "--output-dir", work + "/testing_out_stuff", "--tracefile", work + "/ytest.report.trace", "--log-path", work + "/testing_out_stuff/ts-check.log", "--target_path", target, "--nodejs", node, "--script-name", check.Script}
@@ -386,7 +386,8 @@ func (e *EmitContext) notsLegacyStyles(dir string, state *NotsPrepared, head []s
 	for _, check := range checks {
 		pattern := notsGlob(check.pattern)
 
-		var files, related []string
+		var files []string
+		var related []ANY
 
 		candidates := all
 
@@ -399,7 +400,7 @@ func (e *EmitContext) notsLegacyStyles(dir string, state *NotsPrepared, head []s
 
 			if pattern.match(rel) {
 				files = append(files, rel)
-				related = append(related, file.string())
+				related = append(related, file.any())
 			}
 		}
 
@@ -410,7 +411,7 @@ func (e *EmitContext) notsLegacyStyles(dir string, state *NotsPrepared, head []s
 		s := e.notsSuite(check.name, state.Globals, false)
 
 		s.ciType = "style"
-		s.relatedPaths = sortedUnique(append(related, source(path.Join(dir, check.config)).string(), source(dir, "/package.json").string()))
+		s.relatedPaths = sortedUniqueByText(append(related, source(path.Join(dir, check.config)).any(), source(dir, "/package.json").any()))
 		s.runInputs = []VFS{build(dir, "/package.json")}
 		s.deps = e.notsSuiteDependencies(dir)
 		s.runCwd = build(dir).string()

@@ -95,6 +95,18 @@ func runInputBuildCandidate(modulePath, rel string) VFS {
 	return 0
 }
 
+func runInputBuildCandidateOf(modulePath string, tok ANY) VFS {
+	if v := tok.vfs(); v != 0 && v.rel().cleanPath() {
+		if v.isBuild() {
+			return v
+		}
+
+		return 0
+	}
+
+	return runInputBuildCandidate(modulePath, tok.string())
+}
+
 func rootedBuildCandidate(modulePath, rel string) VFS {
 	if v, ok := moduleRootedVFS(modulePath, rel); ok && v.isBuild() {
 		return v
@@ -174,10 +186,9 @@ func (e *EmitContext) srcPosition(meta SrcMeta) ([]VFS, []VFS) {
 	d := e.d
 	pyProto := isPythonProtoModule(d) && !meta.Auto && !meta.Global
 	tok := meta.Source
-	src := tok.string()
 	class := srcExtClassOf(tok)
 
-	if extIsProto(src) {
+	if extIsProto(tok.relOrSelf().string()) {
 		class = srcExtProto
 	}
 
@@ -198,7 +209,7 @@ func (e *EmitContext) srcPosition(meta SrcMeta) ([]VFS, []VFS) {
 			protoInput = meta.Resolved.Path
 			protoRelID = e.protoSourceRel(protoInput.string())
 		} else {
-			protoRelID = e.protoSourceRel(src)
+			protoRelID = e.protoSourceRel(tok.string())
 		}
 
 		protoRel = protoRelID.string()
@@ -221,12 +232,12 @@ func (e *EmitContext) srcPosition(meta SrcMeta) ([]VFS, []VFS) {
 		}
 
 		input := meta.Resolved.Path
-		variant := flatcVariantForExt(src)
+		variant := flatcVariantForExt(tok.string())
 
 		e.prodVFS = append(e.prodVFS, build(input.relString(), ".h"), build(input.relString(), ".cpp"), build(strings.TrimSuffix(input.relString(), variant.srcExt), variant.bfbsExt))
 	case srcExtRos:
 		if d.ros != nil {
-			e.prodVFS = append(e.prodVFS, e.rosOutputPaths(src, meta.RosZeroCopy)...)
+			e.prodVFS = append(e.prodVFS, e.rosOutputPaths(tok.string(), meta.RosZeroCopy)...)
 		}
 	case srcExtProto:
 		base := strings.TrimSuffix(protoRel, ".proto")
@@ -268,7 +279,7 @@ func (e *EmitContext) srcPosition(meta SrcMeta) ([]VFS, []VFS) {
 		e.prodVFS = append(e.prodVFS, build(protoRel, ".pb.h"), build(protoRel, ".pb.cc"))
 	case srcExtGztProto:
 		if !isPythonProtoModule(d) {
-			e.prodVFS = append(e.prodVFS, e.gztGenProto(src))
+			e.prodVFS = append(e.prodVFS, e.gztGenProto(tok.string()))
 		}
 	}
 
@@ -277,12 +288,12 @@ func (e *EmitContext) srcPosition(meta SrcMeta) ([]VFS, []VFS) {
 	insMark := len(e.prodVFS)
 
 	if class == srcExtProto || class == srcExtEv && pyProto {
-		if _, rooted := moduleRootedVFS(module, src); !rooted && protoInput.isSource() && !meta.Resolved.Existing {
+		if _, rooted := moduleRootedVFS(module, tok.string()); !rooted && protoInput.isSource() && !meta.Resolved.Existing {
 			protoInput = protoInput.rel().build()
 		}
 
 		e.prodVFS = append(e.prodVFS, protoInput)
-	} else if v := runInputBuildCandidate(module, src); v != 0 {
+	} else if v := runInputBuildCandidateOf(module, tok); v != 0 {
 		e.prodVFS = append(e.prodVFS, v)
 	}
 
@@ -290,7 +301,7 @@ func (e *EmitContext) srcPosition(meta SrcMeta) ([]VFS, []VFS) {
 }
 
 func (e *EmitContext) srcInsCandidate(tok ANY) []VFS {
-	if v := runInputBuildCandidate(e.instance.Path.relString(), tok.string()); v != 0 {
+	if v := runInputBuildCandidateOf(e.instance.Path.relString(), tok); v != 0 {
 		e.prodVFS = append(e.prodVFS, v)
 
 		n := len(e.prodVFS)

@@ -9,6 +9,7 @@ import (
 
 var (
 	strSubstBufs       [2][]byte
+	makeExprSubstBufs  [2][]byte
 	scalarVarRefPolicy = &substPolicy{makefile: true, emptyUnknown: true, literal: pathArgumentsReservedVar}
 	substVariables     = &substPolicy{literal: rootVar}
 	substCommand       = &substPolicy{emptyUnknown: true, command: true}
@@ -717,7 +718,11 @@ func (env Environment) subst(text string, locals []confMacroBinding, constant *b
 }
 
 func (env Environment) expandVariableSTR(text string) STR {
-	return internStr(substMacroDeeplyInto(text, nil, env, nil, substVariables, &strSubstBufs))
+	return internStr(env.expandVariableView(text))
+}
+
+func (env Environment) expandVariableView(text string) string {
+	return substMacroDeeplyInto(text, nil, env, nil, substVariables, &strSubstBufs)
 }
 
 func (env Environment) expandVariable(text string) string {

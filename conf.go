@@ -1940,6 +1940,7 @@ func (t *confTables) plan(module *confModule) *confModule {
 }
 
 type Conf struct {
+	guardStmts    map[STR]*MacroGuardStmt
 	state         *ConfState
 	program       *confProgram
 	tables        *confTables

@@ -2,7 +2,7 @@ package main
 
 import (
 	"path"
-	"sort"
+	"slices"
 	"strings"
 )
 
@@ -56,7 +56,8 @@ func parseJavaGlob(pattern string) []javaGlobPart {
 }
 
 type javaExcludeMatcher struct {
-	res []*globMatcher
+	res     []*globMatcher
+	slashed []byte
 }
 
 func newJavaExcludeMatcher(moddir string, patterns []string) *javaExcludeMatcher {
@@ -77,15 +78,23 @@ func newJavaExcludeMatcher(moddir string, patterns []string) *javaExcludeMatcher
 
 func (m *javaExcludeMatcher) excluded(rel string, isDir bool) bool {
 	for _, re := range m.res {
-		if re.match(rel) || isDir && re.match(rel+"/") {
+		if re.match(rel) {
 			return true
+		}
+
+		if isDir {
+			m.slashed = append(append(m.slashed[:0], rel...), '/')
+
+			if re.match(bytesString(m.slashed)) {
+				return true
+			}
 		}
 	}
 
 	return false
 }
 
-func (ctx *GenCtx) javaGlob(moddir, pattern string, ex *javaExcludeMatcher) []string {
+func (ctx *GenCtx) javaGlob(moddir, pattern string, ex *javaExcludeMatcher) []STR {
 	root := moddir
 
 	if rel, ok := strings.CutPrefix(pattern, "$(S)/"); ok {
@@ -97,7 +106,8 @@ func (ctx *GenCtx) javaGlob(moddir, pattern string, ex *javaExcludeMatcher) []st
 
 	parts := parseJavaGlob(pattern)
 
-	var matches []string
+	var matches []STR
+	var joinBuf [256]byte
 
 	dirs := []string{root}
 
@@ -128,7 +138,7 @@ func (ctx *GenCtx) javaGlob(moddir, pattern string, ex *javaExcludeMatcher) []st
 				case isDir:
 					next = append(next, p)
 				case last && !ex.excluded(p, false):
-					matches = append(matches, p)
+					matches = append(matches, internStr(p))
 				}
 			case javaGlobPattern, javaGlobAnything:
 				for _, packed := range ctx.fs.listdir(dirKey(dir)).names {
@@ -138,23 +148,27 @@ func (ctx *GenCtx) javaGlob(moddir, pattern string, ex *javaExcludeMatcher) []st
 						continue
 					}
 
-					name := STR(packed >> 1).string()
+					nameID := STR(packed >> 1)
+					name := nameID.string()
 
-					if part.kind == javaGlobPattern && !part.re.match(name) {
+					if part.kind == javaGlobPattern && !part.re.match(name) || isDir && last {
 						continue
 					}
 
 					p := name
 
 					if dir != "" {
-						p = dir + "/" + name
+						p = bytesString(append(append(append(joinBuf[:0], dir...), '/'), name...))
 					}
 
 					switch {
 					case isDir:
-						next = append(next, p)
-					case !ex.excluded(p, false):
-						matches = append(matches, p)
+						next = append(next, strings.Clone(p))
+					case ex.excluded(p, false):
+					case dir == "":
+						matches = append(matches, nameID)
+					default:
+						matches = append(matches, internStr(p))
 					}
 				}
 			case javaGlobRecursive:
@@ -179,7 +193,24 @@ func (ctx *GenCtx) javaGlob(moddir, pattern string, ex *javaExcludeMatcher) []st
 		dirs = next
 	}
 
-	sort.Strings(matches)
+	keys := ctx.javaGlobKeys[:0]
+
+	for _, m := range matches {
+		keys = append(keys, javaGlobKey{text: m.string(), id: m})
+	}
+
+	slices.SortFunc(keys, func(a, b javaGlobKey) int { return strings.Compare(a.text, b.text) })
+
+	for i, k := range keys {
+		matches[i] = k.id
+	}
+
+	ctx.javaGlobKeys = keys[:0]
 
 	return matches
+}
+
+type javaGlobKey struct {
+	text string
+	id   STR
 }
