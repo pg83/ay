@@ -59,7 +59,7 @@ func (h *ContentHashes) load(rel STR) uint64 {
 type OsFS struct {
 	srcRoot        string
 	rootSlash      string
-	dirs           DenseMap[STR, DirView]
+	dirs           Vec[DirView]
 	dirNames       *BumpAllocator[uint32]
 	dirEntries     *IntSet
 	contentHashes  ContentHashes
@@ -88,13 +88,23 @@ func newFS(srcRoot string) FS {
 }
 
 func (fs *OsFS) listdir(dir STR) DirView {
-	if cached, ok := fs.dirs.get(dir); ok {
-		return cached
+	if row := dirRows.rowOf(dir); int(row) < len(fs.dirs.s) {
+		if cached := fs.dirs.s[row]; cached.dir != 0 {
+			return cached
+		}
 	}
 
+	return fs.listdirSlow(dir)
+}
+
+func (fs *OsFS) listdirSlow(dir STR) DirView {
+	row := dirRows.rowFor(dir)
 	v := fs.readDirViewRel(dir, dir.string())
 
-	fs.dirs.put(dir, v)
+	v.dir = dir
+
+	fs.dirs.ensureLen(int(row) + 1)
+	fs.dirs.s[row] = v
 
 	return v
 }

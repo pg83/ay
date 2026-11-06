@@ -829,14 +829,21 @@ func appendAddIncl(cmdArgs []ANY, addIncl []VFS, memo InclArgMemo) []ANY {
 }
 
 type InclArgMemo struct {
-	m *DenseMap[VFS, STR]
+	m *[2]Vec[STR]
 }
 
 func (m InclArgMemo) arg(path VFS) STR {
-	if a, ok := m.m.get(path); ok {
-		return a
+	if row, col := dirRows.rowOf(path.rel()), &m.m[uint32(path)&1]; int(row) < len(col.s) {
+		if a := col.s[row]; a != 0 {
+			return a
+		}
 	}
 
+	return m.argSlow(path)
+}
+
+func (m InclArgMemo) argSlow(path VFS) STR {
+	row := dirRows.rowFor(path.rel())
 	rel := path.relString()
 	a := internV("-I", path.prefix(), rel)
 
@@ -844,7 +851,10 @@ func (m InclArgMemo) arg(path VFS) STR {
 		a = internV("-I", path.prefix()[:vfsPrefixLen-1])
 	}
 
-	m.m.put(path, a)
+	col := &m.m[uint32(path)&1]
+
+	col.ensureLen(int(row) + 1)
+	col.s[row] = a
 
 	return a
 }

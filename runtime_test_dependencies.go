@@ -171,7 +171,7 @@ func (ctx *GenCtx) runtimeTestOutputDirs(dependency TestBuildDependency, seen ma
 func (ctx *GenCtx) testDependencyMainRefs(project VFS) map[NodeRef]bool {
 	refs := map[NodeRef]bool{}
 
-	for entry := ctx.memo.heads.getSafe(uint32(project.rel())); entry != nil; entry = entry.next {
+	for entry := ctx.memo.head(project.rel()); entry != nil; entry = entry.next {
 		result := entry.result
 
 		if result == nil {

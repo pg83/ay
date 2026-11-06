@@ -139,7 +139,7 @@ func (ctx *GenCtx) projectModuleIndex(suites []*TestSuite) (map[VFS][]NodeRef, m
 }
 
 func (ctx *GenCtx) moduleOutputIncludedDeps(info *GeneratedFileInfo) []IncludeDirective {
-	for entry := ctx.memo.heads.getSafe(uint32(info.OwnerModule.rel())); entry != nil; entry = entry.next {
+	for entry := ctx.memo.head(info.OwnerModule.rel()); entry != nil; entry = entry.next {
 		r := entry.result
 
 		if r == nil || moduleOutputPath(r) != info.OutputPath {

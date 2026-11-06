@@ -177,7 +177,7 @@ type GenCtx struct {
 	warningSink         *moduleWarnings
 	keepGoing           bool
 	na                  *NodeArenas
-	inclArgValues       DenseMap[VFS, STR]
+	inclArgValues       [2]Vec[STR]
 	resHashScratch      []string
 	resHashBuf          []byte
 	resDashBuf          []byte
@@ -263,8 +263,16 @@ type moduleMemoEntry struct {
 }
 
 type moduleMemo struct {
-	heads   PageVec[*moduleMemoEntry]
+	heads   Vec[*moduleMemoEntry]
 	entries *BumpAllocator[moduleMemoEntry]
+}
+
+func (m *moduleMemo) head(path STR) *moduleMemoEntry {
+	if row := dirRows.rowOf(path); int(row) < len(m.heads.s) {
+		return m.heads.s[row]
+	}
+
+	return nil
 }
 
 func newModuleMemo() *moduleMemo {
@@ -2999,7 +3007,7 @@ func (ctx *GenCtx) memoEntry(in ModuleInstance) *moduleMemoEntry {
 
 	other := ctx.instanceVariant(in) & mask
 
-	for entry := ctx.memo.heads.getSafe(uint32(in.Path.rel())); entry != nil; entry = entry.next {
+	for entry := ctx.memo.head(in.Path.rel()); entry != nil; entry = entry.next {
 		if entry.variant&mask == other && entry.peer == in.Peer && entry.tags == in.PeerTags {
 			return entry
 		}
@@ -3009,13 +3017,15 @@ func (ctx *GenCtx) memoEntry(in ModuleInstance) *moduleMemoEntry {
 }
 
 func (ctx *GenCtx) memoPut(in ModuleInstance, result *ModuleEmitResult) *moduleMemoEntry {
-	path := uint32(in.Path.rel())
+	row := dirRows.rowFor(in.Path.rel())
 	variant := ctx.instanceVariant(in)
-	head := ctx.memo.heads.getSafe(path)
+
+	ctx.memo.heads.ensureLen(int(row) + 1)
+
 	entry := ctx.memo.entries.one()
 
-	*entry = moduleMemoEntry{next: head, result: result, variant: variant, peer: in.Peer, tags: in.PeerTags}
-	ctx.memo.heads.set(path, entry)
+	*entry = moduleMemoEntry{next: ctx.memo.heads.s[row], result: result, variant: variant, peer: in.Peer, tags: in.PeerTags}
+	ctx.memo.heads.s[row] = entry
 
 	return entry
 }

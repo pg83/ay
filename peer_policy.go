@@ -137,7 +137,7 @@ type peerPolicySide struct {
 	loose   []int
 	any     []int
 	anySet  BitSet
-	matches DenseMap[STR, []int]
+	matches Vec[uint64]
 	scratch []int
 	store   []int
 }
@@ -272,10 +272,19 @@ func (pm *IncludeParserManager) peerPolicies(value string) *PeerPolicies {
 }
 
 func (side *peerPolicySide) matching(rules []PeerPolicyRule, dir STR, self func(PeerPolicyRule) PeerPolicyPattern) []int {
-	if matches, ok := side.matches.get(dir); ok {
-		return matches
+	if row := dirRows.rowOf(dir); int(row) < len(side.matches.s) {
+		if m := side.matches.s[row]; m != 0 {
+			off, n := uint32(m>>32), uint32(m)-1
+
+			return side.store[off : off+n : off+n]
+		}
 	}
 
+	return side.matchingSlow(rules, dir, self)
+}
+
+func (side *peerPolicySide) matchingSlow(rules []PeerPolicyRule, dir STR, self func(PeerPolicyRule) PeerPolicyPattern) []int {
+	row := dirRows.rowFor(dir)
 	path := dir.string()
 	matches := side.scratch[:0]
 
@@ -301,16 +310,13 @@ func (side *peerPolicySide) matching(rules []PeerPolicyRule, dir STR, self func(
 	matches = slices.Compact(matches)
 	side.scratch = matches[:0]
 
-	var out []int
+	off := len(side.store)
 
-	if n := len(matches); n != 0 {
-		side.store = append(side.store, matches...)
-		out = side.store[len(side.store)-n : len(side.store) : len(side.store)]
-	}
+	side.store = append(side.store, matches...)
+	side.matches.ensureLen(int(row) + 1)
+	side.matches.s[row] = uint64(off)<<32 | uint64(len(matches)+1)
 
-	side.matches.put(dir, out)
-
-	return out
+	return side.store[off:len(side.store):len(side.store)]
 }
 
 func ruleFrom(rule PeerPolicyRule) PeerPolicyPattern {
