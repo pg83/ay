@@ -7,9 +7,9 @@ import (
 )
 
 var (
-	globSegmentMemo = newIntValueMap[*globMatcher](0)
-	globExcludeMemo = newIntValueMap[*globMatcher](0)
-	globPartsMemo   = newIntValueMap[[]GlobPart](0)
+	globSegmentMemo = newSparseMap[STR, *globMatcher](256)
+	globExcludeMemo = newSparseMap[STR, *globMatcher](64)
+	globPartsMemo   = newSparseMap[STR, []GlobPart](64)
 )
 
 const (
@@ -28,10 +28,10 @@ type GlobPart struct {
 }
 
 func globSegmentMatcher(segment string) *globMatcher {
-	id := mix64(uint64(internStr(segment)) + 1)
+	id := internStr(segment)
 
-	if re := globSegmentMemo.get(id); re != nil {
-		return *re
+	if re, ok := globSegmentMemo.get(id); ok {
+		return re
 	}
 
 	re := newGlobMatcher("^" + globSegmentRegex(segment, true) + "$")
@@ -42,10 +42,10 @@ func globSegmentMatcher(segment string) *globMatcher {
 }
 
 func globParts(pattern string) []GlobPart {
-	id := mix64(uint64(internStr(pattern)) + 1)
+	id := internStr(pattern)
 
-	if parts := globPartsMemo.get(id); parts != nil {
-		return *parts
+	if parts, ok := globPartsMemo.get(id); ok {
+		return parts
 	}
 
 	var parts []GlobPart
@@ -106,10 +106,10 @@ func globSegmentRegex(seg string, single bool) string {
 }
 
 func globExcludeMatcher(pattern string) *globMatcher {
-	id := mix64(uint64(internStr(pattern)) + 1)
+	id := internStr(pattern)
 
-	if matcher := globExcludeMemo.get(id); matcher != nil {
-		return *matcher
+	if matcher, ok := globExcludeMemo.get(id); ok {
+		return matcher
 	}
 
 	var b strings.Builder

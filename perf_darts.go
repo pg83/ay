@@ -21,17 +21,17 @@ func perfDarts() int {
 	}
 
 	darts := newDarts(keys)
-	old := newIntValueMap[int32](len(roots) * 2)
+	old := newSparseMap[VFS, int32](len(roots) * 2)
 
 	for i, r := range roots {
-		old.put(uint64(source(r)), int32(i))
+		old.put(source(r), int32(i))
 	}
 
 	oldLookup := func(dir string) (int, bool) {
 		for d := dir; ; {
 			if st := interned(d); st != 0 {
-				if v := old.get(uint64(st.source())); v != nil {
-					return int(*v), true
+				if v, ok := old.get(st.source()); ok {
+					return int(v), true
 				}
 			}
 

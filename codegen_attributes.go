@@ -1,17 +1,17 @@
 package main
 
 type GeneratedFileAttributes struct {
-	gztProto           DenseMap[uint32, *GztProtoProducer]
+	gztProto           SparseMap[uint32, *GztProtoProducer]
 	moduleIncludedDeps DenseMap[uint32, *ModuleIncludedDeps]
 	moduleInputs       DenseMap[uint32, *ModuleInputInfo]
-	collectionPeers    DenseMap[uint32, *CollectionPeerInfo]
-	nots               DenseMap[uint32, *NotsPrepared]
-	notsInputs         DenseMap[uint32, []VFS]
-	sandbox            DenseMap[uint32, *SandboxRecipe]
+	collectionPeers    SparseMap[uint32, *CollectionPeerInfo]
+	nots               SparseMap[uint32, *NotsPrepared]
+	notsInputs         SparseMap[uint32, []VFS]
+	sandbox            SparseMap[uint32, *SandboxRecipe]
 	scoped             DenseMap[uint32, *ScopedCommand]
 	parsedIncludes     DenseMap[uint32, ParsedIncludeSet]
-	fbsFlatc           DenseMap[uint32, *FbsFlatcRecipe]
-	fbsNative          DenseMap[uint32, *FbsNativeRecipe]
+	fbsFlatc           SparseMap[uint32, *FbsFlatcRecipe]
+	fbsNative          SparseMap[uint32, *FbsNativeRecipe]
 }
 
 func (info *GeneratedFileInfo) gztProto() *GztProtoProducer {

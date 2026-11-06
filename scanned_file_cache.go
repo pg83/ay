@@ -3,7 +3,7 @@ package main
 type ScannedFileCache struct {
 	DenseMap2[VFS, []VFS, Closure]
 	deferred    BitSet
-	diagnostics DenseMap[uint32, *IncludeDiagnostics]
+	diagnostics SparseMap[uint32, *IncludeDiagnostics]
 }
 
 func (c *ScannedFileCache) get1(file VFS) (ScannedChildren, bool) {

@@ -86,23 +86,30 @@ func (p ParsedSource) walkable(cache *SharedParseCache) []IncludeDirective {
 }
 
 type SharedParseCache struct {
-	notsJSON     DenseMap[STR, ParsedJSON]
-	usrvDeps     DenseMap[STR, *usrvDepsIndex]
-	notsYAML     DenseMap[STR, map[string]any]
-	notsLocks    DenseMap[STR, *NotsLockfile]
+	notsJSON     SparseMap[STR, ParsedJSON]
+	usrvDeps     SparseMap[STR, *usrvDepsIndex]
+	notsYAML     SparseMap[STR, map[string]any]
+	notsLocks    SparseMap[STR, *NotsLockfile]
 	directives   *BumpAllocator[IncludeDirective]
 	parsed       DenseMap[STR, ParsedSource]
 	parsedExtras Vec[ParsedIncludeSet]
 	conf         *ConfState
-	confFiles    DenseMap[STR, *ConfFile]
-	sysinclYAMLs DenseMap[STR, []SysIncl]
-	peerPolicies DenseMap[STR, *PeerPolicies]
+	confFiles    SparseMap[STR, *ConfFile]
+	sysinclYAMLs SparseMap[STR, []SysIncl]
+	peerPolicies SparseMap[STR, *PeerPolicies]
 }
 
 func newSharedParseCache() *SharedParseCache {
 	return &SharedParseCache{
-		conf:       newConfState(),
-		directives: newBumpAllocator[IncludeDirective](),
+		notsJSON:     newSparseMap[STR, ParsedJSON](64),
+		usrvDeps:     newSparseMap[STR, *usrvDepsIndex](64),
+		notsYAML:     newSparseMap[STR, map[string]any](16),
+		notsLocks:    newSparseMap[STR, *NotsLockfile](64),
+		confFiles:    newSparseMap[STR, *ConfFile](64),
+		sysinclYAMLs: newSparseMap[STR, []SysIncl](64),
+		peerPolicies: newSparseMap[STR, *PeerPolicies](4),
+		conf:         newConfState(),
+		directives:   newBumpAllocator[IncludeDirective](),
 	}
 }
 

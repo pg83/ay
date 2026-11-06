@@ -7,7 +7,7 @@ import (
 	"strings"
 )
 
-var notsGlobMemo = newIntValueMap[*globMatcher](0)
+var notsGlobMemo = newSparseMap[STR, *globMatcher](64)
 
 const notsBuilderDir = "devtools/frontend_build_platform/nots/builder"
 
@@ -1039,10 +1039,10 @@ func (e *EmitContext) emitNotsTouch(output VFS, refs []NodeRef, inputs []VFS, kv
 }
 
 func notsGlob(pattern string) *globMatcher {
-	id := mix64(uint64(internStr(pattern)) + 1)
+	id := internStr(pattern)
 
-	if matcher := notsGlobMemo.get(id); matcher != nil {
-		return *matcher
+	if matcher, ok := notsGlobMemo.get(id); ok {
+		return matcher
 	}
 
 	var b strings.Builder

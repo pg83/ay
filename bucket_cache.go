@@ -58,10 +58,10 @@ type BucketCache struct {
 	chunks       *BumpAllocator[[]VFS]
 	lists        *BumpAllocator[BucketList]
 	pool         *IndexedBumpAllocator[VFS]
-	intern       *IntValueMap[BucketVal]
-	overflow     *IntValueMap[BucketVal]
-	listIntern   *IntValueMap[BucketListVal]
-	listOverflow *IntValueMap[BucketListVal]
+	intern       *bucketCells[BucketVal]
+	overflow     *bucketCells[BucketVal]
+	listIntern   *bucketCells[BucketListVal]
+	listOverflow *bucketCells[BucketListVal]
 	h1Mismatches int
 	overflowed   int
 	scratch      [closureBuckets][]VFS
@@ -74,10 +74,10 @@ func newBucketCache() *BucketCache {
 		chunks:       newBumpAllocator[[]VFS](),
 		lists:        newBumpAllocator[BucketList](),
 		pool:         newIndexedBumpAllocator[VFS](),
-		intern:       newIntValueMap[BucketVal](1 << 17),
-		overflow:     newIntValueMap[BucketVal](1 << 4),
-		listIntern:   newIntValueMap[BucketListVal](1 << 16),
-		listOverflow: newIntValueMap[BucketListVal](1 << 4),
+		intern:       newBucketCells[BucketVal](1 << 17),
+		overflow:     newBucketCells[BucketVal](1 << 4),
+		listIntern:   newBucketCells[BucketListVal](1 << 16),
+		listOverflow: newBucketCells[BucketListVal](1 << 4),
 		bucketEpoch:  uint32(chaosFirstEpoch(1)),
 	}
 
@@ -306,4 +306,29 @@ func (c *BucketCache) storeBuckets(self VFS, rest []VFS) Closure {
 	}
 
 	return c.storeScratch(self)
+}
+
+type bucketCells[V any] struct {
+	idx  *IntMap[uint32]
+	vals Vec[V]
+}
+
+func newBucketCells[V any](hint int) *bucketCells[V] {
+	return &bucketCells[V]{idx: newIntMap[uint32](hint)}
+}
+
+func (m *bucketCells[V]) cell(k uint64) (*V, bool) {
+	cell, existed := m.idx.cell(k)
+
+	if existed {
+		return unsafeAt(m.vals.s, uint64(*cell)), true
+	}
+
+	*cell = uint32(m.vals.len())
+
+	var zero V
+
+	m.vals.pushBack(zero)
+
+	return unsafeAt(m.vals.s, uint64(*cell)), false
 }

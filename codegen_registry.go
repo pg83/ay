@@ -233,7 +233,7 @@ type CodegenRegistry struct {
 	byOwner         DenseMap[VFS, ownerChain]
 	ownerSlots      []ownerSlot
 	bySplit         *IntMap[splitLookup]
-	textTemplates   DenseMap[VFS, []VFS]
+	textTemplates   SparseMap[VFS, []VFS]
 	splitGeneration uint32
 	splitGens       []uint32
 	na              *NodeArenas
@@ -247,7 +247,21 @@ type splitLookup struct {
 }
 
 func newCodegenRegistry(na *NodeArenas) *CodegenRegistry {
-	return &CodegenRegistry{na: na, splitGens: make([]uint32, 1<<splitBucketBits)}
+	return &CodegenRegistry{
+		na:            na,
+		splitGens:     make([]uint32, 1<<splitBucketBits),
+		textTemplates: newSparseMap[VFS, []VFS](16),
+		files:         ScannedFileCache{diagnostics: newSparseMap[uint32, *IncludeDiagnostics](16)},
+		attributes: GeneratedFileAttributes{
+			gztProto:        newSparseMap[uint32, *GztProtoProducer](16),
+			collectionPeers: newSparseMap[uint32, *CollectionPeerInfo](64),
+			nots:            newSparseMap[uint32, *NotsPrepared](16),
+			notsInputs:      newSparseMap[uint32, []VFS](16),
+			sandbox:         newSparseMap[uint32, *SandboxRecipe](256),
+			fbsFlatc:        newSparseMap[uint32, *FbsFlatcRecipe](16),
+			fbsNative:       newSparseMap[uint32, *FbsNativeRecipe](16),
+		},
+	}
 }
 
 func splitBucketOf(rel string) uint32 {

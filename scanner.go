@@ -1073,7 +1073,7 @@ func (sc *ScanCtx) warnUnresolved(includerAbs VFS, d IncludeDirective, sysinclCl
 
 type CfgResolveIndex struct {
 	indexable    bool
-	rank         *IntValueMap[int32]
+	rank         IntMap[int32]
 	buildEntries []CfgBuildAddincl
 }
 
@@ -1099,7 +1099,7 @@ func buildCfgResolveIndex(cfg *ScanConfig) *CfgResolveIndex {
 	}
 
 	idx.indexable = true
-	idx.rank = newIntValueMap[int32](2 * (len(cfg.ownAddIncl) + len(cfg.peerAddInclSet)))
+	idx.rank.init(2 * (len(cfg.ownAddIncl) + len(cfg.peerAddInclSet)))
 
 	r := int32(0)
 

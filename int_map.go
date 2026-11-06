@@ -17,6 +17,14 @@ type IntMap[V any] struct {
 }
 
 func newIntMap[V any](hint int) *IntMap[V] {
+	m := &IntMap[V]{}
+
+	m.init(hint)
+
+	return m
+}
+
+func (m *IntMap[V]) init(hint int) {
 	hint = chaosTableHint(hint)
 
 	c := intMapMinCap
@@ -25,11 +33,7 @@ func newIntMap[V any](hint int) *IntMap[V] {
 		c <<= 1
 	}
 
-	m := &IntMap[V]{}
-
 	m.alloc(c)
-
-	return m
 }
 
 func (m *IntMap[V]) alloc(capacity int) {
