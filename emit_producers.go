@@ -177,8 +177,7 @@ func (e *EmitContext) srcPosition(meta SrcMeta) ([]VFS, []VFS) {
 	src := tok.string()
 	class := srcExtClassOf(tok)
 
-	if extIsProto(meta.Source.string()) {
-		src = meta.Source.string()
+	if extIsProto(src) {
 		class = srcExtProto
 	}
 

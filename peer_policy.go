@@ -138,6 +138,7 @@ type peerPolicySide struct {
 	any     []int
 	anySet  BitSet
 	matches DenseMap[STR, []int]
+	scratch []int
 }
 
 type peerPolicySideBuilder struct {
@@ -275,8 +276,7 @@ func (side *peerPolicySide) matching(rules []PeerPolicyRule, dir STR, self func(
 	}
 
 	path := dir.string()
-
-	var matches []int
+	matches := side.scratch[:0]
 
 	side.darts.walk(path, func(key int, whole bool) {
 		for _, index := range side.prefix[key] {
@@ -298,9 +298,17 @@ func (side *peerPolicySide) matching(rules []PeerPolicyRule, dir STR, self func(
 
 	slices.Sort(matches)
 	matches = slices.Compact(matches)
-	side.matches.put(dir, matches)
+	side.scratch = matches[:0]
 
-	return matches
+	var out []int
+
+	if len(matches) != 0 {
+		out = slices.Clone(matches)
+	}
+
+	side.matches.put(dir, out)
+
+	return out
 }
 
 func ruleFrom(rule PeerPolicyRule) PeerPolicyPattern {

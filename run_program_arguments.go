@@ -35,7 +35,9 @@ func runProgramSourceArgumentValues(args []ANY, env Environment, withText bool) 
 
 		var track SourceTextTracker
 
-		spans := []SourceTextRange{{0, len(value)}}
+		var spanBuf [16]SourceTextRange
+
+		spans := append(spanBuf[:0], SourceTextRange{0, len(value)})
 
 		if strings.ContainsRune(value, '$') {
 			if withText {
@@ -44,7 +46,7 @@ func runProgramSourceArgumentValues(args []ANY, env Environment, withText bool) 
 				value = expandMakeExpression(value, env, runProgramReservedVariable)
 			}
 
-			spans = sourceWordSpans(value, func(r rune) bool { return r == ' ' })
+			spans = appendSourceWordSpans(spanBuf[:0], value, func(r rune) bool { return r == ' ' })
 		} else if value == "" {
 			value = `""`
 			spans[0].End = len(value)
@@ -149,9 +151,40 @@ func prepareRunProgramArguments(args []ANY, env Environment) []ANY {
 		return args
 	}
 
-	text := expandConfigMacroBody(strings.Join(anyStrs(args), " "), env)
+	var buf [512]byte
 
-	return internAnys(strings.FieldsFunc(text, func(r rune) bool { return r == ' ' || r == ',' }))
+	joined := buf[:0]
+
+	for i, a := range args {
+		if i > 0 {
+			joined = append(joined, ' ')
+		}
+
+		joined = appendANYText(joined, a)
+	}
+
+	text := expandConfigMacroBody(bytesString(joined), env)
+
+	var out []ANY
+
+	start := -1
+
+	for i := 0; i <= len(text); i++ {
+		if i == len(text) || text[i] == ' ' || text[i] == ',' {
+			if start >= 0 {
+				if out == nil {
+					out = make([]ANY, 0, len(args))
+				}
+
+				out = append(out, internAny(text[start:i]))
+				start = -1
+			}
+		} else if start < 0 {
+			start = i
+		}
+	}
+
+	return out
 }
 
 func runProgramArgumentExpands(arg ANY) bool {

@@ -85,7 +85,8 @@ func (r *CodegenRegistry) store(dst *GeneratedFileInfo, spec GeneratedFileSpec) 
 	var rare *GeneratedFileRare
 
 	if spec.BuildInputs != nil || spec.OnUse != nil || spec.ClosureLeaves != nil || spec.InputLoopSources != nil || spec.LateOutputs != nil || spec.ModuleOutputs != nil || spec.IncludedBuildInputs != nil || spec.IncludedInputs != nil {
-		rare = &GeneratedFileRare{
+		rare = r.na.genRares.one()
+		*rare = GeneratedFileRare{
 			BuildInputs:         spec.BuildInputs,
 			OnUse:               spec.OnUse,
 			ClosureLeaves:       spec.ClosureLeaves,

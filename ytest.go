@@ -440,7 +440,9 @@ func (ctx *GenCtx) prepareTestDependencies(s *TestSuite) {
 			}
 
 			if python {
-				s.pytestOutputDirs = append(s.pytestOutputDirs, ctx.runtimeTestOutputDirs(dependency, map[*ModuleEmitResult]bool{})...)
+				clear(ctx.runtimeTestSeen)
+
+				s.pytestOutputDirs = append(s.pytestOutputDirs, ctx.runtimeTestOutputDirs(dependency, ctx.runtimeTestSeen)...)
 			}
 		}
 	}
@@ -632,9 +634,7 @@ func (ctx *GenCtx) testNode(s *TestSuite, chunk TestChunk) *Node {
 	o := ctx.tests
 	na := ctx.na
 	work := s.workDir(chunk)
-	meta, trace, log := work+"/meta.json", work+"/ytest.report.trace", work+"/run_test.log"
-	tar := work + "/testing_out_stuff.tar.zstd"
-	outputs := []VFS{intern(meta), intern(trace), intern(log)}
+	outputs := append(ctx.testOutputs[:0], internPrefixedJoin(work, "/meta.json"), internPrefixedJoin(work, "/ytest.report.trace"), internPrefixedJoin(work, "/run_test.log"))
 	head := append(ctx.testAnys[:0], testToolHostPathArg, strRunTest.any())
 
 	if o.commandFile {
@@ -776,8 +776,10 @@ func (ctx *GenCtx) testNode(s *TestSuite, chunk TestChunk) *Node {
 	if o.dirOutputs {
 		head = append(head, argDirOutputs.any())
 	} else {
-		head = append(head, argTar.any(), intern(tar).any())
-		outputs = append(outputs, intern(tar))
+		tar := internPrefixedJoin(work, "/testing_out_stuff.tar.zstd")
+
+		head = append(head, argTar.any(), tar.any())
+		outputs = append(outputs, tar)
 	}
 
 	head = append(head, s.runCmd(work, chunk)...)
@@ -786,7 +788,7 @@ func (ctx *GenCtx) testNode(s *TestSuite, chunk TestChunk) *Node {
 		head = append(head, internArg(testCmdFileEnd).any())
 	}
 
-	cmds := make([]Cmd, 0, len(s.prepare)+1)
+	cmds := ctx.testCmds[:0]
 
 	for _, p := range s.prepare {
 		cmds = append(cmds, Cmd{CmdArgs: na.chunkList(na.anyList(p...))})
@@ -826,9 +828,19 @@ func (ctx *GenCtx) testNode(s *TestSuite, chunk TestChunk) *Node {
 
 	na.strs.commit(len(names))
 
-	for _, decl := range s.globals {
-		cmds[len(cmds)-1].Resources = append(cmds[len(cmds)-1].Resources, decl.FetchKey)
+	if len(s.globals) != 0 {
+		resources := na.strs.alloc(len(s.globals))[:len(s.globals):len(s.globals)]
+
+		for i, decl := range s.globals {
+			resources[i] = decl.FetchKey
+		}
+
+		na.strs.commit(len(resources))
+
+		cmds[len(cmds)-1].Resources = resources
 	}
+
+	ctx.testCmds, ctx.testOutputs = cmds[:0], outputs[:0]
 
 	return &Node{
 		Platform: s.p,

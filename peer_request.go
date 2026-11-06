@@ -115,7 +115,19 @@ func consumerPeerTags(d *ModuleData, env Environment) STR {
 		return 0
 	}
 
-	return internStr(strings.Join(strings.Fields(env.expandVariable(env.string(envPeerdirTags))), " "))
+	var buf [256]byte
+
+	joined := buf[:0]
+
+	for f := range strings.FieldsSeq(env.expandVariable(env.string(envPeerdirTags))) {
+		if len(joined) != 0 {
+			joined = append(joined, ' ')
+		}
+
+		joined = append(joined, f...)
+	}
+
+	return internBytes(joined)
 }
 
 func (ctx *GenCtx) resolvePeerInstance(request ModuleInstance, declaration *ModuleStmt) (ModuleInstance, *ModuleEmitResult) {

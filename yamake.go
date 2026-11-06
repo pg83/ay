@@ -1700,12 +1700,79 @@ func parseFromSandbox(args []ANY, line int) *FromSandboxStmt {
 	return stmt
 }
 
+func runProgramListSection(section ANY) int {
+	switch section {
+	case kwARGS.any():
+		return 0
+	case kwIN.any(), kwIN_DEPS.any():
+		return 1
+	case kwIN_NOPARSE.any():
+		return 2
+	case kwOUT.any():
+		return 3
+	case kwOUT_NOAUTO.any():
+		return 4
+	case kwENV.any():
+		return 5
+	case kwOUTPUT_INCLUDES.any():
+		return 6
+	case kwINDUCED_DEPS.any():
+		return 7
+	case kwTOOL.any():
+		return 8
+	}
+
+	return -1
+}
+
 func parseRunProgram(args []ANY, line int) *RunProgramStmt {
 	stmt := &RunProgramStmt{CallArgs: args, ToolPath: args[0], Line: line}
 	i := 1
 	currentSection := kwARGS.any()
 
-	var noParse []ANY
+	var counts [9]int
+
+	section := 0
+
+	for _, tok := range args[1:] {
+		if runProgramKeywords.has(uint32(tok.str())) {
+			section = runProgramListSection(tok)
+		} else if section >= 0 {
+			counts[section]++
+		}
+	}
+
+	total := counts[0] + counts[1] + 2*counts[2] + counts[3] + counts[4] + counts[5] + counts[6] + counts[7] + counts[8]
+
+	var backing []ANY
+
+	if total != 0 {
+		backing = make([]ANY, 0, total)
+	}
+
+	carve := func(n int) []ANY {
+		if n == 0 {
+			return nil
+		}
+
+		out := backing[len(backing) : len(backing) : len(backing)+n]
+
+		backing = backing[:len(backing)+n]
+
+		return out
+	}
+
+	stmt.Args = carve(counts[0])
+	stmt.INFiles = carve(counts[1] + counts[2])
+
+	noParse := carve(counts[2])
+
+	stmt.OUTFiles = carve(counts[3])
+	stmt.OUTNoAutoFiles = carve(counts[4])
+	stmt.EnvPairs = carve(counts[5])
+	stmt.OutputIncludes = carve(counts[6])
+	stmt.InducedDeps = carve(counts[7])
+	stmt.ToolPaths = carve(counts[8])
 
 	for i < len(args) {
 		tok := args[i]

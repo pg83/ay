@@ -17,6 +17,7 @@ var (
 	dontExpandVars      = [...]ENV{envARCADIA_BUILD_ROOT, envARCADIA_ROOT, envBINDIR, envCURDIR, envPythonBin, envTestCaseRoot, envTestOutRoot, envTestSourceRoot, envTestWorkRoot}
 	pbRuntimeBaseString = pbRuntimeBaseVFS.string()
 	strExpandsToSelf    [tokenExpandRoots + 1]BitSet
+	tokenSubstBufs      [2][2][]byte
 )
 
 var dontExpandVarNames = func() (names [len(dontExpandVars)]string) {
@@ -755,11 +756,12 @@ func collectModuleInto(ctx *GenCtx, instance ModuleInstance, stmts []Stmt, env E
 	fs := ctx.fs
 	modulePath := instance.Path.relString()
 	kind := instance.Kind
+	modulePathID := instance.Path.rel()
 
-	env.setString(envMODDIR, modulePath)
-	env.setVFS(envCURDIR, source(modulePath))
-	env.setVFS(envBINDIR, build(modulePath))
-	env.setVFS(envCmakeCurrentBinaryDir, build(modulePath))
+	env.setStrID(envMODDIR, modulePathID)
+	env.setVFS(envCURDIR, modulePathID.source())
+	env.setVFS(envBINDIR, modulePathID.build())
+	env.setVFS(envCmakeCurrentBinaryDir, modulePathID.build())
 	env.setDefaultString(envCythonOptions, cythonDefaultOptions(instance.Platform))
 	env.setDefaultString(envProtobufIncludePath, pbRuntimeBaseString)
 	env.setDefaultString(envPyProtoMypyEnabled, "yes")
@@ -949,8 +951,12 @@ func collectModuleInto(ctx *GenCtx, instance ModuleInstance, stmts []Stmt, env E
 	d.noOptimize = env.bool(envNoOptimize)
 	d.primaryOutput = env.string(envPrimaryOutputValue)
 
-	if version, ok := env.lookup("MODVER"); ok {
-		d.modver = strings.Join(strings.Fields(version), ".")
+	if env.hasBindingID(envModver) {
+		if version := env.string(envModver); strings.IndexFunc(version, unicode.IsSpace) < 0 {
+			d.modver = version
+		} else {
+			d.modver = strings.Join(strings.Fields(version), ".")
+		}
 	}
 
 	d.bisonGenExt = internStr(env.string(envBisonGenExt))
@@ -1765,7 +1771,7 @@ func applyVarsAsMacros(ctx *GenCtx, modulePath string, kind ModuleKind, language
 
 		d.varMacrosApplied = append(d.varMacrosApplied, raw)
 
-		words := ctx.varWords(internStr(env.expandVariable(env.string(key))))
+		words := ctx.varWords(env.expandVariableSTR(env.string(key)))
 
 		var stmt Stmt
 
@@ -2362,8 +2368,8 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 				sourceValue = v.LexicalValue
 			}
 
-			value, textInputs := expandSourceScalarInputValue(sourceValue, env)
-			valueID := internStr(value)
+			valueID, textInputs := expandSourceScalarInputSTR(sourceValue, env)
+			value := valueID.string()
 
 			env.setFromSTR(v.NameEnv, valueID)
 			env.setTextInputs(v.NameEnv, textInputs)
@@ -4199,7 +4205,9 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 
 		prefix, suffix := v.Args[1].string(), v.Args[2].string()
 
-		var joined []byte
+		var buf [256]byte
+
+		joined := buf[:0]
 
 		for i, value := range v.Args[3:] {
 			if i > 0 {
@@ -4246,7 +4254,7 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 			args := v.Args[1:]
 
 			if nameID == strTestEnvValue {
-				args = []ANY{internStr(expandSourceScalarVarRef(joinAnysSTR(args, " ").string(), env)).any()}
+				args = []ANY{expandSourceScalarVarRefSTR(joinAnysSTR(args, " ").string(), env).any()}
 			}
 
 			if nameID == importMaskVariableSTR {
@@ -5443,6 +5451,25 @@ func expandTokenTracked(s string, env Environment, phase TokenExpansion, track *
 	return expandTokenWith(s, env, phase, track, nil)
 }
 
+func expandTokenView(s string, env Environment, phase TokenExpansion, constant *bool) string {
+	if s == "$S" {
+		return "$(S)"
+	}
+
+	if s == "$B" {
+		return "$(B)"
+	}
+
+	deref, render := phase.policies(nil)
+	derefed := substMacroDeeplyInto(s, nil, env, constant, &deref, &tokenSubstBufs[0])
+
+	if phase == tokenExpandStatement || phase == tokenExpandRoots {
+		return derefed
+	}
+
+	return substMacroDeeplyInto(derefed, nil, env, constant, &render, &tokenSubstBufs[1])
+}
+
 func expandTokenWith(s string, env Environment, phase TokenExpansion, track *SourceTextTracker, constant *bool) string {
 	if s == "$S" {
 		return "$(S)"
@@ -5511,38 +5538,33 @@ func expandListPreSufArgs(items []ANY, env Environment) []ANY {
 }
 
 func expandTokens(items []ANY, env Environment, command bool, phase TokenExpansion) []ANY {
-	anyDollar := false
+	var out []ANY
 
-	for _, item := range items {
-		if strHasDollar(item.str().any()) {
-			anyDollar = true
-
-			break
-		}
-	}
-
-	if !anyDollar {
-		return items
-	}
-
-	out := make([]ANY, 0, len(items))
-
-	for _, item := range items {
+	for i, item := range items {
 		if !strHasDollar(item.str().any()) || !command && strExpandsToSelf[phase].has(uint32(item.str())) {
-			out = append(out, item)
+			if out != nil {
+				out = append(out, item)
+			}
 
 			continue
 		}
 
 		text := item.string()
 		constant := true
-		expanded := expandTokenWith(text, env, phase, nil, &constant)
+		expanded := expandTokenView(text, env, phase, &constant)
 
 		if !command && constant && expanded == text && !vfsHasPrefix(text) && strings.IndexFunc(text, unicode.IsSpace) < 0 {
 			strExpandsToSelf[phase].add(uint32(item.str()))
-			out = append(out, item)
+
+			if out != nil {
+				out = append(out, item)
+			}
 
 			continue
+		}
+
+		if out == nil {
+			out = append(make([]ANY, 0, len(items)+4), items[:i]...)
 		}
 
 		if !command {
@@ -5556,6 +5578,10 @@ func expandTokens(items []ANY, env Environment, command bool, phase TokenExpansi
 		for _, f := range splitShellWords(expanded) {
 			out = append(out, internAny(f))
 		}
+	}
+
+	if out == nil {
+		return items
 	}
 
 	return out
@@ -5706,6 +5732,10 @@ func expandScalarVarRef(s string, env Environment) string {
 
 func expandAssignedScalarVarRef(s string, env Environment) string {
 	return expandToken(s, env, tokenExpandAssignment)
+}
+
+func expandSourceScalarVarRefSTR(s string, env Environment) STR {
+	return internStr(substMacroDeeplyInto(s, nil, env, nil, scalarVarRefPolicy, &strSubstBufs))
 }
 
 func expandSourceScalarVarRef(s string, env Environment) string {
@@ -6111,7 +6141,7 @@ func (v *SetVars) get(k STR) STR {
 		b := []byte(v.vals[k].string())
 
 		for _, c := range chunks {
-			b = append(append(b, ' '), c.string()...)
+			b = appendANYText(append(b, ' '), c)
 		}
 
 		v.vals[k] = internBytes(b)

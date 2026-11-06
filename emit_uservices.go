@@ -185,21 +185,34 @@ func usrvAllSources(fs FS, module string, args []string) []string {
 }
 
 func sourceGlobMatches(pattern, file string) bool {
-	p := strings.Split(pattern, "/")
-	f := strings.Split(file, "/")
+	return sourceGlobMatchAt(pattern, 0, file, 0)
+}
 
-	var match func(int, int) bool
-	match = func(i, j int) bool {
-		if i == len(p) {
-			return j == len(f)
-		}
-
-		if p[i] == "**" {
-			return match(i+1, j) || j < len(f) && match(i, j+1)
-		}
-
-		return j < len(f) && globSegMatch(p[i], f[j]) && match(i+1, j+1)
+func sourceGlobMatchAt(p string, i int, f string, j int) bool {
+	if i > len(p) {
+		return j > len(f)
 	}
 
-	return match(0, 0)
+	pe := pathSegmentEnd(p, i)
+	seg := p[i:pe]
+
+	if seg == "**" {
+		return sourceGlobMatchAt(p, pe+1, f, j) || j <= len(f) && sourceGlobMatchAt(p, i, f, pathSegmentEnd(f, j)+1)
+	}
+
+	if j > len(f) {
+		return false
+	}
+
+	fe := pathSegmentEnd(f, j)
+
+	return globSegMatch(seg, f[j:fe]) && sourceGlobMatchAt(p, pe+1, f, fe+1)
+}
+
+func pathSegmentEnd(s string, i int) int {
+	if k := strings.IndexByte(s[i:], '/'); k >= 0 {
+		return i + k
+	}
+
+	return len(s)
 }

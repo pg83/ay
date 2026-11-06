@@ -2,16 +2,17 @@ package main
 
 import (
 	"crypto/md5"
-	"fmt"
 	"os"
 	"slices"
 	"strings"
 )
 
 var (
-	substVariables = &substPolicy{literal: rootVar}
-	substCommand   = &substPolicy{emptyUnknown: true, command: true}
-	rootVarNames   = [...]string{envBINDIR.string(), envCURDIR.string(), envARCADIA_ROOT.string(), envARCADIA_BUILD_ROOT.string()}
+	strSubstBufs       [2][]byte
+	scalarVarRefPolicy = &substPolicy{makefile: true, emptyUnknown: true, literal: pathArgumentsReservedVar}
+	substVariables     = &substPolicy{literal: rootVar}
+	substCommand       = &substPolicy{emptyUnknown: true, command: true}
+	rootVarNames       = [...]string{envBINDIR.string(), envCURDIR.string(), envARCADIA_ROOT.string(), envARCADIA_BUILD_ROOT.string()}
 )
 
 var macroModifierNames = map[string]macroFlags{
@@ -481,8 +482,17 @@ func applyMacroMods(ref *macroRef, value, prefix, suffix string) (string, bool) 
 }
 
 func substMacro(text string, locals []confMacroBinding, env Environment, constant *bool, policy *substPolicy) string {
-	var out strings.Builder
+	out, changed := substMacroAppend(nil, text, locals, env, constant, policy)
 
+	if !changed {
+		return text
+	}
+
+	return bytesString(out)
+}
+
+func substMacroAppend(out []byte, text string, locals []confMacroBinding, env Environment, constant *bool, policy *substPolicy) ([]byte, bool) {
+	base := len(out)
 	copied := 0
 
 	for i := 0; i < len(text); {
@@ -490,14 +500,14 @@ func substMacro(text string, locals []confMacroBinding, env Environment, constan
 		case '\\':
 			if policy.makefile && i+1 < len(text) {
 				if copied == 0 {
-					out.Grow(len(text) + len(text)/2 + 32)
+					out = slices.Grow(out, len(text)+len(text)/2+32)
 				}
 
 				if policy.track != nil {
-					policy.track.replace(out.Len()+i-copied, out.Len()+i-copied+1, 0, nil)
+					policy.track.replace(len(out)-base+i-copied, len(out)-base+i-copied+1, 0, nil)
 				}
 
-				out.WriteString(text[copied:i])
+				out = append(out, text[copied:i]...)
 				copied = i + 1
 			}
 
@@ -511,7 +521,7 @@ func substMacro(text string, locals []confMacroBinding, env Environment, constan
 			continue
 		}
 
-		if policy.track.literal(out.Len() + i - copied) {
+		if policy.track.literal(len(out) - base + i - copied) {
 			i++
 
 			continue
@@ -556,13 +566,13 @@ func substMacro(text string, locals []confMacroBinding, env Environment, constan
 		}
 
 		if copied == 0 {
-			out.Grow(len(text) + len(text)/2 + 32)
+			out = slices.Grow(out, len(text)+len(text)/2+32)
 		}
 
-		out.WriteString(text[copied:ref.start])
+		out = append(out, text[copied:ref.start]...)
 		copied = ref.end
 
-		at := out.Len()
+		at := len(out) - base
 
 		var inserted []SourceTextRange
 
@@ -594,20 +604,18 @@ func substMacro(text string, locals []confMacroBinding, env Environment, constan
 			separator = ref.join
 		}
 
-		mark := out.Len()
+		mark := len(out)
 		quoted := ref.flags&modQuote != 0
 
 		if quoted {
-			out.WriteByte('"')
+			out = append(out, '"')
 		}
 
 		first := true
 
 		for k := 0; k < values.count(); k++ {
 			if values.vfs != 0 && ref.flags == 0 && ref.ext == "" && ref.skipExt == "" {
-				out.WriteString(prefix)
-				appendVFSText(&out, values.vfs)
-				out.WriteString(suffix)
+				out = append(appendANYText(append(out, prefix...), values.vfs.any()), suffix...)
 				first = false
 
 				continue
@@ -620,37 +628,37 @@ func substMacro(text string, locals []confMacroBinding, env Environment, constan
 			}
 
 			if !first {
-				out.WriteString(separator)
+				out = append(out, separator...)
 			}
 
-			out.WriteString(value)
+			out = append(out, value...)
 			first = false
 		}
 
 		if quoted {
-			out.WriteByte('"')
+			out = append(out, '"')
 		}
 
 		if ref.flags&modHash != 0 {
-			sum := md5.Sum([]byte(out.String()[mark:]))
-			hashed := out.String()[:mark] + fmt.Sprintf("%x", sum)
+			sum := md5.Sum(out[mark:])
 
-			out.Reset()
-			out.WriteString(hashed)
+			out = out[:mark]
+
+			for _, b := range sum {
+				out = append(out, hex[b>>4], hex[b&15])
+			}
 		}
 
 		if policy.track != nil {
-			policy.track.replace(at, at+ref.end-ref.start, out.Len()-at, inserted)
+			policy.track.replace(at, at+ref.end-ref.start, len(out)-base-at, inserted)
 		}
 	}
 
 	if copied == 0 {
-		return text
+		return out, false
 	}
 
-	out.WriteString(text[copied:])
-
-	return out.String()
+	return append(out, text[copied:]...), true
 }
 
 func substMacroDeeply(text string, locals []confMacroBinding, env Environment, constant *bool, policy *substPolicy) string {
@@ -677,8 +685,39 @@ func substMacroDeeply(text string, locals []confMacroBinding, env Environment, c
 	}
 }
 
+func substMacroDeeplyInto(text string, locals []confMacroBinding, env Environment, constant *bool, policy *substPolicy, bufs *[2][]byte) string {
+	if strings.IndexByte(text, '$') < 0 && (!policy.makefile || strings.IndexByte(text, '\\') < 0) {
+		return text
+	}
+
+	for iteration := 1; ; iteration++ {
+		k := iteration & 1
+		next, changed := substMacroAppend(bufs[k][:0], text, locals, env, constant, policy)
+
+		bufs[k] = next[:0]
+
+		if !changed {
+			return text
+		}
+
+		if policy.makefile || strings.IndexByte(bytesString(next), '$') < 0 || bytesString(next) == text {
+			return bytesString(next)
+		}
+
+		if iteration >= 128 {
+			throwFmt("Macro subst exceeded the limit 128")
+		}
+
+		text = bytesString(next)
+	}
+}
+
 func (env Environment) subst(text string, locals []confMacroBinding, constant *bool) string {
 	return substMacroDeeply(text, locals, env, constant, substVariables)
+}
+
+func (env Environment) expandVariableSTR(text string) STR {
+	return internStr(substMacroDeeplyInto(text, nil, env, nil, substVariables, &strSubstBufs))
 }
 
 func (env Environment) expandVariable(text string) string {

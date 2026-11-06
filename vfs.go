@@ -136,6 +136,16 @@ func vfsHasPrefix(s string) bool {
 	return len(s) >= vfsPrefixLen && s[0] == '$' && s[1] == '(' && (s[2] == 'S' || s[2] == 'B') && s[3] == ')' && s[4] == '/'
 }
 
+func internPrefixedJoin(full, suffix string) VFS {
+	root := VFSRootSource
+
+	if full[2] == 'B' {
+		root = VFSRootBuild
+	}
+
+	return VFS(uint32(internV(full[vfsPrefixLen:], suffix))<<1 | uint32(root))
+}
+
 func internClean(full string) VFS {
 	if rel := full[vfsPrefixLen:]; rel == "" || pathIsClean(rel) {
 		return intern(full)

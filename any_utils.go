@@ -16,6 +16,20 @@ func appendArgGroupStr(dst []ANY, srcs ...[]ANY) []ANY {
 	return dst
 }
 
+func appendANYText(b []byte, a ANY) []byte {
+	v := a.vfs()
+
+	if v == 0 {
+		return append(b, a.str().string()...)
+	}
+
+	if rel := v.relString(); rel != "" {
+		return append(append(b, v.prefix()...), rel...)
+	}
+
+	return append(b, v.prefix()[:vfsPrefixLen-1]...)
+}
+
 func anyStrs(as []ANY) []string {
 	out := make([]string, 0, len(as))
 
@@ -138,7 +152,7 @@ func joinAnysSTR(as []ANY, sep string) STR {
 			b = append(b, sep...)
 		}
 
-		b = append(b, a.string()...)
+		b = appendANYText(b, a)
 	}
 
 	joinAnysScratch = b

@@ -323,14 +323,13 @@ func globMatch(fs FS, pattern string) []string {
 				}
 
 				isDir := packed&1 != 0
-				child := joinRel(d, name)
 
 				if last {
 					if !isDir {
-						matches = append(matches, child)
+						matches = append(matches, joinRel(d, name))
 					}
 				} else if isDir {
-					next = append(next, child)
+					next = append(next, joinRel(d, name))
 				}
 			}
 		}

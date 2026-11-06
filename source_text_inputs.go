@@ -55,6 +55,16 @@ func (t *SourceTextTracker) literal(pos int) bool {
 	return t != nil && t.contains(pos, pos+1)
 }
 
+func expandSourceScalarInputSTR(value string, env Environment) (STR, []SourceTextRange) {
+	if len(env.s.textInputs) == 0 {
+		return expandSourceScalarVarRefSTR(value, env), nil
+	}
+
+	value, ranges := expandSourceScalarInputValue(value, env)
+
+	return internStr(value), ranges
+}
+
 func expandSourceScalarInputValue(value string, env Environment) (string, []SourceTextRange) {
 	if len(env.s.textInputs) == 0 {
 		return expandSourceScalarVarRef(value, env), nil
@@ -100,12 +110,14 @@ func prepareRunProgramInputArguments(args []ANY, env Environment) ([]ANY, []ANY)
 
 	var parsed, text []ANY
 
+	var spanBuf [16]SourceTextRange
+
 	for _, arg := range args {
 		var track SourceTextTracker
 
 		value := continueConfigMacroBodyTracked(arg.string(), env, nil, &track)
 
-		for _, span := range sourceWordSpans(value, func(r rune) bool { return r == ' ' || r == ',' }) {
+		for _, span := range appendSourceWordSpans(spanBuf[:0], value, func(r rune) bool { return r == ' ' || r == ',' }) {
 			word := internAny(value[span.Start:span.End])
 
 			if track.contains(span.Start, span.End) {
@@ -126,6 +138,8 @@ func expandSourceInputTokens(args []ANY, env Environment, phase TokenExpansion) 
 
 	var parsed, text []ANY
 
+	var spanBuf [16]SourceTextRange
+
 	for _, arg := range args {
 		if !strHasDollar(arg.str().any()) {
 			parsed = append(parsed, arg)
@@ -137,7 +151,7 @@ func expandSourceInputTokens(args []ANY, env Environment, phase TokenExpansion) 
 
 		value := expandTokenTracked(arg.string(), env, phase, &track)
 
-		for _, span := range sourceWordSpans(value, unicode.IsSpace) {
+		for _, span := range appendSourceWordSpans(spanBuf[:0], value, unicode.IsSpace) {
 			word := internAny(value[span.Start:span.End])
 
 			if track.contains(span.Start, span.End) {
@@ -174,6 +188,8 @@ func captureSourceTextAppend(v *UnknownStmt, env Environment) *sourceTextAppend 
 		offset = n + 1
 	}
 
+	var spanBuf [16]SourceTextRange
+
 	for _, arg := range v.Args[1:] {
 		if !strHasDollar(arg.str().any()) {
 			offset += len(arg.string()) + 1
@@ -185,7 +201,7 @@ func captureSourceTextAppend(v *UnknownStmt, env Environment) *sourceTextAppend 
 
 		value := expandTokenTracked(arg.string(), env, tokenExpandLazy, &track)
 
-		for _, span := range sourceWordSpans(value, unicode.IsSpace) {
+		for _, span := range appendSourceWordSpans(spanBuf[:0], value, unicode.IsSpace) {
 			size := span.End - span.Start
 
 			if track.contains(span.Start, span.End) {
@@ -200,8 +216,10 @@ func captureSourceTextAppend(v *UnknownStmt, env Environment) *sourceTextAppend 
 }
 
 func sourceWordSpans(value string, space func(rune) bool) []SourceTextRange {
-	var spans []SourceTextRange
+	return appendSourceWordSpans(nil, value, space)
+}
 
+func appendSourceWordSpans(spans []SourceTextRange, value string, space func(rune) bool) []SourceTextRange {
 	start := -1
 
 	for i, r := range value {

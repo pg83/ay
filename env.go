@@ -90,7 +90,7 @@ func (s *EnvStore) settle(e ENV) {
 					buf = append(buf, ' ')
 				}
 
-				buf = append(buf, part.string()...)
+				buf = appendANYText(buf, part)
 			}
 
 			s.joined = buf[:0]
@@ -206,7 +206,11 @@ func (e Environment) stringLen(id ENV) int {
 				n := -1
 
 				for _, part := range s.appends[i].parts {
-					n += 1 + len(part.string())
+					if v := part.vfs(); v != 0 {
+						n += 1 + v.stringLen()
+					} else {
+						n += 1 + len(part.str().string())
+					}
 				}
 
 				return n

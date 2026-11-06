@@ -233,6 +233,7 @@ type GenCtx struct {
 	includeMemos        *IncludeMemos
 	goEnvMemo           map[[2]STR]EnvVars
 	goImportDirs        map[goImportKey]STR
+	runtimeTestSeen     map[*ModuleEmitResult]bool
 	frameSerial         uint32
 	scannerTargetPIC    *IncludeScanner
 	roots               map[ModuleInstance]bool
@@ -241,6 +242,8 @@ type GenCtx struct {
 	testEnvTemplates    map[testEnvKey]testEnvTemplate
 	testAnys            []ANY
 	testInputs          []VFS
+	testOutputs         []VFS
+	testCmds            []Cmd
 	targetDirs          map[string]bool
 	rootDemand          ModuleDemand
 }
@@ -379,10 +382,11 @@ func newGenCtx(fs FS, parsers *IncludeParserManager, hostP, targetP *Platform, e
 
 		sbomEnabled: fs.isFile(srcRootRel, sbomConfRel),
 
-		autoincludeIdx: loadAutoincludeIndex(fs),
-		parsedFiles:    map[string]*MakeFile{},
-		includeMemos:   newIncludeMemos(),
-		goImportDirs:   map[goImportKey]STR{},
+		autoincludeIdx:  loadAutoincludeIndex(fs),
+		parsedFiles:     map[string]*MakeFile{},
+		includeMemos:    newIncludeMemos(),
+		goImportDirs:    map[goImportKey]STR{},
+		runtimeTestSeen: map[*ModuleEmitResult]bool{},
 	}
 
 	ctx.inclArgs = InclArgMemo{m: &ctx.inclArgValues}
