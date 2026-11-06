@@ -163,7 +163,7 @@ func (e *EmitContext) emitDescProtoSubmodule() *ModuleEmitResult {
 	var protocBinary VFS
 
 	srcs := slices.Clone(d.srcs)
-	eventSources := e.codegen.moduleSourceInputs(instance.Path, ".ev")
+	eventSources := e.codegen.moduleSourceInputs(ctx.ownedBy(instance.Path, instance.Platform), instance.Path, ".ev")
 
 	for _, event := range eventSources {
 		srcs = append(srcs, SrcMeta{Source: event.any()})

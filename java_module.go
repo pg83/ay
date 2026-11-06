@@ -391,6 +391,7 @@ type JavaModule struct {
 	dir                 string
 	path                VFS
 	instance            ModuleInstance
+	owned               *ownerChain
 	unit                *javaUnit
 	stmt                TOK
 	name                string
@@ -491,6 +492,7 @@ func genJavaModule(ctx *GenCtx, instance ModuleInstance, moduleName TOK, stmts [
 		dir:            dir,
 		path:           instance.Path,
 		instance:       instance,
+		owned:          ctx.frames[ctx.frameDepth-1].owned,
 		unit:           unit,
 		stmt:           moduleName,
 		contribWithVer: !unit.transparent && javaPathIsPrefixOf("contrib/java", dir),

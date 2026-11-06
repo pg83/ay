@@ -1,6 +1,6 @@
 package main
 
-func (ctx *GenCtx) setModuleOutput(reg *CodegenRegistry, owner, output VFS, ref NodeRef, moduleType TOK) {
+func (ctx *GenCtx) setModuleOutput(reg *CodegenRegistry, owner VFS, platform *Platform, output VFS, ref NodeRef, moduleType TOK) {
 	if output == 0 || ref == 0 {
 		return
 	}
@@ -21,9 +21,12 @@ func (ctx *GenCtx) setModuleOutput(reg *CodegenRegistry, owner, output VFS, ref 
 		info.ModuleType = moduleType
 	}
 
-	info.OwnerModule = owner
+	if info.OwnerModule != owner {
+		info.OwnerModule = owner
+		reg.noteOwner(info, ctx.ownerChain(owner, platform))
+	}
+
 	info.ProducerRef = ref
-	reg.noteOwner(info)
 	ctx.emit.modules.add(uint32(ref))
 }
 
@@ -31,25 +34,25 @@ func (ctx *GenCtx) publishModuleOutputs(instance ModuleInstance, result *ModuleE
 	reg := ctx.scannerFor(instance).codegen
 
 	if result.ARPath != nil {
-		ctx.setModuleOutput(reg, instance.Path, *result.ARPath, result.ARRef, result.ModuleStmtName)
+		ctx.setModuleOutput(reg, instance.Path, instance.Platform, *result.ARPath, result.ARRef, result.ModuleStmtName)
 	}
 
 	if result.LDPath != nil {
-		ctx.setModuleOutput(reg, instance.Path, *result.LDPath, result.LDRef, result.ModuleStmtName)
+		ctx.setModuleOutput(reg, instance.Path, instance.Platform, *result.LDPath, result.LDRef, result.ModuleStmtName)
 	}
 
 	if result.GlobalPath != nil && result.GlobalRef != nil {
-		ctx.setModuleOutput(reg, instance.Path, *result.GlobalPath, *result.GlobalRef, 0)
+		ctx.setModuleOutput(reg, instance.Path, instance.Platform, *result.GlobalPath, *result.GlobalRef, 0)
 	}
 
 	if result.java != nil {
-		ctx.setModuleOutput(reg, instance.Path, result.java.target, result.java.outRef, result.ModuleStmtName)
+		ctx.setModuleOutput(reg, instance.Path, instance.Platform, result.java.target, result.java.outRef, result.ModuleStmtName)
 	}
 
 	if inputs := reg.moduleInputs(moduleOutputPath(result)); inputs != nil {
 		for _, global := range inputs.Globals {
 			if info := reg.lookup(global); info != nil && info.OwnerModule == instance.Path {
-				ctx.setModuleOutput(reg, instance.Path, global, info.ProducerRef, 0)
+				ctx.setModuleOutput(reg, instance.Path, instance.Platform, global, info.ProducerRef, 0)
 			}
 		}
 	}

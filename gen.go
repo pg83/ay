@@ -440,6 +440,7 @@ func newGenCtx(fs FS, parsers *IncludeParserManager, hostP, targetP *Platform, e
 type DirEvaluation struct {
 	declaration *ModuleStmt
 	recurses    []string
+	owned       ownerChain
 }
 
 type dirEvaluationKey struct {
@@ -601,8 +602,16 @@ func (ctx *GenCtx) recurseClosure(root string) []string {
 	return out
 }
 
-func (ctx *GenCtx) moduleDeclaration(instance ModuleInstance) *ModuleStmt {
-	return ctx.evaluateDirVFS(instance.Path, instance.Platform).declaration
+func (ctx *GenCtx) ownerChain(owner VFS, platform *Platform) *ownerChain {
+	return &ctx.dirs[dirEvaluationKey{owner, platform}].owned
+}
+
+func (ctx *GenCtx) ownedBy(owner VFS, platform *Platform) ownerChain {
+	if evaluation := ctx.dirs[dirEvaluationKey{owner, platform}]; evaluation != nil {
+		return evaluation.owned
+	}
+
+	return ownerChain{}
 }
 
 func (ctx *GenCtx) scanModuleConfiguration(instance ModuleInstance) (*ModuleStmt, []string) {
@@ -1331,7 +1340,8 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 
 	var moduleName TOK
 
-	declaration := ctx.moduleDeclaration(instance)
+	evaluation := ctx.evaluateDirVFS(instance.Path, instance.Platform)
+	declaration := evaluation.declaration
 
 	if declaration != nil {
 		moduleName = declaration.Name
@@ -1423,6 +1433,8 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 
 	frame := ctx.pushFrame()
 	env := buildIfEnvInto(&frame.ifEnv, instance)
+
+	frame.owned = &evaluation.owned
 
 	defer ctx.popFrame()
 
@@ -1774,7 +1786,7 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 		kind := peerKinds[i]
 
 		if instance.Language == LangFbsJavaNative {
-			parent := JavaModule{dir: instance.Path.relString(), instance: instance, unit: javaUnitFbs, data: &JavaData{peerdirTags: javaTags(instance.Platform.conf, env, envPeerdirTags)}}
+			parent := JavaModule{dir: instance.Path.relString(), instance: instance, owned: frame.owned, unit: javaUnitFbs, data: &JavaData{peerdirTags: javaTags(instance.Platform.conf, env, envPeerdirTags)}}
 
 			if result := ctx.javaPeerResult(&parent, p, slices.Contains(d.explicitPeers, p.any())); result != nil {
 				resolved = append(resolved, ResolvedPeer{path: p, result: result, kind: kind})
@@ -3049,6 +3061,7 @@ func (ctx *GenCtx) py3ccHead(py3ccBinary, py3ccSlowBin VFS) []ANY {
 
 type ModuleFrame struct {
 	testPeers            []*ModuleEmitResult
+	owned                *ownerChain
 	pending              int
 	serial               uint32
 	d                    ModuleData

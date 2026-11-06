@@ -131,6 +131,7 @@ type GeneratedFileSpec struct {
 
 	IncludedBuildInputs []VFS
 	IncludedInputs      *IncludedInputPlan
+	OwnerChain          *ownerChain
 	OutputPath          VFS
 	SourcePath          VFS
 	PrimaryInput        VFS
@@ -230,7 +231,6 @@ type CodegenRegistry struct {
 	files           ScannedFileCache
 	moduleBuildDeps DenseMap[NodeRef, []NodeRef]
 	byRel           DenseMap[STR, *GeneratedFileInfo]
-	byOwner         DenseMap[VFS, ownerChain]
 	ownerSlots      []ownerSlot
 	bySplit         *IntMap[splitLookup]
 	textTemplates   SparseMap[VFS, []VFS]
@@ -301,7 +301,7 @@ func (r *CodegenRegistry) register(info GeneratedFileSpec) *GeneratedFileInfo {
 		if existing.InputsOnly {
 			info.ClosureLeaves = r.na.dedupClosure(info.ClosureLeaves, [][]VFS{existing.closureLeaves()})
 			r.store(existing, info)
-			r.noteOwner(existing)
+			r.noteOwner(existing, info.OwnerChain)
 			r.splitChanged(existing.OutputPath)
 
 			return existing
@@ -324,18 +324,17 @@ func (r *CodegenRegistry) register(info GeneratedFileSpec) *GeneratedFileInfo {
 	r.store(stored, info)
 
 	r.putRel(stored)
-	r.noteOwner(stored)
+	r.noteOwner(stored, info.OwnerChain)
 
 	return stored
 }
 
-func (r *CodegenRegistry) noteOwner(info *GeneratedFileInfo) {
+func (r *CodegenRegistry) noteOwner(info *GeneratedFileInfo, chain *ownerChain) {
 	if info.OwnerModule == 0 {
 		return
 	}
 
 	slot := r.byRel.idx.get(uint32(info.OutputPath.rel()))
-	chain, _ := r.byOwner.get(info.OwnerModule)
 
 	if chain.tail != 0 && r.ownerSlots[chain.tail-1].slot == slot {
 		return
@@ -352,8 +351,6 @@ func (r *CodegenRegistry) noteOwner(info *GeneratedFileInfo) {
 	}
 
 	chain.tail = i
-
-	r.byOwner.put(info.OwnerModule, chain)
 }
 
 type ownerChain struct {
@@ -715,11 +712,9 @@ func (r *CodegenRegistry) buildParsedFor(out VFS) ParsedIncludeSet {
 	return ParsedIncludeSet{}
 }
 
-func (r *CodegenRegistry) moduleSourceInputs(owner VFS, suffix string) []VFS {
+func (r *CodegenRegistry) moduleSourceInputs(chain ownerChain, owner VFS, suffix string) []VFS {
 	var inputs []VFS
 	var slots []uint32
-
-	chain, _ := r.byOwner.get(owner)
 
 	for i := chain.head; i != 0; i = r.ownerSlots[i-1].next {
 		slots = append(slots, r.ownerSlots[i-1].slot)

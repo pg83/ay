@@ -649,6 +649,7 @@ func (e *EmitContext) producersOnly() bool {
 
 func (e *EmitContext) register(info GeneratedFileSpec) *GeneratedFileInfo {
 	info.OwnerModule = e.instance.Path
+	info.OwnerChain = e.frame.owned
 	info.OwnerSerial = e.frame.serial
 
 	e.collectScriptOutput(info.OutputPath)

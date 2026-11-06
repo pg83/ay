@@ -76,6 +76,7 @@ func (ctx *GenCtx) gztProtoSource(instance ModuleInstance, gztSource VFS, scanCt
 		GztProto:       producer,
 		SourcePath:     gztSource,
 		OwnerModule:    instance.Path,
+		OwnerChain:     ctx.ownerChain(instance.Path, instance.Platform),
 		ProducerRef:    gzRef,
 		ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: gztGeneratedProtoParse(ctx, scanner, gztSource, inducedProtos)},
 		OnUse:          pending,

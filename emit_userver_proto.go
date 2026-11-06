@@ -145,7 +145,9 @@ func (e *EmitContext) prepareUserverProtos() {
 
 			genModule(e.ctx, e.derivePeerInstance(peer.string()))
 
-			for _, file := range e.codegen.moduleSourceInputs(source(peer.string()), ".proto") {
+			peerPath := source(peer.string())
+
+			for _, file := range e.codegen.moduleSourceInputs(e.ctx.ownedBy(peerPath, e.instance.Platform), peerPath, ".proto") {
 				batch.files = append(batch.files, UserverProtoFile{path: file.relString()})
 			}
 		}

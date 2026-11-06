@@ -157,6 +157,7 @@ func (ctx *GenCtx) javaRegisterSwigJsrcs(jm *JavaModule) {
 		reg.register(GeneratedFileSpec{
 			OutputPath:      jsrc,
 			OwnerModule:     jm.path,
+			OwnerChain:      jm.owned,
 			ProducerRef:     ref,
 			ProducerMainOut: jsrc,
 			OnUse:           ctx.javaPendingEmit(func() { ctx.javaEmitSwigJsrc(jm, src, srcVFS, jsrc, ref) }),

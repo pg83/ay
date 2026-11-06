@@ -459,6 +459,7 @@ func (ctx *GenCtx) javaRegisterRunPrograms(jm *JavaModule) {
 			ctx.javaReg(jm).register(GeneratedFileSpec{
 				OutputPath:      output,
 				OwnerModule:     jm.path,
+				OwnerChain:      jm.owned,
 				ProducerRef:     ref,
 				ProducerMainOut: outputs[0],
 				OnUse:           pending,
