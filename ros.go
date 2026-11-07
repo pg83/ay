@@ -12,7 +12,7 @@ var rosCppDeps = []string{
 	"sdg/sdc/bros/traits/yamakes/roscpp_traits",
 }
 
-var rosCppIncludes = []string{
+var rosCppIncludes = internStrs([]string{
 	"sdg/sdc/core/rtb/inplace_vector.h",
 	"sdg/sdc/core/rtb/optional.h",
 	"sdg/sdc/core/rtb/optional_io.h",
@@ -24,15 +24,22 @@ var rosCppIncludes = []string{
 	"sdg/sdc/bros/traits/include/ros/message_operations.h",
 	"sdg/sdc/bros/time/include/ros/duration.h",
 	"sdg/sdc/bros/time/include/ros/time.h",
-}
+})
 
-var rosZeroCopyIncludes = []string{
+var rosZeroCopyIncludes = internStrs([]string{
 	"sdg/sdc/core/rtb/inplace_str.h",
 	"sdg/sdc/ros/proto/rosmsg/common_msgs/Duration_ros_converter.h",
 	"sdg/sdc/ros/proto/rosmsg/common_msgs/Duration_zero_copy.h",
 	"sdg/sdc/ros/proto/rosmsg/common_msgs/Time_ros_converter.h",
 	"sdg/sdc/ros/proto/rosmsg/common_msgs/Time_zero_copy.h",
-}
+})
+
+var rosBindingsIncludes = internStrs([]string{
+	"sdg/sdc/ros/misc/python_utils/numpy_wrapper.h",
+	"sdg/sdc/ros/misc/ros_msg_generator/py_cpp/bindings_support_lib/export.h",
+	"sdg/sdc/ros/misc/ros_msg_generator/py_cpp/bindings_support_lib/export_arrays.h",
+	"sdg/sdc/ros/misc/ros_msg_generator/py_cpp/bindings_support_lib/export_enum.h",
+})
 
 var argRosGenerator = internArg(rosGenerator)
 

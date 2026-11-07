@@ -712,7 +712,7 @@ func (e *EmitContext) emitPyNamespaceForGroup(groupIndex int, group PySrcGroup) 
 
 		resolvedRel := ps.Path.relString()
 		root := resolvedRel[:max(len(resolvedRel)-len(srcRel)-1, 0)]
-		entry := pyNamespaceEntry{internStr(root), nsValue}
+		entry := pyNamespaceEntry{internDirText(root), nsValue}
 
 		if !slices.Contains(namespaces, entry) {
 			namespaces = append(namespaces, entry)

@@ -831,6 +831,7 @@ var (
 	strSanitizerType                                                                         = internStr("SANITIZER_TYPE")
 	strSc                                                                                    = internStr("sc")
 	strSdgDevtoolsPyMonobinaryBuilderGenerateProgramStarter                                  = internStr("sdg/devtools/py_monobinary_builder/generate_program_starter")
+	strSdgSdcBrosTraitsIncludeRosServiceTraitsH                                              = internStr("sdg/sdc/bros/traits/include/ros/service_traits.h")
 	strSdgSdcThirdPartyRosGenpyYamakesPylib                                                  = internStr("sdg/sdc/third_party/ros/genpy/yamakes/pylib")
 	strSdgTier0ToolsGenerateExportPyCppBindings                                              = internStr("sdg/tier0/tools/generate_export_py_cpp_bindings")
 	strSdgTier0ToolsGenerateProxyImportFile                                                  = internStr("sdg/tier0/tools/generate_proxy_import_file")

@@ -128,18 +128,14 @@ func (e *EmitContext) emitRosSource(meta SrcMeta, outputs []VFS) {
 	node := NodeSpec{Node: Node{Platform: e.instance.Platform, Cmds: cmds, Env: envVarsVCS, Inputs: ctx.na.rootInputList(ctx.na.vfsList(tool, src), closure.bucketList()...), Outputs: outs, KV: &rosKV, ForeignDepRefs: ctx.na.refList(toolRef)}, input: InputSpec{roots: ctx.na.inputList(ctx.na.vfsList(src), closure.bucketList()...)}}
 	pending := e.pendingEmit(func() { e.emitReservedNode(node, ref) })
 
-	var includes []string
+	var includes []STR
 
 	switch d.ros.Language {
 	case LangCPP:
 		includes = append(includes, rosCppIncludes...)
 	case LangRosBindings:
-		includes = append(includes,
-			"sdg/sdc/ros/misc/python_utils/numpy_wrapper.h",
-			"sdg/sdc/ros/misc/ros_msg_generator/py_cpp/bindings_support_lib/export.h",
-			"sdg/sdc/ros/misc/ros_msg_generator/py_cpp/bindings_support_lib/export_arrays.h",
-			"sdg/sdc/ros/misc/ros_msg_generator/py_cpp/bindings_support_lib/export_enum.h",
-			build(d.ros.Dir.string(), "/", strings.TrimSuffix(path.Base(src.relString()), path.Ext(src.relString())), ".h").string())
+		includes = append(append(includes, rosBindingsIncludes...),
+			internStr(build(d.ros.Dir.string(), "/", strings.TrimSuffix(path.Base(src.relString()), path.Ext(src.relString())), ".h").string()))
 	}
 
 	if zero {
@@ -147,13 +143,13 @@ func (e *EmitContext) emitRosSource(meta SrcMeta, outputs []VFS) {
 	}
 
 	if d.ros.Language == LangCPP && strings.HasSuffix(src.relString(), ".srv") {
-		includes = append(includes, "sdg/sdc/bros/traits/include/ros/service_traits.h")
+		includes = append(includes, strSdgSdcBrosTraitsIncludeRosServiceTraitsH)
 	}
 
 	var parsed []IncludeDirective
 
 	for _, inc := range includes {
-		parsed = append(parsed, IncludeDirective{kind: includeQuoted, target: includeTarget(internStr(inc).any())})
+		parsed = append(parsed, IncludeDirective{kind: includeQuoted, target: includeTarget(inc.any())})
 	}
 
 	children, _ := e.scanner.cachedChildren(src)

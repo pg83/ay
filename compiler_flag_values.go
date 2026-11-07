@@ -8,6 +8,11 @@ import (
 
 var literalCompilerFlagMemo TwoBitSet
 
+var compilerFlagsIdentityLast struct {
+	args []ANY
+	id   STR
+}
+
 const (
 	compilerFlagsCommon CompilerFlagKind = iota
 	compilerFlagsCxx
@@ -77,8 +82,20 @@ func (e *EmitContext) ownCompilerFlagValues(args []ANY, kind CompilerFlagKind) [
 	return e.ctx.na.compilerFlags.list(e.compilerFlagValue(args, kind))
 }
 
+func compilerFlagsIdentity(args []ANY) STR {
+	last := &compilerFlagsIdentityLast
+
+	if last.id != 0 && slices.Equal(last.args, args) {
+		return last.id
+	}
+
+	last.id, last.args = internAnyWords(args), append(last.args[:0], args...)
+
+	return last.id
+}
+
 func compilerCommandFlags(args []ANY, env Environment) CompilerFlagValue {
-	identity := internAnyWords(args)
+	identity := compilerFlagsIdentity(args)
 
 	if !slices.ContainsFunc(args, compilerFlagExpands) {
 		return CompilerFlagValue{Name: identity, Args: args}
