@@ -872,11 +872,11 @@ func (b *javaNodeBuilder) renderKotlincOpts(globals map[string]VFS, opts []strin
 			continue
 		}
 
-		values, _ := commandArgumentExpression(o, func(name string, _ bool) ([]string, string) {
+		values, _ := commandArgumentExpression(o, func(name string, _ bool) ([]ANY, string) {
 			return nil, ""
 		})
 
-		out = append(out, internAnys(values)...)
+		out = append(out, values...)
 	}
 
 	return out

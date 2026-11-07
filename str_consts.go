@@ -908,6 +908,7 @@ var (
 	strUtilGenericSerializedEnumH                                                            = internStr("util/generic/serialized_enum.h")
 	strValidateDataSbr                                                                       = internStr("validate_data_sbr")
 	strValidateResource                                                                      = internStr("validate_resource")
+	strVariable                                                                              = internStr("variable")
 	strVcsInfo                                                                               = internStr("--vcs-info")
 	strVcsVcsJson                                                                            = internStr("$(VCS)/vcs.json")
 	strVendorGithubComGoogleFlatbuffersGo                                                    = internStr("vendor/github.com/google/flatbuffers/go")

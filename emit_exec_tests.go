@@ -8,7 +8,7 @@ func (e *EmitContext) genExecTest() *ModuleEmitResult {
 	var closures [][]ResourceDecl
 
 	for _, p := range e.d.peerdirs {
-		closures = append(closures, e.genPeerModule(e.derivePeerInstance(p.string())).ResourceGlobalClosure)
+		closures = append(closures, e.genPeerModule(e.derivePeerInstanceVFS(p.peerSource())).ResourceGlobalClosure)
 	}
 
 	globals := e.scriptModuleResources(closures)

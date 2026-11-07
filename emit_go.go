@@ -358,7 +358,7 @@ func applyGoImplicitPeerdirs(ctx *GenCtx, instance ModuleInstance, d *ModuleData
 			return
 		}
 
-		for _, imp := range parseGoImports(concatChunks(ctx.fs.read(path.relString()))) {
+		for _, imp := range parseGoImports(concatChunks(ctx.fs.readPath(path.rel()))) {
 			if id := goImportDir(ctx, std, inStd, imp); id != 0 && instance.Platform.allowPeer(dirID, id, ctx.onWarn) {
 				addPeer(id)
 			}

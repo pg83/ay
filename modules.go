@@ -137,7 +137,8 @@ type TestMeta struct {
 }
 
 type ModuleData struct {
-	recurses    []string
+	pathID      STR
+	recurses    []VFS
 	mlaunch     *MlaunchModule
 	ros         *RosModule
 	multimodule TOK
@@ -822,6 +823,7 @@ func collectModuleInto(ctx *GenCtx, instance ModuleInstance, stmts []Stmt, env E
 
 	d.reset()
 
+	d.pathID = modulePathID
 	d.ifReplay = replay
 	d.pythonSQLite3 = true
 	d.needGoogleProtoPeerdirs = true
@@ -1847,7 +1849,7 @@ func applyVarsAsMacros(ctx *GenCtx, modulePath string, kind ModuleKind, language
 			env.recordResourceUse(key)
 		}
 
-		collectStmts(ctx, modulePath, kind, language, ctx.varMacroStmts(key, value, modulePath), env, d, onWarn, platform)
+		collectStmts(ctx, modulePath, kind, language, ctx.varMacroStmts(key, value, d.pathID), env, d, onWarn, platform)
 	}
 }
 
@@ -1856,11 +1858,11 @@ type varMacroKey struct {
 	value STR
 }
 
-func (ctx *GenCtx) varMacroStmts(key ENV, value STR, modulePath string) []Stmt {
+func (ctx *GenCtx) varMacroStmts(key ENV, value STR, modulePath STR) []Stmt {
 	words := ctx.varWords(value)
 
 	if key == envPeerdir {
-		if own := internStr(modulePath).any(); slices.Contains(words, own) {
+		if own := modulePath.any(); slices.Contains(words, own) {
 			return []Stmt{&PeerdirStmt{Paths: slices.DeleteFunc(slices.Clone(words), func(w ANY) bool { return w == own }), Implicit: true}}
 		}
 	}
@@ -2412,7 +2414,7 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 			var fromID STR
 
 			if !v.Implicit {
-				fromID = internStr(modulePath)
+				fromID = d.pathID
 			}
 
 			for _, pTok := range expandStmtTokens(v.Paths, env) {
@@ -6143,8 +6145,8 @@ func hasPy2Variant(name TOK) bool {
 	return false
 }
 
-func moduleExcludesTag(d *ModuleData, tag string) bool {
-	excluded, specified := d.excludeTags[internStr(tag)]
+func moduleExcludesTag(d *ModuleData, tag STR) bool {
+	excluded, specified := d.excludeTags[tag]
 
 	return excluded || d.onlyTags && !specified
 }
@@ -6361,9 +6363,7 @@ func compilerFlagRootValue(value string, env Environment) string {
 	var roots [4]confMacroBinding
 
 	for i, root := range [...]ENV{envARCADIA_ROOT, envARCADIA_BUILD_ROOT, envCURDIR, envBINDIR} {
-		bound, _ := env.lookup(root.string())
-
-		roots[i] = confMacroBinding{name: root.str(), values: []ANY{internAny(bound)}, bound: true}
+		roots[i] = confMacroBinding{name: root.str(), values: []ANY{env.lookupANY(root)}, bound: true}
 	}
 
 	return substMacroDeeply(value, roots[:], Environment{}, nil, &substPolicy{})

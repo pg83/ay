@@ -15,8 +15,8 @@ var (
 
 type commandExpressionScratch struct{ word, key []byte }
 
-func compilerFlagExpression(text string, env Environment, expanding []string) ([]string, string) {
-	return commandArgumentExpression(text, func(name string, _ bool) ([]string, string) {
+func compilerFlagExpression(text string, env Environment, expanding []string) ([]ANY, STR) {
+	return commandArgumentExpression(text, func(name string, _ bool) ([]ANY, string) {
 		if slices.Contains(expanding, name) {
 			throwFmt("self-contradictory variable definition (%s)", name)
 		}
@@ -28,25 +28,26 @@ func compilerFlagExpression(text string, env Environment, expanding []string) ([
 		}
 
 		value, _ := env.lookupENV(id)
+		args, identity := compilerFlagExpression(value, env, append(expanding, name))
 
-		return compilerFlagExpression(value, env, append(expanding, name))
+		return args, identity.string()
 	})
 }
 
 func configuredCompilerFlags(text string, env Environment) []ANY {
 	args, _ := compilerFlagExpression(text, env, nil)
 
-	return internAnys(args)
+	return args
 }
 
-func commandArgumentExpression(text string, resolve func(string, bool) ([]string, string)) (args []string, identity string) {
+func commandArgumentExpression(text string, resolve func(string, bool) ([]ANY, string)) (args []ANY, identity STR) {
 	scratch := commandExpressionPool.Get().(*commandExpressionScratch)
 
 	defer commandExpressionPool.Put(scratch)
 
 	scratch.word, scratch.key = scratch.word[:0], scratch.key[:0]
 	var quote byte
-	var variable []string
+	var variable []ANY
 
 	hasTerm, standalone, started := false, false, false
 
@@ -54,7 +55,7 @@ func commandArgumentExpression(text string, resolve func(string, bool) ([]string
 		if standalone {
 			args = append(args, variable...)
 		} else if hasTerm {
-			args = append(args, internBytes(scratch.word).string())
+			args = append(args, internAny(bytesString(scratch.word)))
 		}
 
 		scratch.word = scratch.word[:0]
@@ -83,7 +84,7 @@ func commandArgumentExpression(text string, resolve func(string, bool) ([]string
 				flush()
 				scratch.key = append(scratch.key, text[i:]...)
 
-				return args, internBytes(scratch.key).string()
+				return args, internBytes(scratch.key)
 			}
 
 			scratch.key = append(scratch.key, text[i:i+2]...)
@@ -215,7 +216,7 @@ func commandArgumentExpression(text string, resolve func(string, bool) ([]string
 					variable = values
 
 					for _, value := range values {
-						scratch.word = append(scratch.word, value...)
+						scratch.word = appendANYText(scratch.word, value)
 					}
 
 					scratch.key = append(scratch.key, expanded...)
@@ -253,7 +254,7 @@ func commandArgumentExpression(text string, resolve func(string, bool) ([]string
 
 	flush()
 
-	return args, internBytes(scratch.key).string()
+	return args, internBytes(scratch.key)
 }
 
 func commandSeparatorTail(text string) bool {

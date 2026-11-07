@@ -74,7 +74,7 @@ func (ctx *GenCtx) javaCPPStyleSuites(jm *JavaModule) []*TestSuite {
 			continue
 		}
 
-		suites = append(suites, ctx.styleSuite(check, jm.dir, jm.data.testEnv, styleCheckResources(check, ctx.javaResourceGlobals(jm))))
+		suites = append(suites, ctx.styleSuite(check, internStr(jm.dir), jm.data.testEnv, styleCheckResources(check, ctx.javaResourceGlobals(jm))))
 	}
 
 	return suites

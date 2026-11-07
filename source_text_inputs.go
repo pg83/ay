@@ -115,10 +115,16 @@ func prepareRunProgramInputArguments(args []ANY, env Environment) ([]ANY, []ANY)
 	for _, arg := range args {
 		var track SourceTextTracker
 
-		value := continueConfigMacroBodyTracked(arg.string(), env, nil, &track)
+		argText := arg.string()
+		value := continueConfigMacroBodyTracked(argText, env, nil, &track)
+		whole := value == argText && (arg.vfs() != 0 || !vfsHasPrefix(argText))
 
 		for _, span := range appendSourceWordSpans(spanBuf[:0], value, func(r rune) bool { return r == ' ' || r == ',' }) {
-			word := internAny(value[span.Start:span.End])
+			word := arg
+
+			if !whole || span.Start != 0 || span.End != len(value) {
+				word = internAny(value[span.Start:span.End])
+			}
 
 			if track.contains(span.Start, span.End) {
 				text = append(text, word)

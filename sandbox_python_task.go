@@ -64,9 +64,9 @@ func selectedSandboxPythonTaskVariants(instance ModuleInstance, name TOK, d *Mod
 	var variants uint16
 
 	for _, sub := range sandboxPythonTaskInstances(instance, name) {
-		tag := multimoduleSub(name.str(), sub.Kind, sub.Language, false).string()
+		tag := multimoduleSub(name.str(), sub.Kind, sub.Language, false)
 
-		if !moduleExcludesTag(d, tag) && !slices.Contains(excluded, tag) {
+		if !moduleExcludesTag(d, tag) && !slices.Contains(excluded, tag.string()) {
 			variants |= sandboxPythonTaskVariantBit(sub)
 		}
 	}

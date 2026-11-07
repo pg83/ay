@@ -285,7 +285,7 @@ func runGenIntoWithResources(fs FS, parsers *IncludeParserManager, targets []str
 	all := make([]DiscoveredModule, 0, len(targets))
 
 	for i, t := range targets {
-		discovered[i] = discoverRecursedTargets(ctx, filepath.Clean(t))
+		discovered[i] = discoverRecursedTargets(ctx, source(filepath.Clean(t)))
 
 		if discovered[i].Root.Declaration != nil {
 			all = append(all, discovered[i].Root)
@@ -306,8 +306,8 @@ func runGenIntoWithResources(fs FS, parsers *IncludeParserManager, targets []str
 	}
 
 	for _, target := range all {
-		ctx.roots[ctx.rootInstanceForDeclaration(target.Path, demandNone, target.Declaration)] = true
-		ctx.rootPaths[source(target.Path)] = true
+		ctx.roots[ctx.rootInstanceForDeclarationVFS(target.Path, demandNone, target.Declaration)] = true
+		ctx.rootPaths[target.Path] = true
 	}
 
 	for _, targets := range discovered {
@@ -447,7 +447,7 @@ func newGenCtx(fs FS, parsers *IncludeParserManager, hostP, targetP *Platform, e
 
 type DirEvaluation struct {
 	declaration *ModuleStmt
-	recurses    []string
+	recurses    []VFS
 	owned       ownerChain
 }
 
@@ -499,6 +499,10 @@ func (ctx *GenCtx) rootInstance(dir string, demand ModuleDemand) ModuleInstance 
 	return ctx.rootInstanceForDeclaration(dir, demand, ctx.evaluateDir(dir, ctx.target).declaration)
 }
 
+func (ctx *GenCtx) rootInstanceVFS(dir VFS, demand ModuleDemand) ModuleInstance {
+	return ctx.rootInstanceForDeclarationVFS(dir, demand, ctx.evaluateDirVFS(dir, ctx.target).declaration)
+}
+
 func (ctx *GenCtx) rootInstanceForDeclaration(dir string, demand ModuleDemand, decl *ModuleStmt) ModuleInstance {
 	return ctx.rootInstanceForDeclarationVFS(source(filepath.Clean(dir)), demand, decl)
 }
@@ -542,7 +546,7 @@ func (ctx *GenCtx) genTarget(targets DiscoveredTargets, rootDemand ModuleDemand)
 	start := ctx.exportLen
 
 	if target.Declaration != nil && isJavaModuleType(target.Declaration.Name) {
-		dirs := ctx.recurseClosure(filepath.Clean(targetDir))
+		dirs := ctx.recurseClosure(targetDir)
 
 		ctx.genStartTarget(dirs[0])
 		ctx.markExportRoot(start)
@@ -555,9 +559,9 @@ func (ctx *GenCtx) genTarget(targets DiscoveredTargets, rootDemand ModuleDemand)
 	}
 
 	if target.Declaration != nil {
-		root := genModule(ctx, ctx.rootInstanceForDeclaration(targetDir, rootDemand, target.Declaration))
+		root := genModule(ctx, ctx.rootInstanceForDeclarationVFS(targetDir, rootDemand, target.Declaration))
 
-		for _, ref := range ctx.moduleResultRefs(ctx.rootInstanceForDeclaration(targetDir, rootDemand, target.Declaration), root) {
+		for _, ref := range ctx.moduleResultRefs(ctx.rootInstanceForDeclarationVFS(targetDir, rootDemand, target.Declaration), root) {
 			ctx.emit.result(ref)
 		}
 
@@ -575,9 +579,9 @@ func (ctx *GenCtx) genTarget(targets DiscoveredTargets, rootDemand ModuleDemand)
 			continue
 		}
 
-		sub := genModule(ctx, ctx.rootInstanceForDeclaration(dir, rootDemand, target.Declaration))
+		sub := genModule(ctx, ctx.rootInstanceForDeclarationVFS(dir, rootDemand, target.Declaration))
 
-		for _, ref := range ctx.moduleResultRefs(ctx.rootInstanceForDeclaration(dir, rootDemand, target.Declaration), sub) {
+		for _, ref := range ctx.moduleResultRefs(ctx.rootInstanceForDeclarationVFS(dir, rootDemand, target.Declaration), sub) {
 			ctx.emit.result(ref)
 		}
 
@@ -585,22 +589,22 @@ func (ctx *GenCtx) genTarget(targets DiscoveredTargets, rootDemand ModuleDemand)
 	}
 }
 
-func (ctx *GenCtx) recurseClosure(root string) []string {
-	seen := map[string]bool{}
+func (ctx *GenCtx) recurseClosure(root VFS) []VFS {
+	seen := map[VFS]bool{}
 
-	var out []string
+	var out []VFS
 
-	var walk func(dir string)
+	var walk func(dir VFS)
 
-	walk = func(dir string) {
-		if seen[dir] || !ctx.fs.isFileID(internStr(dir), strYaMake) {
+	walk = func(dir VFS) {
+		if seen[dir] || !ctx.fs.isFileID(dir.rel(), strYaMake) {
 			return
 		}
 
 		seen[dir] = true
 		out = append(out, dir)
 
-		for _, child := range ctx.evaluateDir(dir, ctx.target).recurses {
+		for _, child := range ctx.evaluateDirVFS(dir, ctx.target).recurses {
 			walk(child)
 		}
 	}
@@ -622,13 +626,15 @@ func (ctx *GenCtx) ownedBy(owner VFS, platform *Platform) ownerChain {
 	return ownerChain{}
 }
 
-func (ctx *GenCtx) scanModuleConfiguration(instance ModuleInstance) (*ModuleStmt, []string) {
+func (ctx *GenCtx) scanModuleConfiguration(instance ModuleInstance) (*ModuleStmt, []VFS) {
 	dir := instance.Path.relString()
 	platform := instance.Platform
 	env := buildIfEnvInto(&ctx.ifEnvScratch, instance)
 	d := &ctx.scanData
 
 	d.reset()
+
+	d.pathID = instance.Path.rel()
 
 	var pending *ModuleStmt
 
@@ -647,7 +653,7 @@ func (ctx *GenCtx) scanModuleConfiguration(instance ModuleInstance) (*ModuleStmt
 	}
 
 	var module *ModuleStmt
-	var children []string
+	var children []VFS
 
 	var scan func(stmts []Stmt)
 
@@ -751,15 +757,15 @@ func (ctx *GenCtx) scanModuleConfiguration(instance ModuleInstance) (*ModuleStmt
 	return module, children
 }
 
-func (ctx *GenCtx) genStartTarget(dir string) {
-	name := ctx.moduleName(dir)
+func (ctx *GenCtx) genStartTarget(dir VFS) {
+	name := ctx.moduleNameVFS(dir)
 
 	switch {
 	case name == 0:
 	case isJavaModuleType(name):
 		ctx.genJavaTarget(dir, name)
 	default:
-		root := genModule(ctx, ctx.rootInstance(dir, demandSelf))
+		root := genModule(ctx, ctx.rootInstanceVFS(dir, demandSelf))
 
 		if root.LDPath != nil {
 			ctx.emit.result(root.LDRef)
@@ -810,13 +816,13 @@ func (e *EmitContext) peerDemand() ModuleDemand {
 	return demandNone
 }
 
-func (ctx *GenCtx) collectConfiguredSubmoduleTests(dir string, results ...*ModuleEmitResult) {
+func (ctx *GenCtx) collectConfiguredSubmoduleTests(dir VFS, results ...*ModuleEmitResult) {
 	if !ctx.testMode {
 		return
 	}
 
-	instance := ctx.rootInstance(dir, demandNone)
-	module := ctx.moduleName(dir)
+	instance := ctx.rootInstanceVFS(dir, demandNone)
+	module := ctx.moduleNameVFS(dir)
 
 	switch module {
 	case tokPy23Library, tokPy3Program:
@@ -917,24 +923,24 @@ func mergeCheckSuite(suites []*TestSuite, s *TestSuite) bool {
 }
 
 type DiscoveredModule struct {
-	Path        string
+	Path        VFS
 	Declaration *ModuleStmt
 }
 
 type DiscoveredTargets struct {
 	Root      DiscoveredModule
 	Recursed  []DiscoveredModule
-	TestOrder []string
+	TestOrder []VFS
 }
 
-func discoverRecursedTargets(ctx *GenCtx, targetDir string) DiscoveredTargets {
-	seen := map[string]bool{targetDir: true}
-	queue := []string{targetDir}
+func discoverRecursedTargets(ctx *GenCtx, targetDir VFS) DiscoveredTargets {
+	seen := map[VFS]bool{targetDir: true}
+	queue := []VFS{targetDir}
 
-	var recurses map[string][]string
+	var recurses map[VFS][]VFS
 
 	if ctx.testMode {
-		recurses = map[string][]string{}
+		recurses = map[VFS][]VFS{}
 	}
 
 	var targets DiscoveredTargets
@@ -942,11 +948,11 @@ func discoverRecursedTargets(ctx *GenCtx, targetDir string) DiscoveredTargets {
 	for at := 0; at < len(queue); at++ {
 		dir := queue[at]
 
-		if at != 0 && !ctx.fs.isFileID(internStr(dir), strYaMake) {
+		if at != 0 && !ctx.fs.isFileID(dir.rel(), strYaMake) {
 			continue
 		}
 
-		evaluation := ctx.evaluateDir(dir, ctx.target)
+		evaluation := ctx.evaluateDirVFS(dir, ctx.target)
 		module, children := evaluation.declaration, evaluation.recurses
 
 		if ctx.testMode {
@@ -968,11 +974,11 @@ func discoverRecursedTargets(ctx *GenCtx, targetDir string) DiscoveredTargets {
 	}
 
 	if ctx.testMode {
-		visited := map[string]bool{}
+		visited := map[VFS]bool{}
 
-		var visit func(string)
+		var visit func(VFS)
 
-		visit = func(dir string) {
+		visit = func(dir VFS) {
 			if visited[dir] {
 				return
 			}
@@ -1098,7 +1104,7 @@ func (ctx *GenCtx) parseFileCached(id STR) []Stmt {
 		return mf.Stmts
 	}
 
-	mf := throw2(parseFileClean(ctx.fs, key.string(), ctx.includeMemos))
+	mf := throw2(parseFileClean(ctx.fs, key, ctx.includeMemos))
 
 	ctx.parsedFiles[key] = mf
 
@@ -1499,7 +1505,7 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 	}
 
 	tag := multimoduleSub(multimoduleOwner(declaration), instance.Kind, instance.Language, instance.YqlCurrent)
-	excluded := tag != 0 && moduleExcludesTag(d, tag.string())
+	excluded := tag != 0 && moduleExcludesTag(d, tag)
 
 	if isSandboxPythonTask(moduleName) {
 		excluded = d.moduleVariants&sandboxPythonTaskVariantBit(instance) == 0
@@ -2448,7 +2454,7 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 	arNameFn = func(dir string) string { return e.arName(dir, d.unit.ARPrefix, archiveName) }
 	globalArNameFn = func(dir string) string { return e.globalArName(dir, d.unit.ARPrefix, archiveName) }
 
-	selfPeerAddInclGlobal := filterBuildRootSelfPaths(instance.Path.relString(), peerAddInclGlobal, dedupedAddIncl)
+	selfPeerAddInclGlobal := filterBuildRootSelfPaths(instance.Path.rel(), peerAddInclGlobal, dedupedAddIncl)
 
 	if d.moduleStmt.Name == tokProtoLibrary {
 		selfPeerAddInclGlobal = peerAddInclGlobal
@@ -2919,12 +2925,12 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 	return result
 }
 
-func filterBuildRootSelfPaths(instancePath string, peer, own []VFS) []VFS {
+func filterBuildRootSelfPaths(instancePath STR, peer, own []VFS) []VFS {
 	if len(peer) == 0 {
 		return peer
 	}
 
-	ownPrefix := build(instancePath)
+	ownPrefix := instancePath.build()
 	out := peer
 
 	dedupers.with(func(deduper *DeDuper) {

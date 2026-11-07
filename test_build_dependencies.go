@@ -131,7 +131,7 @@ func (ctx *GenCtx) selectDependencyInstances(dir string) []ModuleInstance {
 	instances := []ModuleInstance{instance}
 	variants := d.moduleVariants
 
-	if name == tokProtoLibrary && !moduleExcludesTag(d, "PY_PROTO") {
+	if name == tokProtoLibrary && !moduleExcludesTag(d, strPyProto) {
 		variants |= 1 << LangPy2
 	}
 
@@ -180,7 +180,7 @@ func (ctx *GenCtx) selectDependencyInstances(dir string) []ModuleInstance {
 			tag = resolveModuleUnit(name, peer.Kind, peer.Language).Tag
 		}
 
-		if tag != 0 && moduleExcludesTag(d, tag.string()) {
+		if tag != 0 && moduleExcludesTag(d, tag) {
 			continue
 		}
 

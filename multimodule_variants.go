@@ -137,7 +137,7 @@ func (ctx *GenCtx) genMultimoduleTargets(target DiscoveredModule, variants uint1
 	var instances []ModuleInstance
 
 	if target.Declaration != nil && isSandboxPythonTask(target.Declaration.Name) {
-		instance := ctx.rootInstanceForDeclaration(target.Path, demand, target.Declaration)
+		instance := ctx.rootInstanceForDeclarationVFS(target.Path, demand, target.Declaration)
 
 		for _, sub := range sandboxPythonTaskInstances(instance, target.Declaration.Name) {
 			if (sub.Kind != instance.Kind || sub.Language != instance.Language) && variants&sandboxPythonTaskVariantBit(sub) != 0 {
@@ -149,7 +149,7 @@ func (ctx *GenCtx) genMultimoduleTargets(target DiscoveredModule, variants uint1
 	}
 
 	if target.Declaration != nil && target.Declaration.Name == tokYqlUdf {
-		instance := ctx.rootInstanceForDeclaration(target.Path, demand, target.Declaration)
+		instance := ctx.rootInstanceForDeclarationVFS(target.Path, demand, target.Declaration)
 
 		instance.Kind = KindLib
 
@@ -164,7 +164,7 @@ func (ctx *GenCtx) genMultimoduleTargets(target DiscoveredModule, variants uint1
 			continue
 		}
 
-		instance := ctx.rootInstanceForDeclaration(target.Path, demand, target.Declaration)
+		instance := ctx.rootInstanceForDeclarationVFS(target.Path, demand, target.Declaration)
 
 		instance.Language = language
 

@@ -110,13 +110,13 @@ func legacyConfigurationCommand(text string, env Environment, variable, value, b
 
 	depths := map[string]int{}
 
-	var compile func(string, bool, int) []string
-	compile = func(text string, scalar bool, depth int) []string {
+	var compile func(string, bool, int) []ANY
+	compile = func(text string, scalar bool, depth int) []ANY {
 		if depth > 50 {
 			throwFmt("configuration command expansion is too deep")
 		}
 
-		args, _ := commandArgumentExpression(text, func(name string, term bool) ([]string, string) {
+		args, _ := commandArgumentExpression(text, func(name string, term bool) ([]ANY, string) {
 			definition, _ := env.lookup(name)
 
 			if name == variable {
@@ -132,7 +132,7 @@ func legacyConfigurationCommand(text string, env Environment, variable, value, b
 			}
 
 			if scalar || term {
-				shape, _ := commandArgumentExpression(definition, func(string, bool) ([]string, string) { return []string{"variable"}, "" })
+				shape, _ := commandArgumentExpression(definition, func(string, bool) ([]ANY, string) { return []ANY{strVariable.any()}, "" })
 
 				if len(shape) > 1 {
 					if depths[name] != 0 {
@@ -163,7 +163,7 @@ func legacyConfigurationCommand(text string, env Environment, variable, value, b
 		return args
 	}
 
-	args := internAnys(compile(text, false, 0))
+	args := compile(text, false, 0)
 
 	return CompilerFlagValue{Args: args, Resources: resources}
 }

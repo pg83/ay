@@ -476,6 +476,30 @@ func (e Environment) lookup(name string) (string, bool) {
 	return e.lookupENV(internedEnv(name))
 }
 
+func (e Environment) lookupANY(id ENV) ANY {
+	k, v := e.s.lookup(id)
+
+	if k == envAbsent {
+		return strEmpty.any()
+	}
+
+	e.recordResourceUse(id)
+
+	if k == envVFS {
+		return VFS(uint32(v)).any()
+	}
+
+	if v == 0 {
+		return strEmpty.any()
+	}
+
+	if s := v.string(); vfsHasPrefix(s) {
+		return intern(s).any()
+	}
+
+	return v.any()
+}
+
 func (e Environment) lookupSTR(id ENV) (STR, bool) {
 	k, v := e.s.lookup(id)
 

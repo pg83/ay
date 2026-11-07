@@ -481,6 +481,10 @@ func (e *EmitContext) runProgramInputVFSOf(input ANY) VFS {
 		return e.requireProducedInput("IN", "", v)
 	}
 
+	if s := input.str(); s != 0 && s.cleanPath() && !vfsHasPrefix(s.string()) {
+		return e.ctx.programInputVFSID(e.instance, e.d.srcDirs, s)
+	}
+
 	return e.runProgramInputVFS(input.string())
 }
 
@@ -513,6 +517,26 @@ func (ctx *GenCtx) programInputVFS(instance ModuleInstance, srcDirs []VFS, rel s
 	}
 
 	return resolveSourceOrGeneratedVFS(ctx, instance, rel, srcDirs)
+}
+
+func (ctx *GenCtx) programInputVFSID(instance ModuleInstance, srcDirs []VFS, rel STR) VFS {
+	registry := ctx.scannerForPlatform(instance.Platform).codegen
+	text := rel.string()
+	buildVFS := buildJoinClean(instance.Path.relString(), text)
+
+	if registry.lookup(buildVFS) != nil {
+		return buildVFS
+	}
+
+	if src := rel.source(); ctx.fs.isFileVFS(src) {
+		return src
+	}
+
+	if rootBuild := rel.build(); registry.use(rootBuild) != nil {
+		return rootBuild
+	}
+
+	return resolveSourceOrGeneratedVFS(ctx, instance, text, srcDirs)
 }
 
 func (e *EmitContext) emitPR(spec RunProgramNodeSpec, id NodeRef) {

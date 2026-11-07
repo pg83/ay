@@ -267,7 +267,7 @@ type JavaData struct {
 	dmTagsExclude          []ANY
 	moduleTag              STR
 	autoincluded           bool
-	recurses               []string
+	recurses               []VFS
 	name                   string
 	prefix                 string
 	jdkReal                string
@@ -846,7 +846,7 @@ func (u *javaUnit) finalTarget() bool {
 	return u.sub != KindJavaCompilation && u.kind != juIJar && u.kind != juExternal && u.kind != juProxy
 }
 
-func (ctx *GenCtx) genJavaTarget(dir string, name TOK) {
+func (ctx *GenCtx) genJavaTarget(dir VFS, name TOK) {
 	units := javaModuleUnits[name]
 
 	for _, u := range units {
@@ -854,7 +854,7 @@ func (ctx *GenCtx) genJavaTarget(dir string, name TOK) {
 			continue
 		}
 
-		res := genModule(ctx, ModuleInstance{Path: source(dir), Kind: u.sub, Language: LangJava, Platform: ctx.target, Demand: demandSelf})
+		res := genModule(ctx, ModuleInstance{Path: dir, Kind: u.sub, Language: LangJava, Platform: ctx.target, Demand: demandSelf})
 
 		if res.java == nil {
 			continue
@@ -866,13 +866,13 @@ func (ctx *GenCtx) genJavaTarget(dir string, name TOK) {
 	}
 }
 
-func (ctx *GenCtx) genJavaTests(dir string, name TOK) {
+func (ctx *GenCtx) genJavaTests(dir VFS, name TOK) {
 	if !ctx.testMode {
 		return
 	}
 
 	for _, u := range javaModuleUnits[name] {
-		res := genModule(ctx, ModuleInstance{Path: source(dir), Kind: u.sub, Language: LangJava, Platform: ctx.target, Demand: demandSelf})
+		res := genModule(ctx, ModuleInstance{Path: dir, Kind: u.sub, Language: LangJava, Platform: ctx.target, Demand: demandSelf})
 
 		if res.java == nil {
 			continue

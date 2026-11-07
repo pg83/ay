@@ -8,12 +8,12 @@ type ConfigurationDependency struct {
 }
 
 type ConfigurationDependencies struct {
-	recurses   map[VFS][]string
+	recurses   map[VFS][]VFS
 	depends    []ConfigurationDependency
 	processing bool
 }
 
-func appendConfigurationRecurses(out []string, dir string, stmt UnknownStmt, platform *Platform) []string {
+func appendConfigurationRecurses(out []VFS, dir string, stmt UnknownStmt, platform *Platform) []VFS {
 	switch stmt.Name {
 	case tokRecurse, tokRecurseRootRelative:
 	case tokRecurseForTests:
@@ -33,21 +33,25 @@ func appendConfigurationRecurses(out []string, dir string, stmt UnknownStmt, pla
 
 		if stmt.Name != tokRecurseRootRelative {
 			if pathIsClean(child) && child != "" {
-				out = append(out, internJoined(dir, child).string())
+				out = append(out, internJoined(dir, child).source())
 
 				continue
 			}
 
 			child = path.Join(dir, child)
+		} else if id := arg.str(); id != 0 && id.cleanPath() {
+			out = append(out, id.source())
+
+			continue
 		}
 
-		out = append(out, path.Clean(child))
+		out = append(out, source(path.Clean(child)))
 	}
 
 	return out
 }
 
-func (ctx *GenCtx) recordConfiguration(instance ModuleInstance, recurses, depends []string) {
+func (ctx *GenCtx) recordConfiguration(instance ModuleInstance, recurses []VFS, depends []string) {
 	if instance.Platform == ctx.host || !instance.Platform.ifEnv.bool(envTraverseDepends) {
 		return
 	}
@@ -56,7 +60,7 @@ func (ctx *GenCtx) recordConfiguration(instance ModuleInstance, recurses, depend
 
 	if !configuration.processing {
 		if configuration.recurses == nil {
-			configuration.recurses = map[VFS][]string{}
+			configuration.recurses = map[VFS][]VFS{}
 		}
 
 		configuration.recurses[instance.Path] = append(configuration.recurses[instance.Path], recurses...)
@@ -74,23 +78,23 @@ func (ctx *GenCtx) configureDependencies() {
 
 	defer func() { configuration.processing = false }()
 
-	seen := map[string]bool{}
+	seen := map[VFS]bool{}
 
-	var configure func(string)
+	var configure func(VFS)
 
-	configure = func(dir string) {
-		if seen[dir] || !ctx.fs.isFileID(internStr(dir), strYaMake) {
+	configure = func(dir VFS) {
+		if seen[dir] || !ctx.fs.isFileID(dir.rel(), strYaMake) {
 			return
 		}
 
 		seen[dir] = true
 
-		declaration := ctx.evaluateDir(dir, ctx.target).declaration
+		declaration := ctx.evaluateDirVFS(dir, ctx.target).declaration
 
 		if declaration != nil {
-			root := ctx.roots[ctx.rootInstanceForDeclaration(dir, demandNone, declaration)]
+			root := ctx.roots[ctx.rootInstanceForDeclarationVFS(dir, demandNone, declaration)]
 
-			for _, instance := range ctx.testDependencyInstances(dir) {
+			for _, instance := range ctx.testDependencyInstances(dir.relString()) {
 				result := genModule(ctx, instance)
 
 				if root {
@@ -99,7 +103,7 @@ func (ctx *GenCtx) configureDependencies() {
 			}
 		}
 
-		for _, child := range configuration.recurses[source(dir)] {
+		for _, child := range configuration.recurses[dir] {
 			configure(child)
 		}
 	}
@@ -107,7 +111,7 @@ func (ctx *GenCtx) configureDependencies() {
 	for i := 0; i < len(configuration.depends); i++ {
 		dependency := configuration.depends[i]
 
-		configure(dependency.to)
+		configure(source(path.Clean(dependency.to)))
 
 		if ctx.peerTests || ctx.rootPaths[dependency.from] {
 			ctx.testBuildDependencies(dependency.to)

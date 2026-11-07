@@ -197,7 +197,7 @@ func expandCompilerConfFlags(env Environment, value string) []ANY {
 			if strings.Contains(w, "$") {
 				args, _ := compilerFlagExpression(w, env, nil)
 
-				out = append(out, internAnys(args)...)
+				out = append(out, args...)
 
 				continue
 			}

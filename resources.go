@@ -8,6 +8,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"unsafe"
 )
 
 var (
@@ -20,6 +21,10 @@ var (
 	bldResourcesLLDROOT         = build("resources/", resourcePatternLLDRoot)
 	bldResourcesLLDROOTBinLdLld = build("resources/", resourcePatternLLDRoot, "/bin/ld.lld")
 )
+
+var sortedGlobalsLast struct {
+	in, out []ResourceDecl
+}
 
 const (
 	resourceGlobalSuffix = "_RESOURCE_GLOBAL"
@@ -258,15 +263,29 @@ func selectResourceDescriptor(descriptor ResourceDescriptor, hostPlatform string
 }
 
 func sortedResourceGlobals(in []ResourceDecl) []ResourceDecl {
-	if len(in) < 2 || resourceGlobalsSorted(in) {
+	if len(in) < 2 {
 		return in
 	}
 
-	out := slices.Clone(in)
+	last := &sortedGlobalsLast
 
-	slices.SortFunc(out, resourceGlobalCompare)
+	if unsafe.SliceData(last.in) == unsafe.SliceData(in) && len(last.in) == len(in) {
+		return last.out
+	}
 
-	return slices.Compact(out)
+	out := in
+
+	if !resourceGlobalsSorted(in) {
+		out = slices.Clone(in)
+
+		slices.SortFunc(out, resourceGlobalCompare)
+
+		out = slices.Compact(out)
+	}
+
+	last.in, last.out = in, out
+
+	return out
 }
 
 func resourceGlobalCompare(a, b ResourceDecl) int {

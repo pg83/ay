@@ -28,6 +28,7 @@ type FS interface {
 	storeResourceBundle(rel STR, bundle map[string]ResourceBundleEntry)
 
 	walk(rel string, visit func(rel string, isDir bool) bool)
+	walkDirID(root STR, visit func(rel string, dir STR, isDir bool) bool)
 	testPathReadError(rel string) error
 
 	confRoot() string

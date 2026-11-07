@@ -84,9 +84,9 @@ func (e *EmitContext) localLinkerFlagValue(peerRPath []ANY) LocalLinkerFlags {
 
 	env := Environment{s: &e.frame.ifEnv, resourceUses: &resources}
 
-	var expand func(string, []string) ([]string, string)
-	expand = func(text string, expanding []string) ([]string, string) {
-		return commandArgumentExpression(text, func(name string, _ bool) ([]string, string) {
+	var expand func(string, []string) ([]ANY, string)
+	expand = func(text string, expanding []string) ([]ANY, string) {
+		args, identity := commandArgumentExpression(text, func(name string, _ bool) ([]ANY, string) {
 			if slices.Contains(expanding, name) {
 				throwFmt("self-contradictory variable definition (%s)", name)
 			}
@@ -101,17 +101,17 @@ func (e *EmitContext) localLinkerFlagValue(peerRPath []ANY) LocalLinkerFlags {
 				args, _ := expand(value, append(expanding, name))
 
 				for i, arg := range args {
-					file := e.runProgramInputVFS(arg)
+					file := e.runProgramInputVFS(arg.string())
 
 					inputs = append(inputs, file)
-					args[i] = file.string()
+					args[i] = file.any()
 				}
 
 				return args, name
 			}
 
 			if name == "RPATH_GLOBAL" {
-				return anyStrs(peerRPath), name
+				return canonicalANYs(peerRPath), name
 			}
 
 			value, _ := env.lookup(name)
@@ -119,10 +119,12 @@ func (e *EmitContext) localLinkerFlagValue(peerRPath []ANY) LocalLinkerFlags {
 
 			return args, identity
 		})
+
+		return args, identity.string()
 	}
 
 	args, _ := expand(env.string(envLdflags), nil)
-	value := resourceGlobalArgumentValue(internAnys(args), e.peers.ResourceGlobals, &e.ctx.resourceEnv)
+	value := resourceGlobalArgumentValue(args, e.peers.ResourceGlobals, &e.ctx.resourceEnv)
 
 	value.Resources = resourceKeyUnion(resources, value.Resources)
 

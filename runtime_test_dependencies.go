@@ -58,7 +58,7 @@ func (e *EmitContext) recordTestDependencyModule(result *ModuleEmitResult, decla
 		}
 
 		for _, dir := range d.peerdirs {
-			peer := e.derivePeerInstance(dir.string())
+			peer := e.derivePeerInstanceVFS(dir.peerSource())
 
 			peer.Demand = demandSelf
 			peers = append(peers, peer)

@@ -61,6 +61,7 @@ type TestOpts struct {
 	sizes        []string
 	tagFilter    TestTagFilter
 	descriptor   string
+	sizeIDs      []STR
 	styleArg     ANY
 	platformArg  ANY
 	context      []string
@@ -146,6 +147,10 @@ func newTestOpts(mf *MakeFlags, yaConf map[string]any) *TestOpts {
 	}
 
 	opts.styleArg, opts.platformArg = testArg(opts.outputStyle), testArg(opts.descriptor)
+
+	for _, size := range opts.sizes {
+		opts.sizeIDs = append(opts.sizeIDs, internStr(size))
+	}
 
 	return opts
 }
@@ -400,8 +405,8 @@ func testSizeKind(size STR) ProcKind {
 	return 0
 }
 
-func (o *TestOpts) sizeRequested(size string) bool {
-	return len(o.sizes) == 0 || slices.Contains(o.sizes, size)
+func (o *TestOpts) sizeRequested(size STR) bool {
+	return len(o.sizeIDs) == 0 || slices.Contains(o.sizeIDs, size)
 }
 
 type TestSuite struct {
@@ -577,7 +582,7 @@ func (ctx *GenCtx) prepareTestDependencies(s *TestSuite) {
 }
 
 func (ctx *GenCtx) testSuiteSelected(s *TestSuite) bool {
-	return !s.skipped && ctx.tests.sizeRequested(s.size.string()) && ctx.tests.tagFilter.matches(s.tags)
+	return !s.skipped && ctx.tests.sizeRequested(s.size) && ctx.tests.tagFilter.matches(s.tags)
 }
 
 func (ctx *GenCtx) emitTestSuite(s *TestSuite) []NodeRef {

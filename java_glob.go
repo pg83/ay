@@ -109,14 +109,16 @@ func (ctx *GenCtx) javaGlob(moddir, pattern string, ex *javaExcludeMatcher) []ST
 	var matches []STR
 	var joinBuf [256]byte
 
-	dirs := []string{root}
+	dirs := []STR{dirKey(root)}
 
 	for i, part := range parts {
 		last := i == len(parts)-1
 
-		var next []string
+		var next []STR
 
-		for _, dir := range dirs {
+		for _, dirID := range dirs {
+			dir := dirID.string()
+
 			switch part.kind {
 			case javaGlobFixed:
 				p := part.data
@@ -136,12 +138,12 @@ func (ctx *GenCtx) javaGlob(moddir, pattern string, ex *javaExcludeMatcher) []ST
 				switch {
 				case !present:
 				case isDir:
-					next = append(next, p)
+					next = append(next, internStr(p))
 				case last && !ex.excluded(p, false):
 					matches = append(matches, internStr(p))
 				}
 			case javaGlobPattern, javaGlobAnything:
-				for _, packed := range ctx.fs.listdir(dirKey(dir)).names {
+				for _, packed := range ctx.fs.listdir(dirID).names {
 					isDir := packed&1 != 0
 
 					if !isDir && !last {
@@ -162,8 +164,10 @@ func (ctx *GenCtx) javaGlob(moddir, pattern string, ex *javaExcludeMatcher) []ST
 					}
 
 					switch {
+					case isDir && dir == "":
+						next = append(next, nameID)
 					case isDir:
-						next = append(next, strings.Clone(p))
+						next = append(next, internStr(p))
 					case ex.excluded(p, false):
 					case dir == "":
 						matches = append(matches, nameID)
@@ -172,8 +176,8 @@ func (ctx *GenCtx) javaGlob(moddir, pattern string, ex *javaExcludeMatcher) []ST
 					}
 				}
 			case javaGlobRecursive:
-				ctx.fs.walk(dir, func(rel string, isDir bool) bool {
-					if rel == dir {
+				ctx.fs.walkDirID(dirID, func(rel string, id STR, isDir bool) bool {
+					if id == dirID {
 						return true
 					}
 
@@ -181,12 +185,12 @@ func (ctx *GenCtx) javaGlob(moddir, pattern string, ex *javaExcludeMatcher) []ST
 						return false
 					}
 
-					next = append(next, rel)
+					next = append(next, id)
 
 					return true
 				})
 
-				next = append(next, dir)
+				next = append(next, dirID)
 			}
 		}
 

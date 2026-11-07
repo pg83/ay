@@ -44,7 +44,7 @@ func sbomActive(ctx *GenCtx, instance ModuleInstance) bool {
 }
 
 func sbomQualifies(d *ModuleData) bool {
-	if d.moduleStmt.Name == tokProtoLibrary && moduleExcludesTag(d, "CPP_PROTO") {
+	if d.moduleStmt.Name == tokProtoLibrary && moduleExcludesTag(d, strCPPProto) {
 		return false
 	}
 

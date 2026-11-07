@@ -72,9 +72,7 @@ func (ctx *GenCtx) prepareDiscoveredModuleTests(discovered []DiscoveredTargets) 
 		}
 
 		for _, targets := range discovered {
-			for _, dir := range targets.TestOrder {
-				project := source(dir)
-
+			for _, project := range targets.TestOrder {
 				for _, result := range rootProjects[project] {
 					visitRoot(result)
 				}

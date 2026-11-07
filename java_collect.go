@@ -495,7 +495,7 @@ func collectJavaStmts(ctx *GenCtx, jm *JavaModule, d *JavaData, stmts []Stmt, en
 				continue
 			}
 
-			if !applyJavaMacro(ctx, jm, d, v.Raw, args, raw, env) || javaConfBodyToo(v.Raw) {
+			if !applyJavaMacro(ctx, jm, d, v.Raw, args, stmt.Args, raw, env) || javaConfBodyToo(v.Raw) {
 				expandJavaConfMacro(ctx, jm, d, stmt, env)
 			}
 		}
@@ -647,7 +647,7 @@ func parseJavaSrcs(args []string) JavaSrcsSpec {
 	return spec
 }
 
-func applyJavaMacro(ctx *GenCtx, jm *JavaModule, d *JavaData, name STR, args []string, raw []ANY, env Environment) bool {
+func applyJavaMacro(ctx *GenCtx, jm *JavaModule, d *JavaData, name STR, args []string, ids, raw []ANY, env Environment) bool {
 	u := jm.unit
 	arg0 := ""
 
@@ -864,7 +864,7 @@ func applyJavaMacro(ctx *GenCtx, jm *JavaModule, d *JavaData, name STR, args []s
 	case kwDEPENDS:
 		d.test.depends = append(d.test.depends, args...)
 	case kwDOCKER_IMAGE:
-		applyJavaMacro(ctx, jm, d, strSetAppend, append([]string{envDockerImagesValue.string()}, args...), append([]ANY{envDockerImagesValue.str().any()}, raw...), env)
+		applyJavaMacro(ctx, jm, d, strSetAppend, append([]string{envDockerImagesValue.string()}, args...), nil, append([]ANY{envDockerImagesValue.str().any()}, raw...), env)
 	case kwDATA:
 		d.test.data = append(d.test.data, args...)
 	case kwDATA_FILES:
@@ -931,7 +931,7 @@ func applyJavaMacro(ctx *GenCtx, jm *JavaModule, d *JavaData, name STR, args []s
 	case kwJAVA_IGNORE_CLASSPATH_CLASH_FOR:
 		property := []string{envJavaIgnoreClasspathClash.string()}
 
-		applyJavaMacro(ctx, jm, d, strSetAppend, append(property, args...), append([]ANY{envJavaIgnoreClasspathClash.str().any()}, raw...), env)
+		applyJavaMacro(ctx, jm, d, strSetAppend, append(property, args...), nil, append([]ANY{envJavaIgnoreClasspathClash.str().any()}, raw...), env)
 	case kwENV:
 		d.testEnv = append(d.testEnv, splitShellWords(`"`+strings.Join(anyStrs(raw), " ")+`"`)...)
 	case kwLINT:
@@ -953,20 +953,26 @@ func applyJavaMacro(ctx *GenCtx, jm *JavaModule, d *JavaData, name STR, args []s
 	case kwWITH_YA_1931:
 		env.setBool(envWithYa1931, true)
 	case strEnable:
-		for _, a := range args {
-			env.setBool(internEnv(a), true)
+		for i, a := range args {
+			id := javaArgSTR(ids, i, a)
+			name := internEnvSTR(id)
+
+			env.setBool(name, true)
 			javaEnableFlag(d, a, true)
-			d.setVars.set(internStr(a), strYes)
-			jm.instance.Platform.conf.set(env, internEnv(a), &d.setVars)
+			d.setVars.set(id, strYes)
+			jm.instance.Platform.conf.set(env, name, &d.setVars)
 		}
 	case kwDISABLE_DATA_VALIDATION:
 		env.setBool(envValidateData, false)
 	case strDisable:
-		for _, a := range args {
-			env.setBool(internEnv(a), false)
+		for i, a := range args {
+			id := javaArgSTR(ids, i, a)
+			name := internEnvSTR(id)
+
+			env.setBool(name, false)
 			javaEnableFlag(d, a, false)
-			d.setVars.set(internStr(a), strNo)
-			jm.instance.Platform.conf.set(env, internEnv(a), &d.setVars)
+			d.setVars.set(id, strNo)
+			jm.instance.Platform.conf.set(env, name, &d.setVars)
 		}
 	case kwGO_GRPC_GATEWAY_SWAGGER_SRCS:
 		d.peerStmts = append(d.peerStmts, JavaPeerSpec{dir: internStr(goGatewayV1Options), explicit: true})
@@ -1034,6 +1040,16 @@ func javaProtoPluginMacro(d *JavaData, args []string) {
 	}
 
 	d.javaProtoArgs = append(d.javaProtoArgs, JavaProtoPlugin{name: args[0], tool: args[1]})
+}
+
+func javaArgSTR(ids []ANY, i int, text string) STR {
+	if len(ids) > i {
+		if s := ids[i].str(); s != 0 {
+			return s
+		}
+	}
+
+	return internStr(text)
 }
 
 func javaEnableFlag(d *JavaData, name string, on bool) {

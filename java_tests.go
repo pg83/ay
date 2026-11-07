@@ -315,7 +315,7 @@ func (ctx *GenCtx) javaCustomLintSuite(jm *JavaModule, l javaCustomLint) *TestSu
 	}
 
 	check := StyleCheck{Name: l.linter.name, Wrapper: l.linter.wrapper, Resource: l.linter.resource, Files: files, ExtraConfigs: configs}
-	s := ctx.styleSuite(check, jm.dir, slices.Clone(jm.data.testEnv), styleCheckResources(check, ctx.javaResourceGlobals(jm)))
+	s := ctx.styleSuite(check, internStr(jm.dir), slices.Clone(jm.data.testEnv), styleCheckResources(check, ctx.javaResourceGlobals(jm)))
 
 	s.p = jm.instance.Platform
 

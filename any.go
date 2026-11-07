@@ -1,5 +1,7 @@
 package main
 
+import "slices"
+
 type ANY uint32
 
 func (a ANY) vfs() VFS {
@@ -24,6 +26,34 @@ func (a ANY) string() string {
 	}
 
 	return a.str().string()
+}
+
+func canonicalANYs(in []ANY) []ANY {
+	var out []ANY
+
+	for i, a := range in {
+		if a.vfs() == 0 && vfsHasPrefix(a.str().string()) {
+			if out == nil {
+				out = slices.Clone(in)
+			}
+
+			out[i] = intern(a.str().string()).any()
+		}
+	}
+
+	if out == nil {
+		return in
+	}
+
+	return out
+}
+
+func (a ANY) peerSource() VFS {
+	if s := a.str(); s != 0 {
+		return s.source()
+	}
+
+	return source(a.string())
 }
 
 func (a ANY) textSTR() STR {

@@ -421,6 +421,44 @@ func (fs *OsFS) readPath(rel STR) [][]byte {
 	return chunks
 }
 
+func (fs *OsFS) walkDirID(root STR, visit func(rel string, dir STR, isDir bool) bool) {
+	if !fs.listdir(root).listable() || !visit(root.string(), root, true) {
+		return
+	}
+
+	queue, buf := append(fs.walkQueue[:0], root), fs.walkBuf[:0]
+
+	fs.walkQueue, fs.walkBuf = nil, nil
+
+	for head := 0; head < len(queue); head++ {
+		buf = buf[:0]
+
+		if dir := queue[head].string(); dir != "" {
+			buf = append(append(buf, dir...), '/')
+		}
+
+		n := len(buf)
+
+		for _, packed := range fs.listdir(queue[head]).names {
+			buf = append(buf[:n], STR(packed>>1).string()...)
+
+			if packed&1 == 0 {
+				visit(bytesString(buf), 0, false)
+
+				continue
+			}
+
+			child := internBytes(buf)
+
+			if visit(child.string(), child, true) {
+				queue = append(queue, child)
+			}
+		}
+	}
+
+	fs.walkQueue, fs.walkBuf = queue[:0], buf[:0]
+}
+
 func (fs *OsFS) walk(rel string, visit func(rel string, isDir bool) bool) {
 	rel = cleanRel(rel)
 

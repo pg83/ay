@@ -96,7 +96,7 @@ func compilerCommandFlags(args []ANY, env Environment) CompilerFlagValue {
 	if !ok {
 		values, name := compilerFlagExpression(identity.string(), env, compilerFlagExpanding[:0])
 
-		words = append(append(make([]ANY, 0, len(values)+1), internStr(name).any()), internAnys(values)...)
+		words = append(append(make([]ANY, 0, len(values)+1), name.any()), values...)
 
 		expansionMemo.end(key, words...)
 	}

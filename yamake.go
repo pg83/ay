@@ -601,13 +601,13 @@ func (e *ParseError) Error() string {
 	return e.error()
 }
 
-func parseFileClean(fs FS, rel string, memos *IncludeMemos) (mf *MakeFile, err error) {
+func parseFileClean(fs FS, key STR, memos *IncludeMemos) (mf *MakeFile, err error) {
 	exc := try(func() {
-		bp := readForParse(fs, rel)
+		bp := readChunksForParse(fs.readPath(key))
 
 		defer releaseParseBuf(bp)
 
-		mf = throw2(parse(fs, rel, *bp, memos))
+		mf = throw2(parse(fs, key.string(), *bp, memos))
 	})
 
 	if exc != nil {
@@ -619,11 +619,15 @@ func parseFileClean(fs FS, rel string, memos *IncludeMemos) (mf *MakeFile, err e
 }
 
 func readForParse(fs FS, rel string) *[]byte {
+	return readChunksForParse(fs.read(rel))
+}
+
+func readChunksForParse(chunks [][]byte) *[]byte {
 	bp := parseBufPool.Get().(*[]byte)
 
 	*bp = (*bp)[:0]
 
-	for _, chunk := range fs.read(rel) {
+	for _, chunk := range chunks {
 		*bp = append(*bp, chunk...)
 	}
 

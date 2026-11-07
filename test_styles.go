@@ -380,7 +380,7 @@ func (e *EmitContext) styleSuites(globals []ResourceDecl) []*TestSuite {
 			continue
 		}
 
-		suites = append(suites, e.ctx.styleSuite(check, project, e.d.test.env, styleCheckResources(check, globals)))
+		suites = append(suites, e.ctx.styleSuite(check, e.instance.Path.rel(), e.d.test.env, styleCheckResources(check, globals)))
 	}
 
 	return suites
@@ -441,13 +441,14 @@ func styleCheckResources(check StyleCheck, globals []ResourceDecl) []ResourceDec
 	return nil
 }
 
-func (ctx *GenCtx) styleSuite(check StyleCheck, project string, env []string, resources []ResourceDecl) *TestSuite {
+func (ctx *GenCtx) styleSuite(check StyleCheck, projectID STR, env []string, resources []ResourceDecl) *TestSuite {
 	nameID := internStr(check.Name)
-	s := &TestSuite{p: ctx.target, depends: slices.Clone(check.Depends), projectPath: internStr(project), name: nameID, testType: nameID, ciType: strStyle, size: strSmall, timeout: 60, supportsTestParameters: true, globals: resources, env: env, runInputs: []VFS{source(project)}, styleCheck: &check}
+	project := projectID.string()
+	s := &TestSuite{p: ctx.target, depends: slices.Clone(check.Depends), projectPath: projectID, name: nameID, testType: nameID, ciType: strStyle, size: strSmall, timeout: 60, supportsTestParameters: true, globals: resources, env: env, runInputs: []VFS{projectID.source()}, styleCheck: &check}
 
 	s.mergeStyleFiles(nil)
 
-	projectArg, nameArg, wrapperArg := source(project).any(), testArg(check.Name), testArg(check.Wrapper)
+	projectArg, nameArg, wrapperArg := projectID.source().any(), testArg(check.Name), testArg(check.Wrapper)
 
 	s.runCmd = func(work string, chunk TestChunk) []ANY {
 		args := []ANY{testToolHostPathArg, strRunCustomLint.any(), strSourceRoot2.any(), testSourceRootArg, strBuildRoot2.any(), testBuildRootArg, strProjectPath.any(), projectArg, strTracePath.any(), testArg(work + "/ytest.report.trace"), strOutPath.any(), testArg(work + "/testing_out_stuff"), strLintName.any(), nameArg, strWrapperScript.any(), wrapperArg}

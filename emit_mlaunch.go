@@ -90,7 +90,7 @@ func (e *EmitContext) genPackageFinal() *ModuleEmitResult {
 	}
 
 	for _, dir := range e.d.peerdirs {
-		peer := e.derivePeerInstance(dir.string())
+		peer := e.derivePeerInstanceVFS(dir.peerSource())
 
 		peer.Demand = demandLinked
 
