@@ -8,6 +8,12 @@ var envTable = struct {
 	count: 1,
 }
 
+var recentEnvNames struct {
+	text [8]string
+	id   [8]ENV
+	next int
+}
+
 func init() {
 	envTable.strs.set(0, 0)
 }
@@ -42,6 +48,25 @@ func (id ENV) string() string {
 
 func (id ENV) sharedString() string {
 	return envTable.strs.get(uint32(id)).sharedString()
+}
+
+func internedEnvRecent(name string) ENV {
+	c := &recentEnvNames
+
+	for i := range c.text {
+		if c.id[i] != 0 && c.text[i] == name {
+			return c.id[i]
+		}
+	}
+
+	id := internedEnv(name)
+
+	if id != 0 {
+		c.text[c.next], c.id[c.next] = id.string(), id
+		c.next = (c.next + 1) & 7
+	}
+
+	return id
 }
 
 func internedEnv(name string) ENV {

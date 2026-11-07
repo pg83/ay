@@ -9,6 +9,12 @@ import (
 
 var emptyDirNames = []uint32{}
 
+var recentNames struct {
+	text [4]string
+	id   [4]STR
+	next int
+}
+
 const (
 	readChunkSize      = 1 << 20
 	sourceUnderHotMask = 1<<18 - 1
@@ -111,8 +117,27 @@ func (fs *OsFS) listdirSlow(dir STR) DirView {
 	return v
 }
 
-func (fs *OsFS) dirHas(v DirView, name string) (present bool, isDir bool) {
+func internedRecent(name string) STR {
+	c := &recentNames
+
+	for i := range c.text {
+		if c.id[i] != 0 && c.text[i] == name {
+			return c.id[i]
+		}
+	}
+
 	id := interned(name)
+
+	if id != 0 {
+		c.text[c.next], c.id[c.next] = id.string(), id
+		c.next = (c.next + 1) & 3
+	}
+
+	return id
+}
+
+func (fs *OsFS) dirHas(v DirView, name string) (present bool, isDir bool) {
+	id := internedRecent(name)
 
 	if id == 0 {
 		return false, false

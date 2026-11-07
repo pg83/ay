@@ -398,7 +398,7 @@ func macroLookup(name string, locals []confMacroBinding, env Environment, consta
 		*constant = false
 	}
 
-	id := internedEnv(name)
+	id := internedEnvRecent(name)
 
 	if expansionMemo.tracing {
 		expansionMemo.note(env, id)
