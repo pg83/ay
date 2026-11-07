@@ -27,13 +27,13 @@ func (e *EmitContext) emitOneSource(meta SrcMeta) {
 			yapyc := (!isProgramModuleType(e.d.moduleStmt.Name) || pyModuleTypeUsesPython3(e.d.moduleStmt.Name) || e.d.usePython2 || e.d.pythonSourceCallback) && (py.Kind == pySourceProto || !e.d.pyBuildNoPYC)
 
 			if yapyc {
+				tool := e.pyccTool()
+
 				ps.Yapyc = e.pyYapycOutFor(ps)
-			}
-
-			e.collectPySource(ps)
-
-			if yapyc {
-				e.emitPyYapyc(ps, e.pyccTool())
+				e.collectPySource(ps)
+				e.emitPyYapyc(ps, tool)
+			} else {
+				e.collectPySource(ps)
 			}
 
 			if py.Kind == pySourceGenerated && !e.producersOnly() {
