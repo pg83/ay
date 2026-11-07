@@ -207,6 +207,7 @@ type SrcsStmt struct {
 type SetStmt struct {
 	Name         string
 	NameEnv      ENV
+	Plain        STR
 	Value        string
 	LexicalValue string
 	Line         int
@@ -1409,7 +1410,13 @@ func buildStmtForID(nameID STR, args []ANY, line int, fail func(format string, a
 			value = strings.Join(anyStrs(args[1:]), " ")
 		}
 
-		return astOne(astSets, SetStmt{Name: args[0].string(), NameEnv: internEnvSTR(args[0].str()), Value: value, Line: line})
+		var plain STR
+
+		if strings.IndexByte(value, '$') < 0 && strings.IndexByte(value, '\\') < 0 {
+			plain = internStr(value)
+		}
+
+		return astOne(astSets, SetStmt{Name: args[0].string(), NameEnv: internEnvSTR(args[0].str()), Plain: plain, Value: value, Line: line})
 	case "END":
 		return astOne(astEnds, EndStmt{Line: line})
 	case "JOIN_SRCS":

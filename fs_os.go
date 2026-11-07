@@ -129,6 +129,28 @@ func (fs *OsFS) dirHasID(v DirView, id STR) (present bool, isDir bool) {
 	return true, isDir
 }
 
+func (fs *OsFS) existsID(prefix, rel STR) (present bool, isDir bool) {
+	if rel.isEmpty() {
+		return fs.listdir(prefix).listable(), true
+	}
+
+	if !rel.cleanPath() {
+		return fs.existsClean(prefix, rel.string(), false)
+	}
+
+	if s := rel.string(); strings.IndexByte(s, '/') >= 0 {
+		return fs.existsClean(prefix, s, true)
+	}
+
+	view := fs.listdir(prefix)
+
+	if !view.listable() {
+		return false, false
+	}
+
+	return fs.dirHasID(view, rel)
+}
+
 func (fs *OsFS) exists(prefix STR, suffix string) (present bool, isDir bool) {
 	return fs.existsClean(prefix, suffix, suffix != "" && pathIsClean(suffix))
 }

@@ -8,6 +8,7 @@ import (
 var (
 	usesNasm       = []STR{internStr("NASM")}
 	yasmBinaryPath = yasmBinaryVFS.string()
+	asmConfigEnvs  = [asmConfigKeys]ENV{envAsmPrefix, envYasmFmtValue, envHardwareArch, envYasmPlatformFlagsValue, envAsmPrefixValue, envYasmPredefinedFlagsValue, envYasmFlags, envNasmFlags, envYasmPreincludesValue}
 )
 
 var yasmConstHead = []ANY{
@@ -19,20 +20,47 @@ var yasmConstHead = []ANY{
 	argReplaceToolRootT.any(),
 }
 
-func assemblerConfigValue(env Environment, key ENV, fallback string) string {
+const (
+	asmPrefixRaw = iota
+	asmFmtRaw
+	asmArchRaw
+	asmPlatformFlagsRaw
+	asmPrefixValueRaw
+	asmPredefinedRaw
+	asmYasmFlagsRaw
+	asmNasmFlagsRaw
+	asmPreincludesRaw
+	asmConfigKeys
+)
+
+func assemblerConfigText(raw ANY, fallback string, env Environment) string {
 	value := fallback
 
-	if k, v := env.s.lookup(key); k != envAbsent {
-		env.recordResourceUse(key)
-
-		if k == envVFS {
-			value = VFS(uint32(v)).string()
-		} else {
-			value = v.string()
-		}
+	if raw != 0 {
+		value = raw.string()
 	}
 
 	return expandToken(value, env, tokenExpandFinal)
+}
+
+func assemblerRawValue(env Environment, key ENV) ANY {
+	k, v := env.s.lookup(key)
+
+	if k == envAbsent {
+		return 0
+	}
+
+	env.recordResourceUse(key)
+
+	if k == envVFS {
+		return VFS(uint32(v)).any()
+	}
+
+	if v == 0 {
+		return strEmpty.any()
+	}
+
+	return v.any()
 }
 
 func (d *ModuleData) collectAssemblerConfig(env Environment) {
@@ -47,20 +75,43 @@ func (d *ModuleData) collectAssemblerConfig(env Environment) {
 		format, platformFlags, predefined = "win", "-D WIN32", ""
 	}
 
-	prefix := ""
+	d.asmDefaults = [3]string{format, platformFlags, predefined}
+	d.asmPending = true
 
-	if value := env.string(envAsmPrefix); value != "" {
-		prefix = "--prefix=" + value
+	for i, key := range asmConfigEnvs {
+		d.asmRaw[i] = assemblerRawValue(env, key)
+
+		if raw := d.asmRaw[i]; raw != 0 && strHasDollar(raw) {
+			d.asmPending = false
+		}
 	}
 
-	d.asmFormat = internV(assemblerConfigValue(env, envYasmFmtValue, format), assemblerConfigValue(env, envHardwareArch, "64"))
-	d.yasmPlatformFlags = appendQuotedWords(d.yasmPlatformFlags[:0], assemblerConfigValue(env, envYasmPlatformFlagsValue, platformFlags), 0)
+	if !d.asmPending {
+		d.assemblerConfig(env)
+	}
+}
 
-	d.yasmFlags = appendQuotedWords(d.yasmFlags[:0], assemblerConfigValue(env, envAsmPrefixValue, prefix)+" "+
-		assemblerConfigValue(env, envYasmPredefinedFlagsValue, predefined)+" "+assemblerConfigValue(env, envYasmFlags, ""), 0)
+func (d *ModuleData) assemblerConfig(env Environment) {
+	d.asmPending = false
 
-	d.nasmFlags = appendQuotedWords(d.nasmFlags[:0], assemblerConfigValue(env, envNasmFlags, ""), 0)
-	d.asmPreincludes = internAnys(strings.Fields(assemblerConfigValue(env, envYasmPreincludesValue, "")))
+	format, platformFlags, predefined := d.asmDefaults[0], d.asmDefaults[1], d.asmDefaults[2]
+	raw := &d.asmRaw
+	prefix := ""
+
+	if raw[asmPrefixRaw] != 0 {
+		if value := raw[asmPrefixRaw].string(); value != "" {
+			prefix = "--prefix=" + value
+		}
+	}
+
+	d.asmFormat = internV(assemblerConfigText(raw[asmFmtRaw], format, env), assemblerConfigText(raw[asmArchRaw], "64", env))
+	d.yasmPlatformFlags = appendQuotedWords(d.yasmPlatformFlags[:0], assemblerConfigText(raw[asmPlatformFlagsRaw], platformFlags, env), 0)
+
+	d.yasmFlags = appendQuotedWords(d.yasmFlags[:0], assemblerConfigText(raw[asmPrefixValueRaw], prefix, env)+" "+
+		assemblerConfigText(raw[asmPredefinedRaw], predefined, env)+" "+assemblerConfigText(raw[asmYasmFlagsRaw], "", env), 0)
+
+	d.nasmFlags = appendQuotedWords(d.nasmFlags[:0], assemblerConfigText(raw[asmNasmFlagsRaw], "", env), 0)
+	d.asmPreincludes = internAnys(strings.Fields(assemblerConfigText(raw[asmPreincludesRaw], "", env)))
 }
 
 func (e *EmitContext) asmOutputFor(srcVFS VFS) VFS {
@@ -76,6 +127,11 @@ func (e *EmitContext) emitASAsm(srcVFS VFS, in ModuleCCInputs, yasmLD NodeRef, y
 	na := e.ctx.na
 	outVFS := e.asmOutputFor(srcVFS)
 	inVFS := srcVFS
+
+	if e.d.asmPending {
+		e.d.assemblerConfig(Environment{s: &e.frame.ifEnv})
+	}
+
 	preincludes := e.d.asmPreincludes
 	sourceFlags := in.PerSourceCFlags
 	roots := na.vfs.alloc(1 + len(preincludes))[:0]

@@ -61,6 +61,7 @@ func (pm *IncludeParserManager) protoOutputIncludes(set ParsedIncludeSet) Parsed
 type ParsedSource struct {
 	local  []IncludeDirective
 	extra  uint32
+	dir    STR
 	parser IncludeParserKind
 	bucket ParsedIncludeBucket
 }
@@ -209,10 +210,18 @@ func (pm *IncludeParserManager) sourceParsed(vfsPath VFS, ctxParser IncludeDirec
 	out := parser.parse(rel, data, pm.cache.directives)
 	parsed := ParsedSource{local: out[parsedIncludesLocal], parser: includeParserKind(parser), bucket: bucket}
 
+	if len(parsed.local) > 0 {
+		parsed.dir = internStr(pathDir(rel))
+	}
+
 	for _, entries := range out[1:] {
 		if entries != nil {
 			pm.cache.parsedExtras.pushBack(out)
 			parsed.extra = uint32(pm.cache.parsedExtras.len())
+
+			if parsed.dir == 0 {
+				parsed.dir = internStr(pathDir(rel))
+			}
 
 			break
 		}

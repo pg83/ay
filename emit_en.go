@@ -11,7 +11,7 @@ func (e *EmitContext) enumHeaderSourceInput(headerRel string, srcDirs []VFS) VFS
 	ctx, instance := e.ctx, e.instance
 	headerInput := resolveSourceVFS(ctx, instance, headerRel, srcDirs)
 
-	if !ctx.fs.isFile(srcRootRel, headerInput.relString()) {
+	if !ctx.fs.isFileVFS(headerInput) {
 		if vfs, ok := sourceInputVFS(ctx.fs, instance.Path, headerRel); ok && vfs.isSource() {
 			headerInput = vfs
 		}

@@ -90,7 +90,7 @@ func (e *EmitContext) registeredSbomComponent(output VFS) *GeneratedFileInfo {
 }
 
 func sbomModuleVersion(env Environment) string {
-	value, ok := env.lookup("MODVER")
+	value, ok := env.lookupENV(envModver)
 
 	if !ok {
 		return "unknown"

@@ -17,7 +17,7 @@ func (e *EmitContext) emitCheckConfigHStmt(conf ANY) {
 	ctx, instance, d := e.ctx, e.instance, e.d
 	na := ctx.na
 	generatedVFS := checkConfigHGeneratedVFS(instance.Path.relString(), conf)
-	confVFS := resolveSourceVFS(ctx, instance, conf.string(), d.srcDirs)
+	confVFS := resolveSourceANY(ctx, instance, conf, d.srcDirs).Path
 	env := envVarsVCS
 	chRef := ctx.emit.reserve()
 	scanner := e.scanner

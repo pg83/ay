@@ -93,6 +93,7 @@ type javaClosureScratch struct {
 	expEnd    []uint32
 	pathIDs   map[string]uint32
 	paths     []string
+	pathSTRs  []STR
 	parents   []uint32
 	anyPaths  map[ANY]uint32
 	levels    []*javaResolveLevel
@@ -121,6 +122,18 @@ func (s *javaClosureScratch) pathID(p string) uint32 {
 	s.parents = append(s.parents, parent)
 
 	return id
+}
+
+func (s *javaClosureScratch) pathSTR(id uint32) STR {
+	if int(id) >= len(s.pathSTRs) {
+		s.pathSTRs = append(s.pathSTRs, make([]STR, len(s.paths)-len(s.pathSTRs))...)
+	}
+
+	if s.pathSTRs[id] == 0 {
+		s.pathSTRs[id] = internStr(s.paths[id])
+	}
+
+	return s.pathSTRs[id]
 }
 
 func (s *javaClosureScratch) anyPathID(a ANY) uint32 {
@@ -504,7 +517,7 @@ func (r *javaConflictResolver) explicitResolution(peer *JavaModule, isDirect boo
 		return nil
 	}
 
-	return r.ctx.javaContrib(r.parent, r.ctx.jc.paths[rule])
+	return r.ctx.javaContrib(r.parent, r.ctx.jc.pathSTR(rule))
 }
 
 func (ctx *GenCtx) javaManageLocalPeers(jm *JavaModule, rawPeers []*JavaModule, rules *javaDMRules) []javaResolvedPeer {
@@ -523,7 +536,7 @@ func (ctx *GenCtx) javaManageLocalPeers(jm *JavaModule, rawPeers []*JavaModule, 
 			}
 
 			rule := ctx.jc.paths[ruleID]
-			target := ctx.javaContrib(jm, rule)
+			target := ctx.javaContrib(jm, ctx.jc.pathSTR(ruleID))
 
 			if target == nil {
 				ctx.onWarn(Warn{Kind: WarnModuleFailed, Message: jm.dir + ": DEPENDENCY_MANAGEMENT replaces peerdir to " + peer.dir + " with dependency to missing directory or directory without module " + rule})

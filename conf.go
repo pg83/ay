@@ -95,13 +95,13 @@ type ConfFile struct {
 	declared []STR
 	modules  map[string]string
 	variants map[string][]string
-	calls    map[string][]string
-	body     map[string][]ConfMacroCall
+	calls    map[STR][]string
+	body     map[STR][]ConfMacroCall
 	inits    map[STR]*ConfMacro
 	commands map[string]*confCommand
-	selfPeer map[string][]string
-	aliases  map[string]map[STR]STR
-	limits   map[string]*confMacroLimits
+	selfPeer map[STR][]string
+	aliases  map[STR]map[STR]STR
+	limits   map[STR]*confMacroLimits
 
 	callNames  []string
 	callsGuard string
@@ -114,22 +114,23 @@ func (f *ConfFile) flushCalls() {
 	}
 
 	if f.calls == nil {
-		f.calls = map[string][]string{}
+		f.calls = map[STR][]string{}
 	}
 
 	names := f.callNames[f.callsStart:len(f.callNames):len(f.callNames)]
+	guard := internStr(f.callsGuard)
 
-	if previous, ok := f.calls[f.callsGuard]; ok {
+	if previous, ok := f.calls[guard]; ok {
 		names = append(previous[:len(previous):len(previous)], names...)
 	}
 
-	f.calls[f.callsGuard] = names
+	f.calls[guard] = names
 	f.callsStart = len(f.callNames)
 }
 
-func (f *ConfFile) addBodyCall(guard string, name STR, args string) {
+func (f *ConfFile) addBodyCall(guard STR, name STR, args string) {
 	if f.body == nil {
-		f.body = map[string][]ConfMacroCall{}
+		f.body = map[STR][]ConfMacroCall{}
 	}
 
 	f.body[guard] = append(f.body[guard], ConfMacroCall{name: name, args: internStr(strings.TrimSpace(strings.TrimSuffix(strings.TrimSpace(args), ")")))})
@@ -238,7 +239,7 @@ func (s *ConfState) readFile(rel, text string) *ConfFile {
 
 			if property, ok := strings.CutPrefix(line, ".ALIASES="); ok && top.block == "module" && !top.skipped {
 				if conf.aliases == nil {
-					conf.aliases = map[string]map[STR]STR{}
+					conf.aliases = map[STR]map[STR]STR{}
 				}
 
 				aliases := map[STR]STR{}
@@ -249,21 +250,22 @@ func (s *ConfState) readFile(rel, text string) *ConfFile {
 					}
 				}
 
-				conf.aliases[top.guard] = aliases
+				conf.aliases[internStr(top.guard)] = aliases
 
 				continue
 			}
 
 			if name, list, ok := confLimitProperty(line); ok && top.block == "module" && !top.skipped {
 				if conf.limits == nil {
-					conf.limits = map[string]*confMacroLimits{}
+					conf.limits = map[STR]*confMacroLimits{}
 				}
 
-				limits := conf.limits[top.guard]
+				guard := internStr(top.guard)
+				limits := conf.limits[guard]
 
 				if limits == nil {
 					limits = &confMacroLimits{}
-					conf.limits[top.guard] = limits
+					conf.limits[guard] = limits
 				}
 
 				for macro := range strings.FieldsSeq(list) {
@@ -275,10 +277,10 @@ func (s *ConfState) readFile(rel, text string) *ConfFile {
 
 			if property, ok := strings.CutPrefix(line, ".PEERDIRSELF="); ok && top.block == "module" && !top.skipped {
 				if conf.selfPeer == nil {
-					conf.selfPeer = map[string][]string{}
+					conf.selfPeer = map[STR][]string{}
 				}
 
-				conf.selfPeer[top.guard] = strings.Fields(property)
+				conf.selfPeer[internStr(top.guard)] = strings.Fields(property)
 
 				continue
 			}
@@ -315,7 +317,7 @@ func (s *ConfState) readFile(rel, text string) *ConfFile {
 					conf.callNames = append(conf.callNames, internV("env", strings.TrimSpace(name)).string())
 
 					if top.block == "module" {
-						conf.addBodyCall(top.guard, internStr(strings.TrimSpace(name)), line[len(name)+1:])
+						conf.addBodyCall(internStr(top.guard), internStr(strings.TrimSpace(name)), line[len(name)+1:])
 					}
 				}
 
@@ -1228,11 +1230,11 @@ func (p *confProgram) markDirBodies() {
 
 func (t *confTables) build() {
 	seen := map[*ConfFile]bool{}
-	calls := map[string][]string{}
-	body := map[string][]ConfMacroCall{}
-	selfPeers := map[string][]string{}
-	aliases := map[string]map[STR]STR{}
-	limits := map[string]*confMacroLimits{}
+	calls := map[STR][]string{}
+	body := map[STR][]ConfMacroCall{}
+	selfPeers := map[STR][]string{}
+	aliases := map[STR]map[STR]STR{}
+	limits := map[STR]*confMacroLimits{}
 
 	var owners []*ConfFile
 
@@ -1404,10 +1406,10 @@ func (t *confTables) build() {
 
 	for _, module := range t.modules.vals.s {
 		if module != nil {
-			module.calls = calls[module.variable.string()]
-			module.body = body[module.variable.string()]
-			module.aliases = aliases[module.variable.string()]
-			module.own = limits[module.variable.string()]
+			module.calls = calls[module.variable.str()]
+			module.body = body[module.variable.str()]
+			module.aliases = aliases[module.variable.str()]
+			module.own = limits[module.variable.str()]
 		}
 	}
 
@@ -1450,7 +1452,7 @@ func (t *confTables) build() {
 					module.owner = internStr(owner)
 					module.sub = internStr(strings.TrimSuffix(name, "__from__"+owner))
 
-					for _, sub := range selfPeers[module.variable.string()] {
+					for _, sub := range selfPeers[module.variable.str()] {
 						module.selfPeers = append(module.selfPeers, internStr(sub))
 					}
 				}
@@ -1703,7 +1705,7 @@ func (t *confTables) uniteLimits(variants []string) {
 	}
 }
 
-func (t *confTables) orderVariants(owner string, variants []string, selfPeers map[string][]string) {
+func (t *confTables) orderVariants(owner string, variants []string, selfPeers map[STR][]string) {
 	suffix := "__from__" + owner
 	tags := make([]string, len(variants))
 
@@ -1725,7 +1727,7 @@ func (t *confTables) orderVariants(owner string, variants []string, selfPeers ma
 
 		done[tag] = true
 
-		for _, peer := range selfPeers[internV("env", tag, suffix).string()] {
+		for _, peer := range selfPeers[internV("env", tag, suffix)] {
 			visit(peer)
 		}
 
@@ -2602,7 +2604,7 @@ func (c *Conf) runInit(plan *confModule, env Environment, originals *SetVars, re
 		}
 
 		if step.original {
-			value := internStr(env.string(step.variable))
+			value := env.str(step.variable)
 
 			originals.set(step.variable.str(), value)
 
@@ -3293,10 +3295,13 @@ func isConfIdentByte(b byte, first bool) bool {
 }
 
 type confCommandDirs struct {
-	vars     []ENV
-	values   []confRawValue
-	peerdirs []string
-	addincls []string
+	vars       []ENV
+	values     []confRawValue
+	peerdirs   []string
+	addincls   []string
+	peerIDs    []ANY
+	addinclANY []ANY
+	addinclSTR []ANY
 }
 
 type confRawValue struct {
@@ -3365,6 +3370,10 @@ func (c *Conf) commandDirs(name string, env Environment) *confCommandDirs {
 	if len(memos) == confCommandDirsMemo {
 		memos = memos[1:]
 	}
+
+	memo.peerIDs = appendInternAnys(nil, memo.peerdirs)
+	memo.addinclANY = internAnys(memo.addincls)
+	memo.addinclSTR = appendInternAnys(nil, memo.addincls)
 
 	c.dirs[name] = append(memos, memo)
 

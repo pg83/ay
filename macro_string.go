@@ -492,6 +492,20 @@ func substMacro(text string, locals []confMacroBinding, env Environment, constan
 	return bytesString(out)
 }
 
+func nextMacroSpecial(s string) int {
+	d := strings.IndexByte(s, '$')
+
+	if d < 0 {
+		d = len(s)
+	}
+
+	if b := strings.IndexByte(s[:d], '\\'); b >= 0 {
+		return b
+	}
+
+	return d
+}
+
 func substMacroAppend(out []byte, text string, locals []confMacroBinding, env Environment, constant *bool, policy *substPolicy) ([]byte, bool) {
 	base := len(out)
 	copied := 0
@@ -517,7 +531,7 @@ func substMacroAppend(out []byte, text string, locals []confMacroBinding, env En
 			continue
 		case '$':
 		default:
-			i++
+			i += nextMacroSpecial(text[i:])
 
 			continue
 		}

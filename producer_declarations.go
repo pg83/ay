@@ -196,13 +196,13 @@ func (e *EmitContext) orderedProducerPositions(positions []ProducerPos, cythonPl
 
 				decl.Resolved = e.resolvePythonDeclaration(src, group.SourceRoot)
 
-				if extIsProto(src.relOrSelf().string()) || extIsEv(src.relOrSelf().string()) {
+				if srcExtClassOf(src) == srcExtProto || srcExtClassOf(src) == srcExtEv {
 					outs, ins := e.srcPosition(SrcMeta{Source: src, Resolved: decl.Resolved})
 
 					outputs = append(outputs, outs...)
 					inputs = append(inputs, ins...)
 				} else {
-					inputs = append(inputs, e.schedulingSource(src.string(), decl.Resolved))
+					inputs = append(inputs, e.schedulingSourceANY(src, decl.Resolved))
 				}
 			}
 

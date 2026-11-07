@@ -17,7 +17,7 @@ func styleSourcePath(module, file string) string {
 }
 
 func (d *ModuleData) collectCustomStyle(module string, args []ANY, env Environment) {
-	noLint, _ := env.lookup("_NO_LINT_VALUE")
+	noLint, _ := env.lookupENV(envNoLintValue)
 
 	if noLint == "none" || noLint == "none_internal" || env.is(envTidy, strYes) {
 		return
@@ -81,7 +81,7 @@ func (d *ModuleData) collectCustomStyle(module string, args []ANY, env Environme
 	check.Files = sortedUnique(check.Files)
 	check.ConfigMap = strings.Join(fields["DEFAULT_CONFIGS"], "")
 	check.ConfigType = strings.Join(fields["CONFIG_TYPE"], "")
-	check.ConfigDir, _ = env.lookup("MODULE_COMMON_CONFIGS_DIR")
+	check.ConfigDir, _ = env.lookupENV(envModuleCommonConfigsDir)
 
 	if values := fields["FILE_PROCESSING_TIME"]; len(values) != 0 {
 		check.FileProcessingTime = throw2(strconv.ParseFloat(values[0], 64))

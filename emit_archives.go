@@ -39,7 +39,7 @@ func (e *EmitContext) emitArchive(
 			absVFS = e.requireProducedInput("ARCHIVE member", f, resolveSourceVFS(ctx, instance, f, d.srcDirs))
 		}
 
-		if absVFS.isSource() && !ctx.fs.isFile(srcRootRel, absVFS.relString()) {
+		if absVFS.isSource() && !ctx.fs.isFileVFS(absVFS) {
 			throwFmt("ARCHIVE: cannot find source file: %s", f)
 		}
 

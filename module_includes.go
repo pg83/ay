@@ -25,29 +25,31 @@ func (ctx *GenCtx) withIncludedStmts(stmt *IncludeStmt, env Environment, visit f
 		target = path.Join(path.Dir(stmt.File), rel)
 	}
 
-	if !ctx.fs.isFile(srcRootRel, target) {
+	targetID := internStr(target)
+
+	if !ctx.fs.isFileVFS(targetID.source()) {
 		throwFmt("%s:%d: INCLUDE file %s not found", stmt.File, stmt.Line, target)
 	}
 
-	stmts := ctx.parseFileCached(internStr(target))
+	stmts := ctx.parseFileCached(targetID)
 
-	if ctx.parsedFiles[target].IncludeOnce {
-		if env.s.included[target] {
+	if ctx.parsedFiles[parsedFileKey(targetID)].IncludeOnce {
+		if env.s.included[targetID] {
 			return
 		}
 
 		if env.s.included == nil {
-			env.s.included = make(map[string]bool)
+			env.s.included = make(map[STR]bool)
 		}
 
-		env.s.included[target] = true
+		env.s.included[targetID] = true
 	}
 
-	if slices.Contains(ctx.includeStack, target) {
-		throwFmt("%s:%d: INCLUDE cycle: %s -> %s", stmt.File, stmt.Line, strings.Join(ctx.includeStack, " -> "), target)
+	if slices.Contains(ctx.includeStack, targetID) {
+		throwFmt("%s:%d: INCLUDE cycle: %s -> %s", stmt.File, stmt.Line, strings.Join(strStrings(ctx.includeStack), " -> "), target)
 	}
 
-	ctx.includeStack = append(ctx.includeStack, target)
+	ctx.includeStack = append(ctx.includeStack, targetID)
 
 	defer func() { ctx.includeStack = ctx.includeStack[:len(ctx.includeStack)-1] }()
 

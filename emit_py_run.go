@@ -62,7 +62,7 @@ func (e *EmitContext) emitRunPython(stmt *RunPythonStmt, resourceUses []STR) []A
 	ctx, instance, d := e.ctx, e.instance, e.d
 	auxTools := resolveRunProgramAuxTools(ctx, anyStrs(stmt.ToolPaths))
 	scriptVFS := copyFileInputVFS(ctx.fs, instance.Path, stmt.ScriptPath.string())
-	inVFSByToken := make(map[string]VFS, len(stmt.INFiles))
+	inVFSByToken := make(map[ANY]VFS, len(stmt.INFiles))
 	inVFSs := make([]VFS, 0, len(stmt.INFiles))
 	inSources := make([]VFS, 0, len(stmt.INFiles))
 	inBuilds := make([]VFS, 0, len(stmt.INFiles))
@@ -70,7 +70,7 @@ func (e *EmitContext) emitRunPython(stmt *RunPythonStmt, resourceUses []STR) []A
 	for _, f := range stmt.INFiles {
 		vfs := e.runProgramInputVFS(f.string())
 
-		inVFSByToken[f.string()] = vfs
+		inVFSByToken[f] = vfs
 		inVFSs = append(inVFSs, vfs)
 
 		if vfs.isBuild() {
@@ -82,14 +82,14 @@ func (e *EmitContext) emitRunPython(stmt *RunPythonStmt, resourceUses []STR) []A
 
 	e.collectSCInputs(inVFSs[:len(inVFSs)-stmt.INNoParse])
 
-	outVFSByToken := make(map[string]VFS, len(stmt.OUTFiles)+len(stmt.OUTNoAutoFiles)+1)
+	outVFSByToken := make(map[ANY]VFS, len(stmt.OUTFiles)+len(stmt.OUTNoAutoFiles)+1)
 
 	for _, f := range stmt.OUTFiles {
-		outVFSByToken[f.string()] = copyFileOutputVFS(instance.Path.relString(), f.string())
+		outVFSByToken[f] = copyFileOutputVFS(instance.Path.relString(), f.string())
 	}
 
 	for _, f := range stmt.OUTNoAutoFiles {
-		outVFSByToken[f.string()] = copyFileOutputVFS(instance.Path.relString(), f.string())
+		outVFSByToken[f] = copyFileOutputVFS(instance.Path.relString(), f.string())
 	}
 
 	var stdoutVFS *VFS
@@ -98,7 +98,7 @@ func (e *EmitContext) emitRunPython(stmt *RunPythonStmt, resourceUses []STR) []A
 		vfs := copyFileOutputVFS(instance.Path.relString(), stmt.StdoutFile.string())
 
 		stdoutVFS = &vfs
-		outVFSByToken[stmt.StdoutFile.string()] = vfs
+		outVFSByToken[*stmt.StdoutFile] = vfs
 	}
 
 	outputTokens := make([]ANY, 0, len(outVFSByToken))
@@ -110,7 +110,7 @@ func (e *EmitContext) emitRunPython(stmt *RunPythonStmt, resourceUses []STR) []A
 	}
 
 	for _, arg := range stmt.Args {
-		if _, ok := outVFSByToken[arg.string()]; ok {
+		if _, ok := outVFSByToken[arg]; ok {
 			addOutput(arg)
 		}
 	}
@@ -128,7 +128,7 @@ func (e *EmitContext) emitRunPython(stmt *RunPythonStmt, resourceUses []STR) []A
 	outputs := ctx.na.vfs.alloc(len(outputTokens))[:0]
 
 	for _, token := range outputTokens {
-		outputs = append(outputs, outVFSByToken[token.string()])
+		outputs = append(outputs, outVFSByToken[token])
 	}
 
 	ctx.na.vfs.commit(len(outputs))
@@ -207,7 +207,7 @@ func (e *EmitContext) emitRunPython(stmt *RunPythonStmt, resourceUses []STR) []A
 	inSnapVFSs := make([]VFS, 0, len(stmt.INFiles))
 
 	for _, f := range stmt.INFiles {
-		inSnapVFSs = append(inSnapVFSs, inVFSByToken[f.string()])
+		inSnapVFSs = append(inSnapVFSs, inVFSByToken[f])
 	}
 
 	snap := &pyRunSnap{
@@ -244,11 +244,11 @@ func (e *EmitContext) emitRunPython(stmt *RunPythonStmt, resourceUses []STR) []A
 	}
 
 	for _, f := range stmt.OUTFiles {
-		registerPYOutput(outVFSByToken[f.string()], e.pyEmitsIncludes(stmt, f.string(), splitSrcs, hasCCShard))
+		registerPYOutput(outVFSByToken[f], e.pyEmitsIncludes(stmt, f.string(), splitSrcs, hasCCShard))
 	}
 
 	for _, f := range stmt.OUTNoAutoFiles {
-		registerPYOutput(outVFSByToken[f.string()], e.pyEmitsIncludes(stmt, f.string(), splitSrcs, hasCCShard))
+		registerPYOutput(outVFSByToken[f], e.pyEmitsIncludes(stmt, f.string(), splitSrcs, hasCCShard))
 	}
 
 	if stmt.StdoutFile != nil {
@@ -299,7 +299,7 @@ func (e *EmitContext) splitCodegenSrcs(stmt *RunPythonStmt) []VFS {
 	addInducedSources := func(deps []IncludeDirective) {
 		for _, d := range deps {
 			if v := d.target.vfs(); v != 0 {
-				if v.isSource() && ctx.fs.isFile(srcRootRel, v.relString()) {
+				if v.isSource() && ctx.fs.isFileVFS(v) {
 					addSource(v)
 				}
 
@@ -370,11 +370,23 @@ func appendOutputIncludeDirectives(includes []IncludeDirective, outputIncludes [
 	return includes
 }
 
+func tokenVFSByText(tokens []ANY, byToken map[ANY]VFS, text string) (VFS, bool) {
+	for _, t := range tokens {
+		if t.string() == text {
+			vfs, ok := byToken[t]
+
+			return vfs, ok
+		}
+	}
+
+	return 0, false
+}
+
 func (e *EmitContext) emitPYRun(
 	stmt *RunPythonStmt,
 	scriptVFS VFS,
-	inVFSByToken map[string]VFS,
-	outVFSByToken map[string]VFS,
+	inVFSByToken map[ANY]VFS,
+	outVFSByToken map[ANY]VFS,
 	stdoutVFS *VFS,
 	outputs []VFS,
 	directSources []VFS,
@@ -433,16 +445,16 @@ func (e *EmitContext) emitPYRun(
 			continue
 		}
 
-		if vfs, ok := inVFSByToken[a]; ok && !strings.HasPrefix(a, "-") && !strings.Contains(a, "=") {
+		if vfs, ok := inVFSByToken[aTok]; ok && !strings.HasPrefix(a, "-") && !strings.Contains(a, "=") {
 			cmdArgs = append(cmdArgs, vfs.any())
 
 			continue
-		} else if vfs, ok := outVFSByToken[a]; ok && !strings.HasPrefix(a, "-") && !strings.Contains(a, "=") {
+		} else if vfs, ok := outVFSByToken[aTok]; ok && !strings.HasPrefix(a, "-") && !strings.Contains(a, "=") {
 			cmdArgs = append(cmdArgs, vfs.any())
 
 			continue
 		} else if k, val, ok := strings.Cut(a, "="); ok && !strings.HasPrefix(a, "-") {
-			if vfs, ok := inVFSByToken[val]; ok {
+			if vfs, ok := tokenVFSByText(stmt.INFiles, inVFSByToken, val); ok {
 				cmdArgs = append(cmdArgs, internV(k, "=", vfs.prefix(), vfs.relString()).any())
 
 				continue

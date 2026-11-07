@@ -51,7 +51,7 @@ func applyCppTestModule(stmt *ModuleStmt, d *ModuleData, env Environment) {
 	d.peerdirs = append(d.peerdirs, internAnys(peers)...)
 
 	if isUnitTestModule(stmt.Name) {
-		if skip, _ := env.lookup("UT_SKIP_EXCEPTIONS"); skip == "yes" {
+		if skip, _ := env.lookupENV(envUtSkipExceptions); skip == "yes" {
 			d.cFlags = append(d.cFlags, strDutSkipExceptions.any())
 		}
 	}

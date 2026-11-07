@@ -265,7 +265,7 @@ func (e *EmitContext) emitRunProgram(stmt *RunProgramStmt) {
 
 func prProtoImportPbH(pm *IncludeParserManager, inVFSs []VFS, dst []IncludeDirective) []IncludeDirective {
 	for _, v := range inVFSs {
-		if v.isSource() && extIsProto(v.relString()) {
+		if v.isSource() && srcExtClassOf(v.any()) == srcExtProto {
 			dst = protoDirectPbHIncludes(pm, v.relString(), "", dst)
 		}
 	}

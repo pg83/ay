@@ -312,7 +312,7 @@ func (c *NotsModule) finish(env Environment) {
 func (c *NotsModule) setupBuildEnv(env Environment) {
 	listed := map[string]bool{}
 
-	if names, _ := env.lookup("TS_BUILD_ENV"); names != "" && notsBuildEnvFor(env) {
+	if names, _ := env.lookupENV(envTsBuildEnv); names != "" && notsBuildEnvFor(env) {
 		for _, name := range strings.Split(names, ",") {
 			value, ok := env.lookup("TS_ENV_" + name)
 
@@ -325,8 +325,8 @@ func (c *NotsModule) setupBuildEnv(env Environment) {
 		}
 	}
 
-	defaults, _ := env.lookup("TS_BUILD_ENV_DEFAULTS_LIST")
-	sep, _ := env.lookup("TS_BUILD_ENV_DEFAULTS_LIST_SEP")
+	defaults, _ := env.lookupENV(envTsBuildEnvDefaultsList)
+	sep, _ := env.lookupENV(envTsBuildEnvDefaultsListSep)
 
 	for _, entry := range strings.Split(strings.TrimPrefix(defaults, "$TS_BUILD_ENV_DEFAULTS_LIST"), sep) {
 		entry = strings.TrimSpace(entry)
@@ -348,7 +348,7 @@ func (c *NotsModule) setupBuildEnv(env Environment) {
 }
 
 func notsBuildEnvFor(env Environment) bool {
-	targets, ok := env.lookup("TS_BUILD_ENV_FOR")
+	targets, ok := env.lookupENV(envTsBuildEnvFor)
 
 	return !ok || slices.Contains(strings.Split(targets, ":"), env.string(envMODDIR))
 }

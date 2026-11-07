@@ -287,7 +287,7 @@ func (e *EmitContext) emitGoCodegenStmt(st GoCodegenStmt) {
 		mockgenArgs = append(mockgenArgs, st.args...)
 
 		for _, f := range st.inNoParse {
-			inputs = append(inputs, resolveSourceVFS(ctx, instance, f.string(), d.srcDirs))
+			inputs = append(inputs, resolveSourceANY(ctx, instance, f, d.srcDirs).Path)
 		}
 
 		cmds = []Cmd{
@@ -328,7 +328,7 @@ func (e *EmitContext) emitGoCodegenStmt(st GoCodegenStmt) {
 		inputs = append(inputs, in)
 
 		for _, f := range st.inNoParse {
-			inputs = append(inputs, resolveSourceVFS(ctx, instance, f.string(), d.srcDirs))
+			inputs = append(inputs, resolveSourceANY(ctx, instance, f, d.srcDirs).Path)
 		}
 
 		inputs = dedup(inputs)
@@ -486,10 +486,10 @@ func initGoModuleName(modulePath string, env Environment, d *ModuleData, onWarn 
 		env.setString(envREALPRJNAME, path.Base(modulePath))
 	}
 
-	d.setVars.set(envREALPRJNAME.str(), internStr(env.string(envREALPRJNAME)))
-	d.setVars.set(envGO_PACKAGE_VALUE.str(), internStr(env.string(envGO_PACKAGE_VALUE)))
+	d.setVars.set(envREALPRJNAME.str(), env.str(envREALPRJNAME))
+	d.setVars.set(envGO_PACKAGE_VALUE.str(), env.str(envGO_PACKAGE_VALUE))
 
-	stmt.Args = append([]ANY{internStr(env.string(envREALPRJNAME)).any()}, tail...)
+	stmt.Args = append([]ANY{env.str(envREALPRJNAME).any()}, tail...)
 	stmt.Prefix = env.string(envMODULE_PREFIX)
 
 	d.moduleStmt = &stmt

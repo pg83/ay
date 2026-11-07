@@ -37,6 +37,7 @@ type EmitContext struct {
 	commandQueueActive bool
 	producerOutputs    map[VFS]int
 	pendingProducers   int
+	rosArgs            []ANY
 	deferCC            bool
 	ccPending          []CCPending
 	filePending        []func()

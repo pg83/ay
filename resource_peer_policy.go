@@ -8,7 +8,7 @@ func (d *ModuleData) captureResourcePeerPolicy(name string, env Environment) {
 	}
 
 	d.resourcePeerExplicit = true
-	d.resourcePeerOverride = internStr(env.string(internEnv(name)))
+	d.resourcePeerOverride = env.str(envPassPeers)
 }
 
 func (d *ModuleData) finishResourcePeerPolicy() {

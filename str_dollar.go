@@ -8,22 +8,40 @@ const (
 	dollarUnseen DollarMemoState = iota
 	dollarAbsent
 	dollarPresent
+	dollarDeref
 )
 
 type DollarMemoState uint8
 
 func strHasDollar(id ANY) bool {
 	if cell := DollarMemoState(strDollar.get(uint32(id))); cell != dollarUnseen {
-		return cell == dollarPresent
+		return cell >= dollarPresent
 	}
 
-	yes := strings.Contains(id.string(), "$")
+	return strDollarFill(id) >= dollarPresent
+}
 
-	if yes {
-		strDollar.set(uint32(id), uint8(dollarPresent))
-	} else {
-		strDollar.set(uint32(id), uint8(dollarAbsent))
+func strDollarState(id ANY) DollarMemoState {
+	if cell := DollarMemoState(strDollar.get(uint32(id))); cell != dollarUnseen {
+		return cell
 	}
 
-	return yes
+	return strDollarFill(id)
+}
+
+func strDollarFill(id ANY) DollarMemoState {
+	text := id.string()
+	state := dollarAbsent
+
+	if strings.Contains(text, "$") {
+		state = dollarPresent
+
+		if textDerefChanges(text) {
+			state = dollarDeref
+		}
+	}
+
+	strDollar.set(uint32(id), uint8(state))
+
+	return state
 }

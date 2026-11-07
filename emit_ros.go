@@ -42,6 +42,29 @@ func (e *EmitContext) rosOutputPaths(src string, zero bool) []VFS {
 	return outs
 }
 
+func (e *EmitContext) rosModuleArgs() []ANY {
+	d := e.d
+	args := make([]ANY, 0, 6+len(d.scanCtx.rosInclude))
+
+	if d.ros.Language != LangPy && d.ros.Language != LangGo {
+		args = append(args, strRepositoryRoot.any(), srcRootDirVFS.any())
+	}
+
+	thirdParty := "sdg/sdc/third_party_root/ros"
+
+	if d.ros.Language == LangGo {
+		thirdParty = "sdg/sdc/third_party/ros"
+	}
+
+	args = append(args, strThirdPartyRoot.any(), source(thirdParty).any(), strPackage.any(), internStr(d.ros.Package).any())
+
+	for _, inc := range d.scanCtx.rosInclude {
+		args = append(args, internV("-I", inc.relString()).any())
+	}
+
+	return args
+}
+
 func (e *EmitContext) emitRosSource(meta SrcMeta, outputs []VFS) {
 	ctx, d := e.ctx, e.d
 
@@ -76,21 +99,11 @@ func (e *EmitContext) emitRosSource(meta SrcMeta, outputs []VFS) {
 		args = append(args, strHasZeroCopyPeer.any())
 	}
 
-	if d.ros.Language != LangPy && d.ros.Language != LangGo {
-		args = append(args, strRepositoryRoot.any(), srcRootDirVFS.any())
+	if e.rosArgs == nil {
+		e.rosArgs = e.rosModuleArgs()
 	}
 
-	thirdParty := "sdg/sdc/third_party_root/ros"
-
-	if d.ros.Language == LangGo {
-		thirdParty = "sdg/sdc/third_party/ros"
-	}
-
-	args = append(args, strThirdPartyRoot.any(), source(thirdParty).any(), strPackage.any(), internStr(d.ros.Package).any())
-
-	for _, inc := range d.scanCtx.rosInclude {
-		args = append(args, internV("-I", inc.relString()).any())
-	}
+	args = append(args, e.rosArgs...)
 
 	outDir := build(d.ros.Dir)
 

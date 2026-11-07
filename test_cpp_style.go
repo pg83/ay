@@ -40,7 +40,7 @@ func cppStyleCheck(stmt UnknownStmt, env Environment) StyleCheck {
 		check.Peer = ""
 	}
 
-	if value, ok := env.lookup("CPP_LINTERS_DEFAULT_CONFIGS"); ok && value != "" {
+	if value, ok := env.lookupENV(envCppLintersDefaultConfigs); ok && value != "" {
 		check.ConfigMap = value
 	}
 
@@ -48,7 +48,7 @@ func cppStyleCheck(stmt UnknownStmt, env Environment) StyleCheck {
 		if stmt.Args[i] == kwCONFIG_TYPE.any() && i+1 < len(stmt.Args) {
 			i++
 			check.ConfigType = stmt.Args[i].string()
-			check.ConfigDir, _ = env.lookup("MODULE_COMMON_CONFIGS_DIR")
+			check.ConfigDir, _ = env.lookupENV(envModuleCommonConfigsDir)
 		}
 	}
 
@@ -148,7 +148,7 @@ func (e *EmitContext) cppStyleSource(src ANY) ANY {
 }
 
 func (e *EmitContext) cppStyleSourceResolved(src ANY, input VFS) ANY {
-	if !e.ctx.testMode || !cppLinterSource(src.relOrSelf().string()) {
+	if !e.ctx.testMode || len(e.d.styleChecks) == 0 || !cppLinterSource(src.relOrSelf().string()) {
 		return src
 	}
 

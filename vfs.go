@@ -119,13 +119,19 @@ func (v VFS) string() string {
 }
 
 func vfsCompare(a, b VFS) int {
-	ra, rb := a.relString(), b.relString()
-
-	if c := strings.Compare(a.prefix(), b.prefix()); c != 0 {
-		return c
+	if a == b {
+		return 0
 	}
 
-	return strings.Compare(ra, rb)
+	if ab, bb := a.isBuild(), b.isBuild(); ab != bb {
+		if ab {
+			return -1
+		}
+
+		return 1
+	}
+
+	return strings.Compare(a.relString(), b.relString())
 }
 
 func (v VFS) sharedString() string {

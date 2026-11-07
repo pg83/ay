@@ -483,6 +483,16 @@ func (sc *ScanCtx) parserConfig() *ScanConfig {
 	}
 }
 
+func (s *IncludeScanner) includerDir(vfsPath VFS) VFS {
+	if vfsPath.isSource() {
+		if cached, ok := s.parsers.cache.parsed.get(vfsPath.rel()); ok && cached.dir != 0 {
+			return cached.dir.source()
+		}
+	}
+
+	return internStr(pathDir(vfsPath.relString())).source()
+}
+
 func (s *IncludeScanner) parsedIncludes(vfsPath VFS, ctxParser IncludeDirectiveParser) (own, compileExtra []IncludeDirective, info *GeneratedFileInfo, inducedBucket ParsedIncludeBucket) {
 	if vfsPath.isBuild() {
 		info = s.codegen.lookup(vfsPath)
@@ -548,7 +558,7 @@ func (sc *ScanCtx) appendResolvedChildren(out []VFS, vfsPath VFS, previous Scann
 		return out
 	}
 
-	incDir := internStr(pathDir(vfsPath.relString())).source()
+	incDir := s.includerDir(vfsPath)
 
 	if previous.Deferred && previous.Diagnostics != nil {
 		for _, diagnostic := range previous.Diagnostics.Entries {

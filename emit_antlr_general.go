@@ -16,7 +16,7 @@ func (e *EmitContext) emitAntlrRunStmt(run AntlrRunInfo) {
 		jarVFS = e.requireProducedInput("ANTLR jar", run.Jar.string(), copyFileInputVFS(ctx.fs, instance.Path, run.Jar.string()))
 	}
 
-	inVFSByToken := make(map[string]VFS, len(run.INFiles))
+	inVFSByToken := make(map[ANY]VFS, len(run.INFiles))
 	inputs := make([]VFS, 0, len(run.INFiles))
 	inputSources := make([]VFS, 0, len(run.INFiles))
 	inputBuilds := make([]VFS, 0, len(run.INFiles))
@@ -29,7 +29,7 @@ func (e *EmitContext) emitAntlrRunStmt(run AntlrRunInfo) {
 			vfs = e.runProgramInputVFS(inTok.string())
 		}
 
-		inVFSByToken[inTok.string()] = vfs
+		inVFSByToken[inTok] = vfs
 		inputs = append(inputs, vfs)
 
 		if run.Python && inTok != run.Args[0] {
@@ -41,20 +41,20 @@ func (e *EmitContext) emitAntlrRunStmt(run AntlrRunInfo) {
 		}
 	}
 
-	outVFSByToken := make(map[string]VFS, len(run.OUTFiles)+len(run.OUTNoAutoFiles))
+	outVFSByToken := make(map[ANY]VFS, len(run.OUTFiles)+len(run.OUTNoAutoFiles))
 	outputs := make([]VFS, 0, len(run.OUTFiles)+len(run.OUTNoAutoFiles))
 
 	for _, outTok := range run.OUTFiles {
 		vfs := copyFileOutputVFS(instance.Path.relString(), outTok.string())
 
-		outVFSByToken[outTok.string()] = vfs
+		outVFSByToken[outTok] = vfs
 		outputs = append(outputs, vfs)
 	}
 
 	for _, outTok := range run.OUTNoAutoFiles {
 		vfs := copyFileOutputVFS(instance.Path.relString(), outTok.string())
 
-		outVFSByToken[outTok.string()] = vfs
+		outVFSByToken[outTok] = vfs
 		outputs = append(outputs, vfs)
 	}
 
@@ -97,19 +97,19 @@ func (e *EmitContext) emitAntlrRunStmt(run AntlrRunInfo) {
 			continue
 		}
 
-		e.enqueueSrc(SrcMeta{Source: outVFSByToken[outTok.string()].any(), Prio: stmtPrioDefault})
+		e.enqueueSrc(SrcMeta{Source: outVFSByToken[outTok].any(), Prio: stmtPrioDefault})
 	}
 }
 
-func antlrRunCmdArgs(instance ModuleInstance, run AntlrRunInfo, inVFSByToken, outVFSByToken map[string]VFS) []string {
+func antlrRunCmdArgs(instance ModuleInstance, run AntlrRunInfo, inVFSByToken, outVFSByToken map[ANY]VFS) []string {
 	args := make([]string, 0, len(run.Args))
 
 	for _, aTok := range run.Args {
 		a := aTok.string()
 
-		if vfs, ok := inVFSByToken[a]; ok && !strings.HasPrefix(a, "-") && !strings.Contains(a, "=") {
+		if vfs, ok := inVFSByToken[aTok]; ok && !strings.HasPrefix(a, "-") && !strings.Contains(a, "=") {
 			a = vfs.string()
-		} else if vfs, ok := outVFSByToken[a]; ok && !strings.HasPrefix(a, "-") && !strings.Contains(a, "=") {
+		} else if vfs, ok := outVFSByToken[aTok]; ok && !strings.HasPrefix(a, "-") && !strings.Contains(a, "=") {
 			a = vfs.string()
 		}
 

@@ -65,7 +65,7 @@ func (e *EmitContext) emitDocsProtoSubmodule() *ModuleEmitResult {
 	var generated []VFS
 
 	for _, meta := range d.srcs {
-		if !extIsProto(meta.Source.string()) {
+		if srcExtClassOf(meta.Source) != srcExtProto {
 			continue
 		}
 

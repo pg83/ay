@@ -109,12 +109,12 @@ func (e *EmitContext) nativeSwigModuleNames() (string, string) {
 
 func (d *ModuleData) finishNativeSwigConfig(env Environment) {
 	if d.unit.SwigLang == 0 {
-		value, bound := env.lookup("SWIG_LANG")
+		value, bound := env.lookupSTR(envSwigLang)
 
 		if !bound {
-			value = "python"
+			value = strPython2
 		}
 
-		d.unit.SwigLang = internStr(value)
+		d.unit.SwigLang = value
 	}
 }

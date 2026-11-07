@@ -347,14 +347,14 @@ func applyGoImplicitPeerdirs(ctx *GenCtx, instance ModuleInstance, d *ModuleData
 		path := src.vfs()
 
 		if path == 0 {
-			path = resolveSourceVFS(ctx, instance, src.string(), d.srcDirs)
+			path = resolveSourceANY(ctx, instance, src, d.srcDirs).Path
 		}
 
 		if path.isBuild() {
 			return
 		}
 
-		if present, _ := ctx.fs.exists(srcRootRel, path.relString()); !present {
+		if present, _ := ctx.fs.existsID(srcRootRel, path.rel()); !present {
 			return
 		}
 
@@ -816,7 +816,7 @@ func (e *EmitContext) goCgoClosure(includedSrcs []VFS) []VFS {
 		}
 
 		for _, f := range d.cgoSrcs {
-			walk(resolveSourceVFS(ctx, instance, f.string(), d.srcDirs))
+			walk(resolveSourceANY(ctx, instance, f, d.srcDirs).Path)
 		}
 
 		walk(build(instance.Path.relString(), "/_cgo_gotypes.go"))
@@ -949,7 +949,7 @@ func (e *EmitContext) goSrcList(goRes *GoSrcsResult, objOuts []VFS) (srcArgs, cg
 	}
 
 	for _, f := range d.cgoSrcs {
-		cgoSrc := resolveSourceVFS(ctx, instance, f.string(), d.srcDirs)
+		cgoSrc := resolveSourceANY(ctx, instance, f, d.srcDirs).Path
 
 		addSrc(cgoSrc)
 	}
@@ -1228,7 +1228,7 @@ func (e *EmitContext) emitGoExe(resolved []ResolvedPeer, objRefs []NodeRef, objO
 		testTail = append(testTail, strTestSrcs.any())
 
 		for _, src := range d.goTestSrcs {
-			p := resolveSourceVFS(ctx, instance, src.string(), d.srcDirs)
+			p := resolveSourceANY(ctx, instance, src, d.srcDirs).Path
 
 			testTail = append(testTail, p.any())
 			testInputs = append(testInputs, p)
@@ -1237,7 +1237,7 @@ func (e *EmitContext) emitGoExe(resolved []ResolvedPeer, objRefs []NodeRef, objO
 		testTail = append(testTail, strXTestSrcs.any())
 
 		for _, src := range d.goXTestSrcs {
-			p := resolveSourceVFS(ctx, instance, src.string(), d.srcDirs)
+			p := resolveSourceANY(ctx, instance, src, d.srcDirs).Path
 
 			testTail = append(testTail, p.any())
 			testInputs = append(testInputs, p)

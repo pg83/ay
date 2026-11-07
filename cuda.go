@@ -33,9 +33,9 @@ func (e *EmitContext) cudaSettings() *CudaSettings {
 	}
 
 	env := Environment{s: &e.frame.ifEnv}
-	root := commandTokenValue([]ANY{internStr(env.string(envCUDA_ROOT)).any()}, env)
+	root := commandTokenValue([]ANY{env.str(envCUDA_ROOT).any()}, env)
 	rootBound := resourceGlobalArgumentValue(root.Args, e.peers.ResourceGlobals, &e.ctx.resourceEnv)
-	target := commandTokenValue([]ANY{internStr(env.string(envCUDA_TARGET_ROOT)).any()}, env)
+	target := commandTokenValue([]ANY{env.str(envCUDA_TARGET_ROOT).any()}, env)
 	targetBound := resourceGlobalArgumentValue(target.Args, e.peers.ResourceGlobals, &e.ctx.resourceEnv)
 
 	var flagUses []STR

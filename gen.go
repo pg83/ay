@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"github.com/zeebo/xxh3"
 	"os"
 	"path"
 	"path/filepath"
@@ -201,7 +202,7 @@ type GenCtx struct {
 	javaRuleTokens      map[ANY]javaRuleToken
 	javaRuleExpansions  map[javaRuleExpansion][]ANY
 	dllForStack         []string
-	includeStack        []string
+	includeStack        []STR
 	ifEnvScratch        EnvStore
 	walking             map[ModuleInstance]bool
 	cyclesTolerated     int
@@ -230,7 +231,7 @@ type GenCtx struct {
 	tests               *TestOpts
 	sbomEnabled         bool
 	autoincludeIdx      *AutoincludeIndex
-	parsedFiles         map[string]*MakeFile
+	parsedFiles         map[STR]*MakeFile
 	includeMemos        *IncludeMemos
 	goEnvMemo           map[[2]STR]EnvVars
 	goImportDirs        map[goImportKey]STR
@@ -396,7 +397,7 @@ func newGenCtx(fs FS, parsers *IncludeParserManager, hostP, targetP *Platform, e
 		sbomEnabled: fs.isFile(srcRootRel, sbomConfRel),
 
 		autoincludeIdx:     loadAutoincludeIndex(fs),
-		parsedFiles:        map[string]*MakeFile{},
+		parsedFiles:        map[STR]*MakeFile{},
 		includeMemos:       newIncludeMemos(),
 		goImportDirs:       map[goImportKey]STR{},
 		runtimeTestSeen:    map[*ModuleEmitResult]bool{},
@@ -867,7 +868,7 @@ func newSuiteIndex() *SuiteIndex {
 }
 
 func (x *SuiteIndex) add(s *TestSuite) {
-	same, _ := x.byKey.cell(mix64(splitMix64(uint32(internStr(s.testType)), uint32(internStr(s.projectPath))) ^ uint64(internStr(s.name))))
+	same, _ := x.byKey.cell(mix64(xxh3.HashString(s.testType)^mix64(xxh3.HashString(s.projectPath)^mix64(xxh3.HashString(s.name)))) | 1)
 
 	if !mergeCheckSuite(*same, s) {
 		*same = append(*same, s)
@@ -1078,16 +1079,24 @@ func unittestForPeerPath(moduleStmt *ModuleStmt) string {
 	return path.Clean(moduleStmt.Args[0].string())
 }
 
-func (ctx *GenCtx) parseFileCached(id STR) []Stmt {
-	rel := id.cleanRel()
+func parsedFileKey(id STR) STR {
+	if id.cleanPath() {
+		return id
+	}
 
-	if mf, ok := ctx.parsedFiles[rel]; ok {
+	return internStr(id.cleanRel())
+}
+
+func (ctx *GenCtx) parseFileCached(id STR) []Stmt {
+	key := parsedFileKey(id)
+
+	if mf, ok := ctx.parsedFiles[key]; ok {
 		return mf.Stmts
 	}
 
-	mf := throw2(parseFileClean(ctx.fs, rel, ctx.includeMemos))
+	mf := throw2(parseFileClean(ctx.fs, key.string(), ctx.includeMemos))
 
-	ctx.parsedFiles[rel] = mf
+	ctx.parsedFiles[key] = mf
 
 	return mf.Stmts
 }
@@ -1097,7 +1106,7 @@ func moduleStmts(ctx *GenCtx, dir string) []Stmt {
 }
 
 func (ctx *GenCtx) autoincludeStmts(dir string) []Stmt {
-	if inc, ok := ctx.autoincludeIdx.lintersMakeIncFor(dir); ok && ctx.fs.isFile(srcRootRel, inc.relString()) {
+	if inc, ok := ctx.autoincludeIdx.lintersMakeIncFor(dir); ok && ctx.fs.isFileVFS(inc) {
 		return ctx.parseFileCached(inc.rel())
 	}
 
@@ -1109,7 +1118,7 @@ func applyImplicitPeerdirs(ctx *GenCtx, instance ModuleInstance, d *ModuleData) 
 	hasProto := false
 
 	for _, meta := range d.srcs {
-		if needProto && extIsProto(meta.Source.relOrSelf().string()) {
+		if needProto && srcExtClassOf(meta.Source) == srcExtProto {
 			hasProto = true
 
 			break
@@ -1120,7 +1129,7 @@ func applyImplicitPeerdirs(ctx *GenCtx, instance ModuleInstance, d *ModuleData) 
 		modulePath := instance.Path.relString()
 
 		for _, src := range d.pySrcs {
-			hasProto = hasProto || extIsProto(src.relOrSelf().string())
+			hasProto = hasProto || srcExtClassOf(src) == srcExtProto
 		}
 
 		if hasProto && !strings.HasPrefix(modulePath, "contrib/libs/protobuf/builtin_proto") &&
@@ -1130,7 +1139,7 @@ func applyImplicitPeerdirs(ctx *GenCtx, instance ModuleInstance, d *ModuleData) 
 	}
 
 	for _, src := range d.pySrcs {
-		if extIsEv(src.relOrSelf().string()) {
+		if srcExtClassOf(src) == srcExtEv {
 			d.peerdirs = append(d.peerdirs, strContribLibsProtobuf.any(), strLibraryCppEventlogProto.any())
 
 			break
@@ -1139,7 +1148,7 @@ func applyImplicitPeerdirs(ctx *GenCtx, instance ModuleInstance, d *ModuleData) 
 
 	if len(d.pyProtoPlugins) > 0 {
 		for _, src := range d.pySrcs {
-			if extIsProto(src.relOrSelf().string()) {
+			if srcExtClassOf(src) == srcExtProto {
 				hasProto = true
 
 				break
@@ -1663,12 +1672,12 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 
 		for _, g := range d.pySrcGroups {
 			for _, s := range g.Srcs {
-				hasPyProto = hasPyProto || extIsProto(s.Token.string())
+				hasPyProto = hasPyProto || srcExtClassOf(s.Token) == srcExtProto
 			}
 		}
 
 		for _, s := range d.pySrcs {
-			hasPyProto = hasPyProto || extIsProto(s.string())
+			hasPyProto = hasPyProto || srcExtClassOf(s) == srcExtProto
 		}
 
 		if hasPyProto {
@@ -2394,7 +2403,7 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 		return result
 	}
 
-	if !effectiveNoPlatform(d.flags) && !instance.Platform.MSVC && runtimeAncestorCxxConsumers[instance.Path.relString()] {
+	if !effectiveNoPlatform(d.flags) && !instance.Platform.MSVC && runtimeAncestorCxxConsumers[instance.Path.rel()] {
 		hasNostdinc := false
 
 		for _, a := range peerCXXFlagsGlobal {

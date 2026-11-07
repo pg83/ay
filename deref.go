@@ -210,12 +210,10 @@ func derefArchive(a *ArchiveExtraction, env Environment) bool {
 }
 
 func derefChanges(item ANY) bool {
-	if !strHasDollar(item.str().any()) {
-		return false
-	}
+	return strDollarState(item.str().any()) == dollarDeref
+}
 
-	text := item.string()
-
+func textDerefChanges(text string) bool {
 	if strings.IndexByte(text, '\\') >= 0 {
 		return true
 	}

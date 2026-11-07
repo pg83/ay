@@ -804,9 +804,7 @@ func (ctx *GenCtx) javaPeerResult(parent *JavaModule, dir STR, explicit bool) *M
 	return res
 }
 
-func (ctx *GenCtx) javaContrib(parent *JavaModule, dir string) *JavaModule {
-	dirID := internStr(dir)
-
+func (ctx *GenCtx) javaContrib(parent *JavaModule, dirID STR) *JavaModule {
 	if !ctx.fs.isFileID(dirID, strYaMake) {
 		return nil
 	}

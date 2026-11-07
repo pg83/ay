@@ -31,8 +31,10 @@ func resolveSourceVFS(ctx *GenCtx, instance ModuleInstance, src string, dirs []V
 }
 
 func resolveSource(ctx *GenCtx, srcInstance ModuleInstance, srcRel string, srcDirs []VFS) ResolvedSource {
-	if vfs, ok := moduleRootedVFS(srcInstance.Path.relString(), srcRel); ok {
-		return ResolvedSource{Path: vfs, Existing: vfs.isSource() && ctx.fs.isFileVFS(vfs), Fixed: true}
+	if strings.IndexByte(srcRel, '$') >= 0 {
+		if vfs, ok := moduleRootedVFS(srcInstance.Path.relString(), srcRel); ok {
+			return ResolvedSource{Path: vfs, Existing: vfs.isSource() && ctx.fs.isFileVFS(vfs), Fixed: true}
+		}
 	}
 
 	srcRelClean := srcRel != "" && pathIsClean(srcRel)
@@ -100,6 +102,68 @@ func resolveSource(ctx *GenCtx, srcInstance ModuleInstance, srcRel string, srcDi
 	return ResolvedSource{Path: source(srcRelOnDisk), GeneratedDirs: generatedDirs}
 }
 
+func resolveSourceANY(ctx *GenCtx, srcInstance ModuleInstance, src ANY, srcDirs []VFS) ResolvedSource {
+	if v := src.vfs(); v != 0 {
+		if v.rel().cleanPath() {
+			return ResolvedSource{Path: v, Existing: v.isSource() && ctx.fs.isFileVFS(v), Fixed: true}
+		}
+
+		return resolveSource(ctx, srcInstance, src.string(), srcDirs)
+	}
+
+	return resolveSourceID(ctx, srcInstance, src.str(), srcDirs)
+}
+
+func resolveSourceID(ctx *GenCtx, srcInstance ModuleInstance, src STR, srcDirs []VFS) ResolvedSource {
+	if strHasDollar(src.any()) || !src.cleanPath() {
+		return resolveSource(ctx, srcInstance, src.string(), srcDirs)
+	}
+
+	moduleRel := srcInstance.Path.rel()
+
+	if present, isDir := ctx.fs.existsID(moduleRel, src); present && !isDir {
+		path := joinedSource(moduleRel, src)
+
+		ctx.fs.noteFile(path)
+
+		return ResolvedSource{Path: path, Existing: true}
+	}
+
+	generatedDirs := 0
+
+	for i := 1; i < len(srcDirs); i++ {
+		if srcDirs[i].isBuild() {
+			candidate := buildJoinClean(srcDirs[i].relString(), src.string())
+
+			if ctx.scannerForPlatform(srcInstance.Platform).codegen.lookup(candidate) != nil {
+				return ResolvedSource{Path: candidate, GeneratedDirs: generatedDirs}
+			}
+
+			generatedDirs = i + 1
+
+			continue
+		}
+
+		if present, isDir := ctx.fs.existsID(srcDirs[i].rel(), src); present && !isDir {
+			return ResolvedSource{Path: joinedSource(srcDirs[i].rel(), src), Existing: true, GeneratedDirs: generatedDirs}
+		}
+	}
+
+	if present, isDir := ctx.fs.existsID(srcRootRel, src); present && !isDir {
+		return ResolvedSource{Path: src.source(), Existing: true, GeneratedDirs: generatedDirs}
+	}
+
+	return ResolvedSource{Path: joinedSource(moduleRel, src), GeneratedDirs: generatedDirs}
+}
+
+func joinedSource(dir, rel STR) VFS {
+	if dir == srcRootRel {
+		return rel.source()
+	}
+
+	return internJoined(dir.string(), rel.string()).source()
+}
+
 func resolveSourceOrGeneratedVFS(ctx *GenCtx, instance ModuleInstance, src string, srcDirs []VFS) VFS {
 	return resolveSource(ctx, instance, src, srcDirs).withGenerated(ctx.scannerForPlatform(instance.Platform).codegen, src, srcDirs)
 }
@@ -158,7 +222,7 @@ func (e *EmitContext) resolveDeclaredSource(token ANY) ResolvedSource {
 		return ResolvedSource{Path: v, Existing: existing, Fixed: true}
 	}
 
-	return resolveSource(e.ctx, e.instance, token.string(), e.d.srcDirs)
+	return resolveSourceID(e.ctx, e.instance, token.str(), e.d.srcDirs)
 }
 
 func (e *EmitContext) resolveSrc(meta *SrcMeta) {
@@ -175,6 +239,14 @@ func (e *EmitContext) sourceForEmission(meta SrcMeta) VFS {
 	}
 
 	return meta.Resolved.withGenerated(e.codegen, meta.Source.string(), e.d.srcDirs)
+}
+
+func (e *EmitContext) schedulingSourceANY(token ANY, resolved ResolvedSource) VFS {
+	if resolved.Path.isSource() && !resolved.Existing {
+		return moduleInputCandidateVFS(e.instance.Path.relString(), token.string())
+	}
+
+	return resolved.Path
 }
 
 func (e *EmitContext) schedulingSource(token string, resolved ResolvedSource) VFS {

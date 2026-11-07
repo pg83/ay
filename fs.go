@@ -7,6 +7,7 @@ type FS interface {
 	dirHas(v DirView, name string) (present bool, isDir bool)
 
 	exists(prefix STR, suffix string) (present bool, isDir bool)
+	existsID(prefix, rel STR) (present bool, isDir bool)
 	isFile(prefix STR, suffix string) bool
 	isFileClean(prefix STR, suffix string) bool
 	isFileID(dir, name STR) bool

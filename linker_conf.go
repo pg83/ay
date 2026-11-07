@@ -11,11 +11,11 @@ var linkerConfNames = []string{
 	"LD_EXPORT_ALL_DYNAMIC_SYMBOLS_FLAG", "EXPORTS_VALUE", "LINKER_SCRIPT_VALUE",
 }
 
-var linkerConfNameSet = func() map[string]bool {
-	set := make(map[string]bool, len(linkerConfNames))
+var linkerConfNameSet = func() map[ENV]bool {
+	set := make(map[ENV]bool, len(linkerConfNames))
 
 	for _, name := range linkerConfNames {
-		set[name] = true
+		set[internEnv(name)] = true
 	}
 
 	return set
@@ -55,7 +55,7 @@ func (c *LinkerConf) flags(p *Platform) LinkerFlags {
 	env.setString(envExportsFile, "${input:EXPORTS_FILE}")
 	env.setString(envSoname, "$_SONAME")
 
-	c.activeStatements(env, func(key ENV) bool { return linkerConfNameSet[key.string()] }, func(a ConfStmt) {
+	c.activeStatements(env, func(key ENV) bool { return linkerConfNameSet[key] }, func(a ConfStmt) {
 		value := a.value
 
 		if a.op == confAppend {

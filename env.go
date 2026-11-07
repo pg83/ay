@@ -23,7 +23,7 @@ type EnvStore struct {
 	pending          BitSet
 	textInputs       map[ENV][]SourceTextRange
 	resourceBindings []EnvResourceBinding
-	included         map[string]bool
+	included         map[STR]bool
 	confBase         *EnvStore
 	confWrites       []ENV
 	joined           []byte
@@ -268,6 +268,26 @@ func (e Environment) is(id ENV, want STR) bool {
 	return v == want || want == strEmpty && v == 0
 }
 
+func (e Environment) str(id ENV) STR {
+	k, v := e.s.lookup(id)
+
+	if k == envAbsent {
+		return strEmpty
+	}
+
+	e.recordResourceUse(id)
+
+	if k == envVFS {
+		return internStr(VFS(uint32(v)).string())
+	}
+
+	if v == 0 {
+		return strEmpty
+	}
+
+	return v
+}
+
 func (e Environment) stringID(id ENV) STR {
 	if k, v := e.s.lookup(id); k == envStr || k == envInt {
 		e.recordResourceUse(id)
@@ -453,8 +473,30 @@ func (e Environment) hasBindingID(id ENV) bool {
 }
 
 func (e Environment) lookup(name string) (string, bool) {
-	id := internedEnv(name)
+	return e.lookupENV(internedEnv(name))
+}
 
+func (e Environment) lookupSTR(id ENV) (STR, bool) {
+	k, v := e.s.lookup(id)
+
+	if k == envAbsent {
+		return 0, false
+	}
+
+	e.recordResourceUse(id)
+
+	if k == envVFS {
+		return internStr(VFS(uint32(v)).string()), true
+	}
+
+	if v == 0 {
+		return strEmpty, true
+	}
+
+	return v, true
+}
+
+func (e Environment) lookupENV(id ENV) (string, bool) {
 	if id == 0 {
 		return "", false
 	}

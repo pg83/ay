@@ -5,8 +5,8 @@ import (
 	"strings"
 )
 
-var runtimeAncestorCxxConsumers = map[string]bool{
-	"library/cpp/malloc/api": true,
+var runtimeAncestorCxxConsumers = map[STR]bool{
+	internStr("library/cpp/malloc/api"): true,
 }
 
 func (e *EmitContext) confSelfPeerInstances() []ModuleInstance {

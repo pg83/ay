@@ -60,6 +60,8 @@ const (
 	srcExtDylib
 	srcExtJava
 	srcExtPkgFake
+	srcExtPy
+	srcExtPyx
 )
 
 type ExtFlags uint8
@@ -161,6 +163,8 @@ func buildExtClassMatcher() *ExtMatcher[ExtClass] {
 		".dylib":    srcExtDylib,
 		".java":     srcExtJava,
 		".pkg.fake": srcExtPkgFake,
+		".py":       srcExtPy,
+		".pyx":      srcExtPyx,
 	} {
 		get(ext).srcExt = cls
 	}

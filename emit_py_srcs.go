@@ -138,7 +138,7 @@ func (e *EmitContext) collectPySrcGroup(gi int, group PySrcGroup) {
 			keyPrefix = pyResourceKeyPrefix(scope.TopLevel, scope.Namespace, module)
 		}
 
-		if extIsProto(src.relOrSelf().string()) || extIsEv(src.relOrSelf().string()) {
+		if srcExtClassOf(src) == srcExtProto || srcExtClassOf(src) == srcExtEv {
 			logical := pyProtoLogicalModule(module, src.string(), scope)
 
 			if isPythonProtoModule(d) && scope.ModuleName == nil {
@@ -672,7 +672,7 @@ func (e *EmitContext) emitPyNamespaceForGroup(groupIndex int, group PySrcGroup) 
 	}
 
 	for _, ps := range e.pySrcsReg {
-		if ps.Group != groupIndex || ps.Kind != pySourcePlain || !ps.Path.isSource() || !extIsPy(ps.Token.string()) || ps.Scope.ModuleName != nil {
+		if ps.Group != groupIndex || ps.Kind != pySourcePlain || !ps.Path.isSource() || srcExtClassOf(ps.Token) != srcExtPy || ps.Scope.ModuleName != nil {
 			continue
 		}
 
@@ -1060,16 +1060,16 @@ func yaConfFormulaResources(fs FS, confPath string) []string {
 }
 
 func (e *EmitContext) resolvePythonDeclaration(src ANY, sourceRoot bool) ResolvedSource {
-	if sourceRoot && !extIsProto(src.relOrSelf().string()) && !extIsEv(src.relOrSelf().string()) {
+	if sourceRoot && srcExtClassOf(src) != srcExtProto && srcExtClassOf(src) != srcExtEv {
 		return e.resolveDeclaredSource(source(e.instance.Path.relString(), "/", src.string()).any())
 	}
 
-	if src.vfs() != 0 || extIsProto(src.relOrSelf().string()) || extIsEv(src.relOrSelf().string()) {
+	if src.vfs() != 0 || srcExtClassOf(src) == srcExtProto || srcExtClassOf(src) == srcExtEv {
 		return e.resolveDeclaredSource(src)
 	}
 
 	if e.d.usePython2 {
-		if v, ok := moduleRootedVFS(e.instance.Path.relString(), src.string()); ok {
+		if v, ok := moduleRootedANY(e.instance.Path, src); ok {
 			return e.resolveDeclaredSource(v.any())
 		}
 	}

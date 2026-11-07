@@ -259,7 +259,7 @@ func (e *EmitContext) emitGoCgo1Stmt() {
 
 	for _, f := range d.cgoSrcs {
 		files = append(files, cgoFile{
-			src:   resolveSourceVFS(ctx, instance, f.string(), d.srcDirs),
+			src:   resolveSourceANY(ctx, instance, f, d.srcDirs).Path,
 			cgo1:  e.goCgoOut(f, ".cgo1.go"),
 			cgo2C: e.goCgoOut(f, ".cgo2.c"),
 		})

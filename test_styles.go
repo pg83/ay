@@ -110,7 +110,7 @@ func pythonStyleCheck(name string, env Environment) StyleCheck {
 		check.ExtraParams = []string{"check_format=no", "run_in_source_root=no"}
 	}
 
-	if value, ok := env.lookup("PYTHON_LINTERS_DEFAULT_CONFIGS"); ok && value != "" {
+	if value, ok := env.lookupENV(envPythonLintersDefaultConfigs); ok && value != "" {
 		check.ConfigMap = value
 	}
 
@@ -151,7 +151,7 @@ func (d *ModuleData) collectExplicitPythonStyle(stmt UnknownStmt, env Environmen
 			}
 
 			check.ConfigType = stmt.Args[i].string()
-			check.ConfigDir, _ = env.lookup("MODULE_COMMON_CONFIGS_DIR")
+			check.ConfigDir, _ = env.lookupENV(envModuleCommonConfigsDir)
 		case "CHECK_FORMAT":
 			if name != "ruff" {
 				throwFmt("STYLE: CHECK_FORMAT requires ruff")
@@ -179,7 +179,7 @@ func styleChecksDisabled(env Environment) bool {
 func yamlStyleCheck(env Environment) StyleCheck {
 	check := StyleCheck{Name: "yamlfmt", ConfigMap: "build/config/tests/yaml_style/default_configs.json", Wrapper: "tools/yamlfmt_linter/wrapper.py", Resource: "YAMLFMT_RESOURCE_GLOBAL", Peer: yamlfmtResourcePeer}
 
-	if value, ok := env.lookup("YAML_LINTER_DEFAULT_CONFIGS"); ok && value != "" {
+	if value, ok := env.lookupENV(envYamlLinterDefaultConfigs); ok && value != "" {
 		check.ConfigMap = value
 	}
 
@@ -192,7 +192,7 @@ func (d *ModuleData) collectYAMLStyleWithConfig(module string, stmt UnknownStmt,
 	}
 
 	check := yamlStyleCheck(env)
-	files, _ := env.lookup("YAML_LINT_SRCS")
+	files, _ := env.lookupENV(envYamlLintSrcs)
 
 	for _, file := range strings.Fields(files) {
 		check.Files = append(check.Files, styleSourcePath(module, file))
@@ -202,7 +202,7 @@ func (d *ModuleData) collectYAMLStyleWithConfig(module string, stmt UnknownStmt,
 
 	if len(args) > 0 && args[0] == kwCONFIG_TYPE.any() {
 		check.ConfigType = strings.Join(anyStrs(args[1:]), " ")
-		check.ConfigDir, _ = env.lookup("MODULE_COMMON_CONFIGS_DIR")
+		check.ConfigDir, _ = env.lookupENV(envModuleCommonConfigsDir)
 	}
 
 	d.addFileStyleCheck(check)
@@ -229,7 +229,7 @@ func explicitStyleCheck(name TOK, env Environment) StyleCheck {
 
 	check := StyleCheck{Name: "clang_format_json", ConfigMap: "build/config/tests/json_style/default_configs.json", Wrapper: "tools/clang_format_json_linter/wrapper.py", Resource: "CLANG_FORMAT_RESOURCE_GLOBAL", Peer: "build/platform/clang/clang-format"}
 
-	if value, ok := env.lookup("JSON_LINTER_DEFAULT_CONFIGS"); ok && value != "" {
+	if value, ok := env.lookupENV(envJsonLinterDefaultConfigs); ok && value != "" {
 		check.ConfigMap = value
 	}
 
@@ -433,8 +433,10 @@ func styleCheckResources(check StyleCheck, globals []ResourceDecl) []ResourceDec
 		return globals
 	}
 
+	resource := interned(check.Resource)
+
 	for _, r := range globals {
-		if r.GlobalVar.string() == check.Resource {
+		if resource != 0 && r.GlobalVar == resource {
 			return []ResourceDecl{r}
 		}
 	}

@@ -30,6 +30,16 @@ func appendANYText(b []byte, a ANY) []byte {
 	return append(b, v.prefix()[:vfsPrefixLen-1]...)
 }
 
+func strStrings(ids []STR) []string {
+	out := make([]string, 0, len(ids))
+
+	for _, id := range ids {
+		out = append(out, id.string())
+	}
+
+	return out
+}
+
 func anyStrs(as []ANY) []string {
 	out := make([]string, 0, len(as))
 

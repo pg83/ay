@@ -20,6 +20,7 @@ var (
 	tokenSubstBufs      [2][2][]byte
 	listPreSufScratch   []byte
 	trackedSubstBufs    [2][2][]byte
+	valueWordsMemo      = map[STR][]ANY{}
 )
 
 var dontExpandVarNames = func() (names [len(dontExpandVars)]string) {
@@ -233,6 +234,9 @@ type ModuleData struct {
 	yasmPlatformFlags       []ANY
 	asmFormat               STR
 	asmPreincludes          []ANY
+	asmPending              bool
+	asmDefaults             [3]string
+	asmRaw                  [asmConfigKeys]ANY
 	asmAddIncl              []VFS
 	protoAddInclGlobal      []VFS
 	protoAddIncl            []VFS
@@ -650,6 +654,24 @@ func moduleInputCandidateVFS(modulePath string, path string) VFS {
 	return buildJoinClean(modulePath, path)
 }
 
+func moduleRootedANY(module VFS, a ANY) (VFS, bool) {
+	if v := a.vfs(); v != 0 {
+		if rel := v.rel(); rel.isEmpty() {
+			return 0, false
+		} else if rel.cleanPath() {
+			return v, true
+		}
+
+		return internClean(a.string()), true
+	}
+
+	if !strHasDollar(a) {
+		return 0, false
+	}
+
+	return moduleRootedVFS(module.relString(), a.string())
+}
+
 func moduleRootedVFS(modulePath string, path string) (VFS, bool) {
 	if vfsHasPrefix(path) {
 		return internClean(path), true
@@ -828,7 +850,7 @@ func collectModuleInto(ctx *GenCtx, instance ModuleInstance, stmts []Stmt, env E
 			}
 		}
 
-		if extIsPyx(meta.Source.relOrSelf().string()) {
+		if srcExtClassOf(meta.Source) == srcExtPyx {
 			native := meta
 
 			d.cythonCpp = append(d.cythonCpp, &CythonStmt{Src: meta.Source.string(), Seq: declSeqModuleEnd | meta.Seq, Native: &native, Python3: env.bool(envPYTHON3)})
@@ -889,10 +911,10 @@ func collectModuleInto(ctx *GenCtx, instance ModuleInstance, stmts []Stmt, env E
 		d.docs.finish(fs, modulePath, env)
 	}
 
-	sourcePeers, sourceAddIncl := d.sourceCommandDirs(modulePath, env, instance.Platform)
+	sourcePeers, sourceAddIncl := d.sourceCommandDirs(instance.Path.rel(), env, instance.Platform)
 
 	if len(sourceAddIncl) > 0 {
-		collectStmts(ctx, modulePath, instance.Kind, instance.Language, []Stmt{splitAddInclPaths(internAnys(sourceAddIncl))}, env, d, onWarn, instance.Platform)
+		collectStmts(ctx, modulePath, instance.Kind, instance.Language, []Stmt{splitAddInclPaths(sourceAddIncl)}, env, d, onWarn, instance.Platform)
 	}
 
 	d.materializeAddIncl()
@@ -961,7 +983,7 @@ func collectModuleInto(ctx *GenCtx, instance ModuleInstance, stmts []Stmt, env E
 		}
 	}
 
-	d.bisonGenExt = internStr(env.string(envBisonGenExt))
+	d.bisonGenExt = env.str(envBisonGenExt)
 
 	if plugin := env.string(envArPlugin); plugin != "" {
 		d.arPlugin = ptr(internStr(plugin).any())
@@ -1002,7 +1024,7 @@ func collectModuleInto(ctx *GenCtx, instance ModuleInstance, stmts []Stmt, env E
 	for i, meta := range d.srcs {
 		src := meta.Source
 
-		if isPythonProtoModule(d) && extIsGztproto(src.string()) {
+		if isPythonProtoModule(d) && srcExtClassOf(src) == srcExtGztProto {
 			src = gztProtoOutput(resolveSourceOrGeneratedVFS(ctx, instance, src.string(), d.srcDirs)).any()
 			d.srcs[i].Source = src
 			hasPyGztProto = true
@@ -1039,7 +1061,7 @@ func collectModuleInto(ctx *GenCtx, instance ModuleInstance, stmts []Stmt, env E
 	return d
 }
 
-func (d *ModuleData) sourceCommandDirs(modulePath string, env Environment, platform *Platform) (peers []ANY, addincls []string) {
+func (d *ModuleData) sourceCommandDirs(moduleID STR, env Environment, platform *Platform) (peers []ANY, addincls []ANY) {
 	if isGoModuleType(d.unit.Type) {
 		return nil, nil
 	}
@@ -1057,13 +1079,13 @@ func (d *ModuleData) sourceCommandDirs(modulePath string, env Environment, platf
 
 		dirs := platform.conf.commandDirs("_SRC:"+ext, env)
 
-		for _, peer := range dirs.peerdirs {
-			if peer != modulePath {
-				peers = append(peers, internStr(peer).any())
+		for _, peer := range dirs.peerIDs {
+			if peer != moduleID.any() {
+				peers = append(peers, peer)
 			}
 		}
 
-		addincls = append(addincls, dirs.addincls...)
+		addincls = append(addincls, dirs.addinclANY...)
 	}
 
 	generated := func(outputs []ANY, stdout *ANY, noAuto bool) {
@@ -1703,11 +1725,11 @@ func (d *ModuleData) statementCommandDirs(ctx *GenCtx, modulePath string, kind M
 	}
 
 	if len(dirs.peerdirs) != 0 {
-		collectStmts(ctx, modulePath, kind, language, []Stmt{&PeerdirStmt{Paths: appendInternAnys(nil, dirs.peerdirs), Implicit: true}}, env, d, onWarn, platform)
+		collectStmts(ctx, modulePath, kind, language, []Stmt{&PeerdirStmt{Paths: slices.Clone(dirs.peerIDs), Implicit: true}}, env, d, onWarn, platform)
 	}
 
 	if len(dirs.addincls) != 0 {
-		collectStmts(ctx, modulePath, kind, language, []Stmt{splitAddInclPaths(appendInternAnys(nil, dirs.addincls))}, env, d, onWarn, platform)
+		collectStmts(ctx, modulePath, kind, language, []Stmt{splitAddInclPaths(slices.Clone(dirs.addinclSTR))}, env, d, onWarn, platform)
 	}
 }
 
@@ -1787,7 +1809,15 @@ func applyVarsAsMacros(ctx *GenCtx, modulePath string, kind ModuleKind, language
 
 		d.varMacrosApplied = append(d.varMacrosApplied, raw)
 
-		collectStmts(ctx, modulePath, kind, language, ctx.varMacroStmts(key, env.expandVariableSTR(env.string(key)), modulePath), env, d, onWarn, platform)
+		value := raw
+
+		if bound == envVFS || strHasDollar(raw.any()) {
+			value = env.expandVariableSTR(env.string(key))
+		} else {
+			env.recordResourceUse(key)
+		}
+
+		collectStmts(ctx, modulePath, kind, language, ctx.varMacroStmts(key, value, modulePath), env, d, onWarn, platform)
 	}
 }
 
@@ -2182,7 +2212,7 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 				d.exportsScript = dllExportsArg(v)
 
 				if d.exportsScript == nil {
-					if exports, ok := env.lookup("EXPORTS_FILE"); ok && exports != "" {
+					if exports, ok := env.lookupENV(envExportsFile); ok && exports != "" {
 						d.exportsScript = ptr(internStr(exports).any())
 					}
 				}
@@ -2399,21 +2429,27 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 			}
 		case *SetStmt:
 
-			sourceValue := v.Value
+			var valueID STR
+			var textInputs []SourceTextRange
 
-			if v.Name == importMaskVariable && v.LexicalValue != "" {
-				sourceValue = v.LexicalValue
+			if v.Plain != 0 && len(env.s.textInputs) == 0 && !(v.NameEnv == envImportMaskVariable && v.LexicalValue != "") {
+				valueID = v.Plain
+			} else {
+				sourceValue := v.Value
+
+				if v.NameEnv == envImportMaskVariable && v.LexicalValue != "" {
+					sourceValue = v.LexicalValue
+				}
+
+				valueID, textInputs = expandSourceScalarInputSTR(sourceValue, env)
 			}
-
-			valueID, textInputs := expandSourceScalarInputSTR(sourceValue, env)
-			value := valueID.string()
 
 			env.setFromSTR(v.NameEnv, valueID)
 			env.setTextInputs(v.NameEnv, textInputs)
 			d.captureResourcePeerPolicy(v.Name, env)
 
-			if v.Name == importMaskVariable {
-				setPythonImportMask(value, d)
+			if v.NameEnv == envImportMaskVariable {
+				setPythonImportMask(valueID.string(), d)
 			}
 
 			if v.NameEnv == envSANITIZER_TYPE {
@@ -2427,24 +2463,24 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 			d.setVars.set(v.NameEnv.str(), valueID)
 			platform.conf.set(env, v.NameEnv, &d.setVars)
 
-			if v.Name == "SWIG_LANG" {
+			if v.NameEnv == envSwigLang {
 				d.unit.SwigLang = valueID
 			}
 
-			if v.Name == "PROTOC_TRANSITIVE_HEADERS" {
+			if v.NameEnv == envProtocTransitiveHeaders {
 				recalcProtoOutputs(d)
 			}
 
-			if v.Name == "PROTO_NAMESPACE" {
+			if v.NameEnv == envProtoNamespace {
 				d.protoNamespace = nil
 
-				if value != "" {
+				if !valueID.isEmpty() {
 					d.protoNamespace = ptr(valueID.any())
 				}
 			}
 
-			if v.Name == "RAGEL6_FLAGS" {
-				d.ragel6Flags = internAnys(strings.Fields(value))
+			if v.NameEnv == envRagel6Flags {
+				d.ragel6Flags = internAnys(strings.Fields(valueID.string()))
 			}
 		case *EndStmt:
 			if !d.processModuleEnd(modulePath, v.Line, onWarn) {
@@ -2461,7 +2497,7 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 				d.nots.finish(env)
 			}
 
-			d.unit.HashTag = internStr(env.string(envMODULE_TAG))
+			d.unit.HashTag = env.str(envMODULE_TAG)
 			d.pyNamespacePython2 = env.is(envPYTHON2, strYes)
 			d.moduleEnded = true
 
@@ -3747,7 +3783,7 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 		}
 
 		for _, argTok := range v.Args {
-			if !extIsProto(argTok.string()) {
+			if srcExtClassOf(argTok) != srcExtProto {
 				continue
 			}
 
@@ -4008,8 +4044,8 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 	case tokStyleJSON, tokStyleYAML, tokStyleYQL:
 		d.collectStyleCheck(fs, modulePath, v, env)
 	case tokStyleDetekt:
-		noLint, _ := env.lookup("_NO_LINT_VALUE")
-		tidy, _ := env.lookup("TIDY")
+		noLint, _ := env.lookupENV(envNoLintValue)
+		tidy, _ := env.lookupENV(envTidy)
 
 		if noLint != "none" && noLint != "none_internal" && tidy != "yes" {
 			d.peerdirs = append(d.peerdirs, internStr(javaDetekt.resourcePeer).any())
@@ -4694,7 +4730,7 @@ func collectPythonSourceEntry(d *ModuleData, env Environment, peers *[]ANY) {
 		if d.usePython2 {
 			mainPeer = "library/python/runtime/main"
 			sqlitePeer = "contrib/tools/python/src"
-		} else if value, ok := env.lookup("PYTHON3_TOOL_PEERDIR"); ok {
+		} else if value, ok := env.lookupENV(envPYTHON3_TOOL_PEERDIR); ok {
 			sqlitePeer = value
 		} else if env.is(envUSE_PYTHON3_PREV, strYes) {
 			sqlitePeer = "contrib/tools/python3_prev"
@@ -5446,7 +5482,7 @@ func dontExpandVar(name string) bool {
 
 func keepDeferredVar(name string) bool {
 	switch name {
-	case envBINDIR.string(), envCURDIR.string(), "S", "B", "MANAGED_PEERS", "MANAGED_PEERS_CLOSURE", "APPLIED_EXCLUDES", "_FMT_INDUCED_DEPS":
+	case "BINDIR", "CURDIR", "S", "B", "MANAGED_PEERS", "MANAGED_PEERS_CLOSURE", "APPLIED_EXCLUDES", "_FMT_INDUCED_DEPS":
 		return true
 	}
 
@@ -5575,10 +5611,69 @@ func expandListPreSufArgs(items []ANY, env Environment) []ANY {
 	out := make([]ANY, 3, len(items))
 
 	for i := range out {
-		out[i] = internStr(expandToken(items[i].string(), env, tokenExpandArguments)).any()
+		if st := items[i].str(); st != 0 && !strHasDollar(items[i]) && strings.IndexByte(st.string(), '\\') < 0 {
+			out[i] = st.any()
+		} else {
+			out[i] = internStr(expandToken(items[i].string(), env, tokenExpandArguments)).any()
+		}
 	}
 
 	return append(out, expandTokens(items[3:], env, false, tokenExpandArguments)...)
+}
+
+func valueWords(v STR) []ANY {
+	if words, ok := valueWordsMemo[v]; ok {
+		return words
+	}
+
+	words := slices.Clip(internAnys(strings.Fields(v.string())))
+
+	valueWordsMemo[v] = words
+
+	return words
+}
+
+func expandSingleRef(text string, env Environment, phase TokenExpansion) ([]ANY, bool) {
+	if len(text) < 4 || text[0] != '$' || text[1] != '{' || text[len(text)-1] != '}' {
+		return nil, false
+	}
+
+	name := text[2 : len(text)-1]
+
+	if strings.ContainsAny(name, "${}") {
+		return nil, false
+	}
+
+	switch phase {
+	case tokenExpandStatement:
+		if pathArgumentsReservedVar(name) {
+			return nil, false
+		}
+	case tokenExpandRoots:
+		if notRootVar(name) {
+			return nil, false
+		}
+	}
+
+	id := internedEnv(name)
+
+	if id == 0 {
+		return nil, false
+	}
+
+	k, v := env.s.lookup(id)
+
+	if k != envStr && k != envInt || v != 0 && strHasDollar(v.any()) {
+		return nil, false
+	}
+
+	env.recordResourceUse(id)
+
+	if v == 0 {
+		return nil, true
+	}
+
+	return valueWords(v), true
 }
 
 func expandTokens(items []ANY, env Environment, command bool, phase TokenExpansion) []ANY {
@@ -5594,6 +5689,19 @@ func expandTokens(items []ANY, env Environment, command bool, phase TokenExpansi
 		}
 
 		text := item.string()
+
+		if !command {
+			if words, ok := expandSingleRef(text, env, phase); ok {
+				if out == nil {
+					out = append(make([]ANY, 0, len(items)+len(words)), items[:i]...)
+				}
+
+				out = append(out, words...)
+
+				continue
+			}
+		}
+
 		constant := true
 		expanded := expandTokenView(text, env, phase, &constant)
 

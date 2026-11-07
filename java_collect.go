@@ -38,15 +38,15 @@ var javaPathVars = map[string]bool{
 	"BINDIR": true, "CURDIR": true, "ARCADIA_ROOT": true, "ARCADIA_BUILD_ROOT": true, "MODDIR": true,
 }
 
-var javaUberjarFlagVars = []string{
-	"UBERJAR_PREFIX_FLAG",
-	"UBERJAR_HIDE_EXCLUDE_FLAGS",
-	"UBERJAR_HIDE_INCLUDE_FLAGS",
-	"UBERJAR_PATH_EXCLUDES",
-	"UBERJAR_MANIFEST_TRANSFORMER_MAIN_FLAG",
-	"UBERJAR_MANIFEST_TRANSFORMER_ATTRIBUTE_FLAGS",
-	"UBERJAR_APPENDING_TRANSFORMER_FLAGS",
-	"UBERJAR_SERVICES_RESOURCE_TRANSFORMER_FLAG",
+var javaUberjarFlagVars = []ENV{
+	envUberjarPrefixFlag,
+	internEnv("UBERJAR_HIDE_EXCLUDE_FLAGS"),
+	internEnv("UBERJAR_HIDE_INCLUDE_FLAGS"),
+	internEnv("UBERJAR_PATH_EXCLUDES"),
+	envUberjarManifestTransformerMainFlag,
+	internEnv("UBERJAR_MANIFEST_TRANSFORMER_ATTRIBUTE_FLAGS"),
+	internEnv("UBERJAR_APPENDING_TRANSFORMER_FLAGS"),
+	envUberjarServicesResourceTransformerFlag,
 }
 
 var javaConfGlobalBindings = func() []confMacroBinding {
@@ -179,8 +179,8 @@ func collectJavaData(ctx *GenCtx, jm *JavaModule, stmts []Stmt, env Environment)
 	d.modver = sbomModuleVersion(env)
 	d.protoNamespace = env.string(envProtoNamespace)
 
-	for _, name := range javaUberjarFlagVars {
-		value, _ := env.lookup(name)
+	for _, id := range javaUberjarFlagVars {
+		value, _ := env.lookupENV(id)
 
 		d.uberjarOpts = append(d.uberjarOpts, splitJavaCommandWords(expandStmtToken(value, env))...)
 	}
@@ -295,16 +295,18 @@ func collectJavaStmts(ctx *GenCtx, jm *JavaModule, d *JavaData, stmts []Stmt, en
 			}
 
 			for _, p := range expandStmtTokens(v.Paths, env) {
-				ps := p.string()
-
-				if ps == "ADDINCL" || ps == "GLOBAL" || strings.Contains(ps, "${") {
+				if p == kwADDINCL.any() || p == kwGLOBAL.any() || strHasDollar(p) && strings.Contains(p.string(), "${") {
 					continue
 				}
 
 				d.peerStmts = append(d.peerStmts, JavaPeerSpec{dir: peerdirModulePath(p).string(), explicit: !v.Implicit})
 			}
 		case *SetStmt:
-			valueID := expandSourceScalarVarRefSTR(v.Value, env)
+			valueID := v.Plain
+
+			if valueID == 0 {
+				valueID = expandSourceScalarVarRefSTR(v.Value, env)
+			}
 
 			env.setFromSTR(v.NameEnv, valueID)
 			d.setVars.set(v.NameEnv.str(), valueID)

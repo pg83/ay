@@ -170,7 +170,7 @@ func (e *EmitContext) emitDescProtoSubmodule() *ModuleEmitResult {
 	}
 
 	for _, meta := range d.srcs {
-		if extIsGztproto(meta.Source.string()) {
+		if srcExtClassOf(meta.Source) == srcExtGztProto {
 			source := e.resolveModuleSourceVFS(meta.Source, d.srcDirs)
 
 			meta.Source = ctx.gztProtoSource(instance, source, d.scanCtx, protoInclude).any()
@@ -183,7 +183,7 @@ func (e *EmitContext) emitDescProtoSubmodule() *ModuleEmitResult {
 	for _, meta := range srcs {
 		src := meta.Source
 
-		if !extIsProto(src.string()) && !extIsEv(src.string()) {
+		if srcExtClassOf(src) != srcExtProto && srcExtClassOf(src) != srcExtEv {
 			continue
 		}
 

@@ -140,9 +140,9 @@ func (e *EmitContext) rootSourceOrGenerated(rel string) VFS {
 }
 
 func (e *EmitContext) requireProducedInput(kind, token string, vfs VFS) VFS {
-	module := e.instance.Path.relString()
+	if vfs.isBuild() && e.codegen.lookup(vfs) == nil && relUnderDir(vfs.relString(), e.instance.Path.relString()) {
+		module := e.instance.Path.relString()
 
-	if vfs.isBuild() && e.codegen.lookup(vfs) == nil && relUnderDir(vfs.relString(), module) {
 		if token == "" {
 			token = vfs.string()
 		}
@@ -188,7 +188,7 @@ func (e *EmitContext) srcPosition(meta SrcMeta) ([]VFS, []VFS) {
 	tok := meta.Source
 	class := srcExtClassOf(tok)
 
-	if extIsProto(tok.relOrSelf().string()) {
+	if srcExtClassOf(tok) == srcExtProto {
 		class = srcExtProto
 	}
 
@@ -288,7 +288,7 @@ func (e *EmitContext) srcPosition(meta SrcMeta) ([]VFS, []VFS) {
 	insMark := len(e.prodVFS)
 
 	if class == srcExtProto || class == srcExtEv && pyProto {
-		if _, rooted := moduleRootedVFS(module, tok.string()); !rooted && protoInput.isSource() && !meta.Resolved.Existing {
+		if _, rooted := moduleRootedANY(e.instance.Path, tok); !rooted && protoInput.isSource() && !meta.Resolved.Existing {
 			protoInput = protoInput.rel().build()
 		}
 
@@ -727,11 +727,11 @@ func (e *EmitContext) producerPositions(cythonPlans []CythonStmtPlan) ([]Produce
 		} else {
 			mark := len(e.prodVFS)
 
-			e.prodVFS = append(e.prodVFS, e.schedulingSource(m.Source.string(), m.Resolved))
+			e.prodVFS = append(e.prodVFS, e.schedulingSourceANY(m.Source, m.Resolved))
 			ins = e.prodVFSTake(mark)
 
 			if m.Prio == stmtPrioSrcs && srcExtClassOf(m.Source) == srcExtCSource {
-				if _, known := moduleRootedVFS(module, m.Source.string()); known {
+				if _, known := moduleRootedANY(e.instance.Path, m.Source); known {
 					ins = nil
 				}
 			}
@@ -1052,7 +1052,7 @@ func (e *EmitContext) bindDeclaredProgramInputs(inputs []VFS, tokens []ANY) {
 			continue
 		}
 
-		if _, rooted := moduleRootedVFS(e.instance.Path.relString(), token.string()); rooted {
+		if _, rooted := moduleRootedANY(e.instance.Path, token); rooted {
 			continue
 		}
 
