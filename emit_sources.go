@@ -24,10 +24,15 @@ func (e *EmitContext) emitOneSource(meta SrcMeta) {
 			e.emitPyProtoSource(src, e.sourceForEmission(meta), py.Group, py.Module)
 		} else {
 			ps := PySrc{Path: src.vfs(), Existing: meta.Resolved.Existing, PySourceMeta: py}
+			yapyc := (!isProgramModuleType(e.d.moduleStmt.Name) || pyModuleTypeUsesPython3(e.d.moduleStmt.Name) || e.d.usePython2 || e.d.pythonSourceCallback) && (py.Kind == pySourceProto || !e.d.pyBuildNoPYC)
 
-			e.collectPySource(ps.Path, py)
+			if yapyc {
+				ps.Yapyc = e.pyYapycOutFor(ps)
+			}
 
-			if (!isProgramModuleType(e.d.moduleStmt.Name) || pyModuleTypeUsesPython3(e.d.moduleStmt.Name) || e.d.usePython2 || e.d.pythonSourceCallback) && (py.Kind == pySourceProto || !e.d.pyBuildNoPYC) {
+			e.collectPySource(ps)
+
+			if yapyc {
 				e.emitPyYapyc(ps, e.pyccTool())
 			}
 

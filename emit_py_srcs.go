@@ -58,7 +58,16 @@ func pyResourceKeyPrefix(topLevel bool, namespace *ANY, modulePath string) strin
 type PySrc struct {
 	Existing bool
 	Path     VFS
+	Yapyc    VFS
 	PySourceMeta
+}
+
+func (e *EmitContext) pyYapycOf(ps PySrc) VFS {
+	if ps.Yapyc != 0 {
+		return ps.Yapyc
+	}
+
+	return e.pyYapycOutFor(ps)
 }
 
 func (e *EmitContext) resolvePythonSourceID(src STR) ResolvedSource {
@@ -238,8 +247,8 @@ func (e *EmitContext) pyYapycExt() string {
 	return ".yapyc3"
 }
 
-func (e *EmitContext) collectPySource(path VFS, meta PySourceMeta) {
-	e.pySrcsReg = append(e.pySrcsReg, PySrc{Path: path, PySourceMeta: meta})
+func (e *EmitContext) collectPySource(ps PySrc) {
+	e.pySrcsReg = append(e.pySrcsReg, PySrc{Path: ps.Path, Yapyc: ps.Yapyc, PySourceMeta: ps.PySourceMeta})
 }
 
 func (e *EmitContext) pyYapycOutFor(ps PySrc) VFS {
@@ -321,7 +330,7 @@ func (e *EmitContext) appendPyResEntries(out []PyGenResEntry, ps PySrc) []PyGenR
 		}
 
 		token := ps.Token.string()
-		yapycOut := e.pyYapycOutFor(ps)
+		yapycOut := e.pyYapycOf(ps)
 
 		if !strings.HasPrefix(token, "${ARCADIA_BUILD_ROOT}/") {
 			return append(out,
@@ -342,7 +351,7 @@ func (e *EmitContext) appendPyResEntries(out []PyGenResEntry, ps PySrc) []PyGenR
 		out = append(out, PyGenResEntry{token: ps.Token.string(), key: ps.Module, path: ps.Path})
 
 		if !d.pyBuildNoPYC {
-			yapycOut := e.pyYapycOutFor(ps)
+			yapycOut := e.pyYapycOf(ps)
 
 			out = append(out, PyGenResEntry{token: e.resStr2("${ARCADIA_BUILD_ROOT}/", yapycOut.relString()), key: ps.Module, yapyc: true, path: yapycOut})
 		}
@@ -368,7 +377,7 @@ func (e *EmitContext) appendPyResEntries(out []PyGenResEntry, ps PySrc) []PyGenR
 	}
 
 	if !d.pyBuildNoPYC {
-		entry := PyGenResEntry{token: e.resStr2(srcRel, suffix), key: ps.Module, yapyc: true, path: e.pyYapycOutFor(ps)}
+		entry := PyGenResEntry{token: e.resStr2(srcRel, suffix), key: ps.Module, yapyc: true, path: e.pyYapycOf(ps)}
 
 		if rooted, ok := moduleRootedVFS(e.instance.Path.relString(), entry.token); ok {
 			entry.path = rooted
@@ -457,7 +466,7 @@ func (e *EmitContext) emitPyYapyc(ps PySrc, tool PyccTool) {
 	srcAbs := ps.Path
 	toolRefs := tool.refs
 	env := envVarsVCSPyHash
-	outputPath := e.pyYapycOutFor(ps)
+	outputPath := e.pyYapycOf(ps)
 
 	if e.codegen.lookup(outputPath) != nil {
 		return

@@ -18,8 +18,8 @@ const (
 )
 
 type recentSTRs struct {
-	text [4]string
-	id   [4]STR
+	text [16]string
+	id   [16]STR
 	next int
 }
 
@@ -128,7 +128,7 @@ func (c *recentSTRs) intern(name string) STR {
 	id := internStr(name)
 
 	c.text[c.next], c.id[c.next] = id.string(), id
-	c.next = (c.next + 1) & 3
+	c.next = (c.next + 1) & 15
 
 	return id
 }
@@ -148,7 +148,7 @@ func (c *recentSTRs) interned(name string) STR {
 
 	if id != 0 {
 		c.text[c.next], c.id[c.next] = id.string(), id
-		c.next = (c.next + 1) & 3
+		c.next = (c.next + 1) & 15
 	}
 
 	return id
