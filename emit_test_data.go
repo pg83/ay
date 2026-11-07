@@ -18,7 +18,7 @@ func resourceValidationEnabled(env Environment) bool {
 	return !env.is(envValidateData, strNo) && !env.is(envCppAnalysisMode, strYes)
 }
 
-func (ctx *GenCtx) dataValidationSuite(project string, data, env []string, globals []ResourceDecl, uidExt string) *TestSuite {
+func (ctx *GenCtx) dataValidationSuite(project STR, data, env []string, globals []ResourceDecl, uidExt string) *TestSuite {
 	var ids []string
 
 	for _, entry := range data {
@@ -30,7 +30,7 @@ func (ctx *GenCtx) dataValidationSuite(project string, data, env []string, globa
 	return ctx.resourceValidationSuite(project, "validate_data_sbr", ids, env, globals, uidExt)
 }
 
-func (ctx *GenCtx) sandboxValidationSuite(project string, fromSandboxes []*FromSandboxStmt, env []string, globals []ResourceDecl, uidExt string) *TestSuite {
+func (ctx *GenCtx) sandboxValidationSuite(project STR, fromSandboxes []*FromSandboxStmt, env []string, globals []ResourceDecl, uidExt string) *TestSuite {
 	ids := make([]string, len(fromSandboxes))
 
 	for i, stmt := range fromSandboxes {
@@ -40,7 +40,7 @@ func (ctx *GenCtx) sandboxValidationSuite(project string, fromSandboxes []*FromS
 	return ctx.resourceValidationSuite(project, "validate_resource", ids, env, globals, uidExt)
 }
 
-func (ctx *GenCtx) resourceValidationSuite(project, name string, ids, env []string, globals []ResourceDecl, uidExt string) *TestSuite {
+func (ctx *GenCtx) resourceValidationSuite(project STR, name string, ids, env []string, globals []ResourceDecl, uidExt string) *TestSuite {
 	if len(ids) == 0 {
 		return nil
 	}
@@ -48,7 +48,7 @@ func (ctx *GenCtx) resourceValidationSuite(project, name string, ids, env []stri
 	ids = sortedUnique(ids)
 
 	nameID := internStr(name)
-	s := &TestSuite{p: ctx.target, projectPath: internStr(project), name: nameID, testType: nameID, ciType: strTest, size: strSmall, timeout: 60, env: env, globals: globals, network: "full", setupPythonpathEnv: true, supportsTestParameters: true, clearEnvironment: true, noRetries: true, runInputs: []VFS{source(project)}, inputNames: ids}
+	s := &TestSuite{p: ctx.target, projectPath: project, name: nameID, testType: nameID, ciType: strTest, size: strSmall, timeout: 60, env: env, globals: globals, network: "full", setupPythonpathEnv: true, supportsTestParameters: true, clearEnvironment: true, noRetries: true, runInputs: []VFS{project.source()}, inputNames: ids}
 
 	if uidExt != "" {
 		s.uidSalt = "sbr_uid_ext=" + uidExt
@@ -68,7 +68,7 @@ func (ctx *GenCtx) resourceValidationSuite(project, name string, ids, env []stri
 		args := []string{testToolHostPath, "run_check", "--source-root", testSourceRoot, "--checker", checker, "--check-name", s.testType.string(), "--trace-path", work + "/ytest.report.trace", "--out-path", work + "/testing_out_stuff", "--log-path", work + "/testing_out_stuff/run_check.log"}
 
 		args = append(args, s.inputNames...)
-		args = append(args, "--batch", "--batch-name", path.Base(project))
+		args = append(args, "--batch", "--batch-name", path.Base(project.string()))
 
 		return testArgs(args)
 	}

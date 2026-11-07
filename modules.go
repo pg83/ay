@@ -2159,7 +2159,11 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 			d.syncPythonVersion(env)
 
 			if _, conf := env.s.lookup(envREALPRJNAME); conf == prjName {
-				env.setString(envREALPRJNAME, moduleRealPrjName(modulePath, v, d.unit))
+				if arg := moduleRealPrjNameArg(v); arg != 0 {
+					env.setANY(envREALPRJNAME, arg)
+				} else {
+					env.setString(envREALPRJNAME, moduleDerivedPrjName(modulePath, d.unit))
+				}
 			}
 
 			if moduleType := confModuleType(v.Name, d); moduleType != 0 {
@@ -2647,6 +2651,12 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 			d.enumSrcs = append(d.enumSrcs, expandedEN)
 		case *DefaultVarStmt:
 			value := expandSourceScalarVarRef(v.Value, env)
+			valueID := v.ValueID
+
+			if value != v.Value {
+				valueID = internStr(value)
+			}
+
 			bound := env.hasBindingID(v.NameEnv)
 
 			if d.defaultVars == nil {
@@ -2656,15 +2666,15 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 			name := v.NameEnv.str()
 
 			if _, exists := d.defaultVars[name]; !exists {
-				d.defaultVars[name] = internStr(value)
+				d.defaultVars[name] = valueID
 			}
 
-			env.setDefaultString(v.NameEnv, value)
+			env.setDefaultSTR(v.NameEnv, valueID)
 
 			if !bound {
 				d.captureResourcePeerPolicy(v.NameEnv, env)
 
-				d.setVars.set(name, internStr(value))
+				d.setVars.set(name, valueID)
 				platform.conf.set(env, v.NameEnv, &d.setVars)
 			}
 
@@ -6020,7 +6030,13 @@ func expandSourceScalarVarRefID(text STR, env Environment) STR {
 		return words[0].str()
 	}
 
-	value := internStr(expandSourceScalarVarRefView(text.string(), env))
+	raw := text.string()
+	view := expandSourceScalarVarRefView(raw, env)
+	value := text
+
+	if view != raw {
+		value = internStr(view)
+	}
 
 	expansionMemo.end(key, value.any())
 

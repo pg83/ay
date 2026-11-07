@@ -1,6 +1,9 @@
 package main
 
-import "slices"
+import (
+	"path/filepath"
+	"slices"
+)
 
 type ANY uint32
 
@@ -46,6 +49,14 @@ func canonicalANYs(in []ANY) []ANY {
 	}
 
 	return out
+}
+
+func (a ANY) dirSource() VFS {
+	if s := a.str(); s != 0 {
+		return dirSourceOf(s)
+	}
+
+	return source(filepath.Clean(a.string()))
 }
 
 func (a ANY) peerSource() VFS {

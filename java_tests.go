@@ -53,7 +53,7 @@ func (ctx *GenCtx) javaTestSuites(jm *JavaModule) []*TestSuite {
 	if (jm.unit.kind == juJar || jm.unit.kind == juExternal) && jm.data.validateData {
 		globals := ctx.javaResourceGlobals(jm)
 
-		suites = append(suites, ctx.dataValidationSuite(jm.dir, jm.data.test.data, jm.data.testEnv, globals, jm.data.sbrUIDExt), ctx.sandboxValidationSuite(jm.dir, jm.data.fromSandboxes, jm.data.testEnv, globals, jm.data.sbrUIDExt))
+		suites = append(suites, ctx.dataValidationSuite(jm.path.rel(), jm.data.test.data, jm.data.testEnv, globals, jm.data.sbrUIDExt), ctx.sandboxValidationSuite(jm.path.rel(), jm.data.fromSandboxes, jm.data.testEnv, globals, jm.data.sbrUIDExt))
 	}
 
 	if jm.checksClasspathClash() {
@@ -96,7 +96,7 @@ func (ctx *GenCtx) javaCheckSourceDir(jm *JavaModule, dir string) VFS {
 		return jm.path
 	}
 
-	dirs := append(slices.Clone(jm.data.srcDirs), v, build(jm.dir), bld)
+	dirs := append(slices.Clone(jm.data.srcDirs), v, jm.path.rel().build(), bld)
 
 	for _, base := range dirs {
 		rel := path.Join(base.relString(), spelling)
@@ -146,14 +146,14 @@ func sortedUniqueVFS(in []VFS) []VFS {
 func (ctx *GenCtx) javaSuiteBase(jm *JavaModule, name, testType, ciType STR) *TestSuite {
 	return &TestSuite{
 		p:           jm.instance.Platform,
-		projectPath: internStr(jm.dir),
+		projectPath: jm.path.rel(),
 		name:        name,
 		testType:    testType,
 		ciType:      ciType,
 		size:        strSmall,
 		timeout:     60,
 		globals:     ctx.javaResourceGlobals(jm),
-		runInputs:   []VFS{source(jm.dir)},
+		runInputs:   []VFS{jm.path},
 	}
 }
 
@@ -230,7 +230,7 @@ func (ctx *GenCtx) javaKtlintSuite(jm *JavaModule) *TestSuite {
 
 	s.timeout = 120
 	s.requirements = map[string]string{"cpu": "2"}
-	s.relatedPaths = append([]ANY{source(jm.dir).any(), editorconfig.any()}, sortedUniqueByText(testArgs(dirs))...)
+	s.relatedPaths = append([]ANY{jm.path.any(), editorconfig.any()}, sortedUniqueByText(testArgs(dirs))...)
 	s.runInputs = append(s.runInputs, srclist)
 	s.projectBuildDeps = true
 	s.deps = []NodeRef{ctx.javaProducer(jm, srclist)}
@@ -315,7 +315,7 @@ func (ctx *GenCtx) javaCustomLintSuite(jm *JavaModule, l javaCustomLint) *TestSu
 	}
 
 	check := StyleCheck{Name: l.linter.name, Wrapper: l.linter.wrapper, Resource: internStr(l.linter.resource), Files: files, ExtraConfigs: configs}
-	s := ctx.styleSuite(check, internStr(jm.dir), slices.Clone(jm.data.testEnv), styleCheckResources(check, ctx.javaResourceGlobals(jm)))
+	s := ctx.styleSuite(check, jm.path.rel(), slices.Clone(jm.data.testEnv), styleCheckResources(check, ctx.javaResourceGlobals(jm)))
 
 	s.p = jm.instance.Platform
 

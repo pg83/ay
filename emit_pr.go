@@ -161,7 +161,13 @@ func (e *EmitContext) emitRunProgram(stmt *RunProgramStmt) {
 
 	e.dirScratch = protoImportPbH
 
-	res := e.foreignToolResult(internArg(filepath.Clean(stmt.ToolPath.relOrSelf().string())))
+	tool := stmt.ToolPath.relOrSelf()
+
+	if !tool.cleanPath() {
+		tool = internStr(filepath.Clean(tool.string()))
+	}
+
+	res := e.foreignToolResult(internArgSTR(tool))
 
 	if res.LDPath == nil {
 		throwFmt("gen: tool %s has no linkable output", stmt.ToolPath.string())

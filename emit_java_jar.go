@@ -119,8 +119,8 @@ func (ctx *GenCtx) javaEmitJar(jm *JavaModule) {
 	globals := ctx.javaGlobals(jm)
 	closure := ctx.javaManagedPeersClosure(jm)
 	b := ctx.javaBuilderReq(jm, &javaReqCPU4)
-	bindir := build(jm.dir)
-	moddir := source(jm.dir)
+	bindir := jm.path.rel().build()
+	moddir := jm.path
 	jdk := javaJDKResource(d.jdkReal)
 	srclst := build(jm.dir, "/all-java.srclst")
 	ktSrclist := build(jm.dir, "/misc/all-kt-sources.txt")

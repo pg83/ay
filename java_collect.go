@@ -324,12 +324,18 @@ func collectJavaStmts(ctx *GenCtx, jm *JavaModule, d *JavaData, stmts []Stmt, en
 			d.setRawVarID(v.NameEnv.str(), raw, rawID)
 		case *DefaultVarStmt:
 			value := expandSourceScalarVarRef(v.Value, env)
+			valueID := v.ValueID
+
+			if value != v.Value {
+				valueID = internStr(value)
+			}
+
 			bound := env.hasBindingID(v.NameEnv)
 
-			env.setDefaultString(v.NameEnv, value)
+			env.setDefaultSTR(v.NameEnv, valueID)
 
 			if !bound {
-				d.setVars.set(v.NameEnv.str(), internStr(value))
+				d.setVars.set(v.NameEnv.str(), valueID)
 				jm.instance.Platform.conf.set(env, v.NameEnv, &d.setVars)
 				d.setRawVar(v.NameEnv.str(), d.rawExpand(v.Value))
 			}
@@ -673,7 +679,11 @@ func applyJavaMacro(ctx *GenCtx, jm *JavaModule, d *JavaData, name STR, args []s
 
 	switch name {
 	case kwVERSION:
-		env.setString(envModver, strings.Join(args, " "))
+		if len(args) == 1 && len(ids) == 1 {
+			env.setANY(envModver, ids[0])
+		} else {
+			env.setString(envModver, strings.Join(args, " "))
+		}
 	case kwLICENSE:
 		if ctx.sbomEnabled && env.bool(envNeedSbomInfo) {
 			d.sbomComponent = true

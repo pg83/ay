@@ -66,7 +66,7 @@ func (b *javaNodeBuilder) javaSbom(jm *JavaModule, closure javaClosureSeq) {
 		}
 	}
 
-	args = append(args, strModPath.any(), internStr(jm.dir).any(), strO.any(),
+	args = append(args, strModPath.any(), jm.path.rel().any(), strO.any(),
 		build(jm.dir, "/cls/META-INF/SBOM.json").any(), strVcsInfo.any(), bldVcsJson.any())
 
 	for entry := range closure {

@@ -432,6 +432,7 @@ type DefaultVarStmt struct {
 	VarName string
 	NameEnv ENV
 	Value   string
+	ValueID STR
 	Line    int
 }
 
@@ -1573,17 +1574,19 @@ func buildStmtForID(nameID STR, args []ANY, line int, fail func(format string, a
 	case stmtKindDefault:
 
 		varName := ""
-		value := ""
+		nameID := strEmpty
+		valueID := strEmpty
 
 		if len(args) >= 1 {
-			varName = args[0].string()
+			nameID = args[0].textSTR()
+			varName = nameID.string()
 		}
 
 		if len(args) >= 2 {
-			value = strings.Join(anyStrs(args[1:]), " ")
+			valueID = joinAnysSTR(args[1:], " ")
 		}
 
-		return &DefaultVarStmt{VarName: varName, NameEnv: internEnv(varName), Value: value, Line: line}
+		return &DefaultVarStmt{VarName: varName, NameEnv: internEnvSTR(nameID), Value: valueID.string(), ValueID: valueID, Line: line}
 	case stmtKindConfigureFile:
 
 		if len(args) != 2 {

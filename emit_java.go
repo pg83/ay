@@ -534,7 +534,7 @@ func javaJDKResource(jdk string) string {
 func (ctx *GenCtx) javaEmitContrib(jm *JavaModule) {
 	d := jm.data
 	b := ctx.javaBuilder(jm)
-	bindir := build(jm.dir)
+	bindir := jm.path.rel().build()
 	srcJar := build(jm.dir, "/", jm.name, "-sources.jar")
 	globals := ctx.javaGlobals(jm)
 	jdk := javaJDKResource(d.jdkReal)
@@ -593,7 +593,7 @@ func (ctx *GenCtx) javaEmitContrib(jm *JavaModule) {
 
 	if d.sbomComponent {
 		args := append(b.python(source(sbomGenScriptRel)), strOutput.any(), build(jm.dir, "/", jm.name, ".component.sbom").any(),
-			strType.any(), strLibrary.any(), strPath.any(), internStr(jm.dir).any(), strVer.any())
+			strType.any(), strLibrary.any(), strPath.any(), jm.path.rel().any(), strVer.any())
 
 		if d.modver != "" {
 			args = append(args, internStr(d.modver).any())

@@ -378,6 +378,20 @@ func (e Environment) setStringID(id ENV, v STR) {
 	e.setStrID(id, v)
 }
 
+func (e Environment) setANY(id ENV, a ANY) {
+	if v := a.vfs(); v != 0 {
+		e.setVFS(id, v)
+
+		return
+	}
+
+	if s := a.str(); vfsHasPrefix(s.string()) {
+		e.setVFS(id, intern(s.string()))
+	} else {
+		e.setStrID(id, s)
+	}
+}
+
 func (e Environment) setString(id ENV, v string) {
 	if vfsHasPrefix(v) {
 		e.setVFS(id, intern(v))
@@ -558,6 +572,14 @@ func (e Environment) lookupValueENV(id ENV) (string, VFS, bool) {
 	}
 
 	return v.string(), 0, true
+}
+
+func (e Environment) setDefaultSTR(id ENV, v STR) {
+	if e.hasBindingID(id) {
+		return
+	}
+
+	e.setANY(id, v.any())
 }
 
 func (e Environment) setDefaultString(id ENV, v string) {

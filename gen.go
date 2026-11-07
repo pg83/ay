@@ -483,6 +483,14 @@ func (ctx *GenCtx) evaluateDirVFS(dir VFS, platform *Platform) *DirEvaluation {
 	return evaluation
 }
 
+func dirSourceOf(dir STR) VFS {
+	if dir.cleanPath() {
+		return dir.source()
+	}
+
+	return source(filepath.Clean(dir.string()))
+}
+
 func (ctx *GenCtx) moduleName(dir string) TOK {
 	return ctx.moduleNameVFS(source(filepath.Clean(dir)))
 }
@@ -1031,6 +1039,14 @@ func prebuiltProgramName(instance ModuleInstance, moduleStmt *ModuleStmt) string
 }
 
 func moduleRealPrjName(dir string, stmt *ModuleStmt, unit ModuleUnit) string {
+	if arg := moduleRealPrjNameArg(stmt); arg != 0 {
+		return arg.string()
+	}
+
+	return moduleDerivedPrjName(dir, unit)
+}
+
+func moduleRealPrjNameArg(stmt *ModuleStmt) ANY {
 	args := stmt.Args
 
 	if stmt.Name == tokUnittestFor && len(args) > 0 {
@@ -1044,9 +1060,13 @@ func moduleRealPrjName(dir string, stmt *ModuleStmt, unit ModuleUnit) string {
 			continue
 		}
 
-		return args[i].string()
+		return args[i]
 	}
 
+	return 0
+}
+
+func moduleDerivedPrjName(dir string, unit ModuleUnit) string {
 	switch {
 	case isUnitTestModule(unit.Type) || isPythonTestModule(unit.Type) || unit.Type == tokExectest:
 		return fullPathTestName(dir)
@@ -1560,7 +1580,7 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 			return
 		}
 
-		project := instance.Path.relString()
+		project := instance.Path.rel()
 
 		for _, suite := range []*TestSuite{ctx.dataValidationSuite(project, d.test.data, d.test.env, result.ResourceGlobalClosure, env.string(envSbrUIDExt)), ctx.sandboxValidationSuite(project, d.fromSandboxes, d.test.env, result.ResourceGlobalClosure, env.string(envSbrUIDExt))} {
 			if suite != nil {
@@ -2970,7 +2990,7 @@ func (ctx *GenCtx) toolResult(modulePath ARG) *ModuleEmitResult {
 
 	var res *ModuleEmitResult
 
-	if dir := modulePath.string(); isJavaModuleType(ctx.moduleName(dir)) {
+	if dir := modulePath.string(); isJavaModuleType(ctx.moduleNameVFS(dirSourceOf(modulePath.str()))) {
 		res = ctx.javaToolResult(dir)
 	} else {
 		res = genModule(ctx, newToolInstance(ctx.host, dir))

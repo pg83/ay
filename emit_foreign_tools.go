@@ -14,11 +14,11 @@ type ForeignTool struct {
 func (e *EmitContext) foreignToolResult(path ARG) *ModuleEmitResult {
 	ctx := e.ctx
 
-	if e.instance.Platform == ctx.host || e.instance.Platform == ctx.host.picVariant || isJavaModuleType(ctx.moduleName(path.string())) {
+	if e.instance.Platform == ctx.host || e.instance.Platform == ctx.host.picVariant || isJavaModuleType(ctx.moduleNameVFS(dirSourceOf(path.str()))) {
 		return e.toolResult(path)
 	}
 
-	instance := ctx.rootInstance(path.string(), demandLinked)
+	instance := ctx.rootInstanceVFS(dirSourceOf(path.str()), demandLinked)
 
 	instance.Platform = e.instance.Platform
 

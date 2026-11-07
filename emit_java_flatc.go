@@ -36,7 +36,7 @@ func (ctx *GenCtx) javaRegisterFbsSources(jm *JavaModule) {
 				args = append(args, argI.any(), inc.any())
 			}
 
-			args = append(args, argDashO.any(), build(jm.dir).any(), source.any())
+			args = append(args, argDashO.any(), jm.path.rel().build().any(), source.any())
 			b.cmd(args, bldRootDirVFS)
 
 			scan := newScanContext(ctx.na, ctx.parsers, nil, nil, nil, includeScannerBasePaths(jm.instance.Platform))
@@ -57,7 +57,7 @@ func (ctx *GenCtx) javaRegisterFbsSources(jm *JavaModule) {
 
 			tar := b.python(buildScriptsTarSourcesPy)
 
-			tar = append(tar, strInput.any(), build(jm.dir).any(), strOutput.any(), out.any(), strExts.any(), strJava3.any())
+			tar = append(tar, strInput.any(), jm.path.rel().build().any(), strOutput.any(), out.any(), strExts.any(), strJava3.any())
 			b.cmd(tar, 0)
 			b.outputs = []VFS{out}
 			b.setKV(pkFJ, pcLightGreen, false)
