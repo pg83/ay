@@ -340,7 +340,9 @@ func globVisit(fs FS, pattern string, visit func(file string, view bool)) {
 						visit(bytesString(child), true)
 					}
 				} else if isDir {
-					next = append(next, globDir{text: string(child)})
+					id := internBytes(child)
+
+					next = append(next, globDir{id.string(), id})
 				}
 
 				continue
@@ -364,7 +366,9 @@ func globVisit(fs FS, pattern string, visit func(file string, view bool)) {
 				} else if isDir && d == "" {
 					next = append(next, globDir{name, STR(packed >> 1)})
 				} else if isDir {
-					next = append(next, globDir{text: joinRel(d, name)})
+					id := internStr(joinRel(d, name))
+
+					next = append(next, globDir{id.string(), id})
 				}
 			}
 		}
