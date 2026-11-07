@@ -790,22 +790,22 @@ func collectModuleInto(ctx *GenCtx, instance ModuleInstance, stmts []Stmt, env E
 
 	kindOfResolve, _ := env.s.lookup(envDontResolveIncludes)
 
-	d.dontResolveIncludes = kindOfResolve != envAbsent && env.string(envDontResolveIncludes) != "no"
+	d.dontResolveIncludes = kindOfResolve != envAbsent && !env.is(envDontResolveIncludes, strNo)
 	finishYqlModule(instance, env, d)
 
-	if d.unit.Type == tokCrate && !envRustHost(env) && env.string(envSANITIZER_TYPE) == "memory" {
-		d.peerdirs = append(d.peerdirs, internAny("contrib/restricted/rust_msan"))
+	if d.unit.Type == tokCrate && !envRustHost(env) && env.is(envSANITIZER_TYPE, strMemory) {
+		d.peerdirs = append(d.peerdirs, strContribRestrictedRustMsan.any())
 	}
 
 	d.peerdirs = append(d.peerdirs, d.macroPeerdirs...)
-	d.pyProtoMypy = env.string(envPyProtoMypyEnabled) == "yes" &&
+	d.pyProtoMypy = env.is(envPyProtoMypyEnabled, strYes) &&
 		(isPythonProtoModule(d) || d.unit.Type == tokPy2Library || d.unit.Type == tokPy3Library || d.unit.Type == tokPy23Library)
 	d.flags.NoCompilerWarnings = env.bool(envNoCompilerWarnings)
 	d.noLint = env.string(envNoLintValue)
-	d.useCommonGoogleAPIs = env.string(envCommonGoogleApis) != "None"
+	d.useCommonGoogleAPIs = !env.is(envCommonGoogleApis, strNone)
 	d.dynamicLink = env.bool(envDynamicLink)
 
-	if env.string(envYqlAbiPeerdirTag) == "YQL_ABI_CURRENT" {
+	if env.is(envYqlAbiPeerdirTag, strYqlAbiCurrent) {
 		d.yqlCurrent = true
 	}
 
@@ -926,14 +926,14 @@ func collectModuleInto(ctx *GenCtx, instance ModuleInstance, stmts []Stmt, env E
 		d.peerdirs = append(d.peerdirs, clangSAPeer.any())
 	}
 
-	if d.multimodule == tokMlaunchPipeline && d.unit.Type == tokProgram && env.string(envSdcPlatform) == "" {
+	if d.multimodule == tokMlaunchPipeline && d.unit.Type == tokProgram && env.is(envSdcPlatform, strEmpty) {
 		env.setBool(envSTRIP, true)
 	}
 
-	d.strip = env.string(envSTRIP) == "yes"
-	d.noStrip = env.string(envNO_STRIP) == "yes"
-	d.noFixElf = env.string(envNoFixElf) == "yes"
-	d.gettextKeepPath = env.string(envGettextKeepPath) == "yes"
+	d.strip = env.is(envSTRIP, strYes)
+	d.noStrip = env.is(envNO_STRIP, strYes)
+	d.noFixElf = env.is(envNoFixElf, strYes)
+	d.gettextKeepPath = env.is(envGettextKeepPath, strYes)
 	d.finishNativeSwigConfig(env)
 	d.useNasm = env.bool(envUseNasmAssembler)
 	d.collectAssemblerConfig(env)
@@ -949,7 +949,7 @@ func collectModuleInto(ctx *GenCtx, instance ModuleInstance, stmts []Stmt, env E
 	d.flags.NoPlatform = env.bool(envNoplatform)
 	d.flags.NoWShadow = env.bool(envNoWshadow)
 	d.flags.NoExportDynSymbols = env.bool(envNoExportDynamicSymbols)
-	d.noExtendedPySearch = env.string(envNoExtendedSourceSearch) == "yes"
+	d.noExtendedPySearch = env.is(envNoExtendedSourceSearch, strYes)
 	d.noOptimize = env.bool(envNoOptimize)
 	d.primaryOutput = env.string(envPrimaryOutputValue)
 
@@ -1021,8 +1021,8 @@ func collectModuleInto(ctx *GenCtx, instance ModuleInstance, stmts []Stmt, env E
 	hasProto = hasProto || hasGeneratedSourceClass(d, srcExtProto)
 
 	d.peerdirs = append(d.peerdirs, sourcePeers...)
-	d.optimizePyProtos = env.string(envOptimizePyProtosFlag) == "yes"
-	d.ignoreCppProtoSelfPeers = env.string(envIgnoreCppProtoSelfPeers) == "yes"
+	d.optimizePyProtos = env.is(envOptimizePyProtosFlag, strYes)
+	d.ignoreCppProtoSelfPeers = env.is(envIgnoreCppProtoSelfPeers, strYes)
 
 	if hasPyGztProto && d.optimizePyProtos {
 		d.peerdirs = append(d.peerdirs, strKernelGazetteerProto.any())
@@ -1127,12 +1127,12 @@ func ensureResourcePeer(modulePath string, d *ModuleData) {
 	}
 
 	for _, p := range d.peerdirs {
-		if p.string() == resourcePeer {
+		if p == strLibraryCppResource.any() {
 			return
 		}
 	}
 
-	d.peerdirs = append(d.peerdirs, internStr(resourcePeer).any())
+	d.peerdirs = append(d.peerdirs, strLibraryCppResource.any())
 }
 
 func filterInvalidAddIncl(fs FS, d *ModuleData, modulePath string, onWarn func(Warn)) {
@@ -1220,11 +1220,11 @@ func shouldCheckSourceDir(path VFS) bool {
 		return false
 	}
 
-	if path.relString() == "" {
+	if path.rel().isEmpty() {
 		return false
 	}
 
-	if strings.Contains(path.relString(), "$") {
+	if strHasDollar(path.rel().any()) {
 		return false
 	}
 
@@ -1233,9 +1233,9 @@ func shouldCheckSourceDir(path VFS) bool {
 
 func (d *ModuleData) syncPythonVersion(env Environment) {
 	switch {
-	case env.string(envPYTHON2) == "yes":
+	case env.is(envPYTHON2, strYes):
 		d.usePython2, d.usePython3 = true, false
-	case env.string(envPYTHON3) == "yes":
+	case env.is(envPYTHON3, strYes):
 		d.usePython2, d.usePython3 = false, true
 	}
 }
@@ -1719,6 +1719,10 @@ func interpretPending(ctx *GenCtx, modulePath string, kind ModuleKind, language 
 	slices.SortStableFunc(d.pending, func(a, b PendingStmt) int {
 		if a.key != b.key {
 			return cmp.Compare(a.key, b.key)
+		}
+
+		if a.name == b.name {
+			return 0
 		}
 
 		return strings.Compare(a.name.string(), b.name.string())
@@ -2300,7 +2304,7 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 				if goSrcs {
 					ext := filepath.Ext(srcTok.string())
 
-					if srcTok.string() != "CGO_EXPORT" && !goSrcsExtensionSupported(ext) {
+					if srcTok != kwCGO_EXPORT.any() && !goSrcsExtensionSupported(ext) {
 						continue
 					}
 
@@ -2458,7 +2462,7 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 			}
 
 			d.unit.HashTag = internStr(env.string(envMODULE_TAG))
-			d.pyNamespacePython2 = env.string(envPYTHON2) == "yes"
+			d.pyNamespacePython2 = env.is(envPYTHON2, strYes)
 			d.moduleEnded = true
 
 		case *JoinSrcsStmt:
@@ -3223,11 +3227,11 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 	case tokMessage:
 		args := v.Args
 
-		if len(args) > 0 && args[0].string() == "STATUS" {
+		if len(args) > 0 && args[0] == kwSTATUS.any() {
 			args = args[1:]
 		}
 
-		if len(args) > 0 && args[0].string() == "FATAL_ERROR" {
+		if len(args) > 0 && args[0] == kwFATAL_ERROR.any() {
 			throwFmt("%s: %s", modulePath, joinAnys(args[1:], " "))
 		}
 
@@ -3343,7 +3347,7 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 			d.peerdirs = append(d.peerdirs, argBuildPlatformLld.any())
 		}
 	case tokLlvmCompileCxx:
-		if len(v.Args) < 2 || env.string(envCLANG_BC_ROOT) == "" {
+		if len(v.Args) < 2 || env.is(envCLANG_BC_ROOT, strEmpty) {
 			throwFmt("LLVM_COMPILE_CXX requires input, output and USE_LLVM_BC16/18/20")
 		}
 
@@ -3354,7 +3358,7 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 
 		d.peerdirs = append(d.peerdirs, strBuildPlatformClang.any())
 	case tokCompileLua, tokCompileLua21, tokCompileLuaOpenresty:
-		if len(v.Args) != 1 && (len(v.Args) != 3 || v.Args[1].string() != "NAME") {
+		if len(v.Args) != 1 && (len(v.Args) != 3 || v.Args[1] != kwNAME.any()) {
 			throwFmt("%s expects a source and optional NAME", v.Name.string())
 		}
 
@@ -3385,22 +3389,22 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 		i := 0
 
 		for i < len(v.Args) {
-			switch v.Args[i].string() {
-			case "NAME":
+			switch v.Args[i] {
+			case kwNAME.any():
 				if i+1 >= len(v.Args) {
 					throwFmt("LLVM_BC NAME expects a value")
 				}
 
 				stmt.Name = v.Args[i+1].string()
 				i += 2
-			case "SUFFIX":
+			case kwSUFFIX.any():
 				if i+1 >= len(v.Args) {
 					throwFmt("LLVM_BC SUFFIX expects a value")
 				}
 
 				stmt.Suffix = v.Args[i+1].string()
 				i += 2
-			case "SYMBOLS":
+			case kwSYMBOLS.any():
 				i++
 
 				for i < len(v.Args) && !isLlvmBcKeyword(v.Args[i].string()) {
@@ -3408,10 +3412,10 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 					markUserArg(v.Args[i])
 					i++
 				}
-			case "GENERATE_MACHINE_CODE":
+			case kwGENERATE_MACHINE_CODE.any():
 				stmt.GenerateMachineCode = true
 				i++
-			case "NO_COMPILE":
+			case kwNO_COMPILE.any():
 				stmt.NoCompile = true
 				i++
 			default:
@@ -3757,7 +3761,7 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 		stmt := ListProtoStmt{Output: strFilesProto.any()}
 
 		for i := 0; i < len(v.Args); i++ {
-			if v.Args[i].string() == "TO" && i+1 < len(v.Args) {
+			if v.Args[i] == kwTO.any() && i+1 < len(v.Args) {
 				i++
 				stmt.Output = v.Args[i]
 			} else {
@@ -3973,11 +3977,11 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 		strict, args := true, v.Args
 
 		if len(args) > 0 {
-			switch args[0].string() {
-			case "WARNING":
+			switch args[0] {
+			case kwWARNING.any():
 				strict = false
 				args = args[1:]
-			case "STRICT", "FATAL_ERROR":
+			case kwSTRICT.any(), kwFATAL_ERROR.any():
 				args = args[1:]
 			}
 		}
@@ -4028,7 +4032,7 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 		}
 	case tokTestSrcs:
 		args := v.Args
-		moduleRelative := len(args) > 0 && args[0].string() == "_MR"
+		moduleRelative := len(args) > 0 && args[0] == strMr.any()
 
 		if moduleRelative {
 			args = args[1:]
@@ -4122,9 +4126,9 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 
 		value := joinAnys(v.Args, " ")
 
-		env.setString(internEnv(importMaskVariable), value)
+		env.setString(envImportMaskVariable, value)
 		setPythonImportMask(value, d)
-		d.setVars.set(internStr(importMaskVariable), internStr(value))
+		d.setVars.set(importMaskVariableSTR, internStr(value))
 	case tokCppProtoPlugin0, tokCppProtoPlugin, tokCppProtoPlugin2, tokCppEvProtoPlugin:
 		addCPPProtoPlugin(d, parseCPPProtoPlugin(v))
 	case tokTasklet:
@@ -4171,14 +4175,14 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 		itemDispatcherHeader := ""
 
 		for i := 0; i < len(v.Args); i++ {
-			switch v.Args[i].string() {
-			case "ITEM_DISPATCHER":
+			switch v.Args[i] {
+			case kwITEM_DISPATCHER.any():
 				i++
 
 				if i < len(v.Args) {
 					itemDispatcher = v.Args[i].string()
 				}
-			case "ITEM_DISPATCHER_HEADER":
+			case kwITEM_DISPATCHER_HEADER.any():
 				i++
 
 				if i < len(v.Args) {
@@ -4308,8 +4312,8 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 	case tokInducedDeps:
 
 		if len(v.Args) >= 2 {
-			toHeader := v.Args[0].string() != "cpp"
-			toCpp := v.Args[0].string() != "h"
+			toHeader := v.Args[0] != strCpp2.any()
+			toCpp := v.Args[0] != strH.any()
 
 			for _, pTok := range v.Args[1:] {
 				dir := IncludeDirective{kind: includeQuoted, target: includeTarget(pTok)}
@@ -4485,15 +4489,15 @@ func parseCPPProtoPlugin(v UnknownStmt) CppProtoPlugin {
 	}
 
 	for tail < len(v.Args) {
-		switch v.Args[tail].string() {
-		case "DEPS":
+		switch v.Args[tail] {
+		case kwDEPS.any():
 			tail++
 
-			for tail < len(v.Args) && v.Args[tail].string() != "EXTRA_OUT_FLAG" {
+			for tail < len(v.Args) && v.Args[tail] != kwEXTRA_OUT_FLAG.any() {
 				plugin.Deps = append(plugin.Deps, v.Args[tail].string())
 				tail++
 			}
-		case "EXTRA_OUT_FLAG":
+		case kwEXTRA_OUT_FLAG.any():
 			tail++
 
 			if tail >= len(v.Args) {
@@ -4648,13 +4652,13 @@ func confModuleType(name TOK, d *ModuleData) string {
 }
 
 func pyProgram(d *ModuleData, env Environment) {
-	if env.string(envUSE_ARCADIA_PYTHON) != "yes" {
+	if !env.is(envUSE_ARCADIA_PYTHON, strYes) {
 		return
 	}
 
-	sqlite := env.string(envPYTHON_SQLITE3) != "no"
+	sqlite := !env.is(envPYTHON_SQLITE3, strNo)
 
-	if env.string(envPYTHON2) == "yes" {
+	if env.is(envPYTHON2, strYes) {
 		d.peerdirs = append(d.peerdirs, strLibraryPythonRuntimeMain.any())
 
 		if sqlite {
@@ -4683,7 +4687,7 @@ func collectPythonSourceEntry(d *ModuleData, env Environment, peers *[]ANY) {
 	d.pythonSourceEntry = true
 	d.pythonSourceProgram = moduleType == "PROGRAM"
 
-	if env.string(envUSE_ARCADIA_PYTHON) == "yes" {
+	if env.is(envUSE_ARCADIA_PYTHON, strYes) {
 		mainPeer := "library/python/runtime_py3/main"
 		sqlitePeer := "contrib/tools/python3"
 
@@ -4692,7 +4696,7 @@ func collectPythonSourceEntry(d *ModuleData, env Environment, peers *[]ANY) {
 			sqlitePeer = "contrib/tools/python/src"
 		} else if value, ok := env.lookup("PYTHON3_TOOL_PEERDIR"); ok {
 			sqlitePeer = value
-		} else if env.string(envUSE_PYTHON3_PREV) == "yes" {
+		} else if env.is(envUSE_PYTHON3_PREV, strYes) {
 			sqlitePeer = "contrib/tools/python3_prev"
 		}
 
@@ -4854,7 +4858,7 @@ func collectPySrcGroup(fs FS, modulePath string, v UnknownStmt, d *ModuleData, e
 			if !explicitModule {
 				src = strings.TrimSuffix(src, ".gztproto") + ".proto"
 
-				if env.string(envOptimizePyProtosFlag) == "yes" {
+				if env.is(envOptimizePyProtosFlag, strYes) {
 					d.peerdirs = append(d.peerdirs, strKernelGazetteerProto.any())
 				}
 			}
@@ -5138,10 +5142,10 @@ func protoAddInclPaths(args []ANY) ([]VFS, VFS, bool) {
 	var rel string
 
 	for _, a := range args {
-		switch a.string() {
-		case "GLOBAL":
+		switch a {
+		case kwGLOBAL.any():
 			global = true
-		case "WITH_GEN":
+		case kwWITH_GEN.any():
 			withGen = true
 		default:
 			rel = filepath.ToSlash(filepath.Clean(a.string()))
@@ -5157,7 +5161,7 @@ func protoAddInclPaths(args []ANY) ([]VFS, VFS, bool) {
 		includes = append(includes, bld)
 	}
 
-	if src.relString() != "" {
+	if !src.rel().isEmpty() {
 		includes = append(includes, src)
 	}
 
@@ -5247,7 +5251,7 @@ func applyArchiveAsmStmt(v UnknownStmt, d *ModuleData) {
 				throwFmt("gen: ARCHIVE_ASM at line %d: Keyword 'NAME' appears more than once and is not an array.", v.Line)
 			}
 
-			if i+1 >= len(v.Args) || v.Args[i+1].string() == "NAME" || v.Args[i+1].string() == "DONTCOMPRESS" {
+			if i+1 >= len(v.Args) || v.Args[i+1] == kwNAME.any() || v.Args[i+1] == kwDONTCOMPRESS.any() {
 				throwFmt("gen: ARCHIVE_ASM(NAME ...) missing value after NAME (line %d)", v.Line)
 			}
 
@@ -5729,7 +5733,11 @@ func applyDeclareInDirs(fs FS, modulePath string, v UnknownStmt, env Environment
 			dirRel, name := splitDirName(rel)
 
 			if matcher.match(name) && name != "ya.make" && name != "a.yaml" && !excluded(dirRel, name) {
-				files = append(files, filePrefix(dirRel)+name)
+				if prefix := filePrefix(dirRel); prefix != "" {
+					files = append(files, prefix+name)
+				} else {
+					files = append(files, strings.Clone(name))
+				}
 			}
 
 			return false
@@ -5797,10 +5805,10 @@ func allPySrcArgs(fs FS, modulePath string, v UnknownStmt) []ANY {
 	for i := 0; i < len(v.Args); i++ {
 		a := v.Args[i]
 
-		switch a.string() {
-		case "TOP_LEVEL":
+		switch a {
+		case kwTOP_LEVEL.any():
 			topLevel = true
-		case "NAMESPACE":
+		case kwNAMESPACE.any():
 			i++
 
 			if i >= len(v.Args) {
@@ -5808,9 +5816,9 @@ func allPySrcArgs(fs FS, modulePath string, v UnknownStmt) []ANY {
 			}
 
 			namespace = v.Args[i]
-		case "RECURSIVE":
+		case kwRECURSIVE.any():
 			recursive = true
-		case "NO_TEST_FILES":
+		case kwNO_TEST_FILES.any():
 			noTestFiles = true
 		default:
 			dirs = append(dirs, a.string())
@@ -5858,8 +5866,8 @@ func allPySrcArgs(fs FS, modulePath string, v UnknownStmt) []ANY {
 					return !fs.isFileID(dirKey(rel), strYaMake)
 				}
 
-				if pathDir(rel) != walkRoot {
-					appendPyFile(rel)
+				if pathDir(rel) != walkRoot && filepath.Ext(rel) == ".py" {
+					appendPyFile(strings.Clone(rel))
 				}
 
 				return false
@@ -5875,7 +5883,7 @@ func allPySrcArgs(fs FS, modulePath string, v UnknownStmt) []ANY {
 
 	var args []ANY
 
-	if namespace != 0 && namespace.string() != "" {
+	if namespace != 0 && namespace != strEmpty.any() {
 		args = append(args, kwNAMESPACE.any(), namespace)
 	}
 

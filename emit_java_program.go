@@ -9,11 +9,11 @@ import (
 	"strings"
 )
 
-func javaClosureJars(closure javaClosureSeq, ext string) []VFS {
+func javaClosureJars(closure javaClosureSeq, ext SrcExtClass) []VFS {
 	var out []VFS
 
 	for e := range closure {
-		if strings.HasSuffix(e.path.relString(), ext) {
+		if srcExtClassOf(e.path.any()) == ext {
 			out = append(out, e.path)
 		}
 	}
@@ -217,7 +217,7 @@ func (ctx *GenCtx) javaEmitRunnable(jm *JavaModule) {
 		b.cmd(b.fsTools(strMd.any(), cpDir.any()), 0)
 		b.cmd(b.fsTools(strLinkOrCopy.any(), self.any(), jm.target.any()), 0)
 
-		lc, lateOuts := javaLinkToDir(b.fsTools(strLinkOrCopyToDir.any(), strYaStartCommandFile.any(), self.any()), closure, cpDir, ".so", ".dll", ".dylib")
+		lc, lateOuts := javaLinkToDir(b.fsTools(strLinkOrCopyToDir.any(), strYaStartCommandFile.any(), self.any()), closure, cpDir, srcExtSo, srcExtDll, srcExtDylib)
 
 		b.cmd(append(lc, strYaEndCommandFile.any(), cpDir.any()), 0)
 
@@ -238,7 +238,7 @@ func (ctx *GenCtx) javaEmitRunnable(jm *JavaModule) {
 
 	b.cmd(b.fsTools(strMd.any(), cpDir.any()), 0)
 
-	lc, lateOuts := javaLinkToDir(b.fsTools(strLinkOrCopyToDir.any(), strYaStartCommandFile.any()), closure, cpDir, ".jar", ".so", ".dll", ".dylib")
+	lc, lateOuts := javaLinkToDir(b.fsTools(strLinkOrCopyToDir.any(), strYaStartCommandFile.any()), closure, cpDir, srcExtJar, srcExtSo, srcExtDll, srcExtDylib)
 
 	b.cmd(append(lc, strYaEndCommandFile.any(), cpDir.any()), 0)
 
@@ -277,7 +277,7 @@ func (ctx *GenCtx) javaEmitRunnable(jm *JavaModule) {
 
 	mk = append(mk, strFromArgs.any(), cplst.any(), strYaStartCommandFile.any())
 
-	for _, p := range javaClosureJars(closure, ".jar") {
+	for _, p := range javaClosureJars(closure, srcExtJar) {
 		mk = append(mk, internV(jm.dir, "/", jm.name, "/", path.Base(p.relString())).any())
 	}
 
@@ -291,7 +291,7 @@ func (ctx *GenCtx) javaEmitRunnable(jm *JavaModule) {
 	b.emitModule(jm)
 }
 
-func javaLinkToDir(lc []ANY, closure javaClosureSeq, cpDir VFS, exts ...string) ([]ANY, []VFS) {
+func javaLinkToDir(lc []ANY, closure javaClosureSeq, cpDir VFS, exts ...SrcExtClass) ([]ANY, []VFS) {
 	var lateOuts []VFS
 
 	for _, ext := range exts {

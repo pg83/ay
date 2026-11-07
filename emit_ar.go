@@ -5,6 +5,8 @@ import "strings"
 var (
 	arKV               = KV{P: pkAR, PC: pcLightRed, ShowOut: true}
 	archiveNameScratch []byte
+	strArTypeLLVM      = internStr(arTypeLLVM)
+	strArFormatGNU     = internStr(arFormatGNU)
 )
 
 const (

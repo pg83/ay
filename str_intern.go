@@ -407,6 +407,10 @@ func (s STR) any() ANY {
 	return ANY(uint32(s) << 1)
 }
 
+func (id STR) isEmpty() bool {
+	return id == 0 || id == strEmpty
+}
+
 func (id STR) cleanPath() bool {
 	t := &internTable
 

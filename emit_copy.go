@@ -1,7 +1,5 @@
 package main
 
-import "strings"
-
 func copyFileParsedIncludes(na *NodeArenas, srcVFS, moduleDir VFS, entry CopyFileEntry) []IncludeDirective {
 	out := na.dirs.alloc(1 + len(entry.OutputIncludes))[:0]
 
@@ -97,7 +95,7 @@ func (e *EmitContext) registerCopyFile(entry CopyFileEntry) (CopyEmitState, *Gen
 			info.IncludedInputs = &IncludedInputPlan{Roots: ctx.na.vfsList(srcVFS)}
 		}
 
-		if strings.HasSuffix(srcVFS.relString(), ".in") {
+		if srcIsTemplate(srcVFS) {
 			if srcVFS.isSource() && !entry.WithContext {
 				reg.forwardTextTemplates(dstVFS, ctx.na.vfsList(srcVFS))
 			} else {

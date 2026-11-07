@@ -119,7 +119,7 @@ func descPeerClosure(e *EmitContext, peerdirs []ANY, injectBuiltins, commonGoogl
 	}
 
 	for _, p := range peerdirs {
-		if commonGoogle && p.string() == "contrib/libs/googleapis-common-protos" {
+		if commonGoogle && p == strContribLibsGoogleapisCommonProtos.any() {
 			continue
 		}
 

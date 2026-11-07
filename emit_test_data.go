@@ -15,7 +15,7 @@ var dataValidationResourceID = regexp.MustCompile(`^sbr:/?/?([0-9]+)=?.*`)
 const maxCorpusResourcesAllowed = 5
 
 func resourceValidationEnabled(env Environment) bool {
-	return env.string(envValidateData) != "no" && env.string(envCppAnalysisMode) != "yes"
+	return !env.is(envValidateData, strNo) && !env.is(envCppAnalysisMode, strYes)
 }
 
 func (ctx *GenCtx) dataValidationSuite(project string, data, env []string, globals []ResourceDecl, uidExt string) *TestSuite {

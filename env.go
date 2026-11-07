@@ -10,8 +10,10 @@ var emptyAppendArgs = []ANY{strEmpty.any()}
 type EnvKind uint8
 
 type envAppend struct {
-	id    ENV
-	parts []ANY
+	id      ENV
+	counted int32
+	n       int
+	parts   []ANY
 }
 
 type EnvStore struct {
@@ -202,18 +204,22 @@ func (e Environment) stringLen(id ENV) int {
 
 	if len(s.appends) != 0 && s.pending.has(uint32(id)) {
 		for i := range s.appends {
-			if s.appends[i].id == id {
-				n := -1
+			if a := &s.appends[i]; a.id == id {
+				if a.counted == 0 {
+					a.n = -1
+				}
 
-				for _, part := range s.appends[i].parts {
+				for _, part := range a.parts[a.counted:] {
 					if v := part.vfs(); v != 0 {
-						n += 1 + v.stringLen()
+						a.n += 1 + v.stringLen()
 					} else {
-						n += 1 + len(part.str().string())
+						a.n += 1 + len(part.str().string())
 					}
 				}
 
-				return n
+				a.counted = int32(len(a.parts))
+
+				return a.n
 			}
 		}
 	}
@@ -246,6 +252,22 @@ func (e Environment) string(id ENV) string {
 	return ""
 }
 
+func (e Environment) is(id ENV, want STR) bool {
+	k, v := e.s.lookup(id)
+
+	if k == envAbsent {
+		return want == strEmpty
+	}
+
+	e.recordResourceUse(id)
+
+	if k == envVFS {
+		return false
+	}
+
+	return v == want || want == strEmpty && v == 0
+}
+
 func (e Environment) stringID(id ENV) STR {
 	if k, v := e.s.lookup(id); k == envStr || k == envInt {
 		e.recordResourceUse(id)
@@ -272,7 +294,7 @@ func (e Environment) cloneInto(dst *EnvStore) Environment {
 	dst.appends = dst.appends[:0]
 
 	for _, a := range e.s.appends {
-		dst.appends = append(dst.appends, envAppend{id: a.id, parts: slices.Clone(a.parts)})
+		dst.appends = append(dst.appends, envAppend{id: a.id, counted: a.counted, n: a.n, parts: slices.Clone(a.parts)})
 	}
 
 	dst.pending.copyFrom(&e.s.pending)

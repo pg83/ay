@@ -87,7 +87,7 @@ func (e *EmitContext) emitRustModule(result *ModuleEmitResult, peers []ResolvedP
 		inputs = append(inputs, p)
 		textInputs = append(textInputs, p)
 
-		if strings.HasSuffix(p.relString(), ".in") {
+		if srcIsTemplate(p) {
 			textTemplates = append(textTemplates, p)
 		}
 

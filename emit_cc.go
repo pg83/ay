@@ -735,7 +735,7 @@ func composeCCCommandArgBlocks(na *NodeArenas, p *Platform, in *ModuleCompileEnv
 		cflagsStr = suppressOptimize(p.CompileCFlags)
 	}
 
-	if in.CompilerEnv.string(envNO_DEBUGINFO) == "yes" && len(p.DebugInfoFlags) > 0 {
+	if in.CompilerEnv.is(envNO_DEBUGINFO, strYes) && len(p.DebugInfoFlags) > 0 {
 		flags := na.anys.alloc(len(cflagsStr))[:0]
 
 		for _, flag := range cflagsStr {

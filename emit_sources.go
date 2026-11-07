@@ -174,7 +174,7 @@ func (e *EmitContext) emitOneSource(meta SrcMeta) {
 			return
 		}
 
-		if isGoModuleType(e.d.unit.Type) && src.string() == "CGO_EXPORT" {
+		if isGoModuleType(e.d.unit.Type) && src == kwCGO_EXPORT.any() {
 			return
 		}
 

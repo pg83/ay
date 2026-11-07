@@ -36,7 +36,7 @@ func evalCondAt(nodes []CondNode, i int32, env Environment) bool {
 	case ckIdent:
 		return !commandOnlyVar(n.Env) && env.bool(n.Env)
 	case ckConfIdent:
-		return env.string(n.Env) != ""
+		return !env.is(n.Env, strEmpty)
 	case ckNot:
 		return !evalCondAt(nodes, n.L, env)
 	case ckAnd:

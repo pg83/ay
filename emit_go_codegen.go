@@ -350,7 +350,7 @@ func (e *EmitContext) emitGoCodegenStmt(st GoCodegenStmt) {
 func applyGoGrpcGatewayStmt(v UnknownStmt, d *ModuleData, env Environment) {
 	std := env.string(envGOSTD)
 	files := v.Args
-	noJSONNames := len(files) > 0 && files[0].string() == "NO_JSON_NAMES_FOR_FIELDS"
+	noJSONNames := len(files) > 0 && files[0] == kwNO_JSON_NAMES_FOR_FIELDS.any()
 
 	if noJSONNames {
 		files = files[1:]
@@ -398,7 +398,7 @@ func applyGoGrpcGatewayStmt(v UnknownStmt, d *ModuleData, env Environment) {
 	}
 
 	for _, f := range files {
-		if strings.HasSuffix(f.string(), ".proto") {
+		if srcExtClassOf(f) == srcExtProto {
 			d.goCodegens = append(d.goCodegens, GoCodegenStmt{seq: d.nextDeclSeq(), kind: goCodegenGateway, file: f.string(), plugins: plugins, outs: outs})
 		}
 	}
@@ -575,8 +575,8 @@ func newGoEmbedBindir(xtest bool, importPath string, args []ANY) GoEmbed {
 	var files []ANY
 
 	for i := 0; i < len(args); i++ {
-		switch args[i].string() {
-		case "PREFIX":
+		switch args[i] {
+		case kwPREFIX.any():
 			i++
 
 			if i == len(args) {
@@ -584,7 +584,7 @@ func newGoEmbedBindir(xtest bool, importPath string, args []ANY) GoEmbed {
 			}
 
 			importPath = args[i].string()
-		case "FILES":
+		case kwFILES.any():
 			files = args[i+1:]
 			i = len(args)
 		default:

@@ -3,11 +3,15 @@ package main
 import "strings"
 
 var (
-	llvmBcKV  = KV{P: pkBC, PC: pcLightGreen}
-	llvmBcKV2 = KV{P: pkLD, PC: pcLightRed}
-	llvmBcKV3 = KV{P: pkOP, PC: pcYellow}
-	llvmLlcKV = KV{P: pkLC, PC: pcYellow}
+	llvmBcKV      = KV{P: pkBC, PC: pcLightGreen}
+	llvmBcKV2     = KV{P: pkLD, PC: pcLightRed}
+	llvmBcKV3     = KV{P: pkOP, PC: pcYellow}
+	llvmLlcKV     = KV{P: pkLC, PC: pcYellow}
+	vfsOptWrapper = intern(optWrapper)
+	strOptWrapper = internStr(optWrapper)
 )
+
+const optWrapper = "$(S)/build/scripts/llvm_opt_wrapper.py"
 
 type LlvmCompileStmt struct {
 	DeclSeq   int
@@ -90,18 +94,13 @@ func (e *EmitContext) emitLlvmBcStmt(stmt *LlvmBcStmt) {
 	ctx, instance, d := e.ctx, e.instance, e.d
 	na := ctx.na
 	suffix := e.llvmBcSuffix(stmt)
-
-	const (
-		optWrapper = "$(S)/build/scripts/llvm_opt_wrapper.py"
-	)
-
 	python := d.tc.Python3.string()
 	env := envVarsVCS
 	clangRoot := e.llvmClangRoot(stmt.ClangBCRoot)
 	clangxx := clangRoot + "/bin/clang++"
 	llvmLink := clangRoot + "/bin/llvm-link"
 	opt := clangRoot + "/bin/opt"
-	optWrapperVFS := intern(optWrapper)
+	optWrapperVFS := vfsOptWrapper
 	pendNodes := make([]NodeSpec, 0, len(stmt.Sources)+2)
 	pendRefs := make([]NodeRef, 0, len(stmt.Sources)+2)
 	bcRefs := make([]NodeRef, 0, len(stmt.Sources))
@@ -192,7 +191,7 @@ func (e *EmitContext) emitLlvmBcStmt(stmt *LlvmBcStmt) {
 
 	optOutName := stmt.Name + "_optimized" + suffix + ".bc"
 	optOut := copyFileOutputVFS(instance.Path.relString(), optOutName)
-	optArgs := []ANY{internStr(python).any(), internStr(optWrapper).any(), internStr(opt).any(), mergedOut.any(), argDashO.any(), optOut.any()}
+	optArgs := []ANY{internStr(python).any(), strOptWrapper.any(), internStr(opt).any(), mergedOut.any(), argDashO.any(), optOut.any()}
 	passes := []string{"default<O2>", "globalopt", "globaldce"}
 
 	if len(stmt.Symbols) > 0 {
@@ -240,7 +239,7 @@ func (e *EmitContext) emitLlvmBcStmt(stmt *LlvmBcStmt) {
 		object := build(optOut.relString(), ".o")
 
 		node := NodeSpec{Node: Node{Platform: instance.Platform,
-			Cmds: na.cmdList(Cmd{CmdArgs: na.chunkList(na.anyList(toolBin.any(), optOut.any(), internAny("--filetype"), internAny("obj"), argDashO.any(), object.any(), internAny("-O2"))), Env: env}),
+			Cmds: na.cmdList(Cmd{CmdArgs: na.chunkList(na.anyList(toolBin.any(), optOut.any(), strFiletype.any(), strObj.any(), argDashO.any(), object.any(), strO2.any())), Env: env}),
 			Env:  env, Inputs: na.inputList(na.vfsList(toolBin, optOut)), Outputs: na.vfsList(object),
 			KV: &llvmLlcKV, DepRefs: na.refList(opRef), ForeignDepRefs: na.refList(toolRef)},
 		}

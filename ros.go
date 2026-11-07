@@ -34,6 +34,8 @@ var rosZeroCopyIncludes = []string{
 	"sdg/sdc/ros/proto/rosmsg/common_msgs/Time_zero_copy.h",
 }
 
+var argRosGenerator = internArg(rosGenerator)
+
 const rosGenerator = "sdg/sdc/ros/misc/ros_msg_generator/yamakes/generator"
 
 type RosModule struct {

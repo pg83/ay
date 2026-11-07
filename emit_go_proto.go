@@ -163,7 +163,7 @@ func (e *EmitContext) emitGoProtoCmd(protoRel string, goOpts *string, plugins []
 	for _, out := range outs {
 		e.register(GeneratedFileSpec{OutputPath: out, ProducerRef: ref, ProducerMainOut: outs[0]})
 
-		if strings.HasSuffix(out.relString(), ".go") {
+		if srcExtClassOf(out.any()) == srcExtGo {
 			e.collectGoAutoSource(out, seq)
 		}
 	}

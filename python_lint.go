@@ -21,8 +21,8 @@ func (s *pythonLintState) bind(env Environment) {
 	s.raw = env.string(envNoLintValue)
 	s.seed = env.string(envPyLinterFiles)
 	s.extra = strings.Fields(env.string(envPyExtraLintFilesValue))
-	s.analysis = env.string(envCppAnalysisMode) == "yes"
-	s.disableF8 = env.string(envDisableFlake8) == "yes"
+	s.analysis = env.is(envCppAnalysisMode, strYes)
+	s.disableF8 = env.is(envDisableFlake8, strYes)
 }
 
 func (s *pythonLintState) value() string {

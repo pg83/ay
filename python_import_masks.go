@@ -6,7 +6,10 @@ import (
 	"strings"
 )
 
-var importMaskVariableSTR = internStr(importMaskVariable)
+var (
+	importMaskVariableSTR = internStr(importMaskVariable)
+	envImportMaskVariable = internEnv(importMaskVariable)
+)
 
 const importMaskVariable = "NO_CHECK_IMPORTS_FOR_VALUE"
 
@@ -19,14 +22,14 @@ type pythonImportMask struct {
 }
 
 func initPythonImportMask(env Environment, d *ModuleData) {
-	key := internEnv(importMaskVariable)
+	key := envImportMaskVariable
 
 	env.setDefaultString(key, "None")
 	d.importMask.base = env.string(key)
 }
 
 func setupPythonImportMask(env Environment, d *ModuleData) {
-	key := internEnv(importMaskVariable)
+	key := envImportMaskVariable
 
 	if isPyProgramType(d.unit.Type) {
 		if d.importMask.local {
@@ -38,7 +41,7 @@ func setupPythonImportMask(env Environment, d *ModuleData) {
 			}
 		}
 
-		if env.bool(envSANITIZER_TYPE) && env.string(envSANITIZER_TYPE) != "no" {
+		if env.bool(envSANITIZER_TYPE) && !env.is(envSANITIZER_TYPE, strNo) {
 			env.setString(key, "")
 			d.importMask.local = true
 		}
@@ -52,7 +55,7 @@ func setPythonImportMask(value string, d *ModuleData) {
 }
 
 func appendPythonImportMask(value string, env Environment, d *ModuleData) string {
-	previous := env.string(internEnv(importMaskVariable))
+	previous := env.string(envImportMaskVariable)
 
 	if !d.importMask.local || previous == "" {
 		previous = "$" + importMaskVariable
@@ -70,7 +73,7 @@ func appendPythonImportMask(value string, env Environment, d *ModuleData) string
 }
 
 func finishPythonImportMask(env Environment, d *ModuleData) {
-	raw := env.string(internEnv(importMaskVariable))
+	raw := env.string(envImportMaskVariable)
 
 	d.noCheckImportsDisabled = strings.TrimSpace(raw) == ""
 
@@ -80,7 +83,7 @@ func finishPythonImportMask(env Environment, d *ModuleData) {
 
 	base := runProgramSourceEnv(env, &d.sourceEnv)
 
-	base.setString(internEnv(importMaskVariable), d.importMask.base)
+	base.setString(envImportMaskVariable, d.importMask.base)
 
 	expanded := expandConfigMacroBody(raw, base)
 

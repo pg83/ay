@@ -19,7 +19,7 @@ func styleSourcePath(module, file string) string {
 func (d *ModuleData) collectCustomStyle(module string, args []ANY, env Environment) {
 	noLint, _ := env.lookup("_NO_LINT_VALUE")
 
-	if noLint == "none" || noLint == "none_internal" || env.string(envTidy) == "yes" {
+	if noLint == "none" || noLint == "none_internal" || env.is(envTidy, strYes) {
 		return
 	}
 

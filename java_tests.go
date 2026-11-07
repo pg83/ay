@@ -10,7 +10,10 @@ import (
 	"strings"
 )
 
-var javaDetekt = &javaLinter{name: "detekt", wrapper: "tools/detekt_linter/wrapper.py", resourcePeer: "build/platform/java/detekt", resource: "DETEKT_RESOURCE_GLOBAL"}
+var (
+	javaDetekt             = &javaLinter{name: "detekt", wrapper: "tools/detekt_linter/wrapper.py", resourcePeer: "build/platform/java/detekt", resource: "DETEKT_RESOURCE_GLOBAL"}
+	srcJavaStyleMigrations = source(javaStyleMigrations)
+)
 
 var javaStyleConfigs = map[string]string{
 	"base":     "/yandex_checks.xml",
@@ -164,7 +167,7 @@ func (ctx *GenCtx) javaStyleSuite(jm *JavaModule) *TestSuite {
 	s.timeout = 240
 	s.requirements = map[string]string{"ram": "16"}
 	s.supportsTestParameters = true
-	s.relatedPaths = append([]ANY{source(javaStyleMigrations).any()}, sortedUniqueByText(testArgs(dirs))...)
+	s.relatedPaths = append([]ANY{srcJavaStyleMigrations.any()}, sortedUniqueByText(testArgs(dirs))...)
 	s.runInputs = append(s.runInputs, srclst)
 	s.deps = []NodeRef{ctx.javaProducer(jm, srclst)}
 	s.env = append(slices.Clone(d.testEnv), javaStyleServerEnv)
@@ -391,7 +394,7 @@ func (ctx *GenCtx) javaJunitSuite(jm *JavaModule) *TestSuite {
 	testDeps := make([]JavaClosureEntry, 0, ctx.javaManagedLen(jm))
 
 	for e := range closure {
-		if strings.HasSuffix(e.path.relString(), ".jar") {
+		if srcExtClassOf(e.path.any()) == srcExtJar {
 			classpath = append(classpath, e.path.rel().any())
 			testDeps = append(testDeps, e)
 		}
@@ -407,7 +410,7 @@ func (ctx *GenCtx) javaJunitSuite(jm *JavaModule) *TestSuite {
 			testDeps = append(testDeps, JavaClosureEntry{path: f, foreign: p.res})
 		}
 
-		if strings.HasSuffix(f.relString(), ".so") {
+		if srcExtClassOf(f.any()) == srcExtSo {
 			libpath = append(libpath, "$(B)/"+path.Dir(f.relString()))
 		}
 	}
@@ -419,7 +422,7 @@ func (ctx *GenCtx) javaJunitSuite(jm *JavaModule) *TestSuite {
 	s.projectBuildDeps = true
 	s.deps = deps.deps
 
-	py := internStr(testYMakePython3).any()
+	py := strTestYMakePython3.any()
 
 	s.prepare = [][]ANY{
 		{py, buildScriptsMkdirPy.any(), internStr(path.Dir(cpf.string())).any()},

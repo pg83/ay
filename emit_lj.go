@@ -2,7 +2,10 @@ package main
 
 import "strings"
 
-var ljKV = KV{P: pkLJ, PC: pcLightCyan}
+var (
+	ljKV              = KV{P: pkLJ, PC: pcLightCyan}
+	srcLuajit21CwdRel = source(luajit21CwdRel)
+)
 
 const luajit21CwdRel = "contrib/libs/luajit_21"
 
@@ -60,7 +63,7 @@ func (e *EmitContext) emitLJReserved(luaSrc, rawOut, compilerBin VFS, compilerLD
 func (e *EmitContext) emitLuaJit21() {
 	ctx, instance, d := e.ctx, e.instance, e.d
 	compilerLDRef, compilerBin := e.tool(argLuajit21Compiler)
-	cwd := source(luajit21CwdRel)
+	cwd := srcLuajit21CwdRel
 
 	for _, lua := range d.lj21.Luas {
 		luaSrc := resolveSourceVFS(ctx, instance, lua, d.srcDirs)

@@ -2082,7 +2082,7 @@ func loadConf(pm *IncludeParserManager, root *ConfFile, platformEnv Environment)
 	scratch := pm.cache.conf
 
 	commands := [...]ENV{
-		envComma, internEnv(importMaskVariable), envDefaultAllocator,
+		envComma, envImportMaskVariable, envDefaultAllocator,
 		envCAsCxxFlags, envYqlPythonDir, envPmScript,
 		envSetTsInputsBaseExcludes, envNotsTool, envPeerdirsRulesPath,
 	}
@@ -2571,7 +2571,7 @@ func (c *Conf) deepRead(plan *confModule, base *EnvStore) []bool {
 func (c *Conf) runInit(plan *confModule, env Environment, originals *SetVars, recording []ConfAssignment) {
 	for _, step := range plan.steps {
 		switch {
-		case step.fallback && env.string(step.variable) != "":
+		case step.fallback && !env.is(step.variable, strEmpty):
 			if recording != nil {
 				recordConfAssignment(recording, step.variable, env)
 			}

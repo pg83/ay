@@ -25,10 +25,10 @@ func (e *EmitContext) bpfCompileNode(stmt LlvmCompileStmt, out VFS) NodeSpec {
 	env := envVarsVCS
 	commands := na.cmdList(Cmd{CmdArgs: args, Env: env})
 	outputs := na.vfsList(out)
-	resources := []STR{strYMakePython3Name, internStr(resourcePatternClang18)}
+	resources := []STR{strYMakePython3Name, strResourcePatternClang18}
 
 	if p.UsesSDKRoot {
-		resources = append(resources, internStr(resourcePatternOSSDKRoot))
+		resources = append(resources, strResourcePatternOSSDKRoot)
 	}
 
 	if stmt.Kind == tokBpfStatic {

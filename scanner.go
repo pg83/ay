@@ -960,7 +960,7 @@ func (sc *ScanCtx) resolve(out []VFS, includerAbs, incDir VFS, d IncludeDirectiv
 	}
 
 	if d.kind == includeMacro {
-		aliases, _, claimed := s.sysincl.lookup(includerAbs.relString(), d.target.str())
+		aliases, _, claimed := s.sysincl.lookup(includerAbs, d.target.str())
 
 		aliases = append([]VFS(nil), aliases...)
 
@@ -984,18 +984,17 @@ func (sc *ScanCtx) resolve(out []VFS, includerAbs, incDir VFS, d IncludeDirectiv
 	out = sc.resolveSearchPath(out, includerAbs, incDir, d)
 
 	searchOut := out[mark:]
-	includerRel := includerAbs.relString()
 
 	var mappings []VFS
 	var hasMultiTarget bool
 	var sysinclClaimed bool
-	mappings, hasMultiTarget, sysinclClaimed = s.sysincl.lookup(includerRel, d.target.str())
+	mappings, hasMultiTarget, sysinclClaimed = s.sysincl.lookup(includerAbs, d.target.str())
 
 	if d.quotedLike() && len(searchOut) > 0 {
 		bypass := !hasMultiTarget
 
 		if !bypass && searchOut[0].isBuild() == includerAbs.isBuild() {
-			incDir := pathDir(includerRel)
+			incDir := pathDir(includerAbs.relString())
 			rel := searchOut[0].relString()
 			t := d.target.string()
 
@@ -1087,13 +1086,13 @@ func buildCfgResolveIndex(cfg *ScanConfig) *CfgResolveIndex {
 	idx := &CfgResolveIndex{}
 
 	for _, p := range cfg.ownAddIncl {
-		if p.isSource() && p.relString() == "" {
+		if p.isSource() && p.rel().isEmpty() {
 			return idx
 		}
 	}
 
 	for _, p := range cfg.peerAddInclSet {
-		if p.isSource() && p.relString() == "" {
+		if p.isSource() && p.rel().isEmpty() {
 			return idx
 		}
 	}

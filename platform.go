@@ -68,6 +68,7 @@ type Platform struct {
 	LinkPreludeExtra      []ANY
 	ClangVer              string
 	ClangVerSTR           STR
+	ClangToolRes          STR
 	BuildTypeUpperSTR     STR
 	WrapccHead            []ANY
 	WrapUnshare           bool
@@ -178,6 +179,7 @@ func newPlatform(os OS, isa ISA, buildType string, tc *Toolchain, flags map[stri
 		LinkPreludeExtra:      internAnys(linkPreludeExtra),
 		ClangVer:              clangVer,
 		ClangVerSTR:           internStr(clangVer),
+		ClangToolRes:          internStr(resourcePatternClangTool + clangVer),
 		CompressDebugSections: slices.Contains(splitShellWords(flags["_LD_FLAGS"]), argWlCompressDebugSectionsZstd.string()),
 		BuildInfoKV: KV{
 			P:            pkBI,
@@ -211,7 +213,7 @@ func newPlatform(os OS, isa ISA, buildType string, tc *Toolchain, flags map[stri
 	p.CompilerPlatform = strings.Fields(flags["COMPILER_PLATFORM"])
 
 	if p.UsesSDKRoot {
-		osSDKRoot := internStr(resourcePatternOSSDKRoot)
+		osSDKRoot := strResourcePatternOSSDKRoot
 
 		p.CCUsesResources = append(p.CCUsesResources, osSDKRoot)
 		p.UsesClangOnly = append(p.UsesClangOnly, osSDKRoot)
@@ -263,8 +265,8 @@ func newPlatform(os OS, isa ISA, buildType string, tc *Toolchain, flags map[stri
 		p.ForceCppFlags = msvcConfWords(p.ifEnv, "$_FORCE_CPP_FLAGS")
 	}
 
-	p.UseObjcopy = p.ifEnv.string(envYmakeUseObjcopy) == "yes"
-	p.YasmDebugInfo = p.ifEnv.string(envYasmDebugInfo) != "" || p.ifEnv.string(envYasmDebugInfoDisableCacheNoUid) != ""
+	p.UseObjcopy = p.ifEnv.is(envYmakeUseObjcopy, strYes)
+	p.YasmDebugInfo = !p.ifEnv.is(envYasmDebugInfo, strEmpty) || !p.ifEnv.is(envYasmDebugInfoDisableCacheNoUid, strEmpty)
 
 	bundle := compileFlagBundleFor(p)
 
@@ -343,7 +345,7 @@ func buildPlatformIfEnv(p *Platform) Environment {
 		env.setBool(envCGO_ENABLED, false)
 	}
 
-	if env.bool(envOPENSOURCE) || env.string(envOPENSOURCE_PROJECT) == "ymake" || env.string(envOPENSOURCE_PROJECT) == "ya" {
+	if env.bool(envOPENSOURCE) || env.is(envOPENSOURCE_PROJECT, strYmake) || env.is(envOPENSOURCE_PROJECT, strYa) {
 		env.setBool(envYA_OPENSOURCE, true)
 	}
 
@@ -356,8 +358,8 @@ func buildPlatformIfEnv(p *Platform) Environment {
 		env.setString(env_USE_IDN, "dynamic")
 	}
 
-	if env.string(envHAVE_MKL) == "" {
-		env.setBool(envHAVE_MKL, env.bool(envOS_LINUX) && env.bool(envARCH_X86_64) && env.string(envSANITIZER_TYPE) == "")
+	if env.is(envHAVE_MKL, strEmpty) {
+		env.setBool(envHAVE_MKL, env.bool(envOS_LINUX) && env.bool(envARCH_X86_64) && env.is(envSANITIZER_TYPE, strEmpty))
 	}
 
 	if env.bool(envOPENSOURCE) {
@@ -393,12 +395,12 @@ func buildPlatformIfEnv(p *Platform) Environment {
 		env.setStringID(envAMX_CFLAGS, strAMXCFlags)
 	}
 
-	if (!env.bool(envARCH_X86_64) && !env.bool(envARCH_I386)) || env.string(envDISABLE_INSTRUCTION_SETS) == "yes" {
+	if (!env.bool(envARCH_X86_64) && !env.bool(envARCH_I386)) || env.is(envDISABLE_INSTRUCTION_SETS, strYes) {
 		env.setStringID(envUSE_SSE4, strNo)
 		env.setStringID(envCpuCheck, strNo)
 	}
 
-	if env.bool(envARCH_I386) && env.bool(envOS_ANDROID) || env.string(envNosse) == "yes" {
+	if env.bool(envARCH_I386) && env.bool(envOS_ANDROID) || env.is(envNosse, strYes) {
 		env.setStringID(envUSE_SSE4, strNo)
 	}
 
@@ -407,9 +409,9 @@ func buildPlatformIfEnv(p *Platform) Environment {
 
 func debugInfoFlags(env Environment, flags map[string]string) []ANY {
 	switch {
-	case env.string(envNO_DEBUGINFO) == "yes":
+	case env.is(envNO_DEBUGINFO, strYes):
 		return nil
-	case env.bool(envCLANG) && env.string(envDEBUGINFO_LINES_ONLY) == "yes":
+	case env.bool(envCLANG) && env.is(envDEBUGINFO_LINES_ONLY, strYes):
 		return []ANY{argGlineTablesOnly.any()}
 	}
 

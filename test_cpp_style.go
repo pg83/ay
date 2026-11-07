@@ -45,7 +45,7 @@ func cppStyleCheck(stmt UnknownStmt, env Environment) StyleCheck {
 	}
 
 	for i := 0; i < len(stmt.Args); i++ {
-		if stmt.Args[i].string() == "CONFIG_TYPE" && i+1 < len(stmt.Args) {
+		if stmt.Args[i] == kwCONFIG_TYPE.any() && i+1 < len(stmt.Args) {
 			i++
 			check.ConfigType = stmt.Args[i].string()
 			check.ConfigDir, _ = env.lookup("MODULE_COMMON_CONFIGS_DIR")

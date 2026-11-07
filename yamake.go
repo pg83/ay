@@ -11,23 +11,24 @@ import (
 )
 
 var (
-	parseBufPool = sync.Pool{New: func() any { return new([]byte) }}
-	parserPool   = sync.Pool{New: func() any { return &Parser{lex: &Lexer{}} }}
-	astArgs      = newBumpAllocator[ANY]()
-	astStmts     = newBumpAllocator[Stmt]()
-	astFiles     = newBumpAllocator[MakeFile]()
-	astUnknowns  = newBumpAllocator[UnknownStmt]()
-	astModules   = newBumpAllocator[ModuleStmt]()
-	astSrcs      = newBumpAllocator[SrcsStmt]()
-	astPeerdirs  = newBumpAllocator[PeerdirStmt]()
-	astIfs       = newBumpAllocator[IfStmt]()
-	astSets      = newBumpAllocator[SetStmt]()
-	astCFlags    = newBumpAllocator[CFlagsStmt]()
-	astCXXFlags  = newBumpAllocator[CXXFlagsStmt]()
-	astEnumSers  = newBumpAllocator[GenerateEnumSerializationStmt]()
-	astConds     = newBumpAllocator[CondNode]()
-	astEnds      = newBumpAllocator[EndStmt]()
-	condFalse    = []CondNode{{Kind: ckString, Name: "no"}}
+	parseBufPool         = sync.Pool{New: func() any { return new([]byte) }}
+	parserPool           = sync.Pool{New: func() any { return &Parser{lex: &Lexer{}} }}
+	astArgs              = newBumpAllocator[ANY]()
+	astStmts             = newBumpAllocator[Stmt]()
+	astFiles             = newBumpAllocator[MakeFile]()
+	astUnknowns          = newBumpAllocator[UnknownStmt]()
+	astModules           = newBumpAllocator[ModuleStmt]()
+	astSrcs              = newBumpAllocator[SrcsStmt]()
+	astPeerdirs          = newBumpAllocator[PeerdirStmt]()
+	astIfs               = newBumpAllocator[IfStmt]()
+	astSets              = newBumpAllocator[SetStmt]()
+	astCFlags            = newBumpAllocator[CFlagsStmt]()
+	astCXXFlags          = newBumpAllocator[CXXFlagsStmt]()
+	astEnumSers          = newBumpAllocator[GenerateEnumSerializationStmt]()
+	astConds             = newBumpAllocator[CondNode]()
+	astEnds              = newBumpAllocator[EndStmt]()
+	condFalse            = []CondNode{{Kind: ckString, Name: "no"}}
+	strStructCodegenTool = internStr(structCodegenTool)
 )
 
 var runAntlrKeywords = strKeySet(
@@ -1217,7 +1218,7 @@ func capturesLexicalArgs(nameID STR) bool {
 func appendMacroCallStmts(out []Stmt, nameID STR, args, lexical []ANY, line int, fail func(format string, a ...any)) []Stmt {
 	if nameID == tokCppEnumsSerialization.str() {
 		for i := 0; i < len(args); i++ {
-			if args[i].string() == "NAMESPACE" {
+			if args[i] == kwNAMESPACE.any() {
 				i++
 
 				continue
@@ -1250,7 +1251,7 @@ func (p *Parser) applyIncludeOnce(nameTok Token) {
 		p.lex.throwParse(nameTok.line, nameTok.col, "INCLUDE_ONCE expects 0 or 1 arguments, got %d", len(args))
 	}
 
-	if len(args) == 1 && args[0].string() == "no" {
+	if len(args) == 1 && args[0] == strNo.any() {
 		enabled = false
 	}
 
@@ -1653,24 +1654,24 @@ func parseFromSandbox(args []ANY, line int) *FromSandboxStmt {
 	section := ""
 
 	for i := 0; i < len(args); i++ {
-		switch args[i].string() {
-		case "FILE":
+		switch args[i] {
+		case kwFILE.any():
 			stmt.File = true
 			section = ""
-		case "EXECUTABLE":
+		case kwEXECUTABLE.any():
 			stmt.Executable = true
 			section = ""
-		case "AUTOUPDATED", "PREFIX", "SBR":
+		case kwAUTOUPDATED.any(), kwPREFIX.any(), kwSBR.any():
 			section = args[i].string()
-		case "OUT":
+		case kwOUT.any():
 			section = "OUT"
-		case "OUT_NOAUTO":
+		case kwOUT_NOAUTO.any():
 			section = "OUT_NOAUTO"
-		case "OUTPUT_INCLUDES":
+		case kwOUTPUT_INCLUDES.any():
 			section = "OUTPUT_INCLUDES"
-		case "RENAME":
+		case kwRENAME.any():
 			section = "RENAME"
-		case "INDUCED_DEPS":
+		case kwINDUCED_DEPS.any():
 			section = "INDUCED_DEPS"
 		default:
 			switch section {
@@ -1939,7 +1940,7 @@ func parseBaseCodegen(args []ANY, line int) *BaseCodegenStmt {
 
 func parseStructCodegen(prefix ANY, line int) *BaseCodegenStmt {
 	return &BaseCodegenStmt{
-		ToolPath:       internStr(structCodegenTool).any(),
+		ToolPath:       strStructCodegenTool.any(),
 		Prefix:         prefix,
 		OutputIncludes: structCodegenOutputIncludes,
 		Macro:          tokStructCodegen.str(),
@@ -1951,12 +1952,12 @@ func scAddInclArgument(args []ANY, start int) (path, scope ANY, end int, ok bool
 	sc := false
 
 	for i := start; i < len(args); i++ {
-		switch args[i].string() {
-		case "GLOBAL", "ONE_LEVEL":
+		switch args[i] {
+		case kwGLOBAL.any(), kwONE_LEVEL.any():
 			scope = args[i]
-		case "LOCAL":
-		case "FOR":
-			if i+1 >= len(args) || args[i+1].string() != "sc" {
+		case kwLOCAL.any():
+		case kwFOR.any():
+			if i+1 >= len(args) || args[i+1] != strSc.any() {
 				return 0, 0, start, false
 			}
 
@@ -2008,7 +2009,7 @@ func splitAddInclPaths(args []ANY) *AddInclStmt {
 		}
 
 		if args[i] == kwFOR.any() {
-			if i+2 < len(args) && args[i+1].string() == "proto" {
+			if i+2 < len(args) && args[i+1] == strProto2.any() {
 				protoPaths = append(protoPaths, args[i+2])
 				protoAllPaths = append(protoAllPaths, args[i+2])
 				i += 2
@@ -2016,35 +2017,35 @@ func splitAddInclPaths(args []ANY) *AddInclStmt {
 				continue
 			}
 
-			if i+2 < len(args) && args[i+1].string() == "flatc" {
+			if i+2 < len(args) && args[i+1] == strFlatc.any() {
 				flatcPaths = append(flatcPaths, args[i+2])
 				i += 2
 
 				continue
 			}
 
-			if i+2 < len(args) && args[i+1].string() == "cython" {
+			if i+2 < len(args) && args[i+1] == strCython.any() {
 				cythonPaths = append(cythonPaths, args[i+2])
 				i += 2
 
 				continue
 			}
 
-			if i+2 < len(args) && args[i+1].string() == "asm" {
+			if i+2 < len(args) && args[i+1] == strAsm.any() {
 				asmPaths = append(asmPaths, args[i+2])
 				i += 2
 
 				continue
 			}
 
-			if i+2 < len(args) && args[i+1].string() == "swig" {
+			if i+2 < len(args) && args[i+1] == strSwig.any() {
 				swigPaths = append(swigPaths, args[i+2])
 				i += 2
 
 				continue
 			}
 
-			if i+1 < len(args) && args[i+1].string() == "c" {
+			if i+1 < len(args) && args[i+1] == strC6.any() {
 				i++
 
 				continue
@@ -2059,7 +2060,7 @@ func splitAddInclPaths(args []ANY) *AddInclStmt {
 			i++
 
 			if i < len(args) && args[i] == kwFOR.any() {
-				if i+2 < len(args) && args[i+1].string() == "flatc" {
+				if i+2 < len(args) && args[i+1] == strFlatc.any() {
 					flatcPaths = append(flatcPaths, args[i+2])
 					flatcGlobalPaths = append(flatcGlobalPaths, args[i+2])
 					i += 2
@@ -2067,7 +2068,7 @@ func splitAddInclPaths(args []ANY) *AddInclStmt {
 					continue
 				}
 
-				if i+2 < len(args) && args[i+1].string() == "cython" {
+				if i+2 < len(args) && args[i+1] == strCython.any() {
 					cythonPaths = append(cythonPaths, args[i+2])
 					cythonGlobalPaths = append(cythonGlobalPaths, args[i+2])
 					i += 2
@@ -2075,14 +2076,14 @@ func splitAddInclPaths(args []ANY) *AddInclStmt {
 					continue
 				}
 
-				if i+2 < len(args) && args[i+1].string() == "asm" {
+				if i+2 < len(args) && args[i+1] == strAsm.any() {
 					asmPaths = append(asmPaths, args[i+2])
 					i += 2
 
 					continue
 				}
 
-				if i+2 < len(args) && args[i+1].string() == "proto" {
+				if i+2 < len(args) && args[i+1] == strProto2.any() {
 					protoGlobalPaths = append(protoGlobalPaths, args[i+2])
 					protoAllPaths = append(protoAllPaths, args[i+2])
 					i += 2
@@ -2090,7 +2091,7 @@ func splitAddInclPaths(args []ANY) *AddInclStmt {
 					continue
 				}
 
-				if i+2 < len(args) && args[i+1].string() == "swig" {
+				if i+2 < len(args) && args[i+1] == strSwig.any() {
 					swigPaths = append(swigPaths, args[i+2])
 					swigGlobalPaths = append(swigGlobalPaths, args[i+2])
 					i += 2
@@ -2098,7 +2099,7 @@ func splitAddInclPaths(args []ANY) *AddInclStmt {
 					continue
 				}
 
-				if i+1 < len(args) && args[i+1].string() != "c" {
+				if i+1 < len(args) && args[i+1] != strC6.any() {
 					i += 2
 
 					continue

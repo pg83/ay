@@ -173,7 +173,7 @@ func (d *ModuleData) collectExplicitPythonStyle(stmt UnknownStmt, env Environmen
 func styleChecksDisabled(env Environment) bool {
 	value := env.string(envNoLintValue)
 
-	return value == "none" || value == "none_internal" || env.string(envTidy) == "yes"
+	return value == "none" || value == "none_internal" || env.is(envTidy, strYes)
 }
 
 func yamlStyleCheck(env Environment) StyleCheck {
@@ -200,7 +200,7 @@ func (d *ModuleData) collectYAMLStyleWithConfig(module string, stmt UnknownStmt,
 
 	args := stmt.Args
 
-	if len(args) > 0 && args[0].string() == "CONFIG_TYPE" {
+	if len(args) > 0 && args[0] == kwCONFIG_TYPE.any() {
 		check.ConfigType = strings.Join(anyStrs(args[1:]), " ")
 		check.ConfigDir, _ = env.lookup("MODULE_COMMON_CONFIGS_DIR")
 	}
@@ -250,12 +250,12 @@ func collectStyleFiles(fs FS, module string, stmt UnknownStmt) []string {
 	dst := &dirs
 
 	for _, arg := range stmt.Args {
-		switch arg.string() {
-		case "DIRS":
+		switch arg {
+		case kwDIRS.any():
 			dst = &dirs
-		case "DIRS_RECURSE":
+		case kwDIRS_RECURSE.any():
 			dst = &recursive
-		case "EXCLUDE":
+		case kwEXCLUDE.any():
 			dst = nil
 		default:
 			if dst == nil {

@@ -253,7 +253,7 @@ func (ctx *GenCtx) javaEmitJar(jm *JavaModule) {
 		w = append(w, strFile.any(), ktBfg.any(), strM.any(), strYaStartCommandFile.any())
 
 		for e := range closure {
-			if strings.HasSuffix(e.path.relString(), ".jar") {
+			if srcExtClassOf(e.path.any()) == srcExtJar {
 				w = append(w, e.path.any())
 			}
 		}
@@ -375,7 +375,7 @@ func (ctx *GenCtx) javaEmitJar(jm *JavaModule) {
 	if d.addDLLs {
 		jni := b.fsTools(strLinkOrCopyToDir.any(), strYaStartCommandFile.any())
 
-		for _, ext := range []string{".so", ".dll", ".dylib"} {
+		for _, ext := range []SrcExtClass{srcExtSo, srcExtDll, srcExtDylib} {
 			for _, p := range javaClosureJars(closure, ext) {
 				jni = append(jni, p.any())
 			}
@@ -402,7 +402,7 @@ func (ctx *GenCtx) javaEmitJar(jm *JavaModule) {
 
 		for _, g := range globs {
 			for _, f := range g.files {
-				if strings.HasSuffix(f.relString(), ".java") {
+				if srcExtClassOf(f.any()) == srcExtJava {
 					w = append(w, f.rel().any())
 				}
 			}
@@ -572,7 +572,7 @@ func (ctx *GenCtx) javaLinkUberjar(jm *JavaModule, b *javaNodeBuilder, globals m
 		args = append(args, strJar2.any(), libJar.any())
 	}
 
-	for _, p := range javaClosureJars(closure, ".jar") {
+	for _, p := range javaClosureJars(closure, srcExtJar) {
 		args = append(args, strJar2.any(), p.any())
 	}
 

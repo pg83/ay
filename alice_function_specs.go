@@ -28,7 +28,7 @@ func aliceFunctionSpecStmts(args []ANY, line int) []Stmt {
 
 	stmts = append(stmts, parseRunProgram(internAnys(runArgs), line))
 
-	if len(args) != 0 && args[0].string() == "DONT_ADD_TO_RESOURCE" {
+	if len(args) != 0 && args[0] == kwDONT_ADD_TO_RESOURCE.any() {
 		return stmts
 	}
 

@@ -56,8 +56,8 @@ func (e *EmitContext) cudaSettings() *CudaSettings {
 		RootResources: rootUses, TargetResources: targetUses,
 		Version: env.string(envCUDA_VERSION), Std: env.string(envNvccStdVer),
 		ObjectSuffix:        env.string(envNvccObjExt),
-		SkipCompressedDebug: env.string(envCUDA_HOST_COMPILER_VERSION) == "14",
-		Sanitize:            env.bool(envCUDA_SANITIZE), SplitSanitize: env.string(envCUDA_SANITIZE) != "",
+		SkipCompressedDebug: env.is(envCUDA_HOST_COMPILER_VERSION, str14),
+		Sanitize:            env.bool(envCUDA_SANITIZE), SplitSanitize: !env.is(envCUDA_SANITIZE, strEmpty),
 	}
 
 	return c

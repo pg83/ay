@@ -2,7 +2,12 @@ package main
 
 import "strings"
 
-var sbomKV = KV{P: pkDX, PC: pcYellow}
+var (
+	sbomKV                    = KV{P: pkDX, PC: pcYellow}
+	srcClangToolchainInfoRel  = source(clangToolchainInfoRel)
+	srcPythonToolchainInfoRel = source(pythonToolchainInfoRel)
+	srcSbomGenScriptRel       = source(sbomGenScriptRel)
+)
 
 const (
 	sbomGenScriptRel        = "build/internal/scripts/gen_sbom.py"
@@ -17,7 +22,7 @@ const (
 
 func clangToolchainSbomComponent(ctx *GenCtx, platform *Platform) (*NodeRef, *VFS) {
 	res := genModule(ctx, ModuleInstance{
-		Path:     source(clangToolchainInfoRel),
+		Path:     srcClangToolchainInfoRel,
 		Kind:     KindLib,
 		Language: LangCPP,
 		Platform: platform,
@@ -28,7 +33,7 @@ func clangToolchainSbomComponent(ctx *GenCtx, platform *Platform) (*NodeRef, *VF
 
 func pythonToolchainSbomComponent(ctx *GenCtx, platform *Platform) (*NodeRef, *VFS) {
 	res := genModule(ctx, ModuleInstance{
-		Path:     source(pythonToolchainInfoRel),
+		Path:     srcPythonToolchainInfoRel,
 		Kind:     KindLib,
 		Language: LangCPP,
 		Platform: platform,
@@ -39,7 +44,7 @@ func pythonToolchainSbomComponent(ctx *GenCtx, platform *Platform) (*NodeRef, *V
 
 func sbomActive(ctx *GenCtx, instance ModuleInstance) bool {
 	return ctx.sbomEnabled && instance.Platform.OS == OSLinux && instance.Platform.ISA == ISAX8664 &&
-		!instance.Platform.ifEnv.bool(envAutocheck) && instance.Platform.ifEnv.string(envSbomGenerationAllowed) != "no"
+		!instance.Platform.ifEnv.bool(envAutocheck) && !instance.Platform.ifEnv.is(envSbomGenerationAllowed, strNo)
 }
 
 func sbomQualifies(d *ModuleData) bool {
@@ -119,7 +124,7 @@ func (e *EmitContext) emitSbomComponent(realPrjName string) (*NodeRef, *VFS) {
 		return &info.ProducerRef, &info.OutputPath
 	}
 
-	scriptVFS := source(sbomGenScriptRel)
+	scriptVFS := srcSbomGenScriptRel
 	env := envVarsVCS
 
 	node := NodeSpec{Node: Node{Platform: instance.Platform,
@@ -158,7 +163,7 @@ func (e *EmitContext) emitSbomToolchainComponent(toolchainName, ver string) (*No
 		return &info.ProducerRef, &info.OutputPath
 	}
 
-	scriptVFS := source(sbomGenScriptRel)
+	scriptVFS := srcSbomGenScriptRel
 	env := envVarsVCS
 
 	node := NodeSpec{Node: Node{Platform: instance.Platform,

@@ -999,8 +999,14 @@ func (e *EmitContext) emitDeclaredProducers(cythonPlans []CythonStmtPlan) {
 		e.producerOutputs = make(map[VFS]int, len(positions))
 	}
 
+	e.pendingProducers = 0
+
 	for _, i := range e.prodOrder {
 		pos := &positions[i]
+
+		if len(pos.outs) > 0 {
+			e.pendingProducers++
+		}
 
 		for _, output := range pos.outs {
 			e.producerOutputs[output] = i
@@ -1023,6 +1029,10 @@ func (e *EmitContext) queueSource(index int) {
 	meta := e.srcs[index]
 	outs, ins := e.srcPosition(meta)
 	pos := ProducerPos{kind: prodQueuedSrc, index: index, outs: outs, ins: ins}
+
+	if len(outs) > 0 {
+		e.pendingProducers++
+	}
 
 	for _, output := range outs {
 		e.producerOutputs[output] = len(e.prodPos)
@@ -1055,6 +1065,16 @@ func (e *EmitContext) bindDeclaredProgramInputs(inputs []VFS, tokens []ANY) {
 }
 
 func (e *EmitContext) includesPendingOutput(info *GeneratedFileInfo, pi int) bool {
+	others := e.pendingProducers
+
+	if len(e.prodPos[pi].outs) > 0 {
+		others--
+	}
+
+	if others <= 0 {
+		return false
+	}
+
 	local := info.parsedIncludes().bucket(parsedIncludesLocal)
 
 	if len(local) == 0 {
@@ -1134,6 +1154,10 @@ func (e *EmitContext) drainCommands(cythonPlans []CythonStmtPlan, srcs []SrcMeta
 
 		blocked = 0
 		e.prodPos[pi].done = true
+
+		if len(pos.outs) > 0 {
+			e.pendingProducers--
+		}
 
 		switch pos.kind {
 		case prodUsrvFile:

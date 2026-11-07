@@ -2,6 +2,8 @@ package main
 
 import "strings"
 
+var argYtProtoYsonTool = internArg(ytProtoYsonTool)
+
 const ytProtoYsonTool = "yt/yt/orm/go/codegen/yson/internal/proto-yson-gen/cmd/proto-yson-gen"
 
 func applyYtOrmProtoYson(modulePath string, args []ANY, d *ModuleData, env Environment) {
@@ -35,7 +37,7 @@ func (e *EmitContext) emitYtOrmProtoYson(st GoCodegenStmt) {
 	ctx, d := e.ctx, e.d
 	na := ctx.na
 	protocRef, protoc := e.tool(argContribToolsProtoc)
-	pluginRef, plugin := e.tool(internArg(ytProtoYsonTool))
+	pluginRef, plugin := e.tool(argYtProtoYsonTool)
 
 	args := []ANY{
 		protoc.any(), internV("--plugin=protoc-gen-custom=", plugin.string()).any(),

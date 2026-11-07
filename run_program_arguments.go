@@ -147,41 +147,40 @@ func bindRunProgramCalls(programs []*RunProgramStmt, env Environment, scratch *E
 }
 
 func prepareRunProgramArguments(args []ANY, env Environment) []ANY {
-	if !slices.ContainsFunc(args, runProgramArgumentExpands) {
+	first := slices.IndexFunc(args, runProgramArgumentExpands)
+
+	if first < 0 {
 		return args
 	}
 
+	out := append(make([]ANY, 0, len(args)), args[:first]...)
+
 	var buf [512]byte
 
-	joined := buf[:0]
+	for _, a := range args[first:] {
+		if !runProgramArgumentExpands(a) {
+			out = append(out, a)
 
-	for i, a := range args {
-		if i > 0 {
-			joined = append(joined, ' ')
+			continue
 		}
 
-		joined = appendANYText(joined, a)
+		text := expandConfigMacroBody(bytesString(appendANYText(buf[:0], a)), env)
+		start := -1
+
+		for i := 0; i <= len(text); i++ {
+			if i == len(text) || text[i] == ' ' || text[i] == ',' {
+				if start >= 0 {
+					out = append(out, internAny(text[start:i]))
+					start = -1
+				}
+			} else if start < 0 {
+				start = i
+			}
+		}
 	}
 
-	text := expandConfigMacroBody(bytesString(joined), env)
-
-	var out []ANY
-
-	start := -1
-
-	for i := 0; i <= len(text); i++ {
-		if i == len(text) || text[i] == ' ' || text[i] == ',' {
-			if start >= 0 {
-				if out == nil {
-					out = make([]ANY, 0, len(args))
-				}
-
-				out = append(out, internAny(text[start:i]))
-				start = -1
-			}
-		} else if start < 0 {
-			start = i
-		}
+	if len(out) == 0 {
+		return nil
 	}
 
 	return out

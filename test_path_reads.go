@@ -51,7 +51,7 @@ func (fs *OsFS) testPathReadError(rel string) error {
 
 				if !cached {
 					readErr = fs.readTestPathFile(file)
-					fs.testReadErrors[name] = readErr
+					fs.testReadErrors[strings.Clone(name)] = readErr
 				}
 			}
 

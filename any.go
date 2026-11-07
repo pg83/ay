@@ -35,6 +35,10 @@ func (a ANY) relOrSelf() STR {
 }
 
 func pathAny(s STR) ANY {
+	if !strHasDollar(s.any()) {
+		return s.any()
+	}
+
 	if v := s.vfs(); v != 0 {
 		return v.any()
 	}

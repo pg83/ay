@@ -45,7 +45,7 @@ func (e *EmitContext) prepareFortran() {
 	var name STR
 
 	for _, resource := range e.peers.ResourceGlobals {
-		if resource.GlobalVar.string() == "FLANG_RESOURCE_GLOBAL" {
+		if resource.GlobalVar == kwFLANG_RESOURCE_GLOBAL {
 			root, name = resource.Value.string(), resource.Name
 
 			break
@@ -72,7 +72,7 @@ func (e *EmitContext) prepareFortran() {
 	cc.FortranResourceUses = value.Resources
 
 	if e.instance.Platform.UsesSDKRoot {
-		cc.FortranResources = append(cc.FortranResources, internStr(resourcePatternOSSDKRoot))
+		cc.FortranResources = append(cc.FortranResources, strResourcePatternOSSDKRoot)
 	}
 
 	e.ctx.na.strs.commit(len(cc.FortranResources))

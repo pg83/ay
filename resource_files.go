@@ -306,7 +306,7 @@ func globVisit(fs FS, pattern string, visit func(file string, view bool)) {
 
 				fs.walk(d, func(rel string, isDir bool) bool {
 					if !isDir {
-						visit(rel, false)
+						visit(rel, true)
 					}
 
 					return true

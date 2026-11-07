@@ -118,12 +118,12 @@ func appendLinkerGlobals(args []ANY, flags LinkerFlags, archives, objects []VFS)
 	for _, arg := range flags.Globals {
 		var paths []VFS
 
-		switch arg.string() {
-		case "${rootrel;ext=.a:SRCS_GLOBAL}":
+		switch arg {
+		case strRootrelExtASRCSGLOBAL.any():
 			paths = archives
-		case "${rootrel;ext=.o:SRCS_GLOBAL}":
+		case strRootrelExtOSRCSGLOBAL.any():
 			paths = objects
-		case "${rootrel;ext=.supp:SRCS_GLOBAL}":
+		case strRootrelExtSuppSRCSGLOBAL.any():
 		default:
 			args = append(args, arg)
 		}
@@ -138,7 +138,7 @@ func appendLinkerGlobals(args []ANY, flags LinkerFlags, archives, objects []VFS)
 
 func appendLinkerScripts(args, template []ANY, scripts []VFS) []ANY {
 	for _, arg := range template {
-		if arg.string() != "${ext=.ld;pre=-T:SRCS_GLOBAL}" {
+		if arg != strExtLdPreTSRCSGLOBAL.any() {
 			args = append(args, arg)
 
 			continue

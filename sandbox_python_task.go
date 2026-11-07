@@ -127,7 +127,7 @@ func setupSandboxPythonTask(name TOK, modulePath string, kind ModuleKind, langua
 	if name == tokSandboxPy233Task && kind == KindLib && language != LangPy2 {
 		prefix := "libpy3"
 
-		if env.string(envMsvc) == "yes" || env.string(envCygwin) == "yes" {
+		if env.is(envMsvc, strYes) || env.is(envCygwin, strYes) {
 			prefix = "py3"
 		}
 
@@ -156,7 +156,7 @@ func setupSandboxPythonTask(name TOK, modulePath string, kind ModuleKind, langua
 		for _, mask := range []string{"api.*", "kernel.*", "library.*", "sky*"} {
 			value := appendPythonImportMask(mask, env, d)
 
-			env.setString(internEnv(importMaskVariable), value)
+			env.setString(envImportMaskVariable, value)
 		}
 	}
 

@@ -31,6 +31,7 @@ var (
 	goToolCmdVetRelative  = goToolCmdVetChunk("source=;build=;tools=")
 	goSymabisHead         = goSymabisHeadChunk("$(S)=>/-S;$(B)=>/-B;$(TOOL_ROOT)=>/-T")
 	goSymabisHeadRelative = goSymabisHeadChunk("$(S)=>;$(B)=>;$(TOOL_ROOT)=>")
+	strGoArcPrefix        = internStr(goArcPrefix)
 )
 
 var goToolScriptInputsChunk = []VFS{
@@ -193,7 +194,7 @@ func (g *GoStd) toolCmdHead(mode string) []ANY {
 		strYaStartCommandFile.any(),
 		strMode.any(), internStr(mode).any(),
 		strStdLibPrefix.any(), internStr(g.Prefix + "/").any(),
-		strArcProjectPrefix.any(), internStr(goArcPrefix).any(),
+		strArcProjectPrefix.any(), strGoArcPrefix.any(),
 		strGoversion.any(), internStr(g.Version).any(),
 		strLang2.any(),
 		strSourceRoot.any(), strS.any(),
@@ -366,7 +367,7 @@ func applyGoImplicitPeerdirs(ctx *GenCtx, instance ModuleInstance, d *ModuleData
 
 	for _, program := range d.runPrograms {
 		for _, input := range program.INFiles[:len(program.INFiles)-program.INNoParse] {
-			if strings.HasSuffix(input.relOrSelf().string(), ".go") {
+			if srcExtClassOf(input) == srcExtGo {
 				addImports(input)
 			}
 		}
@@ -374,7 +375,7 @@ func applyGoImplicitPeerdirs(ctx *GenCtx, instance ModuleInstance, d *ModuleData
 
 	for _, statement := range d.goCodegens {
 		for _, input := range statement.files {
-			if strings.HasSuffix(input.relOrSelf().string(), ".go") {
+			if srcExtClassOf(input) == srcExtGo {
 				addImports(input)
 			}
 		}
@@ -389,7 +390,7 @@ func applyGoImplicitPeerdirs(ctx *GenCtx, instance ModuleInstance, d *ModuleData
 			continue
 		}
 
-		if strings.HasSuffix(meta.Source.relOrSelf().string(), ".go") {
+		if srcExtClassOf(meta.Source) == srcExtGo {
 			addImports(meta.Source)
 		}
 	}
@@ -1172,7 +1173,7 @@ func (e *EmitContext) emitGoExe(resolved []ResolvedPeer, objRefs []NodeRef, objO
 		strOutputGo.any(),
 		strGoVcsJson,
 		vcsGoPath.any(),
-		internStr(goArcPrefix).any(),
+		strGoArcPrefix.any(),
 	)), Env: goVcsEnv}
 
 	srcArgs, cgoSrcArgs, ownInputs, _, ownBuilds := e.goSrcList(goRes, objOuts)

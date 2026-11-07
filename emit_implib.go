@@ -20,10 +20,10 @@ func parseImplib(args []ANY) ImplibStmt {
 	s := ImplibStmt{Path: args[1].string(), Callback: "_"}
 
 	for i := 2; i < len(args); i++ {
-		switch args[i].string() {
-		case "FROM_BUNDLE":
+		switch args[i] {
+		case kwFROM_BUNDLE.any():
 			s.FromBundle = true
-		case "SONAME", "DLOPEN_CALLBACK":
+		case kwSONAME.any(), kwDLOPEN_CALLBACK.any():
 			key := args[i].string()
 
 			i++

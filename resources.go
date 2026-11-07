@@ -11,12 +11,14 @@ import (
 )
 
 var (
-	strLLDRootName      = internStr(resourcePatternLLDRoot)
-	strYMakePython3Name = internStr(resourcePatternYMakePython3)
-	usesPython3         = []STR{strYMakePython3Name}
-	usesPython3JDK17    = []STR{strYMakePython3Name, internStr(resourcePatternJDK17)}
-	usesPython3Clang16  = []STR{strYMakePython3Name, internStr(resourcePatternClang16)}
-	resourcesKV         = KV{P: pkld, PC: pcLightBlue, ShowOut: true}
+	strLLDRootName              = internStr(resourcePatternLLDRoot)
+	strYMakePython3Name         = internStr(resourcePatternYMakePython3)
+	usesPython3                 = []STR{strYMakePython3Name}
+	usesPython3JDK17            = []STR{strYMakePython3Name, internStr(resourcePatternJDK17)}
+	usesPython3Clang16          = []STR{strYMakePython3Name, internStr(resourcePatternClang16)}
+	resourcesKV                 = KV{P: pkld, PC: pcLightBlue, ShowOut: true}
+	bldResourcesLLDROOT         = build("resources/", resourcePatternLLDRoot)
+	bldResourcesLLDROOTBinLdLld = build("resources/", resourcePatternLLDRoot, "/bin/ld.lld")
 )
 
 const (
@@ -174,7 +176,7 @@ func resolveResourceDecls(fs FS, host *Platform, modulePath string, stmt *Declar
 
 			var stripPrefix uint64
 
-			if i+4 < len(stmt.Args) && stmt.Args[i+3].string() == "STRIP_PREFIX" {
+			if i+4 < len(stmt.Args) && stmt.Args[i+3] == kwSTRIP_PREFIX.any() {
 				var err error
 				stripPrefix, err = strconv.ParseUint(strings.TrimPrefix(stmt.Args[i+4].string(), "+"), 10, 32)
 
@@ -392,12 +394,6 @@ type ModuleToolchain struct {
 	Python3       ANY
 }
 
-func isClangToolResourceName(name, clangVer string) bool {
-	return len(name) == len(resourcePatternClangTool)+len(clangVer) &&
-		strings.HasPrefix(name, resourcePatternClangTool) &&
-		name[len(resourcePatternClangTool):] == clangVer
-}
-
 type ToolchainKey struct {
 	clangVer string
 	python3  STR
@@ -410,7 +406,7 @@ func resolveModuleToolchain(ctx *GenCtx, globals []ResourceDecl, p *Platform) Mo
 
 	for _, decl := range globals {
 		switch {
-		case isClangToolResourceName(decl.Name.string(), clangVer):
+		case decl.Name == p.ClangToolRes:
 			key.bits |= 1
 		case decl.Name == strLLDRootName:
 			key.bits |= 2
@@ -441,12 +437,10 @@ func resolveModuleToolchain(ctx *GenCtx, globals []ResourceDecl, p *Platform) Mo
 			tc.Objcopy = build(pfx, clangRes, "/bin/llvm-objcopy")
 			tc.Strip = build(pfx, clangRes, "/bin/llvm-strip")
 		case strLLDRootName:
-			const pfx = "resources/"
-
-			tc.LLDRoot = build(pfx, resourcePatternLLDRoot)
-			tc.LLD = build(pfx, resourcePatternLLDRoot, "/bin/ld.lld")
+			tc.LLDRoot = bldResourcesLLDROOT
+			tc.LLD = bldResourcesLLDROOTBinLdLld
 		case strYMakePython3Name:
-			tc.Python3 = build("resources/", resourcePatternYMakePython3, "/bin/python3").any()
+			tc.Python3 = bldResourcesYMAKEPYTHON3BinPython3.any()
 		}
 	}
 
@@ -458,8 +452,8 @@ func resolveModuleToolchain(ctx *GenCtx, globals []ResourceDecl, p *Platform) Mo
 		tc.Python3,
 		buildScriptsLinkLibPy.any(),
 		tc.AR.any(),
-		internStr(arTypeLLVM).any(),
-		internStr(arFormatGNU).any(),
+		strArTypeLLVM.any(),
+		strArFormatGNU.any(),
 		argB.any(),
 		argNone.any(),
 		arg2.any(),
@@ -530,7 +524,7 @@ func (e *EmitContext) genResourcesLibrary() *ModuleEmitResult {
 	var sbomPath *VFS
 
 	if sbomActive(ctx, instance) && d.toolchainName != "" {
-		if instance.Path.relString() != pythonToolchainInfoRel {
+		if instance.Path.rel() != strBuildPlatformPythonYmakePython3 {
 			pythonToolchainSbomComponent(ctx, instance.Platform)
 		}
 

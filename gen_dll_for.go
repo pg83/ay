@@ -40,7 +40,7 @@ func withDllForStmts(ctx *GenCtx, dir string, stmt *UnknownStmt, visit func([]St
 	var exports ANY
 
 	for i := 1; i < len(stmt.Args); i++ {
-		if stmt.Args[i].string() == "EXPORTS" {
+		if stmt.Args[i] == kwEXPORTS.any() {
 			if i+1 < len(stmt.Args) {
 				i++
 				exports = stmt.Args[i]

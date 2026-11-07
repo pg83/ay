@@ -29,7 +29,7 @@ func applyTaskletRegistration(stmt UnknownStmt, d *ModuleData, env Environment) 
 
 	d.peerdirs = append(d.peerdirs, taskletRegistrationPeers...)
 
-	if !extended && args[1].string() == "js" {
+	if !extended && args[1] == strJs.any() {
 		d.peerdirs = append(d.peerdirs, strTaskletV1RuntimeJs.any())
 	}
 

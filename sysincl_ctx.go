@@ -112,7 +112,7 @@ func (c *SysinclCtx) ciClaims(target STR) bool {
 	return true
 }
 
-func (c *SysinclCtx) lookup(path string, target STR) ([]VFS, bool, bool) {
+func (c *SysinclCtx) lookup(path VFS, target STR) ([]VFS, bool, bool) {
 	if !c.mightClaim(target) {
 		return nil, false, false
 	}
@@ -259,7 +259,7 @@ func buildSysinclIndex(set SysInclSet) *SysinclIndex {
 	return m
 }
 
-func (m *SysinclIndex) lookup(path string, target STR) ([]VFS, bool, bool) {
+func (m *SysinclIndex) lookup(path VFS, target STR) ([]VFS, bool, bool) {
 	bi := m.byID.get(uint64(target))
 	bucket := m.buckets[*bi]
 
@@ -269,6 +269,7 @@ func (m *SysinclIndex) lookup(path string, target STR) ([]VFS, bool, bool) {
 		hasMultiTarget bool
 		single         []VFS
 		singleMulti    bool
+		pathRel        string
 	)
 
 	for i := range bucket {
@@ -278,8 +279,14 @@ func (m *SysinclIndex) lookup(path string, target STR) ([]VFS, bool, bool) {
 			continue
 		}
 
-		if c.filter != nil && !c.filter.match(path) {
-			continue
+		if c.filter != nil {
+			if pathRel == "" {
+				pathRel = path.relString()
+			}
+
+			if !c.filter.match(pathRel) {
+				continue
+			}
 		}
 
 		cMulti := c.multi && len(c.paths) >= 2

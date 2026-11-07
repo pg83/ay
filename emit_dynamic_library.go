@@ -13,8 +13,8 @@ func parseDllModuleArgs(args []ANY) DllModuleArgs {
 	var out DllModuleArgs
 
 	for i := 0; i < len(args); i++ {
-		switch args[i].string() {
-		case "PREFIX", "EXPORTS":
+		switch args[i] {
+		case kwPREFIX.any(), kwEXPORTS.any():
 			keyword := args[i].string()
 
 			if keyword == "EXPORTS" {

@@ -7,6 +7,8 @@ var (
 	srcExtClasses   []uint8
 )
 
+const srcExtTemplate = 0x80
+
 const (
 	extCxxSource ExtFlags = 1 << iota
 	extCCSource
@@ -51,6 +53,13 @@ const (
 	srcExtSsqls
 	srcExtFortran
 	srcExtGettext
+	srcExtObject
+	srcExtJar
+	srcExtSo
+	srcExtDll
+	srcExtDylib
+	srcExtJava
+	srcExtPkgFake
 )
 
 type ExtFlags uint8
@@ -144,6 +153,14 @@ func buildExtClassMatcher() *ExtMatcher[ExtClass] {
 		".swg":      srcExtSwg,
 		".ssqls":    srcExtSsqls,
 		".f":        srcExtFortran,
+		".o":        srcExtObject,
+		".obj":      srcExtObject,
+		".jar":      srcExtJar,
+		".so":       srcExtSo,
+		".dll":      srcExtDll,
+		".dylib":    srcExtDylib,
+		".java":     srcExtJava,
+		".pkg.fake": srcExtPkgFake,
 	} {
 		get(ext).srcExt = cls
 	}
@@ -285,15 +302,30 @@ func extIsCOrHeaderSource(p string) bool {
 type SrcExtClass uint8
 
 func srcExtClassOf(id ANY) SrcExtClass {
-	rel := id.relOrSelf()
+	return SrcExtClass(srcExtCell(id.relOrSelf()) &^ srcExtTemplate)
+}
 
+func srcIsTemplate(v VFS) bool {
+	return srcExtCell(v.rel())&srcExtTemplate != 0
+}
+
+func srcExtCell(rel STR) uint8 {
 	if int(rel) < len(srcExtClasses) {
-		if c := SrcExtClass(srcExtClasses[rel]); c != srcExtUnseen {
+		if c := srcExtClasses[rel]; c != uint8(srcExtUnseen) {
 			return c
 		}
 	}
 
-	c := classifySrcExt(rel.string())
+	return classifySrcExtCell(rel)
+}
+
+func classifySrcExtCell(rel STR) uint8 {
+	s := rel.string()
+	c := uint8(classifySrcExt(s))
+
+	if extIsTemplateIn(s) {
+		c |= srcExtTemplate
+	}
 
 	for int(rel) >= len(srcExtClasses) {
 		grown := len(srcExtClasses) * 2
@@ -308,7 +340,7 @@ func srcExtClassOf(id ANY) SrcExtClass {
 		srcExtClasses = next
 	}
 
-	srcExtClasses[rel] = uint8(c)
+	srcExtClasses[rel] = c
 
 	return c
 }

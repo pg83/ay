@@ -34,6 +34,7 @@ var (
 	testSourceRootArg          = internStr(testSourceRoot).any()
 	testGDBPathArg             = internStr(testGDBPath).any()
 	testPythonBinArg           = internStr(testPythonBin).any()
+	argTestCmdFileEnd          = internArg(testCmdFileEnd)
 )
 
 const (
@@ -424,6 +425,9 @@ type TestSuite struct {
 	supportsTestParameters bool
 	smoothShutdown         []string
 	globals                []ResourceDecl
+	sortedGlobals          []ResourceDecl
+	nodeArgs               [5]ANY
+	envArgs                []ANY
 	requirements           map[string]string
 	network                string
 	split                  int
@@ -468,7 +472,7 @@ func (ctx *GenCtx) testContext() NodeRef {
 	}
 
 	na := ctx.na
-	args := []ANY{internStr(testYMakePython3).any(), source(testAppendFileScriptRel).any(), bldCommonTestContext.any()}
+	args := []ANY{strTestYMakePython3.any(), srcTestAppendFileScriptRel.any(), bldCommonTestContext.any()}
 
 	for _, line := range o.context {
 		args = append(args, internStr(line).any())
@@ -476,7 +480,7 @@ func (ctx *GenCtx) testContext() NodeRef {
 
 	o.contextRef = ctx.emit.emit(&Node{
 		Platform: ctx.target,
-		Cmds:     na.cmdList(Cmd{CmdArgs: na.chunkList(args)}), Inputs: na.inputList(na.vfsList(source(testAppendFileScriptRel))), KV: &testNodesKV,
+		Cmds:     na.cmdList(Cmd{CmdArgs: na.chunkList(args)}), Inputs: na.inputList(na.vfsList(srcTestAppendFileScriptRel)), KV: &testNodesKV,
 		Outputs:      na.vfsList(bldCommonTestContext),
 		Requirements: o.contextReqs,
 		Resources:    usesPython3,
@@ -621,6 +625,8 @@ func (ctx *GenCtx) emitTestSuite(s *TestSuite) []NodeRef {
 		files = []string{""}
 	}
 
+	s.prepareNodeArgs()
+
 	var runs []*Node
 	var runRefs []NodeRef
 
@@ -659,6 +665,40 @@ func (ctx *GenCtx) emitTestSuite(s *TestSuite) []NodeRef {
 	}
 
 	return runRefs
+}
+
+func (s *TestSuite) prepareNodeArgs() {
+	s.nodeArgs = [5]ANY{testArg(s.size), testArg(s.testType), testArg(s.ciType), testArg(s.name), testArg(s.projectPath)}
+	s.sortedGlobals = sortedResourceGlobals(s.globals)
+	s.envArgs = s.envArgs[:0]
+
+	var pairs [][2]string
+
+	if len(s.env) > 0 {
+		for _, g := range s.globals {
+			name, value, _ := strings.Cut(g.Token.string(), "::")
+
+			pairs = append(pairs, [2]string{"$" + name, value})
+		}
+	}
+
+	for _, e := range s.env {
+		for _, p := range pairs {
+			e = strings.ReplaceAll(e, p[0], p[1])
+		}
+
+		if !strings.Contains(e, "=") {
+			v, ok := os.LookupEnv(e)
+
+			if !ok {
+				continue
+			}
+
+			e += "=" + v
+		}
+
+		s.envArgs = append(s.envArgs, testArg(e))
+	}
 }
 
 func (ctx *GenCtx) testAccumulator(s *TestSuite, chunks []*Node, refs []NodeRef, retry int) *Node {
@@ -727,7 +767,7 @@ func (ctx *GenCtx) testNode(s *TestSuite, chunk TestChunk) *Node {
 		head = append(head, testCmdFileStartArg)
 	}
 
-	head = append(head, strMeta.any(), outputs[0].any(), strTrace.any(), outputs[1].any(), strTimeout.any(), intArg(s.timeout), strLogPath.any(), outputs[2].any(), strTestSize.any(), testArg(s.size), strTestType.any(), testArg(s.testType), strTestCiType.any(), testArg(s.ciType), strContextFilename.any(), bldCommonTestContext.any(), strSourceRoot2.any(), strS.any(), strBuildRoot2.any(), strB.any(), strTestSuiteName.any(), testArg(s.name), strProjectPath.any(), testArg(s.projectPath))
+	head = append(head, strMeta.any(), outputs[0].any(), strTrace.any(), outputs[1].any(), strTimeout.any(), intArg(s.timeout), strLogPath.any(), outputs[2].any(), strTestSize.any(), s.nodeArgs[0], strTestType.any(), s.nodeArgs[1], strTestCiType.any(), s.nodeArgs[2], strContextFilename.any(), bldCommonTestContext.any(), strSourceRoot2.any(), strS.any(), strBuildRoot2.any(), strB.any(), strTestSuiteName.any(), s.nodeArgs[3], strProjectPath.any(), s.nodeArgs[4])
 
 	related := dedupRelatedPaths(s.relatedPaths)
 
@@ -779,24 +819,8 @@ func (ctx *GenCtx) testNode(s *TestSuite, chunk TestChunk) *Node {
 		head = append(head, strRequiresRamDisk.any())
 	}
 
-	for _, e := range s.env {
-		for _, g := range s.globals {
-			name, value, _ := strings.Cut(g.Token.string(), "::")
-
-			e = strings.ReplaceAll(e, "$"+name, value)
-		}
-
-		if !strings.Contains(e, "=") {
-			v, ok := os.LookupEnv(e)
-
-			if !ok {
-				continue
-			}
-
-			e += "=" + v
-		}
-
-		head = append(head, strEnv.any(), testArg(e))
+	for _, e := range s.envArgs {
+		head = append(head, strEnv.any(), e)
 	}
 
 	if s.setupPythonpathEnv {
@@ -825,7 +849,7 @@ func (ctx *GenCtx) testNode(s *TestSuite, chunk TestChunk) *Node {
 
 	head = append(head, strCompressionFilter.any(), strZstd.any(), strCompressionLevel.any(), strOne.any())
 
-	for _, g := range sortedResourceGlobals(s.globals) {
+	for _, g := range s.sortedGlobals {
 		head = append(head, argGlobalResource.any(), g.Token.any())
 	}
 
@@ -871,7 +895,7 @@ func (ctx *GenCtx) testNode(s *TestSuite, chunk TestChunk) *Node {
 	head = append(head, s.runCmd(work, chunk)...)
 
 	if o.commandFile {
-		head = append(head, internArg(testCmdFileEnd).any())
+		head = append(head, argTestCmdFileEnd.any())
 	}
 
 	cmds := ctx.testCmds[:0]

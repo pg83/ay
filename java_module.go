@@ -110,7 +110,7 @@ func javaTags(conf *Conf, env Environment, key ENV) []ANY {
 
 func javaTagIn(tag STR, tags []ANY) bool {
 	for _, t := range tags {
-		if t == tag.any() || t == strEmptyTag.any() && tag.string() == "" {
+		if t == tag.any() || t == strEmptyTag.any() && tag.isEmpty() {
 			return true
 		}
 	}

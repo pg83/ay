@@ -243,8 +243,8 @@ func finishYqlUdfModule(modulePath string, d *ModuleData, env Environment) {
 		return
 	}
 
-	d.yqlUdfProbe = !(env.bool(envSANITIZER_TYPE) || env.string(envUSE_ARCADIA_PYTHON) == "no" || env.string(envUdfNoProbe) == "yes" ||
-		env.string(envMUSL) == "yes" || env.string(envCppAnalysisMode) == "yes")
+	d.yqlUdfProbe = !(env.bool(envSANITIZER_TYPE) || env.is(envUSE_ARCADIA_PYTHON, strNo) || env.is(envUdfNoProbe, strYes) ||
+		env.is(envMUSL, strYes) || env.is(envCppAnalysisMode, strYes))
 
 	if d.exportsScript == nil && !env.bool(envOS_WINDOWS) {
 		id := envYqlUdfExport
@@ -295,7 +295,7 @@ func registerYqlPythonUdf(fs FS, modulePath string, stmt UnknownStmt, d *ModuleD
 
 	addLibra := libra == "yes"
 
-	if addLibra && env.string(envOPENSOURCE) != "" {
+	if addLibra && !env.is(envOPENSOURCE, strEmpty) {
 		throwFmt("Libra modules are not supported in opensource python UDFs")
 	}
 

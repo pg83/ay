@@ -146,7 +146,7 @@ func (e *EmitContext) notsRecipes(target string, head []string, globals []Resour
 			layer = "node_modules.layer"
 
 			for _, decl := range globals {
-				if decl.Name.string() == "SQUASHFS_TOOLS" {
+				if decl.Name == kwSQUASHFS_TOOLS {
 					extra = " --squashfs-tools-path $" + decl.GlobalVar.string()
 				}
 			}

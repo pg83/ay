@@ -457,7 +457,7 @@ func (ctx *GenCtx) javaEmitTest(jm *JavaModule) {
 
 	w = append(w, strFile.any(), runBf.any(), strQ.any(), strM.any(), strYaStartCommandFile.any())
 
-	for _, p := range javaClosureJars(closure, ".jar") {
+	for _, p := range javaClosureJars(closure, srcExtJar) {
 		w = append(w, p.any())
 	}
 

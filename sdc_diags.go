@@ -8,6 +8,12 @@ import (
 	"strings"
 )
 
+var (
+	strSdgSdcRosMonitoringsDiagUpdaterGenUtilsDiagsGoGen       = internStr(sdcDiagUpdaterDir + "/gen_utils/diags_go_gen")
+	strSdgSdcRosMonitoringsDiagUpdaterGenUtilsDiagsSplitGen    = internStr(sdcDiagUpdaterDir + "/gen_utils/diags_split_gen")
+	strSdgSdcRosMonitoringsDiagUpdaterUtilsDiagsSplitGenerator = internStr(sdcDiagUpdaterDir + "/utils/diags_split_generator")
+)
+
 const (
 	sdcDiagUpdaterDir       = "sdg/sdc/ros/monitorings/diag_updater"
 	sdcDiagDescriptionsRoot = sdcDiagUpdaterDir + "/etc/Descriptions"
@@ -94,7 +100,7 @@ func applySdcDiagsSplitGenerator(fs FS, modulePath string, stmt UnknownStmt, env
 			}
 		}
 
-		rp.ToolPath = internStr(sdcDiagUpdaterDir + "/gen_utils/diags_go_gen").any()
+		rp.ToolPath = strSdgSdcRosMonitoringsDiagUpdaterGenUtilsDiagsGoGen.any()
 		rp.Args = internAnys(append(append([]string{"--description_files"}, deps...), "--out_dir", "${BINDIR}", "--package", path.Base(modulePath)))
 		rp.OUTFiles = internAnys(outs)
 
@@ -114,7 +120,7 @@ func applySdcDiagsSplitGenerator(fs FS, modulePath string, stmt UnknownStmt, env
 		srcs = append(srcs, resultDir+"/"+rel+".cpp")
 	}
 
-	rp.ToolPath = internStr(sdcDiagUpdaterDir + "/gen_utils/diags_split_gen").any()
+	rp.ToolPath = strSdgSdcRosMonitoringsDiagUpdaterGenUtilsDiagsSplitGen.any()
 	rp.Args = internAnys(append(append([]string{"--description_files"}, deps...), "--out_dir", resultDir))
 	rp.OUTNoAutoFiles = internAnys(concat(includes, srcs))
 
@@ -209,7 +215,7 @@ func applySdcDiagsSplitGeneratorV3(fs FS, modulePath string, stmt UnknownStmt, e
 	includes = append(includes, sdcDiagUpdaterDir+"/include/diagnostics/diagnostic.h")
 
 	appendRunProgram(&RunProgramStmt{
-		ToolPath: internStr(sdcDiagUpdaterDir + "/utils/diags_split_generator").any(),
+		ToolPath: strSdgSdcRosMonitoringsDiagUpdaterUtilsDiagsSplitGenerator.any(),
 		Args:     internAnys(args), INFiles: internAnys([]string{input}),
 		OUTFiles: internAnys([]string{output}), OutputIncludes: internAnys(includes), Line: stmt.Line,
 	}, env, d)

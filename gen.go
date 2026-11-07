@@ -1500,7 +1500,7 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 		return result
 	}
 
-	if moduleName == tokSandboxTask && instance.Kind == KindBin && env.string(envFAIL_PY2) == "yes" {
+	if moduleName == tokSandboxTask && instance.Kind == KindBin && env.is(envFAIL_PY2, strYes) {
 		throwFmt("gen: %s: You are using deprecated Python2-only code (SANDBOX_TASK). Please consider rewriting to 2/3-compatible code.", instance.Path.relString())
 	}
 

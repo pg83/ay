@@ -210,7 +210,7 @@ func applySdcInstall(module string, tokens []ANY, d *ModuleData, env Environment
 	}
 
 	allowed := strings.Fields(env.string(envSdcInstallKinds))
-	supernode := env.string(envSdcUseSupernode) == "yes"
+	supernode := env.is(envSdcUseSupernode, strYes)
 	args := anyStrs(tokens)
 	kind := ""
 

@@ -18,7 +18,7 @@ func buildScriptTable(fs FS) ScriptDeps {
 		}
 
 		if extIsPy(rel) {
-			texts[rel] = string(concatChunks(fs.read(rel)))
+			texts[strings.Clone(rel)] = string(concatChunks(fs.read(rel)))
 		}
 
 		return false

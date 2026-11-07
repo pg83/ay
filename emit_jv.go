@@ -11,6 +11,7 @@ var (
 	antlr3JarPath           = antlr3JarVFS.string()
 	stdout2stderrPath       = stdout2stderrVFS.string()
 	jvKV                    = KV{P: pkJV, PC: pcLightBlue, ShowOut: true}
+	strJdkResourcePath      = internStr(jdkResourcePath)
 )
 
 const jdkResourcePath = "$(B)/resources/JDK17/bin/java"
@@ -96,7 +97,7 @@ func (e *EmitContext) emitJVGeneralReserved(
 	cmdArgs = append(cmdArgs,
 		tc.Python3,
 		internStr(stdout2stderrPath).any(),
-		internStr(jdkResourcePath).any(),
+		strJdkResourcePath.any(),
 		argJar.any(),
 		jarVFS.any(),
 	)

@@ -107,7 +107,7 @@ func parseBundleEntries(v UnknownStmt) []BundleEntry {
 
 		name := v.Args[1].string()
 
-		if len(v.Args) >= 4 && v.Args[2].string() == "RENAME" {
+		if len(v.Args) >= 4 && v.Args[2] == kwRENAME.any() {
 			name = v.Args[3].string()
 		}
 
@@ -123,14 +123,14 @@ func parseBundleEntries(v UnknownStmt) []BundleEntry {
 
 			suffix := ""
 
-			if i+1 < len(v.Args) && v.Args[i].string() == "SUFFIX" {
+			if i+1 < len(v.Args) && v.Args[i] == kwSUFFIX.any() {
 				suffix = v.Args[i+1].string()
 				i += 2
 			}
 
 			name := path.Base(target) + suffix
 
-			if i+1 < len(v.Args) && v.Args[i].string() == "NAME" {
+			if i+1 < len(v.Args) && v.Args[i] == kwNAME.any() {
 				name = v.Args[i+1].string()
 				i += 2
 			}

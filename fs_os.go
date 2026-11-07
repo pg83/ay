@@ -410,14 +410,31 @@ func (fs *OsFS) walk(rel string, visit func(rel string, isDir bool) bool) {
 		return
 	}
 
-	queue := []string{rel}
+	queue := []STR{dirKey(rel)}
+
+	var buf []byte
 
 	for head := 0; head < len(queue); head++ {
-		for _, packed := range fs.listdirRel(queue[head]).names {
-			child := internJoined(queue[head], STR(packed>>1).string()).string()
-			isDir := packed&1 != 0
+		buf = buf[:0]
 
-			if visit(child, isDir) && isDir {
+		if dir := queue[head].string(); dir != "" {
+			buf = append(append(buf, dir...), '/')
+		}
+
+		n := len(buf)
+
+		for _, packed := range fs.listdir(queue[head]).names {
+			buf = append(buf[:n], STR(packed>>1).string()...)
+
+			if packed&1 == 0 {
+				visit(bytesString(buf), false)
+
+				continue
+			}
+
+			child := internBytes(buf)
+
+			if visit(child.string(), true) {
 				queue = append(queue, child)
 			}
 		}

@@ -1,9 +1,6 @@
 package main
 
-import (
-	"slices"
-	"strings"
-)
+import "slices"
 
 type PeerContext struct {
 	Modules           []VFS
@@ -39,6 +36,7 @@ type EmitContext struct {
 	commandHead        int
 	commandQueueActive bool
 	producerOutputs    map[VFS]int
+	pendingProducers   int
 	deferCC            bool
 	ccPending          []CCPending
 	filePending        []func()
@@ -445,7 +443,7 @@ func (e *EmitContext) includeNodeInputs(node *NodeSpec) {
 				}
 			}
 
-			template := strings.HasSuffix(input.relString(), ".in")
+			template := srcIsTemplate(input)
 			text := input.isSource() && slices.Contains(node.input.text, input)
 
 			if template {

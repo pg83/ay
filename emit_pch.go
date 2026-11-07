@@ -42,7 +42,7 @@ func (e *EmitContext) emitPchFile(stmt PchFileStmt) {
 		}
 
 		if e.instance.Platform.UsesSDKRoot {
-			resources = append(resources, internStr(resourcePatternOSSDKRoot))
+			resources = append(resources, strResourcePatternOSSDKRoot)
 		}
 
 		na.strs.commit(len(resources))

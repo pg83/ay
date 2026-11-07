@@ -1,5 +1,11 @@
 package main
 
+var (
+	strResourcePatternClang18          = internStr(resourcePatternClang18)
+	strResourcePatternOSSDKRoot        = internStr(resourcePatternOSSDKRoot)
+	bldResourcesYMAKEPYTHON3BinPython3 = build("resources/", resourcePatternYMakePython3, "/bin/python3")
+)
+
 const (
 	resourcePatternYMakePython3 = "YMAKE_PYTHON3"
 	resourcePatternClang14      = "CLANG14"

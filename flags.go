@@ -211,11 +211,11 @@ func expandCompilerConfFlags(env Environment, value string) []ANY {
 
 func optimizeFlags(env Environment) []ANY {
 	switch {
-	case env.string(envBuildRelease) != "yes":
+	case !env.is(envBuildRelease, strYes):
 		return nil
-	case env.string(envBuildSizeOptimized) != "yes":
+	case !env.is(envBuildSizeOptimized, strYes):
 		return []ANY{argO3.any()}
-	case env.string(envCLANG) == "yes":
+	case env.is(envCLANG, strYes):
 		return []ANY{argOz.any()}
 	}
 

@@ -31,7 +31,7 @@ func rustModuleUnit(name TOK, language Language) ModuleUnit {
 }
 
 func envRustHost(env Environment) bool {
-	return env.string(envRustMode) == "host"
+	return env.is(envRustMode, strHost)
 }
 
 func setupRustModule(name TOK, language Language, env Environment, d *ModuleData) {
@@ -39,7 +39,7 @@ func setupRustModule(name TOK, language Language, env Environment, d *ModuleData
 		return
 	}
 
-	d.peerdirs = append(d.peerdirs, internAny("build/platform/rust"), internAny("build/platform/clang"))
+	d.peerdirs = append(d.peerdirs, strBuildPlatformRust.any(), strBuildPlatformClang.any())
 	env.setDefaultString(envRustRoot, "src/lib.rs")
 	env.setDefaultString(envRustVersion, "0.0.0")
 	env.setDefaultString(envRustEdition, "2021")
@@ -71,7 +71,7 @@ func setupRustModule(name TOK, language Language, env Environment, d *ModuleData
 
 			env.setString(envMODULE_SUFFIX, suffix)
 		} else {
-			d.peerdirs = append(d.peerdirs, internAny("build/rust/staticlib"))
+			d.peerdirs = append(d.peerdirs, strBuildRustStaticlib.any())
 		}
 	case tokRustRuntime:
 		env.setString(envRustKind, "runtime")
@@ -196,7 +196,7 @@ func rustTarget(p *Platform, host bool) string {
 	case OSLinux:
 		libc := "gnu"
 
-		if !host && p.ifEnv.string(envMUSL) == "yes" {
+		if !host && p.ifEnv.is(envMUSL, strYes) {
 			libc = "musl"
 		}
 

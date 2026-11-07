@@ -1,7 +1,5 @@
 package main
 
-import "strings"
-
 var (
 	mlaunchKV      = KV{P: pkML, PC: pcCyan}
 	golaunchKV     = KV{P: pkGL, PC: pcCyan}
@@ -166,7 +164,7 @@ func (e *EmitContext) genPackageFinal() *ModuleEmitResult {
 	args := []ANY{e.d.tc.Python3, copyScript.any(), strYaStartCommandFile.any(), strDestDir.any(), build(module).any(), strBuildRoot2.any(), bldRootDirVFS.any()}
 	outputs := []VFS{out}
 
-	if env := (Environment{s: &e.frame.ifEnv}); env.string(envPackedPackageExt) != "" {
+	if env := (Environment{s: &e.frame.ifEnv}); !env.is(envPackedPackageExt, strEmpty) {
 		archive := build(module, "/", name, ".", env.string(envPackedPackageExt))
 
 		args = append(args, strDestArch.any(), archive.any())
@@ -174,7 +172,7 @@ func (e *EmitContext) genPackageFinal() *ModuleEmitResult {
 	}
 
 	for _, file := range copyFiles {
-		if !strings.HasSuffix(file.relString(), ".pkg.fake") {
+		if srcExtClassOf(file.any()) != srcExtPkgFake {
 			args = append(args, file.any())
 		}
 	}
@@ -202,7 +200,7 @@ func (e *EmitContext) genPackageFinal() *ModuleEmitResult {
 	}
 
 	for _, file := range copyFiles {
-		if !strings.HasSuffix(file.relString(), ".pkg.fake") {
+		if srcExtClassOf(file.any()) != srcExtPkgFake {
 			node.Outputs = append(node.Outputs, build(module, "/", file.relString()))
 		}
 	}

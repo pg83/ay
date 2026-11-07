@@ -70,7 +70,7 @@ func resolveLargeFileSource(fs FS, codegen *CodegenRegistry, modulePath, name st
 func applyLargeFiles(fs FS, codegen *CodegenRegistry, modulePath string, stmt UnknownStmt, d *ModuleData, onWarn func(Warn)) {
 	args := stmt.Args
 
-	if len(args) > 0 && args[0].string() == "AUTOUPDATED" {
+	if len(args) > 0 && args[0] == kwAUTOUPDATED.any() {
 		args = args[1:]
 	}
 

@@ -99,7 +99,7 @@ func (d *JavaData) sourceCommandPeers(jm *JavaModule, source string, env Environ
 }
 
 func javaModulePrologue(ctx *GenCtx, jm *JavaModule, d *JavaData, env Environment) {
-	sourcesJar := env.string(envBUILD_TYPE) == "DEBUG" && env.string(envNO_DEBUGINFO) != "yes"
+	sourcesJar := env.is(envBUILD_TYPE, strDebug) && !env.is(envNO_DEBUGINFO, strYes)
 	sbom := sbomActive(ctx, jm.instance)
 
 	d.embedSbom = sbom || ctx.sbomEnabled && env.bool(envEmbedSbom)
@@ -214,7 +214,7 @@ func collectJavaData(ctx *GenCtx, jm *JavaModule, stmts []Stmt, env Environment)
 	d.srcResource = env.string(envSrcResourceID)
 	d.localJar = env.string(envLocalJarPath)
 	d.localSourcesJar = env.string(envLocalSourcesJarPath)
-	d.commonGoogleAPIs = env.string(envCommonGoogleApis) != "None"
+	d.commonGoogleAPIs = !env.is(envCommonGoogleApis, strNone)
 	d.varPeers = ctx.varWords(internStr(env.expandVariable(env.string(envPeerdir))))
 	d.peerdirTags = javaTags(jm.instance.Platform.conf, env, envPeerdirTags)
 	d.moduleTag = env.stringID(envMODULE_TAG)
@@ -439,7 +439,7 @@ func collectJavaStmts(ctx *GenCtx, jm *JavaModule, d *JavaData, stmts []Stmt, en
 				continue
 			}
 
-			if list, ok := d.ruleList(jm, v.Raw.string()); ok {
+			if list, ok := d.ruleList(jm, v.Raw); ok {
 				if list != nil {
 					*list = javaAppendResolved(*list, v.Args, ctx.javaExpandRuleArgs(v.Args, env))
 				}
@@ -483,7 +483,7 @@ func collectJavaStmts(ctx *GenCtx, jm *JavaModule, d *JavaData, stmts []Stmt, en
 				continue
 			}
 
-			if !applyJavaMacro(ctx, jm, d, v.Raw.string(), args, raw, env) || javaConfBodyToo(v.Raw) {
+			if !applyJavaMacro(ctx, jm, d, v.Raw, args, raw, env) || javaConfBodyToo(v.Raw) {
 				expandJavaConfMacro(ctx, jm, d, stmt, env)
 			}
 		}
@@ -491,8 +491,8 @@ func collectJavaStmts(ctx *GenCtx, jm *JavaModule, d *JavaData, stmts []Stmt, en
 }
 
 func javaConfBodyToo(name STR) bool {
-	switch name.string() {
-	case "WITH_KOTLIN", "USE_ERROR_PRONE", "UBERJAR", "WITH_KOTLIN_GRPC", "JAVA_PROTO_PLUGIN":
+	switch name {
+	case kwWITH_KOTLIN, kwUSE_ERROR_PRONE, kwUBERJAR, kwWITH_KOTLIN_GRPC, kwJAVA_PROTO_PLUGIN:
 		return true
 	}
 
@@ -635,11 +635,11 @@ func parseJavaSrcs(args []string) JavaSrcsSpec {
 	return spec
 }
 
-func applyJavaMacro(ctx *GenCtx, jm *JavaModule, d *JavaData, name string, args []string, raw []ANY, env Environment) bool {
+func applyJavaMacro(ctx *GenCtx, jm *JavaModule, d *JavaData, name STR, args []string, raw []ANY, env Environment) bool {
 	u := jm.unit
 	arg0 := ""
 
-	if name == "FILES" {
+	if name == kwFILES {
 		for _, file := range args {
 			if strings.HasPrefix(file, "${ARCADIA_BUILD_ROOT}") || strings.HasPrefix(file, "$(B)/") {
 				continue
@@ -651,7 +651,7 @@ func applyJavaMacro(ctx *GenCtx, jm *JavaModule, d *JavaData, name string, args 
 		return true
 	}
 
-	if name != "GENERATE_SCRIPT" {
+	if name != strGenerateScript {
 		args = javaDropUnresolved(args)
 	}
 
@@ -660,15 +660,15 @@ func applyJavaMacro(ctx *GenCtx, jm *JavaModule, d *JavaData, name string, args 
 	}
 
 	switch name {
-	case "VERSION":
+	case kwVERSION:
 		env.setString(envModver, strings.Join(args, " "))
-	case "LICENSE":
+	case kwLICENSE:
 		if ctx.sbomEnabled && env.bool(envNeedSbomInfo) {
 			d.sbomComponent = true
 		}
-	case "FLATC_FLAGS":
+	case kwFLATC_FLAGS:
 		d.flatcFlags = append(d.flatcFlags, internAnys(args)...)
-	case "SET_APPEND":
+	case strSetAppend:
 		if len(args) == 0 {
 			return true
 		}
@@ -694,103 +694,103 @@ func applyJavaMacro(ctx *GenCtx, jm *JavaModule, d *JavaData, name string, args 
 		if args[0] == "_PROTOC_FLAGS" {
 			d.protocFlags = append(d.protocFlags, args[1:]...)
 		}
-	case "JDK_VERSION", "DEFAULT_JDK_VERSION":
+	case kwJDK_VERSION, kwDEFAULT_JDK_VERSION:
 		checkJdkVersion(arg0)
 		javaSetJDK(d, env, arg0)
 		jm.instance.Platform.conf.set(env, envJdkRealVersion, nil)
 
 		d.hasPerModuleJDK = true
 		d.recalcJavacOpts(jm)
-	case "WITH_KOTLIN":
+	case kwWITH_KOTLIN:
 		d.withKotlin = true
 		d.recalcKotlincOpts(jm)
-	case "WITH_KAPT":
+	case kwWITH_KAPT:
 		d.withKapt = true
 
 		if arg0 == "GENERATE_KOTLIN" {
 			d.kaptAPOptions = append(d.kaptAPOptions, "kapt.kotlin.generated="+jm.path.rel().build().string()+"/kapt_gen_src")
 		}
-	case "KAPT_OPTS":
+	case kwKAPT_OPTS:
 		for _, a := range args {
 			d.kaptOpts = append(d.kaptOpts, "-P", a)
 		}
-	case "KAPT_ANNOTATION_PROCESSOR":
+	case kwKAPT_ANNOTATION_PROCESSOR:
 		d.kaptProcessors = append(d.kaptProcessors, args...)
-	case "KAPT_ANNOTATION_PROCESSOR_CLASSPATH":
+	case kwKAPT_ANNOTATION_PROCESSOR_CLASSPATH:
 		d.kaptAPClasspath = append(d.kaptAPClasspath, args...)
 
 		for _, a := range args {
 			d.peerStmts = append(d.peerStmts, JavaPeerSpec{dir: a})
 		}
-	case "KAPT_ANNOTATION_PROCESSOR_OPTIONS":
+	case kwKAPT_ANNOTATION_PROCESSOR_OPTIONS:
 		d.kaptAPOptions = append(d.kaptAPOptions, args...)
-	case "KOTLINC_FLAGS":
+	case kwKOTLINC_FLAGS:
 		d.kotlincOpts.appendStmt(args...)
-	case "WITH_KOTLINC_ALLOPEN":
+	case kwWITH_KOTLINC_ALLOPEN:
 		d.kotlincOpts.appendStmt(javaKotlinPluginOpts("allopen", args)...)
 		d.allopen = true
 		d.recalcKotlincOpts(jm)
-	case "WITH_KOTLINC_LOMBOK":
+	case kwWITH_KOTLINC_LOMBOK:
 		d.kotlincOpts.appendStmt(javaKotlinPluginOpts("lombok", args)...)
 		d.lombok = true
 		d.recalcKotlincOpts(jm)
-	case "WITH_KOTLINC_NOARG":
+	case kwWITH_KOTLINC_NOARG:
 		d.kotlincOpts.appendStmt(javaKotlinPluginOpts("noarg", args)...)
 		d.noarg = true
 		d.recalcKotlincOpts(jm)
-	case "WITH_KOTLINC_SERIALIZATION":
+	case kwWITH_KOTLINC_SERIALIZATION:
 		d.serialization = true
 		d.recalcKotlincOpts(jm)
-	case "WITH_KOTLINC_DETEKT":
+	case kwWITH_KOTLINC_DETEKT:
 		for _, o := range args {
 			d.kotlincOpts.appendStmt("-P", "plugin:detekt-compiler-plugin:"+o)
 		}
 
 		d.detekt = true
 		d.recalcKotlincOpts(jm)
-	case "ENABLE_KOTLIN_ABI_JAR":
+	case kwENABLE_KOTLIN_ABI_JAR:
 		d.abiJar = true
 		d.recalcKotlincOpts(jm)
-	case "JAVAC_FLAGS":
+	case kwJAVAC_FLAGS:
 		d.javacOpts.appendStmt(args...)
-	case "ENABLE_PREVIEW":
+	case kwENABLE_PREVIEW:
 		d.jvmArgs = append(d.jvmArgs, "--enable-preview")
 		d.javacOpts.appendStmt("--enable-preview", "--release", d.jdkReal)
 		d.enablePreview = true
-	case "USE_ERROR_PRONE":
+	case kwUSE_ERROR_PRONE:
 		d.errorProne = true
 		d.recalcJavacOpts(jm)
-	case "UBERJAR":
+	case kwUBERJAR:
 		d.uberjar = true
 		d.recalcKotlincOpts(jm)
-	case "UBERJAR_HIDING_PREFIX":
+	case kwUBERJAR_HIDING_PREFIX:
 		env.setString(envUberjarPrefixFlag, "--shade-prefix "+arg0)
-	case "UBERJAR_HIDE_EXCLUDE_PATTERN":
+	case kwUBERJAR_HIDE_EXCLUDE_PATTERN:
 		for _, a := range args {
 			appendMacroEnv(env, "UBERJAR_HIDE_EXCLUDE_FLAGS", "--shade-exclude "+a)
 		}
-	case "UBERJAR_HIDE_INCLUDE_PATTERN":
+	case kwUBERJAR_HIDE_INCLUDE_PATTERN:
 		for _, a := range args {
 			appendMacroEnv(env, "UBERJAR_HIDE_INCLUDE_FLAGS", "--shade-include "+a)
 		}
-	case "UBERJAR_PATH_EXCLUDE_PREFIX":
+	case kwUBERJAR_PATH_EXCLUDE_PREFIX:
 		for _, a := range args {
 			appendMacroEnv(env, "UBERJAR_PATH_EXCLUDES", "--uber-exclude "+a)
 		}
-	case "UBERJAR_MANIFEST_TRANSFORMER_MAIN":
+	case kwUBERJAR_MANIFEST_TRANSFORMER_MAIN:
 		env.setString(envUberjarManifestTransformerMainFlag, "--manifest-main "+arg0)
-	case "UBERJAR_MANIFEST_TRANSFORMER_ATTRIBUTE":
+	case kwUBERJAR_MANIFEST_TRANSFORMER_ATTRIBUTE:
 		if len(args) > 0 {
 			appendMacroEnv(env, "UBERJAR_MANIFEST_TRANSFORMER_ATTRIBUTE_FLAGS", "--manifest-attribute "+arg0+":'"+strings.Join(args[1:], " ")+"'")
 		}
-	case "UBERJAR_APPENDING_TRANSFORMER":
+	case kwUBERJAR_APPENDING_TRANSFORMER:
 		for _, a := range args {
 			appendMacroEnv(env, "UBERJAR_APPENDING_TRANSFORMER_FLAGS", "--append-transformer "+a)
 		}
-	case "UBERJAR_SERVICES_RESOURCE_TRANSFORMER":
+	case kwUBERJAR_SERVICES_RESOURCE_TRANSFORMER:
 		env.setString(envUberjarServicesResourceTransformerFlag, "--service-transformer")
-	case "JAVA_DEPENDENCIES_CONFIGURATION":
-	case "JAVA_TEST_PEERDIR", "JAVA_RUNTIME_PEERDIR":
+	case kwJAVA_DEPENDENCIES_CONFIGURATION:
+	case kwJAVA_TEST_PEERDIR, kwJAVA_RUNTIME_PEERDIR:
 		if !javaMacroIsAlias(jm, name) {
 			return true
 		}
@@ -798,68 +798,68 @@ func applyJavaMacro(ctx *GenCtx, jm *JavaModule, d *JavaData, name string, args 
 		for _, a := range args {
 			d.peerStmts = append(d.peerStmts, JavaPeerSpec{dir: a})
 		}
-	case "JAVA_API_PEERDIR":
+	case kwJAVA_API_PEERDIR:
 		for _, a := range args {
 			d.peerStmts = append(d.peerStmts, JavaPeerSpec{dir: a})
 		}
-	case "JAVA_IMPL_PEERDIR":
+	case kwJAVA_IMPL_PEERDIR:
 		for _, a := range args {
 			d.peerStmts = append(d.peerStmts, JavaPeerSpec{dir: a})
 		}
 
 		d.implPeers = append(d.implPeers, args...)
-	case "JUNIT_TESTS_JAR":
+	case kwJUNIT_TESTS_JAR:
 		if u.kind == juTest && len(args) > 0 {
 			d.unittestDir = arg0
 			d.unittestMod = path.Join(args...)
 			d.peerStmts = append(d.peerStmts, JavaPeerSpec{dir: arg0})
 		}
-	case "AUTO_SERVICE":
+	case kwAUTO_SERVICE:
 		d.peerStmts = append(d.peerStmts, JavaPeerSpec{dir: "contrib/java/com/google/auto/service/auto-service-annotations/" + arg0})
-	case "USE_ANNOTATION_PROCESSOR":
-	case "ANNOTATION_PROCESSOR", "JAR_ANNOTATION_PROCESSOR":
+	case kwUSE_ANNOTATION_PROCESSOR:
+	case kwANNOTATION_PROCESSOR, kwJAR_ANNOTATION_PROCESSOR:
 		d.annotationProcs = append(d.annotationProcs, args...)
-	case "JAR_MAIN_CLASS":
+	case kwJAR_MAIN_CLASS:
 		d.jarMainClass = arg0
-	case "JVM_ARGS":
+	case kwJVM_ARGS:
 		d.jvmArgs = append(d.jvmArgs, args...)
-	case "SIZE":
+	case kwSIZE:
 		d.test.size = strings.ToLower(arg0)
-	case "TIMEOUT":
+	case kwTIMEOUT:
 		d.test.timeout = arg0
-	case "TEST_CWD":
+	case kwTEST_CWD:
 		d.test.cwd = arg0
-	case "TAG":
+	case kwTAG:
 		d.test.tags = append(d.test.tags, args...)
-	case "REQUIREMENTS":
+	case kwREQUIREMENTS:
 		d.test.requirements = append(d.test.requirements, args...)
-	case "FORK_TESTS":
+	case kwFORK_TESTS:
 		d.test.forkMode = "tests"
-	case "FORK_SUBTESTS":
+	case kwFORK_SUBTESTS:
 		d.test.forkMode = "subtests"
-	case "SPLIT_FACTOR":
+	case kwSPLIT_FACTOR:
 		d.test.splitFactor = arg0
-	case "PARALLEL_TESTS_WITHIN_NODE":
+	case kwPARALLEL_TESTS_WITHIN_NODE:
 		env.setString(envParallelTestsWithinNodeWorkers, arg0)
-	case "EXPERIMENTAL_FORK":
+	case kwEXPERIMENTAL_FORK:
 		d.test.experimentalFork = true
-	case "SYSTEM_PROPERTIES":
+	case kwSYSTEM_PROPERTIES:
 		d.test.systemProperties = append(d.test.systemProperties, args...)
-	case "TEST_JAVA_CLASSPATH_CMD_TYPE":
+	case kwTEST_JAVA_CLASSPATH_CMD_TYPE:
 		d.test.classpathCmdType = arg0
-	case "USE_RECIPE":
+	case kwUSE_RECIPE:
 		d.test.recipes = append(d.test.recipes, strings.Join(args, " "))
-	case "DEPENDS":
+	case kwDEPENDS:
 		d.test.depends = append(d.test.depends, args...)
-	case "DOCKER_IMAGE":
-		applyJavaMacro(ctx, jm, d, "SET_APPEND", append([]string{envDockerImagesValue.string()}, args...), append([]ANY{envDockerImagesValue.str().any()}, raw...), env)
-	case "DATA":
+	case kwDOCKER_IMAGE:
+		applyJavaMacro(ctx, jm, d, strSetAppend, append([]string{envDockerImagesValue.string()}, args...), append([]ANY{envDockerImagesValue.str().any()}, raw...), env)
+	case kwDATA:
 		d.test.data = append(d.test.data, args...)
-	case "DATA_FILES":
+	case kwDATA_FILES:
 		for _, a := range args {
 			d.test.data = append(d.test.data, testDataFile(a))
 		}
-	case "JAVA_SRCS", "FULL_JAVA_SRCS":
+	case kwJAVA_SRCS, kwFULL_JAVA_SRCS:
 		if u.kind == juJar && !u.proto {
 			spec := parseJavaSrcs(args)
 			rawSpec := parseJavaSrcs(d.javaRawArgs(anyStrs(raw)))
@@ -869,14 +869,14 @@ func applyJavaMacro(ctx *GenCtx, jm *JavaModule, d *JavaData, name string, args 
 
 			d.javaSrcs = append(d.javaSrcs, spec)
 		}
-	case "DEFAULT_JAVA_SRCS_LAYOUT", "DEFAULT_JUNIT_JAVA_SRCS_LAYOUT":
+	case kwDEFAULT_JAVA_SRCS_LAYOUT, kwDEFAULT_JUNIT_JAVA_SRCS_LAYOUT:
 		if u.kind != juJar || u.proto {
 			return true
 		}
 
 		srcDir, resDir := "src/main/java", "src/main/resources"
 
-		if name == "DEFAULT_JUNIT_JAVA_SRCS_LAYOUT" {
+		if name == kwDEFAULT_JUNIT_JAVA_SRCS_LAYOUT {
 			srcDir, resDir = "java", "resources"
 		}
 
@@ -895,7 +895,7 @@ func applyJavaMacro(ctx *GenCtx, jm *JavaModule, d *JavaData, name string, args 
 			spec.salt = javaSrcsSalt(spec)
 			d.javaSrcs = append(d.javaSrcs, spec)
 		}
-	case "RUN_JAVA_PROGRAM":
+	case strRunJavaProgram:
 		expanded := javaRunProgramRawArgs(anyStrs(raw), env, d.rawVars)
 
 		if bad := malformedCommandReference(expanded); bad != "" {
@@ -905,81 +905,81 @@ func applyJavaMacro(ctx *GenCtx, jm *JavaModule, d *JavaData, name string, args 
 		}
 
 		d.runJavaPrograms = append(d.runJavaPrograms, JavaRunProgram{args: args, raw: expanded})
-		d.commandPeers = append(d.commandPeers, jm.instance.Platform.conf.commandDirs(name, env).peerdirs...)
-	case "GENERATE_SCRIPT":
+		d.commandPeers = append(d.commandPeers, jm.instance.Platform.conf.commandDirs(name.string(), env).peerdirs...)
+	case strGenerateScript:
 		d.generateScripts = append(d.generateScripts, args)
-	case "WITH_JDK":
+	case kwWITH_JDK:
 		d.withJDK = true
-	case "JAVA_EXTERNAL_DEPENDENCIES":
+	case kwJAVA_EXTERNAL_DEPENDENCIES:
 		d.externalDeps = append(d.externalDeps, args...)
-	case "ADD_DLLS_TO_JAR":
+	case kwADD_DLLS_TO_JAR:
 		d.addDLLs = true
-	case "CHECK_JAVA_DEPS":
+	case kwCHECK_JAVA_DEPS:
 		d.checkJavaDeps = strings.ToLower(arg0)
-	case "JAVA_IGNORE_CLASSPATH_CLASH_FOR":
+	case kwJAVA_IGNORE_CLASSPATH_CLASH_FOR:
 		property := []string{envJavaIgnoreClasspathClash.string()}
 
-		applyJavaMacro(ctx, jm, d, "SET_APPEND", append(property, args...), append([]ANY{envJavaIgnoreClasspathClash.str().any()}, raw...), env)
-	case "ENV":
+		applyJavaMacro(ctx, jm, d, strSetAppend, append(property, args...), append([]ANY{envJavaIgnoreClasspathClash.str().any()}, raw...), env)
+	case kwENV:
 		d.testEnv = append(d.testEnv, splitShellWords(`"`+strings.Join(anyStrs(raw), " ")+`"`)...)
-	case "LINT":
+	case kwLINT:
 		d.lintLevel = arg0
-	case "NO_LINT":
+	case kwNO_LINT:
 		d.noLint = "none"
 
 		if arg0 == "ktlint" {
 			d.noLint = "ktlint"
 		}
-	case "COLLECT_KOTLIN_LINT_SRCS":
+	case kwCOLLECT_KOTLIN_LINT_SRCS:
 		d.collectKotlinLint = args
-	case "STYLE_DETEKT":
+	case kwSTYLE_DETEKT:
 		if d.noLint != "none" {
 			d.customLints = append(d.customLints, javaCustomLint{linter: javaDetekt, configTypes: javaMacroKeyword(args, "CONFIG_TYPE")})
 		}
-	case "USE_KTLINT_OLD":
+	case kwUSE_KTLINT_OLD:
 		d.ktlintOld = true
-	case "WITH_YA_1931":
+	case kwWITH_YA_1931:
 		env.setBool(envWithYa1931, true)
-	case "ENABLE":
+	case strEnable:
 		for _, a := range args {
 			env.setBool(internEnv(a), true)
 			javaEnableFlag(d, a, true)
 			d.setVars.set(internStr(a), strYes)
 			jm.instance.Platform.conf.set(env, internEnv(a), &d.setVars)
 		}
-	case "DISABLE_DATA_VALIDATION":
+	case kwDISABLE_DATA_VALIDATION:
 		env.setBool(envValidateData, false)
-	case "DISABLE":
+	case strDisable:
 		for _, a := range args {
 			env.setBool(internEnv(a), false)
 			javaEnableFlag(d, a, false)
 			d.setVars.set(internStr(a), strNo)
 			jm.instance.Platform.conf.set(env, internEnv(a), &d.setVars)
 		}
-	case "GO_GRPC_GATEWAY_SWAGGER_SRCS":
+	case kwGO_GRPC_GATEWAY_SWAGGER_SRCS:
 		d.peerStmts = append(d.peerStmts, JavaPeerSpec{dir: goGatewayV1Options, explicit: true})
-	case "GO_GRPC_GATEWAY_V2_OPENAPI_SRCS":
+	case kwGO_GRPC_GATEWAY_V2_OPENAPI_SRCS:
 		d.peerStmts = append(d.peerStmts, JavaPeerSpec{dir: goGatewayV2Options, explicit: true})
-	case "WITH_KOTLIN_GRPC":
+	case kwWITH_KOTLIN_GRPC:
 		d.javaProtoArgs = append(d.javaProtoArgs, JavaProtoPlugin{kotlinGrpc: true})
-	case "JAVA_PROTO_PLUGIN":
+	case kwJAVA_PROTO_PLUGIN:
 		javaProtoPluginMacro(d, args)
-	case "PROTO_NAMESPACE":
+	case kwPROTO_NAMESPACE:
 		env.setString(envProtoNamespace, args[len(args)-1])
 		d.addProtoInclude(args, true)
-	case "PROTO_ADDINCL":
+	case kwPROTO_ADDINCL:
 		d.addProtoInclude(args, false)
-	case "EXPORT_YMAPS_PROTO":
+	case kwEXPORT_YMAPS_PROTO:
 		env.setString(envProtoNamespace, "maps/doc/proto")
 		d.addProtoInclude([]string{"maps/doc/proto"}, true)
-	case "PROTOC_FATAL_WARNINGS":
+	case kwPROTOC_FATAL_WARNINGS:
 		d.protocFlags = append(d.protocFlags, "--fatal_warnings")
-	case "ONLY_TAGS", "INCLUDE_TAGS", "EXCLUDE_TAGS":
+	case kwONLY_TAGS, kwINCLUDE_TAGS, kwEXCLUDE_TAGS:
 		if d.excludeTags == nil {
 			d.excludeTags = map[string]bool{}
 		}
 
-		if name == "ONLY_TAGS" {
+		if name == kwONLY_TAGS {
 			clear(d.excludeTags)
 			d.onlyTags = true
 
@@ -997,14 +997,14 @@ func applyJavaMacro(ctx *GenCtx, jm *JavaModule, d *JavaData, name string, args 
 		}
 
 		for _, a := range args {
-			d.excludeTags[a] = name == "EXCLUDE_TAGS"
+			d.excludeTags[a] = name == kwEXCLUDE_TAGS
 		}
-	case "TASKLET":
+	case kwTASKLET:
 		d.peerStmts = append(d.peerStmts, JavaPeerSpec{dir: strTaskletV1Api.string(), explicit: true})
-	case "STYLE_RUFF", "STYLE_PYTHON":
+	case kwSTYLE_RUFF, kwSTYLE_PYTHON:
 		style := "ruff"
 
-		if name == "STYLE_PYTHON" {
+		if name == kwSTYLE_PYTHON {
 			style = "black"
 		}
 
@@ -1033,9 +1033,9 @@ func javaEnableFlag(d *JavaData, name string, on bool) {
 	}
 }
 
-func javaMacroIsAlias(jm *JavaModule, name string) bool {
+func javaMacroIsAlias(jm *JavaModule, name STR) bool {
 	switch name {
-	case "JAVA_RUNTIME_PEERDIR", "JAVA_RUNTIME_EXCLUDE":
+	case kwJAVA_RUNTIME_PEERDIR, kwJAVA_RUNTIME_EXCLUDE:
 		return jm.unit.kind == juRunnable
 	default:
 		return jm.unit.kind == juTest
@@ -1296,13 +1296,13 @@ func javaRunProgramRawArgs(raw []string, env Environment, rawVars map[string]str
 	return out
 }
 
-func (d *JavaData) ruleList(jm *JavaModule, name string) (*[]ANY, bool) {
+func (d *JavaData) ruleList(jm *JavaModule, name STR) (*[]ANY, bool) {
 	switch name {
-	case "DEPENDENCY_MANAGEMENT":
+	case kwDEPENDENCY_MANAGEMENT:
 		return &d.dm, true
-	case "EXCLUDE":
+	case kwEXCLUDE:
 		return &d.excludes, true
-	case "JAVA_RUNTIME_EXCLUDE", "JAVA_TEST_EXCLUDE":
+	case kwJAVA_RUNTIME_EXCLUDE, kwJAVA_TEST_EXCLUDE:
 		if !javaMacroIsAlias(jm, name) {
 			return nil, true
 		}

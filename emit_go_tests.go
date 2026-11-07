@@ -114,7 +114,7 @@ func (e *EmitContext) goTestRunSuite(binRef NodeRef, globals []ResourceDecl) *Te
 	s := e.goSuiteBase(name, "go_test", "test", globals)
 
 	s.applyTestMeta(d.test, d.setVars.get(strADD_SRCDIR_TO_TEST_DATA) != strNo)
-	s.skipped = Environment{s: &e.frame.ifEnv}.string(envSKIP_TEST_VALUE) != ""
+	s.skipped = !Environment{s: &e.frame.ifEnv}.is(envSKIP_TEST_VALUE, strEmpty)
 	s.deps = []NodeRef{binRef}
 	s.supportsCanonization = true
 	s.canonicalData = true
@@ -124,7 +124,7 @@ func (e *EmitContext) goTestRunSuite(binRef NodeRef, globals []ResourceDecl) *Te
 
 	s.runCmd = func(work string, chunk TestChunk) []ANY {
 		return []ANY{
-			internStr(testToolHostPath).any(), strRunGoTest.any(),
+			strTestToolHostPath.any(), strRunGoTest.any(),
 			strBinary.any(), binary.any(),
 			strTestWorkDir.any(), intern(work).any(),
 			strTracefile.any(), intern(work + "/ytest.report.trace").any(),
@@ -153,7 +153,7 @@ func (e *EmitContext) goFmtSuite(files []VFS, globals []ResourceDecl) *TestSuite
 	gofmt := strGoToolsResourceGlobalBinGofmt.any()
 
 	for _, g := range globals {
-		if g.GlobalVar.string() == "GO_TOOLS_RESOURCE_GLOBAL" {
+		if g.GlobalVar == kwGO_TOOLS_RESOURCE_GLOBAL {
 			gofmt = intern(g.Value.string() + "/bin/gofmt").any()
 		}
 	}
@@ -164,7 +164,7 @@ func (e *EmitContext) goFmtSuite(files []VFS, globals []ResourceDecl) *TestSuite
 
 	s.runCmd = func(work string, _ TestChunk) []ANY {
 		out := []ANY{
-			internStr(testToolHostPath).any(), strRunGoFmt.any(),
+			strTestToolHostPath.any(), strRunGoFmt.any(),
 			strGofmt.any(), gofmt,
 			argSourceRoot.any(), strS.any(),
 			argTracePath.any(), intern(work + "/ytest.report.trace").any(),
@@ -188,7 +188,7 @@ func (e *EmitContext) goVetSuite(vetReport VFS, globals []ResourceDecl) *TestSui
 	s.projectBuildDeps = true
 	s.runCmd = func(work string, _ TestChunk) []ANY {
 		return []ANY{
-			internStr(testToolHostPath).any(), strRunCheck.any(),
+			strTestToolHostPath.any(), strRunCheck.any(),
 			argSourceRoot.any(), strS.any(),
 			strChecker.any(), strRunGoVet.any(),
 			strCheckName.any(), strGovet.any(),

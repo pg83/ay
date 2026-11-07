@@ -32,19 +32,19 @@ func bindRunAntlr4Python(args []ANY, version string) *antlrPythonArguments {
 	extra := false
 
 	for i := 1; i < len(args); i++ {
-		switch args[i].string() {
-		case "LISTENER":
+		switch args[i] {
+		case kwLISTENER.any():
 			stmt.Listener, extra = true, false
-		case "VISITOR":
+		case kwVISITOR.any():
 			stmt.Visitor, extra = true, false
-		case "SUBDIR":
+		case kwSUBDIR.any():
 			if i+1 == len(args) {
 				throwFmt("RUN_ANTLR4_PYTHON%s SUBDIR expects a value", version)
 			}
 
 			i++
 			stmt.Subdir, extra = args[i], false
-		case "EXTRA_OUTS":
+		case kwEXTRA_OUTS.any():
 			extra = true
 		default:
 			if extra {

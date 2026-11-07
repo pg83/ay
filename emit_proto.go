@@ -7,11 +7,12 @@ import (
 )
 
 var (
-	protobufRuntimeDirectives      = quotedDirectives(protobufRuntimeHeaders)
-	pbDescriptorImporterDirectives = quotedDirectives(pbDescriptorImporterHeaders)
-	pbRuntimeBaseVFS               = source(strings.TrimSuffix(pbRuntimeBase, "/"))
-	pbKV                           = KV{P: pkPB, PC: pcYellow}
-	cppProtoSpec                   = &ProtoSpec{kv: &pbKV, modulePlugins: true}
+	protobufRuntimeDirectives                         = quotedDirectives(protobufRuntimeHeaders)
+	pbDescriptorImporterDirectives                    = quotedDirectives(pbDescriptorImporterHeaders)
+	pbRuntimeBaseVFS                                  = source(strings.TrimSuffix(pbRuntimeBase, "/"))
+	pbKV                                              = KV{P: pkPB, PC: pcYellow}
+	cppProtoSpec                                      = &ProtoSpec{kv: &pbKV, modulePlugins: true}
+	strContribLibsProtobufSrcGoogleProtobufPortDefInc = internV(pbRuntimeBase, "google/protobuf/port_def.inc")
 )
 
 var protobufRuntimeHeaders = []VFS{
@@ -135,12 +136,12 @@ func protoOutputRel(outputRoot, rel string) string {
 
 func protoTransitiveHeadersEnabled(d *ModuleData) bool {
 	if d.setVars.has(strProtocTransitiveHeaders) {
-		return d.setVars.get(strProtocTransitiveHeaders).string() != "no"
+		return d.setVars.get(strProtocTransitiveHeaders) != strNo
 	}
 
 	if d.defaultVars != nil {
 		if v, ok := d.defaultVars[strProtocTransitiveHeaders]; ok {
-			return v.string() != "no"
+			return v != strNo
 		}
 	}
 
@@ -575,7 +576,7 @@ func (e *EmitContext) emitProtoPB(protoVFS VFS, cfg ProtoPBConfig, pe *PbModuleE
 		grpcHParsed = na.dirs.alloc(2 + len(directImports))[:0]
 		grpcHParsed = append(grpcHParsed, IncludeDirective{kind: includeQuoted, target: includeTarget(pbH.rel().any())})
 		grpcHParsed = append(grpcHParsed, directImports...)
-		grpcHParsed = append(grpcHParsed, IncludeDirective{kind: includeQuoted, target: includeTarget(internV(pbRuntimeBase, "google/protobuf/port_def.inc").any())})
+		grpcHParsed = append(grpcHParsed, IncludeDirective{kind: includeQuoted, target: includeTarget(strContribLibsProtobufSrcGoogleProtobufPortDefInc.any())})
 		na.dirs.commit(len(grpcHParsed))
 		grpcHParsed = grpcHParsed[:len(grpcHParsed):len(grpcHParsed)]
 	}

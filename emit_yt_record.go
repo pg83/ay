@@ -8,7 +8,7 @@ import (
 var ytRecordKV = KV{P: pkRC}
 
 func applyYtRecord(modulePath string, v UnknownStmt, d *ModuleData, env Environment) {
-	if len(v.Args) == 0 || len(v.Args) > 1 && v.Args[1].string() != "OUTPUT_INCLUDES" {
+	if len(v.Args) == 0 || len(v.Args) > 1 && v.Args[1] != kwOUTPUT_INCLUDES.any() {
 		throwFmt("GENERATE_YT_RECORD expects a YAML input and optional OUTPUT_INCLUDES")
 	}
 

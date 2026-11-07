@@ -1,7 +1,5 @@
 package main
 
-import "strings"
-
 func (e *EmitContext) pythonScriptCmd(script string, args ...string) Cmd {
 	na := e.ctx.na
 	head := []ANY{e.d.tc.Python3, source("build/scripts/", script).any()}
@@ -82,7 +80,7 @@ func (e *EmitContext) emitLazyModuleNode(node NodeSpec, needs []VFS, ownedOutput
 
 	for _, chunk := range node.input.roots {
 		for _, input := range chunk {
-			if input.isBuild() && strings.HasSuffix(input.relString(), ".in") && reg.lookup(input) != nil {
+			if input.isBuild() && srcIsTemplate(input) && reg.lookup(input) != nil {
 				templates = append(templates, input)
 			}
 		}
@@ -123,7 +121,7 @@ func (e *EmitContext) scriptModuleResources(closures [][]ResourceDecl, peers ...
 	e.d.tc = resolveModuleToolchain(e.ctx, globals, e.instance.Platform)
 
 	if e.d.tc.Python3 == 0 {
-		e.d.tc.Python3 = build("resources/", resourcePatternYMakePython3, "/bin/python3").any()
+		e.d.tc.Python3 = bldResourcesYMAKEPYTHON3BinPython3.any()
 	}
 
 	e.d.cc.TC = e.d.tc

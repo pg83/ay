@@ -7,7 +7,10 @@ import (
 	"strings"
 )
 
-var notsGlobMemo = newSparseMap[STR, *globMatcher](64)
+var (
+	notsGlobMemo      = newSparseMap[STR, *globMatcher](64)
+	argNotsBuilderDir = internArg(notsBuilderDir)
+)
 
 const notsBuilderDir = "devtools/frontend_build_platform/nots/builder"
 
@@ -623,7 +626,7 @@ func (e *EmitContext) notsPrepare() notsPreparation {
 	peerRefs = dedupRefs(peerRefs)
 	peerInputs = dedup(peerInputs)
 
-	toolRef, toolPath := e.tool(internArg(notsBuilderDir))
+	toolRef, toolPath := e.tool(argNotsBuilderDir)
 	prepToolIndex := len(prepInputs)
 
 	prepInputs = append(prepInputs, toolPath)
@@ -902,7 +905,7 @@ func (e *EmitContext) emitNotsTest() *ModuleEmitResult {
 	target := ""
 
 	for _, arg := range args {
-		if arg.string() == "RELATIVE" {
+		if arg == kwRELATIVE.any() {
 			relative = true
 		} else {
 			target = arg.string()

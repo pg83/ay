@@ -224,7 +224,7 @@ func (pm *IncludeParserManager) sourceParsed(vfsPath VFS, ctxParser IncludeDirec
 }
 
 func (pm *IncludeParserManager) indexAddincl(a VFS) {
-	if a.isBuild() || a.relString() == "" {
+	if a.isBuild() || a.rel().isEmpty() {
 		return
 	}
 

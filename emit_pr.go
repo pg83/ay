@@ -49,13 +49,13 @@ func (e *EmitContext) emitRunProgramStmt(rp *RunProgramStmt) {
 
 	if isGoModuleType(e.d.unit.Type) {
 		for _, out := range rp.OUTNoAutoFiles {
-			if strings.HasSuffix(out.string(), ".go") {
+			if srcExtClassOf(out) == srcExtGo {
 				outs = append(outs, out.string())
 			}
 		}
 	}
 
-	if rp.StdoutFile != nil && (!rp.StdoutNoAuto || isGoModuleType(e.d.unit.Type) && strings.HasSuffix(rp.StdoutFile.string(), ".go")) {
+	if rp.StdoutFile != nil && (!rp.StdoutNoAuto || isGoModuleType(e.d.unit.Type) && srcExtClassOf(*rp.StdoutFile) == srcExtGo) {
 		outs = append(outs, rp.StdoutFile.string())
 	}
 

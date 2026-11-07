@@ -45,7 +45,7 @@ func applyUserverProto(v UnknownStmt, d *ModuleData) {
 		}
 
 		for i := 0; i < len(v.Args); i++ {
-			if v.Args[i].string() == "FROM" {
+			if v.Args[i] == kwFROM.any() {
 				i++
 
 				if i < len(v.Args) {
