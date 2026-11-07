@@ -457,7 +457,13 @@ func (ctx *GenCtx) styleSuite(check StyleCheck, projectID STR, env []string, res
 
 		if dependsArgs == nil {
 			for _, dependency := range sortedUnique(append(slices.Clone(s.depends), project)) {
-				dependsArgs = append(dependsArgs, strDepends.any(), testArg(dependency))
+				arg := projectID.any()
+
+				if dependency != project {
+					arg = testArg(dependency)
+				}
+
+				dependsArgs = append(dependsArgs, strDepends.any(), arg)
 			}
 		}
 

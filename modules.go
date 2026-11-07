@@ -2586,7 +2586,11 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 				rooted, ok := moduleRootedVFS(modulePath, dir)
 
 				if !ok {
-					rooted = dirKey(dir).source()
+					if id := dirTok.str(); id != 0 && id.cleanPath() {
+						rooted = id.source()
+					} else {
+						rooted = dirKey(dir).source()
+					}
 				}
 
 				if !slices.Contains(d.srcDirs, rooted) {

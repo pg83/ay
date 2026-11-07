@@ -94,14 +94,18 @@ func (m *javaExcludeMatcher) excluded(rel string, isDir bool) bool {
 	return false
 }
 
-func (ctx *GenCtx) javaGlob(moddir, pattern string, ex *javaExcludeMatcher) []STR {
-	root := moddir
+func (ctx *GenCtx) javaGlob(moddir string, moddirID STR, pattern string, ex *javaExcludeMatcher) []STR {
+	root, rootID := moddir, moddirID
 
 	if rel, ok := strings.CutPrefix(pattern, "$(S)/"); ok {
-		root = ""
+		root, rootID = "", strEmpty
 		pattern = rel
 	} else if strings.HasPrefix(pattern, "$") {
 		return nil
+	}
+
+	if rootID == 0 {
+		rootID = dirKey(root)
 	}
 
 	parts := parseJavaGlob(pattern)
@@ -109,7 +113,7 @@ func (ctx *GenCtx) javaGlob(moddir, pattern string, ex *javaExcludeMatcher) []ST
 	var matches []STR
 	var joinBuf [256]byte
 
-	dirs := []STR{dirKey(root)}
+	dirs := []STR{rootID}
 
 	for i, part := range parts {
 		last := i == len(parts)-1

@@ -292,7 +292,7 @@ func (ctx *GenCtx) javaKotlinLintFiles(jm *JavaModule) []VFS {
 	var files []VFS
 
 	for _, p := range patterns {
-		for _, f := range ctx.javaGlob(jm.dir, p, ex) {
+		for _, f := range ctx.javaGlob(jm.dir, jm.path.rel(), p, ex) {
 			files = append(files, f.source())
 		}
 	}

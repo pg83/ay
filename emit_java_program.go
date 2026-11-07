@@ -597,7 +597,7 @@ func (ctx *GenCtx) emitJavaRunProgram(dir string, platform *Platform, jdk string
 			pattern = "$(S)/" + strings.TrimPrefix(pattern, "/")
 		}
 
-		for _, f := range ctx.javaGlob(dir, pattern, newJavaExcludeMatcher(dir, nil)) {
+		for _, f := range ctx.javaGlob(dir, 0, pattern, newJavaExcludeMatcher(dir, nil)) {
 			file := f.source()
 
 			b.input(file)

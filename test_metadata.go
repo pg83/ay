@@ -253,8 +253,16 @@ func testInnerCommand(s *TestSuite, meta TestMeta, binary VFS, work string, chun
 			command = append(command, strSplitByTests.any())
 		}
 
+		project := s.projectPath.string()
+
 		for _, directory := range s.pytestOutputDirs {
-			command = append(command, strDepRoot.any(), testArg(directory))
+			arg := s.projectPath.any()
+
+			if directory != project {
+				arg = testArg(directory)
+			}
+
+			command = append(command, strDepRoot.any(), arg)
 		}
 
 		for _, flag := range opts.flags {
