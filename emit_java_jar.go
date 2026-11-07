@@ -9,8 +9,8 @@ import (
 )
 
 var (
-	javaSrcsScripts = []VFS{buildScriptsProcessCommandFilesPy, source("build/scripts/java_pack_to_file.py"), buildScriptsAutotarGendirsPy, buildScriptsResolveJavaSrcsPy}
-	javacScripts    = []VFS{source("build/scripts/build_java_with_error_prone2.py"), buildScriptsSetupJavaTmpdirPy, source("build/scripts/javac_daemon_client.py"), source("build/scripts/JavacDaemon.jar")}
+	javaSrcsScriptsLazy []VFS
+	javacScriptsLazy    []VFS
 )
 
 type javaSrcsGlob struct {
@@ -236,7 +236,7 @@ func (ctx *GenCtx) javaEmitJar(jm *JavaModule) {
 
 	prep = append(prep, strYaEndCommandFile.any())
 
-	for _, s := range javaSrcsScripts {
+	for _, s := range javaSrcsScriptsOf() {
 		b.script(s)
 	}
 
@@ -271,7 +271,7 @@ func (ctx *GenCtx) javaEmitJar(jm *JavaModule) {
 
 		kt := b.python(buildScriptsRunJavacPy)
 
-		for _, s := range javacScripts {
+		for _, s := range javacScriptsOf() {
 			b.script(s)
 		}
 
@@ -326,7 +326,7 @@ func (ctx *GenCtx) javaEmitJar(jm *JavaModule) {
 
 	javac := b.python(buildScriptsRunJavacPy)
 
-	for _, s := range javacScripts {
+	for _, s := range javacScriptsOf() {
 		b.script(s)
 	}
 
@@ -591,4 +591,24 @@ func (ctx *GenCtx) javaLinkUberjar(jm *JavaModule, b *javaNodeBuilder, globals m
 	b.cmd(append(b.python(ldVcsInfoVFS), strOutputJava.any(), bldVcsJson.any(), mf.any(), jm.target.any()), 0)
 	b.cmd([]ANY{b.resourcePath(globals, jdk, "/bin/jar"), strUfv.any(), jm.target.any(), strMetaInfManifestMf.any()}, build(jm.dir, "/_empty"))
 	b.cmd([]ANY{b.resourcePath(globals, jdk, "/bin/jar"), strUfvm.any(), jm.target.any(), mf.any()}, 0)
+}
+
+func javaSrcsScriptsOf() []VFS {
+	if javaSrcsScriptsLazy == nil {
+		for _, p := range []string{"build/scripts/process_command_files.py", "build/scripts/java_pack_to_file.py", "build/scripts/autotar_gendirs.py", "build/scripts/resolve_java_srcs.py"} {
+			javaSrcsScriptsLazy = append(javaSrcsScriptsLazy, source(p))
+		}
+	}
+
+	return javaSrcsScriptsLazy
+}
+
+func javacScriptsOf() []VFS {
+	if javacScriptsLazy == nil {
+		for _, p := range []string{"build/scripts/build_java_with_error_prone2.py", "build/scripts/setup_java_tmpdir.py", "build/scripts/javac_daemon_client.py", "build/scripts/JavacDaemon.jar"} {
+			javacScriptsLazy = append(javacScriptsLazy, source(p))
+		}
+	}
+
+	return javacScriptsLazy
 }
