@@ -560,7 +560,7 @@ func (ctx *GenCtx) javaToolJar(jm *JavaModule, b *javaNodeBuilder, dir string) V
 	return res.java.target
 }
 
-func (ctx *GenCtx) javaLinkUberjar(jm *JavaModule, b *javaNodeBuilder, globals map[string]VFS, closure javaClosureSeq, libJar VFS, hasSources bool) {
+func (ctx *GenCtx) javaLinkUberjar(jm *JavaModule, b *javaNodeBuilder, globals map[STR]VFS, closure javaClosureSeq, libJar VFS, hasSources bool) {
 	d := jm.data
 	jdk := javaJDKResource(d.jdkReal)
 	bindir := jm.path.rel().build().string()

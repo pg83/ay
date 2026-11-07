@@ -130,7 +130,7 @@ func parseJavaGenerateScript(args []string) []javaGenScript {
 	return out
 }
 
-func (b *javaNodeBuilder) javaScriptgenScripts(jm *JavaModule, globals map[string]VFS, closure javaClosureSeq, jdk string) {
+func (b *javaNodeBuilder) javaScriptgenScripts(jm *JavaModule, globals map[STR]VFS, closure javaClosureSeq, jdk string) {
 	d := jm.data
 	flag := "IS_UBERJAR=no"
 
@@ -331,42 +331,43 @@ type javaRunProgram struct {
 
 func parseJavaRunProgram(dir string, rp JavaRunProgram) javaRunProgram {
 	r := javaRunProgram{}
-	mode := ""
+
+	var mode ANY
 
 	var opaque []ANY
 
 	for _, arg := range rp.args {
 		switch arg {
 		case kwIN.any(), kwIN_NOPARSE.any(), strInDir.any(), kwOUT.any(), kwOUT_NOAUTO.any(), kwTOOL.any(), strOutDir.any(), strClasspath2.any(), kwENV.any(), kwCWD.any(), kwSTDOUT.any(), kwSTDOUT_NOAUTO.any():
-			mode = arg.string()
+			mode = arg
 
 			continue
 		case strAddSrcsToClasspath.any():
-			mode = ""
+			mode = 0
 
 			continue
 		}
 
 		switch mode {
-		case "IN":
+		case kwIN.any():
 			r.in = append(r.in, arg)
-		case "IN_NOPARSE":
+		case kwIN_NOPARSE.any():
 			opaque = append(opaque, arg)
-		case "OUT":
+		case kwOUT.any():
 			r.out = append(r.out, arg)
-		case "OUT_NOAUTO":
+		case kwOUT_NOAUTO.any():
 			r.noauto = append(r.noauto, arg)
-		case "IN_DIR":
+		case strInDir.any():
 			r.inDirs = append(r.inDirs, arg.string())
-		case "OUT_DIR":
+		case strOutDir.any():
 			r.outDir = arg.string()
-		case "TOOL":
+		case kwTOOL.any():
 			r.tools = append(r.tools, arg.string())
-		case "CLASSPATH":
+		case strClasspath2.any():
 			r.tool = arg.string()
-		case "CWD":
+		case kwCWD.any():
 			r.cwd = arg.string()
-		case "":
+		case 0:
 			r.args = append(r.args, arg)
 		}
 	}
@@ -483,7 +484,7 @@ func (ctx *GenCtx) javaEmitRunProgram(jm *JavaModule, r javaRunProgram, ref Node
 	ctx.emitJavaRunProgram(jm.dir, jm.instance.Platform, jm.data.jdkReal, ctx.javaGlobals(jm), r, ref, func(name string) VFS { return ctx.javaArgVFS(jm, name) }, e)
 }
 
-func (ctx *GenCtx) emitJavaRunProgram(dir string, platform *Platform, jdk string, globals map[string]VFS, r javaRunProgram, ref NodeRef, input func(string) VFS, e *EmitContext) {
+func (ctx *GenCtx) emitJavaRunProgram(dir string, platform *Platform, jdk string, globals map[STR]VFS, r javaRunProgram, ref NodeRef, input func(string) VFS, e *EmitContext) {
 	b := &javaNodeBuilder{ctx: ctx, p: platform, inputContext: e}
 	bindir := build(dir)
 	outDir := r.outDir

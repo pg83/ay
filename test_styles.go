@@ -80,7 +80,7 @@ func (d *ModuleData) collectPythonStyleChecks(env Environment) {
 
 func pythonStyleCheck(name string, env Environment) StyleCheck {
 	check := StyleCheck{Name: name, Python: true, ConfigMap: strBuildConfigTestsPyStyleDefaultConfigsJson, FileProcessingTime: 1.5}
-	timeVar := "FLAKE8_FILE_PROCESSING_TIME"
+	timeVar := envFlake8FileProcessingTime
 
 	switch name {
 	case "flake8", "py2_flake8":
@@ -101,12 +101,12 @@ func pythonStyleCheck(name string, env Environment) StyleCheck {
 		}
 	case "black":
 		check.Peer, check.Resource, check.Wrapper = "build/external_resources/black", strBlackResourceGlobal, "tools/black_linter/wrapper.py"
-		timeVar = "BLACK_FILE_PROCESSING_TIME"
+		timeVar = envBlackFileProcessingTime
 	case "ruff":
 		check.Peer, check.Resource, check.Wrapper = "build/external_resources/ruff", strRuffResourceGlobal, "tools/ruff_linter/wrapper.py"
 		check.FileProcessingTime = 0.5
 
-		timeVar = "RUFF_FILE_PROCESSING_TIME"
+		timeVar = envRuffFileProcessingTime
 		check.ExtraParams = []string{"check_format=no", "run_in_source_root=no"}
 	}
 
@@ -114,7 +114,7 @@ func pythonStyleCheck(name string, env Environment) StyleCheck {
 		check.ConfigMap = value
 	}
 
-	if value, ok := env.lookup(timeVar); ok && value != "" {
+	if value, ok := env.lookupENV(timeVar); ok && value != "" {
 		check.FileProcessingTime = throw2(strconv.ParseFloat(value, 64))
 	}
 
@@ -142,8 +142,8 @@ func (d *ModuleData) collectExplicitPythonStyle(stmt UnknownStmt, env Environmen
 	check := pythonStyleCheck(name, env)
 
 	for i := 0; i < len(stmt.Args); i++ {
-		switch arg := stmt.Args[i].string(); arg {
-		case "CONFIG_TYPE":
+		switch stmt.Args[i] {
+		case kwCONFIG_TYPE.any():
 			i++
 
 			if i >= len(stmt.Args) {
@@ -152,13 +152,13 @@ func (d *ModuleData) collectExplicitPythonStyle(stmt UnknownStmt, env Environmen
 
 			check.ConfigType = stmt.Args[i].string()
 			check.ConfigDir, _ = env.lookupENV(envModuleCommonConfigsDir)
-		case "CHECK_FORMAT":
+		case strCheckFormat.any():
 			if name != "ruff" {
 				throwFmt("STYLE: CHECK_FORMAT requires ruff")
 			}
 
 			check.ExtraParams[0] = "check_format=yes"
-		case "RUN_IN_SOURCE_ROOT":
+		case strRunInSourceRoot.any():
 			if name != "ruff" {
 				throwFmt("STYLE: RUN_IN_SOURCE_ROOT requires ruff")
 			}

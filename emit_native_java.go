@@ -1,7 +1,5 @@
 package main
 
-import "strings"
-
 type NativeJavaProgram struct {
 	Call    JavaRunProgram
 	DeclSeq int
@@ -19,13 +17,7 @@ func (e *EmitContext) emitNativeJavaProgram(program NativeJavaProgram) {
 	ref := e.ctx.emit.reserve()
 
 	pending := e.pendingEmit(func() {
-		globals := map[string]VFS{}
-
-		for _, decl := range e.peers.ResourceGlobals {
-			globals[strings.TrimSuffix(decl.GlobalVar.string(), resourceGlobalSuffix)] = decl.Value
-		}
-
-		e.ctx.emitJavaRunProgram(dir, e.instance.Platform, e.d.runJavaJdk, globals, r, ref, e.runProgramInputVFS, e)
+		e.ctx.emitJavaRunProgram(dir, e.instance.Platform, e.d.runJavaJdk, javaGlobalsOf(e.peers.ResourceGlobals), r, ref, e.runProgramInputVFS, e)
 	})
 
 	for _, output := range outputs {

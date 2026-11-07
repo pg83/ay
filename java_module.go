@@ -419,7 +419,7 @@ type JavaModule struct {
 	incRecipe           *javaIncludedRecipe
 	globals             []ResourceDecl
 	resourceGlobals     []ResourceDecl
-	globalsByName       map[string]VFS
+	globalsByName       map[STR]VFS
 	resourceGlobalsDone bool
 	result              *ModuleEmitResult
 	outRef              NodeRef

@@ -84,7 +84,7 @@ func parseCopyEntries(args []string, line int) ([]CopyFileEntry, string) {
 			includes = append(includes, src)
 		}
 
-		entry := parseCopyFileEntry(internAnys(append([]string{src, dst, "OUTPUT_INCLUDES"}, includes...)), false, line)
+		entry := parseCopyFileEntry(append([]string{src, dst, "OUTPUT_INCLUDES"}, includes...), false, line)
 
 		entry.Auto = values["AUTO"] != ""
 		out = append(out, entry)

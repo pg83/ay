@@ -197,7 +197,7 @@ func (ctx *GenCtx) javaStyleSuite(jm *JavaModule) *TestSuite {
 
 	s.runCmd = func(work string, _ TestChunk) []ANY {
 		strs := []string{testToolHostPath, "run_javastyle", "--source-root", "$(S)", "--trace-path", work + "/ytest.report.trace",
-			"--out-path", work + "/testing_out_stuff", "--java", globals[jdk].string() + "/bin/java",
+			"--out-path", work + "/testing_out_stuff", "--java", globals[interned(jdk)].string() + "/bin/java",
 			"--runner-lib-path", javaStyleRunnerLib, "--config-xml", javaStyleConfigs[d.lintLevel], "--verbose",
 			"--modulo", "1", "--modulo-index", "0"}
 
@@ -354,10 +354,10 @@ func (ctx *GenCtx) javaJunitSuite(jm *JavaModule) *TestSuite {
 	closure := ctx.javaManagedPeersClosure(jm)
 	globals := ctx.javaGlobals(jm)
 	jdk := "JDK" + d.jdkReal
-	jdkForTests, ok := globals[jdk+"_FOR_TESTS"]
+	jdkForTests, ok := globals[internedV(jdk, "_FOR_TESTS")]
 
 	if !ok {
-		jdkForTests = globals[jdk]
+		jdkForTests = globals[interned(jdk)]
 	}
 
 	s := ctx.javaSuiteBase(jm, internStr(path.Base(path.Dir(jm.dir))+"-"+path.Base(jm.dir)), strJava5, strTest)

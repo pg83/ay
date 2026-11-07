@@ -7,8 +7,9 @@ import (
 )
 
 var (
-	javaReqCPU4       = Requirements{CPU: 4, Network: nwRestricted, RAM: 32}
-	javaReqNetworkAll = Requirements{CPU: 1, Network: nwFull, RAM: 32}
+	javaReqCPU4         = Requirements{CPU: 4, Network: nwRestricted, RAM: 32}
+	javaReqNetworkAll   = Requirements{CPU: 1, Network: nwFull, RAM: 32}
+	resourceGlobalBases = map[STR]STR{}
 )
 
 type javaNodeBuilder struct {
@@ -499,30 +500,47 @@ func (ctx *GenCtx) javaResourceGlobals(jm *JavaModule) []ResourceDecl {
 	return jm.resourceGlobals
 }
 
-func (ctx *GenCtx) javaGlobals(jm *JavaModule) map[string]VFS {
-	if jm.globalsByName != nil {
-		return jm.globalsByName
+func resourceGlobalBase(global STR) STR {
+	if base, ok := resourceGlobalBases[global]; ok {
+		return base
 	}
 
-	out := map[string]VFS{}
+	base := internStr(strings.TrimSuffix(global.string(), resourceGlobalSuffix))
 
-	for _, decl := range ctx.javaResourceGlobals(jm) {
-		out[strings.TrimSuffix(decl.GlobalVar.string(), resourceGlobalSuffix)] = decl.Value
+	resourceGlobalBases[global] = base
+
+	return base
+}
+
+func javaGlobalsOf(decls []ResourceDecl) map[STR]VFS {
+	out := make(map[STR]VFS, len(decls))
+
+	for _, decl := range decls {
+		out[resourceGlobalBase(decl.GlobalVar)] = decl.Value
 	}
-
-	jm.globalsByName = out
 
 	return out
 }
 
-func (b *javaNodeBuilder) resourcePath(globals map[string]VFS, name, suffix string) ANY {
-	v, ok := globals[name]
+func (ctx *GenCtx) javaGlobals(jm *JavaModule) map[STR]VFS {
+	if jm.globalsByName != nil {
+		return jm.globalsByName
+	}
+
+	jm.globalsByName = javaGlobalsOf(ctx.javaResourceGlobals(jm))
+
+	return jm.globalsByName
+}
+
+func (b *javaNodeBuilder) resourcePath(globals map[STR]VFS, name, suffix string) ANY {
+	id := interned(name)
+	v, ok := globals[id]
 
 	if !ok {
 		return internStr(suffix).any()
 	}
 
-	b.useResource(internStr(name))
+	b.useResource(id)
 
 	return internV(v.string(), suffix).any()
 }
@@ -767,7 +785,7 @@ func (ctx *GenCtx) javaEmitEvProto(jm *JavaModule, scanCtx *ScanContext, ev VFS)
 	return out
 }
 
-func (ctx *GenCtx) javaEmitProtoPB(jm *JavaModule, globals map[string]VFS, scanCtx *ScanContext, protoVFS VFS) VFS {
+func (ctx *GenCtx) javaEmitProtoPB(jm *JavaModule, globals map[STR]VFS, scanCtx *ScanContext, protoVFS VFS) VFS {
 	d := jm.data
 	protoRel := protoVFS.relString()
 	out := build(strings.TrimSuffix(protoRel, path.Ext(protoRel)), ".jsrc")
@@ -856,7 +874,7 @@ func (ctx *GenCtx) javaEmitProtoPB(jm *JavaModule, globals map[string]VFS, scanC
 	return out
 }
 
-func (b *javaNodeBuilder) renderKotlincOpts(globals map[string]VFS, opts []string) []ANY {
+func (b *javaNodeBuilder) renderKotlincOpts(globals map[STR]VFS, opts []string) []ANY {
 	out := make([]ANY, 0, len(opts))
 
 	for _, o := range opts {

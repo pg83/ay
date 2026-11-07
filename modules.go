@@ -523,11 +523,11 @@ type Lj21Archive struct {
 type CopyFileEntry struct {
 	Resolved       ResolvedSource
 	DeclSeq        int
-	Src            STR
+	Src            string
 	Dst            string
 	Auto           bool
 	WithContext    bool
-	OutputIncludes []ANY
+	OutputIncludes []string
 }
 
 type Antlr4GrammarInfo struct {
@@ -555,38 +555,38 @@ type AntlrRunInfo struct {
 	OutputIncludes []ANY
 }
 
-func parseCopyFileEntry(args []ANY, withContext bool, line int) CopyFileEntry {
+func parseCopyFileEntry(args []string, withContext bool, line int) CopyFileEntry {
 	entry := CopyFileEntry{WithContext: withContext}
 	positional := 0
-	section := false
+	section := ""
 
 	for _, arg := range args {
 		switch arg {
-		case strAuto.any():
+		case "AUTO":
 			entry.Auto = true
-			section = false
+			section = ""
 
 			continue
-		case strText.any():
-			section = false
+		case "TEXT":
+			section = ""
 
 			continue
-		case kwOUTPUT_INCLUDES.any(), kwINDUCED_DEPS.any():
-			section = true
+		case "OUTPUT_INCLUDES", "INDUCED_DEPS":
+			section = arg
 
 			continue
 		}
 
 		switch {
-		case section:
+		case section != "":
 			entry.OutputIncludes = append(entry.OutputIncludes, arg)
 		case positional == 0:
-			entry.Src = arg.textSTR()
+			entry.Src = arg
 		case positional == 1:
-			entry.Dst = arg.string()
+			entry.Dst = arg
 		}
 
-		if !section {
+		if section == "" {
 			positional++
 		}
 	}
@@ -751,10 +751,6 @@ func moduleRootedVFS(modulePath string, path string) (VFS, bool) {
 	default:
 		return 0, false
 	}
-}
-
-func isModuleRooted(path string) bool {
-	return vfsHasPrefix(path) || strings.HasPrefix(path, "${ARCADIA_ROOT}") || strings.HasPrefix(path, "${CURDIR}") || strings.HasPrefix(path, "${ARCADIA_BUILD_ROOT}") || strings.HasPrefix(path, "${BINDIR}")
 }
 
 func copyFileOutputVFS(modulePath string, dst string) VFS {
@@ -3810,7 +3806,7 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 		d.proto2Fbs = append(d.proto2Fbs, Proto2FbsStmt{Source: expandStmtTokenAny(v.Args[0], env), Seq: d.nextDeclSeq()})
 		d.hasFbs = true
 	case tokCopyFile, tokCopyFileWithContext:
-		entry := parseCopyFileEntry(v.Args, v.Name == tokCopyFileWithContext, v.Line)
+		entry := parseCopyFileEntry(anyStrs(v.Args), v.Name == tokCopyFileWithContext, v.Line)
 
 		entry.DeclSeq = d.nextDeclSeq()
 		d.copyFiles = append(d.copyFiles, entry)

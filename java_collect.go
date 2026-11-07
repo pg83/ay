@@ -441,7 +441,7 @@ func collectJavaStmts(ctx *GenCtx, jm *JavaModule, d *JavaData, stmts []Stmt, en
 
 			if v.Name == tokCopyFile || v.Name == tokCopyFileWithContext {
 				args := expandStmtTokens(v.Args, env)
-				entry := parseCopyFileEntry(args, v.Name == tokCopyFileWithContext, v.Line)
+				entry := parseCopyFileEntry(anyStrs(args), v.Name == tokCopyFileWithContext, v.Line)
 
 				entry.DeclSeq = d.nextDeclSeq()
 				d.copyFiles = append(d.copyFiles, entry)
@@ -743,7 +743,7 @@ func applyJavaMacro(ctx *GenCtx, jm *JavaModule, d *JavaData, name STR, args []s
 	case kwKAPT_ANNOTATION_PROCESSOR_CLASSPATH:
 		d.kaptAPClasspath = append(d.kaptAPClasspath, args...)
 
-		for _, id := range ids {
+		for _, id := range javaMacroIDs(args, ids) {
 			d.peerStmts = append(d.peerStmts, JavaPeerSpec{dir: id.textSTR()})
 		}
 	case kwKAPT_ANNOTATION_PROCESSOR_OPTIONS:
@@ -823,15 +823,15 @@ func applyJavaMacro(ctx *GenCtx, jm *JavaModule, d *JavaData, name STR, args []s
 			return true
 		}
 
-		for _, id := range ids {
+		for _, id := range javaMacroIDs(args, ids) {
 			d.peerStmts = append(d.peerStmts, JavaPeerSpec{dir: id.textSTR()})
 		}
 	case kwJAVA_API_PEERDIR:
-		for _, id := range ids {
+		for _, id := range javaMacroIDs(args, ids) {
 			d.peerStmts = append(d.peerStmts, JavaPeerSpec{dir: id.textSTR()})
 		}
 	case kwJAVA_IMPL_PEERDIR:
-		for _, id := range ids {
+		for _, id := range javaMacroIDs(args, ids) {
 			d.peerStmts = append(d.peerStmts, JavaPeerSpec{dir: id.textSTR()})
 		}
 
@@ -878,7 +878,7 @@ func applyJavaMacro(ctx *GenCtx, jm *JavaModule, d *JavaData, name STR, args []s
 	case kwUSE_RECIPE:
 		d.test.recipes = append(d.test.recipes, strings.Join(args, " "))
 	case kwDEPENDS:
-		for _, id := range ids {
+		for _, id := range javaMacroIDs(args, ids) {
 			d.test.depends = append(d.test.depends, id.textSTR())
 		}
 	case kwDOCKER_IMAGE:
@@ -934,7 +934,7 @@ func applyJavaMacro(ctx *GenCtx, jm *JavaModule, d *JavaData, name STR, args []s
 			return true
 		}
 
-		d.runJavaPrograms = append(d.runJavaPrograms, JavaRunProgram{args: ids, raw: expanded})
+		d.runJavaPrograms = append(d.runJavaPrograms, JavaRunProgram{args: javaMacroIDs(args, ids), raw: expanded})
 		d.commandPeers = append(d.commandPeers, jm.instance.Platform.conf.commandDirs(name.string(), env).peerdirs...)
 	case strGenerateScript:
 		d.generateScripts = append(d.generateScripts, args)
@@ -1540,7 +1540,15 @@ func javaDropUnresolvedIDs(args []string, ids []ANY) ([]string, []ANY) {
 		return out, ids
 	}
 
-	return out, internAnys(out)
+	return out, nil
+}
+
+func javaMacroIDs(args []string, ids []ANY) []ANY {
+	if ids == nil {
+		return internAnys(args)
+	}
+
+	return ids
 }
 
 func javaDropUnresolved(args []string) []string {
