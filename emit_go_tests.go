@@ -52,9 +52,9 @@ func (e *EmitContext) goFmtSuites(globals []ResourceDecl) []*TestSuite {
 	}
 
 	{
-		var dirs []string
+		var dirs []STR
 
-		byDir := map[string][]VFS{}
+		byDir := map[STR][]VFS{}
 		seen := map[VFS]bool{}
 
 		for _, src := range fmtFiles {
@@ -71,7 +71,7 @@ func (e *EmitContext) goFmtSuites(globals []ResourceDecl) []*TestSuite {
 
 			seen[f] = true
 
-			dir := path.Dir(f.relString())
+			dir := internStr(path.Dir(f.relString()))
 
 			if _, ok := byDir[dir]; !ok {
 				dirs = append(dirs, dir)
@@ -81,7 +81,7 @@ func (e *EmitContext) goFmtSuites(globals []ResourceDecl) []*TestSuite {
 		}
 
 		for _, dir := range dirs {
-			suites = append(suites, e.goFmtSuite(byDir[dir], globals))
+			suites = append(suites, e.goFmtSuite(dir, byDir[dir], globals))
 		}
 	}
 
@@ -141,12 +141,12 @@ func (e *EmitContext) goTestRunSuite(binRef NodeRef, globals []ResourceDecl) *Te
 	return s
 }
 
-func (e *EmitContext) goFmtSuite(files []VFS, globals []ResourceDecl) *TestSuite {
+func (e *EmitContext) goFmtSuite(dir STR, files []VFS, globals []ResourceDecl) *TestSuite {
 	slices.SortFunc(files, vfsCompare)
 
 	s := e.goSuiteBase(strGofmt2, strGofmt2, strStyle, globals)
 
-	s.projectPath = internStr(path.Dir(files[0].relString()))
+	s.projectPath = dir
 	s.runInputs = []VFS{s.projectPath.source()}
 	s.checkFiles = files
 

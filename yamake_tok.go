@@ -387,7 +387,7 @@ var tokName = [...]STR{
 	tokUseCommonGoogleApis:             internStr("USE_COMMON_GOOGLE_APIS"),
 	tokUseCxx:                          internStr("USE_CXX"),
 	tokUseUtil:                         internStr("USE_UTIL"),
-	tokUseLightPy2cc:                   internStr("USE_LIGHT_PY2CC"),
+	tokUseLightPy2cc:                   strUseLightPy2cc,
 	tokUseLlvmBc16:                     internStr("USE_LLVM_BC16"),
 	tokUseLlvmBc18:                     internStr("USE_LLVM_BC18"),
 	tokUseLlvmBc20:                     internStr("USE_LLVM_BC20"),

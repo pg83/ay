@@ -100,6 +100,66 @@ var wordBytes = func() [256]uint8 {
 	return table
 }()
 
+var stmtKindNames = [...][]string{
+	stmtKindProgram:                   {"PROGRAM", "LIBRARY", "CUDA_DEVICE_LINK_LIBRARY", "DOCS", "DOCS_LIBRARY", "CRATE", "CRATE_PROC_MACRO", "RUST_BUILD_SCRIPT", "RUST_RUNTIME", "TS_PACKAGE", "TS_LIBRARY", "TS_NEXT", "TS_VITE", "TS_RSPACK", "TS_TSC", "TS_TEST_FOR", "TS_TEST_JEST_FOR", "TS_TEST_VITEST_FOR", "PY23_NATIVE_LIBRARY", "PY3_LIBRARY", "PY23_LIBRARY", "PY2_LIBRARY", "SANDBOX_TASK", "SANDBOX_PY3_TASK", "SANDBOX_PY23_TASK", "SANDBOX_PY23_3_TASK", "PY3_PROGRAM_BIN", "PY2_PROGRAM", "PY3_PROGRAM", "PY3TEST", "PY3TEST_BIN", "PY2TEST", "PY23_TEST", "PY2MODULE", "PY3MODULE", "PY_ANY_MODULE", "YQL_PREBUILT_TOOL", "YQL_UDF", "YQL_PYTHON_UDF", "YQL_PYTHON3_UDF", "YQL_UDF_YDB", "YQL_UDF_CONTRIB", "YQL_UDF_TEST", "YQL_UDF_MINITEST", "YQL_LIBRARY", "YQL_PREBUILT_PROGRAM", "PROTO_LIBRARY", "ROS_LIBRARY", "MLAUNCH_LIBRARY", "MLAUNCH_COMPONENT", "MLAUNCH_PIPELINE", "SDC_DIAGS_LIBRARY", "GOLAUNCH_PROGRAM", "GOLAUNCH_COMPOSITE", "PROTO_DESCRIPTIONS", "PROTO_REGISTRY", "DLL", "DLL_TOOL", "SO_PROGRAM", "DYNAMIC_LIBRARY", "UDF_BASE", "PACKAGE", "UNION", "SDC_UNION", "CI_GROUP", "RESOURCES_LIBRARY", "GEN_LIBRARY", "PREBUILT_PROGRAM", "FBS_LIBRARY", "GO_LIBRARY", "GO_PROGRAM", "GO_TEST", "GO_DLL", "EXECTEST", "UNITTEST_FOR", "UNITTEST", "UNITTEST_WITH_CUSTOM_ENTRY_POINT", "YT_UNITTEST", "GTEST", "G_BENCHMARK", "Y_BENCHMARK", "FUZZ", "BOOSTTEST", "BOOSTTEST_WITH_MAIN", "JAVA_LIBRARY", "JAVA_LIBRARY_SPLIT", "JAVA_LIBRARY_NON_SPLIT", "JAVA_PROGRAM", "JAVA_CONTRIB", "JAVA_CONTRIB_PROXY", "JAVA_CONTRIB_PROGRAM", "JAVA_CONTRIB_ANNOTATION_PROCESSOR", "JAVA_ANNOTATION_PROCESSOR", "JAVA_TEST_LIBRARY", "JUNIT5", "JUNIT6", "JTEST", "JTEST_FOR", "EXTERNAL_JAVA_LIBRARY", "JAR_LIBRARY", "DLL_JAVA"},
+	stmtKindProtoSchema:               {"PROTO_SCHEMA"},
+	stmtKindDeclareExternalResource:   {"DECLARE_EXTERNAL_RESOURCE", "DECLARE_EXTERNAL_HOST_RESOURCES_BUNDLE", "DECLARE_EXTERNAL_HOST_RESOURCES_BUNDLE_BY_JSON"},
+	stmtKindPeerdir:                   {"PEERDIR"},
+	stmtKindSrcs:                      {"SRCS"},
+	stmtKindSet:                       {"SET"},
+	stmtKindEnd:                       {"END"},
+	stmtKindJoinSrcs:                  {"JOIN_SRCS"},
+	stmtKindAddincl:                   {"ADDINCL"},
+	stmtKindCflags:                    {"CFLAGS", "GLOBAL_CFLAGS"},
+	stmtKindCxxflags:                  {"CXXFLAGS"},
+	stmtKindConlyflags:                {"CONLYFLAGS"},
+	stmtKindLdflags:                   {"LDFLAGS"},
+	stmtKindSrcdir:                    {"SRCDIR"},
+	stmtKindGlobalSrcs:                {"GLOBAL_SRCS"},
+	stmtKindGenerateEnumSerialization: {"GENERATE_ENUM_SERIALIZATION"},
+	stmtKindAliceGenerateNoexceptEnumSerialization: {"ALICE_GENERATE_NOEXCEPT_ENUM_SERIALIZATION"},
+	stmtKindGenerateEnumSerializationWithHeader:    {"GENERATE_ENUM_SERIALIZATION_WITH_HEADER"},
+	stmtKindGenerateEnumSerializationNoutf:         {"GENERATE_ENUM_SERIALIZATION_NOUTF"},
+	stmtKindDefault:                                {"DEFAULT"},
+	stmtKindConfigureFile:                          {"CONFIGURE_FILE"},
+	stmtKindCreateBuildinfoFor:                     {"CREATE_BUILDINFO_FOR"},
+	stmtKindRunAntlr4Cpp:                           {"RUN_ANTLR4_CPP"},
+	stmtKindRunAntlr4CppSplit:                      {"RUN_ANTLR4_CPP_SPLIT"},
+	stmtKindRunAntlr4Python2:                       {"RUN_ANTLR4_PYTHON2", "RUN_ANTLR4_PYTHON3"},
+	stmtKindRunAntlr:                               {"RUN_ANTLR", "RUN_ANTLR4"},
+	stmtKindRunProgram:                             {"RUN_PROGRAM", "RUN_PY3_PROGRAM"},
+	stmtKindRunPython3:                             {"RUN_PYTHON3"},
+	stmtKindRunLua:                                 {"RUN_LUA"},
+	stmtKindSplitCodegen:                           {"SPLIT_CODEGEN"},
+	stmtKindBaseCodegen:                            {"BASE_CODEGEN"},
+	stmtKindStructCodegen:                          {"STRUCT_CODEGEN"},
+	stmtKindFromSandbox:                            {"FROM_SANDBOX"},
+	stmtKindResource:                               {"RESOURCE"},
+	stmtKindResourceFiles:                          {"RESOURCE_FILES"},
+	stmtKindAllResourceFiles:                       {"ALL_RESOURCE_FILES"},
+	stmtKindAllResourceFilesFromDirs:               {"ALL_RESOURCE_FILES_FROM_DIRS"},
+}
+
+var stmtKinds = func() []uint8 {
+	var ids []STR
+	var kinds []uint8
+
+	for kind, names := range stmtKindNames {
+		for _, name := range names {
+			ids = append(ids, internStr(name))
+			kinds = append(kinds, uint8(kind))
+		}
+	}
+
+	out := make([]uint8, slices.Max(ids)+1)
+
+	for i, id := range ids {
+		out[id] = kinds[i]
+	}
+
+	return out
+}()
+
 const (
 	splitCodegenDefaultOutNum = 25
 	splitCodegenStreamCount   = 5
@@ -153,6 +213,47 @@ const (
 	includeSeen includeEventKind = iota
 	includeUnseen
 	includeOnce
+)
+
+const (
+	_ = iota
+	stmtKindProgram
+	stmtKindProtoSchema
+	stmtKindDeclareExternalResource
+	stmtKindPeerdir
+	stmtKindSrcs
+	stmtKindSet
+	stmtKindEnd
+	stmtKindJoinSrcs
+	stmtKindAddincl
+	stmtKindCflags
+	stmtKindCxxflags
+	stmtKindConlyflags
+	stmtKindLdflags
+	stmtKindSrcdir
+	stmtKindGlobalSrcs
+	stmtKindGenerateEnumSerialization
+	stmtKindAliceGenerateNoexceptEnumSerialization
+	stmtKindGenerateEnumSerializationWithHeader
+	stmtKindGenerateEnumSerializationNoutf
+	stmtKindDefault
+	stmtKindConfigureFile
+	stmtKindCreateBuildinfoFor
+	stmtKindRunAntlr4Cpp
+	stmtKindRunAntlr4CppSplit
+	stmtKindRunAntlr4Python2
+	stmtKindRunAntlr
+	stmtKindRunProgram
+	stmtKindRunPython3
+	stmtKindRunLua
+	stmtKindSplitCodegen
+	stmtKindBaseCodegen
+	stmtKindStructCodegen
+	stmtKindFromSandbox
+	stmtKindResource
+	stmtKindResourceFiles
+	stmtKindAllResourceFiles
+	stmtKindAllResourceFilesFromDirs
 )
 
 func strKeySet(words ...string) BitSet {
@@ -1375,39 +1476,30 @@ type Parser struct {
 	stmtScratch  []Stmt
 }
 
+func stmtKindOf(name STR) uint8 {
+	if int(name) < len(stmtKinds) {
+		return stmtKinds[name]
+	}
+
+	return 0
+}
+
 func buildStmtForID(nameID STR, args []ANY, line int, fail func(format string, a ...any)) Stmt {
 	name := nameID.string()
 
-	switch name {
-	case "PROGRAM", "LIBRARY", "CUDA_DEVICE_LINK_LIBRARY", "DOCS", "DOCS_LIBRARY",
-		"CRATE", "CRATE_PROC_MACRO", "RUST_BUILD_SCRIPT", "RUST_RUNTIME",
-		"TS_PACKAGE", "TS_LIBRARY", "TS_NEXT", "TS_VITE", "TS_RSPACK", "TS_TSC", "TS_TEST_FOR", "TS_TEST_JEST_FOR", "TS_TEST_VITEST_FOR",
-
-		"PY23_NATIVE_LIBRARY", "PY3_LIBRARY", "PY23_LIBRARY", "PY2_LIBRARY", "SANDBOX_TASK", "SANDBOX_PY3_TASK", "SANDBOX_PY23_TASK", "SANDBOX_PY23_3_TASK",
-		"PY3_PROGRAM_BIN", "PY2_PROGRAM", "PY3_PROGRAM", "PY3TEST", "PY3TEST_BIN", "PY2TEST", "PY23_TEST", "PY2MODULE", "PY3MODULE", "PY_ANY_MODULE",
-		"YQL_PREBUILT_TOOL", "YQL_UDF", "YQL_PYTHON_UDF", "YQL_PYTHON3_UDF", "YQL_UDF_YDB", "YQL_UDF_CONTRIB", "YQL_UDF_TEST", "YQL_UDF_MINITEST", "YQL_LIBRARY", "YQL_PREBUILT_PROGRAM",
-		"PROTO_LIBRARY", "ROS_LIBRARY", "MLAUNCH_LIBRARY", "MLAUNCH_COMPONENT", "MLAUNCH_PIPELINE", "SDC_DIAGS_LIBRARY", "GOLAUNCH_PROGRAM", "GOLAUNCH_COMPOSITE",
-		"PROTO_DESCRIPTIONS", "PROTO_REGISTRY",
-		"DLL", "DLL_TOOL", "SO_PROGRAM", "DYNAMIC_LIBRARY", "UDF_BASE",
-		"PACKAGE", "UNION", "SDC_UNION", "CI_GROUP", "RESOURCES_LIBRARY", "GEN_LIBRARY",
-		"PREBUILT_PROGRAM",
-		"FBS_LIBRARY",
-		"GO_LIBRARY", "GO_PROGRAM", "GO_TEST", "GO_DLL",
-		"EXECTEST", "UNITTEST_FOR", "UNITTEST", "UNITTEST_WITH_CUSTOM_ENTRY_POINT", "YT_UNITTEST", "GTEST", "G_BENCHMARK", "Y_BENCHMARK", "FUZZ", "BOOSTTEST", "BOOSTTEST_WITH_MAIN",
-		"JAVA_LIBRARY", "JAVA_LIBRARY_SPLIT", "JAVA_LIBRARY_NON_SPLIT", "JAVA_PROGRAM", "JAVA_CONTRIB", "JAVA_CONTRIB_PROXY", "JAVA_CONTRIB_PROGRAM", "JAVA_CONTRIB_ANNOTATION_PROCESSOR", "JAVA_ANNOTATION_PROCESSOR", "JAVA_TEST_LIBRARY", "JUNIT5", "JUNIT6", "JTEST", "JTEST_FOR", "EXTERNAL_JAVA_LIBRARY", "JAR_LIBRARY", "DLL_JAVA":
+	switch stmtKindOf(nameID) {
+	case stmtKindProgram:
 		return astOne(astModules, ModuleStmt{Name: internTokSTR(nameID), Args: args, Line: line})
-	case "PROTO_SCHEMA":
+	case stmtKindProtoSchema:
 
 		return astOne(astModules, ModuleStmt{Name: tokProtoLibrary, Schema: true, Args: args, Line: line})
-	case "DECLARE_EXTERNAL_RESOURCE",
-		"DECLARE_EXTERNAL_HOST_RESOURCES_BUNDLE",
-		"DECLARE_EXTERNAL_HOST_RESOURCES_BUNDLE_BY_JSON":
+	case stmtKindDeclareExternalResource:
 		return &DeclareResourceStmt{Macro: internTokSTR(nameID), Args: args, Line: line}
-	case "PEERDIR":
+	case stmtKindPeerdir:
 		return astOne(astPeerdirs, PeerdirStmt{Paths: args, Line: line})
-	case "SRCS":
+	case stmtKindSrcs:
 		return astOne(astSrcs, SrcsStmt{Sources: args, Line: line})
-	case "SET":
+	case stmtKindSet:
 		if len(args) == 0 {
 			fail("SET expects at least 1 argument (name), got %d", len(args))
 		}
@@ -1419,9 +1511,9 @@ func buildStmtForID(nameID STR, args []ANY, line int, fail func(format string, a
 		}
 
 		return astOne(astSets, SetStmt{Name: args[0].string(), NameEnv: internEnvSTR(args[0].str()), Value: value, Plain: setValuePlain(value.string()), Line: line})
-	case "END":
+	case stmtKindEnd:
 		return astOne(astEnds, EndStmt{Line: line})
-	case "JOIN_SRCS":
+	case stmtKindJoinSrcs:
 		if len(args) == 0 {
 			fail("JOIN_SRCS expects at least one argument (the output name)")
 		}
@@ -1429,49 +1521,49 @@ func buildStmtForID(nameID STR, args []ANY, line int, fail func(format string, a
 		sources := astArgs.list(args[1:]...)
 
 		return &JoinSrcsStmt{OutputName: args[0].string(), Sources: sources, Line: line}
-	case "ADDINCL":
+	case stmtKindAddincl:
 		stmt := splitAddInclPaths(args)
 
 		stmt.Line = line
 
 		return stmt
-	case "CFLAGS", "GLOBAL_CFLAGS":
+	case stmtKindCflags:
 		return astOne(astCFlags, CFlagsStmt{Flags: args, Line: line, Global: name == "GLOBAL_CFLAGS"})
-	case "CXXFLAGS":
+	case stmtKindCxxflags:
 		return astOne(astCXXFlags, CXXFlagsStmt{Flags: args, Line: line})
-	case "CONLYFLAGS":
+	case stmtKindConlyflags:
 		return &CONLYFlagsStmt{Flags: args, Line: line}
-	case "LDFLAGS":
+	case stmtKindLdflags:
 		return &LDFlagsStmt{Flags: append([]ANY(nil), args...), Line: line}
-	case "SRCDIR":
+	case stmtKindSrcdir:
 		return &SrcDirStmt{Dirs: append([]ANY(nil), args...), Line: line}
-	case "GLOBAL_SRCS":
+	case stmtKindGlobalSrcs:
 		return &GlobalSrcsStmt{Sources: append([]ANY(nil), args...), Line: line}
-	case "GENERATE_ENUM_SERIALIZATION":
+	case stmtKindGenerateEnumSerialization:
 		if len(args) != 1 {
 			fail("GENERATE_ENUM_SERIALIZATION expects exactly 1 argument (header path), got %d", len(args))
 		}
 
 		return astOne(astEnumSers, GenerateEnumSerializationStmt{Macro: kwGENERATE_ENUM_SERIALIZATION, Header: args[0].string(), Variant: "plain", Line: line})
-	case "ALICE_GENERATE_NOEXCEPT_ENUM_SERIALIZATION":
+	case stmtKindAliceGenerateNoexceptEnumSerialization:
 		if len(args) != 1 {
 			fail("ALICE_GENERATE_NOEXCEPT_ENUM_SERIALIZATION expects exactly 1 argument (header path), got %d", len(args))
 		}
 
 		return astOne(astEnumSers, GenerateEnumSerializationStmt{Macro: strAliceGenerateNoexceptEnumSerialization, Header: args[0].string(), Variant: "noexcept_header", Line: line})
-	case "GENERATE_ENUM_SERIALIZATION_WITH_HEADER":
+	case stmtKindGenerateEnumSerializationWithHeader:
 		if len(args) != 1 {
 			fail("GENERATE_ENUM_SERIALIZATION_WITH_HEADER expects exactly 1 argument (header path), got %d", len(args))
 		}
 
 		return &GenerateEnumSerializationStmt{Macro: kwGENERATE_ENUM_SERIALIZATION_WITH_HEADER, Header: args[0].string(), Variant: "with_header", Line: line}
-	case "GENERATE_ENUM_SERIALIZATION_NOUTF":
+	case stmtKindGenerateEnumSerializationNoutf:
 		if len(args) != 1 {
 			fail("GENERATE_ENUM_SERIALIZATION_NOUTF expects exactly 1 argument (header path), got %d", len(args))
 		}
 
 		return &GenerateEnumSerializationStmt{Macro: kwGENERATE_ENUM_SERIALIZATION_NOUTF, Header: args[0].string(), Variant: "noutf", Line: line}
-	case "DEFAULT":
+	case stmtKindDefault:
 
 		varName := ""
 		value := ""
@@ -1485,60 +1577,60 @@ func buildStmtForID(nameID STR, args []ANY, line int, fail func(format string, a
 		}
 
 		return &DefaultVarStmt{VarName: varName, NameEnv: internEnv(varName), Value: value, Line: line}
-	case "CONFIGURE_FILE":
+	case stmtKindConfigureFile:
 
 		if len(args) != 2 {
 			fail("CONFIGURE_FILE expects exactly 2 arguments (src dst), got %d", len(args))
 		}
 
 		return &ConfigureFileStmt{Src: args[0].string(), Dst: args[1].string(), Line: line}
-	case "CREATE_BUILDINFO_FOR":
+	case stmtKindCreateBuildinfoFor:
 
 		if len(args) != 1 {
 			fail("CREATE_BUILDINFO_FOR expects exactly 1 argument, got %d", len(args))
 		}
 
 		return &CreateBuildInfoStmt{OutputHeader: args[0].string(), Line: line}
-	case "RUN_ANTLR4_CPP":
+	case stmtKindRunAntlr4Cpp:
 
 		if len(args) == 0 {
 			fail("RUN_ANTLR4_CPP expects at least 1 argument (grammar)")
 		}
 
 		return parseRunAntlr4Cpp(args, line)
-	case "RUN_ANTLR4_CPP_SPLIT":
+	case stmtKindRunAntlr4CppSplit:
 
 		if len(args) < 2 {
 			fail("RUN_ANTLR4_CPP_SPLIT expects at least 2 arguments (lexer parser)")
 		}
 
 		return parseRunAntlr4CppSplit(args, line)
-	case "RUN_ANTLR4_PYTHON2", "RUN_ANTLR4_PYTHON3":
+	case stmtKindRunAntlr4Python2:
 		if len(args) == 0 {
 			fail("%s expects a grammar", name)
 		}
 
 		return &RunAntlr4PythonStmt{Args: args, Version: strings.TrimPrefix(name, "RUN_ANTLR4_PYTHON"), Line: line}
-	case "RUN_ANTLR", "RUN_ANTLR4":
+	case stmtKindRunAntlr:
 		if len(args) == 0 {
 			fail("%s expects at least 1 argument", name)
 		}
 
 		return parseRunAntlr(args, Token{id: nameID, line: line})
-	case "RUN_PROGRAM", "RUN_PY3_PROGRAM":
+	case stmtKindRunProgram:
 
 		if len(args) == 0 {
 			fail("%s expects at least 1 argument (tool path)", name)
 		}
 
 		return parseRunProgram(args, line)
-	case "RUN_PYTHON3":
+	case stmtKindRunPython3:
 		if len(args) == 0 {
 			fail("RUN_PYTHON3 expects at least 1 argument (script path)")
 		}
 
 		return parseRunPython(args, line)
-	case "RUN_LUA":
+	case stmtKindRunLua:
 		if len(args) == 0 {
 			fail("RUN_LUA expects at least 1 argument (script path)")
 		}
@@ -1548,42 +1640,42 @@ func buildStmtForID(nameID STR, args []ANY, line int, fail func(format string, a
 		stmt.Lua = true
 
 		return stmt
-	case "SPLIT_CODEGEN":
+	case stmtKindSplitCodegen:
 		if len(args) < 2 {
 			fail("SPLIT_CODEGEN expects at least 2 arguments (tool prefix), got %d", len(args))
 		}
 
 		return parseSplitCodegen(args, line)
-	case "BASE_CODEGEN":
+	case stmtKindBaseCodegen:
 		if len(args) < 2 {
 			fail("BASE_CODEGEN expects at least 2 arguments (tool prefix), got %d", len(args))
 		}
 
 		return parseBaseCodegen(args, line)
-	case "STRUCT_CODEGEN":
+	case stmtKindStructCodegen:
 		if len(args) != 1 {
 			fail("STRUCT_CODEGEN expects exactly 1 argument (prefix), got %d", len(args))
 		}
 
 		return parseStructCodegen(args[0], line)
-	case "FROM_SANDBOX":
+	case stmtKindFromSandbox:
 
 		if len(args) == 0 {
 			fail("FROM_SANDBOX expects at least 1 argument (resource id)")
 		}
 
 		return parseFromSandbox(args, line)
-	case "RESOURCE":
+	case stmtKindResource:
 		return &ResourceStmt{Args: args, Line: line}
-	case "RESOURCE_FILES":
+	case stmtKindResourceFiles:
 		return &ResourceFilesStmt{Args: astArgs.list(args...), Line: line}
-	case "ALL_RESOURCE_FILES":
+	case stmtKindAllResourceFiles:
 		if len(args) == 0 {
 			fail("ALL_RESOURCE_FILES expects at least 1 argument (the extension)")
 		}
 
 		return &AllResourceFilesStmt{Args: astArgs.list(args...), Line: line}
-	case "ALL_RESOURCE_FILES_FROM_DIRS":
+	case stmtKindAllResourceFilesFromDirs:
 		return &AllResourceFilesStmt{Args: astArgs.list(args...), FromDirs: true, Line: line}
 	default:
 		return astOne(astUnknowns, UnknownStmt{Name: internTokMaybeSTR(nameID), Raw: nameID, Args: args, Line: line})

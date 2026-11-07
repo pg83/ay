@@ -157,7 +157,7 @@ func (f *ConfFile) macroConditionParams(macroBranch int32, sig ConfMacroSignatur
 		}
 
 		confTextRefs(f.branches[b].expr, func(key ENV) {
-			name := internStr(key.string())
+			name := key.str()
 
 			if (slices.Contains(sig.positional, name) || name == sig.vararg && sig.vararg != 0 || slices.ContainsFunc(sig.keywords, func(k ConfKeyword) bool { return k.name == name })) && !slices.Contains(params, name.string()) {
 				params = append(params, name.string())

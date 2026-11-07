@@ -26,6 +26,14 @@ func (a ANY) string() string {
 	return a.str().string()
 }
 
+func (a ANY) textSTR() STR {
+	if v := a.vfs(); v != 0 {
+		return internStr(v.string())
+	}
+
+	return a.str()
+}
+
 func (a ANY) relOrSelf() STR {
 	if v := a.vfs(); v != 0 {
 		return v.rel()

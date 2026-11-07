@@ -2,8 +2,8 @@ package main
 
 import "strings"
 
-func (d *ModuleData) captureResourcePeerPolicy(name string, env Environment) {
-	if name != "PASS_PEERS" || d.moduleStmt == nil || d.resourcePeerClosed {
+func (d *ModuleData) captureResourcePeerPolicy(name ENV, env Environment) {
+	if name != envPassPeers || d.moduleStmt == nil || d.resourcePeerClosed {
 		return
 	}
 

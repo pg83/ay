@@ -2475,7 +2475,7 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 
 			env.setFromSTR(v.NameEnv, valueID)
 			env.setTextInputs(v.NameEnv, textInputs)
-			d.captureResourcePeerPolicy(v.Name, env)
+			d.captureResourcePeerPolicy(v.NameEnv, env)
 
 			if v.NameEnv == envImportMaskVariable {
 				setPythonImportMask(valueID.string(), d)
@@ -2612,16 +2612,18 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 				d.defaultVars = map[STR]STR{}
 			}
 
-			if _, exists := d.defaultVars[internStr(v.VarName)]; !exists {
-				d.defaultVars[internStr(v.VarName)] = internStr(value)
+			name := v.NameEnv.str()
+
+			if _, exists := d.defaultVars[name]; !exists {
+				d.defaultVars[name] = internStr(value)
 			}
 
 			env.setDefaultString(v.NameEnv, value)
 
 			if !bound {
-				d.captureResourcePeerPolicy(v.VarName, env)
+				d.captureResourcePeerPolicy(v.NameEnv, env)
 
-				d.setVars.set(internStr(v.VarName), internStr(value))
+				d.setVars.set(name, internStr(value))
 				platform.conf.set(env, v.NameEnv, &d.setVars)
 			}
 
@@ -3384,7 +3386,7 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 		bundle := readResourceBundleJSON(fs, moduleSourceRel(modulePath, v.Args[1].string()))
 
 		if uri, ok := resolveResourceURIFromBundle(bundle, env); ok {
-			env.setString(internEnv(v.Args[0].string()), uri)
+			env.setString(internEnvSTR(v.Args[0].textSTR()), uri)
 		}
 	case tokUseCxx, tokUseUtil:
 		if !isGoModuleType(d.unit.Type) {
@@ -3879,51 +3881,53 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 	case tokEnable:
 
 		for _, aTok := range v.Args {
-			a := aTok.string()
+			a := aTok.textSTR()
+			name := internEnvSTR(a)
 
-			env.setBool(internEnv(a), true)
-			d.captureResourcePeerPolicy(a, env)
+			env.setBool(name, true)
+			d.captureResourcePeerPolicy(name, env)
 
-			d.setVars.set(internStr(a), strYes)
+			d.setVars.set(a, strYes)
 
 			switch a {
-			case "SANITIZER_TYPE":
+			case strSanitizerType:
 				setupPythonImportMask(env, d)
-			case "MUSL_LITE":
+			case strMuslLite:
 				d.muslLite = true
-			case "PYBUILD_NO_PYC":
+			case strPybuildNoPyc:
 				d.pyBuildNoPYC = true
-			case "PYBUILD_NO_PY":
+			case strPybuildNoPy:
 				d.pyBuildNoPY = true
-			case "PYTHON_SQLITE3":
+			case strPythonSqlite3:
 				d.pythonSQLite3 = true
-			case "USE_LIGHT_PY2CC":
+			case strUseLightPy2cc:
 				d.useLightPy2cc = true
 			}
 		}
 	case tokDisable:
 
 		for _, aTok := range v.Args {
-			a := aTok.string()
+			a := aTok.textSTR()
+			name := internEnvSTR(a)
 
-			env.setBool(internEnv(a), false)
-			d.captureResourcePeerPolicy(a, env)
+			env.setBool(name, false)
+			d.captureResourcePeerPolicy(name, env)
 
-			if a == "SANITIZER_TYPE" {
+			if a == strSanitizerType {
 				setupPythonImportMask(env, d)
 			}
 
-			d.setVars.set(internStr(a), strNo)
+			d.setVars.set(a, strNo)
 
-			if a == "PYTHON_SQLITE3" {
+			if a == strPythonSqlite3 {
 				d.pythonSQLite3 = false
 			}
 
-			if a == "USE_LIGHT_PY2CC" {
+			if a == strUseLightPy2cc {
 				d.useLightPy2cc = false
 			}
 
-			if a == "NEED_GOOGLE_PROTO_PEERDIRS" {
+			if a == strNeedGoogleProtoPeerdirs {
 				d.needGoogleProtoPeerdirs = false
 			}
 		}
@@ -4366,7 +4370,7 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 			}
 
 			if nameID == strPassPeers {
-				d.captureResourcePeerPolicy("PASS_PEERS", env)
+				d.captureResourcePeerPolicy(envPassPeers, env)
 			}
 
 			if nameID == strSanitizerType {
