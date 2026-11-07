@@ -183,7 +183,7 @@ func appendLiteralCompilerFlags(args []ANY, env Environment, name string, allGlo
 	return global, own
 }
 
-func compilerFlagForwardingWithoutRoots(value string, env Environment, parameters map[string][]string) (string, []compilerFlagResourceOrigin) {
+func compilerFlagForwardingWithoutRoots(value string, env Environment, parameters map[string][]ANY) (string, []compilerFlagResourceOrigin) {
 	roots := [...]ENV{envARCADIA_ROOT, envARCADIA_BUILD_ROOT, envCURDIR, envBINDIR}
 
 	var kinds [len(roots)]EnvKind
@@ -201,7 +201,7 @@ func compilerFlagForwardingWithoutRoots(value string, env Environment, parameter
 	return compilerFlagForwarding(value, env, parameters)
 }
 
-func compilerFlagForwarding(value string, env Environment, parameters map[string][]string) (string, []compilerFlagResourceOrigin) {
+func compilerFlagForwarding(value string, env Environment, parameters map[string][]ANY) (string, []compilerFlagResourceOrigin) {
 	var keys []STR
 	env.resourceUses = &keys
 

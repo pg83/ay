@@ -155,13 +155,13 @@ func bindRunProgramCalls(programs []*RunProgramStmt, env Environment, scratch *E
 		bound.EnvPairs = prepareRunProgramArguments(bound.EnvPairs, locals)
 
 		if bound.StdoutFile != nil {
-			value := internStr(strings.Join(anyStrs(prepareRunProgramArguments([]ANY{*bound.StdoutFile}, locals)), " ")).any()
+			value := joinAnysSTR(prepareRunProgramArguments([]ANY{*bound.StdoutFile}, locals), " ").any()
 
 			bound.StdoutFile = &value
 		}
 
 		if bound.CWD != nil {
-			value := internStr(strings.Join(anyStrs(prepareRunProgramArguments([]ANY{*bound.CWD}, locals)), " ")).any()
+			value := joinAnysSTR(prepareRunProgramArguments([]ANY{*bound.CWD}, locals), " ").any()
 
 			bound.CWD = &value
 		}

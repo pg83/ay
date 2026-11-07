@@ -34,14 +34,14 @@ func (e *EmitContext) emitAntlr4GrammarStmt(g Antlr4GrammarInfo) {
 		args = append(args, argNoListener.any())
 	}
 
-	args = appendInternAnys(args, g.Options)
+	args = append(args, g.Options...)
 	args = append(args, kwCWD.any(), build(module).any(), kwIN.any())
 	args = appendInternAnys(args, grammars)
 	args = append(args, kwOUT_NOAUTO.any())
 	args = appendInternAnys(args, []string{lexerBase + ".cpp", lexerBase + ".h", parserBase + ".cpp", parserBase + ".h"})
 	args = appendInternAnys(args, antlr4OptionalHeaders(optionalBase, g.Visitor, g.Listener))
 	args = append(args, kwOUTPUT_INCLUDES.any(), antlr4RuntimeHeaderVFS.any())
-	args = appendInternAnys(args, g.OutputIncludes)
+	args = append(args, g.OutputIncludes...)
 
 	call := parseRunAntlr(args, Token{id: kwRUN_ANTLR4})
 

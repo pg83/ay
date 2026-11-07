@@ -775,7 +775,7 @@ func (env Environment) expand(text string) string {
 	return substMacroDeeply(text, nil, env, nil, substCommand)
 }
 
-func bindingsOf(parameters map[string][]string) []confMacroBinding {
+func bindingsOf(parameters map[string][]ANY) []confMacroBinding {
 	if len(parameters) == 0 {
 		return nil
 	}
@@ -783,7 +783,7 @@ func bindingsOf(parameters map[string][]string) []confMacroBinding {
 	locals := make([]confMacroBinding, 0, len(parameters))
 
 	for name, values := range parameters {
-		locals = append(locals, confMacroBinding{name: internStr(name), values: internAnys(values), bound: true})
+		locals = append(locals, confMacroBinding{name: internStr(name), values: values, bound: true})
 	}
 
 	return locals

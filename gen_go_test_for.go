@@ -10,7 +10,13 @@ func (d *ModuleData) withGoTestForStmts(ctx *GenCtx, dir string, stmt *UnknownSt
 		throwFmt("GO_TEST_FOR expects a source directory")
 	}
 
-	forDir := path.Clean(stmt.Args[0].string())
+	forDirID := stmt.Args[0].textSTR()
+
+	if !forDirID.cleanPath() {
+		forDirID = internStr(path.Clean(forDirID.string()))
+	}
+
+	forDir := forDirID.string()
 
 	if forDir == dir {
 		throwFmt("GO_TEST_FOR: the current directory (%s) can not be used as an argument", dir)
@@ -25,9 +31,9 @@ func (d *ModuleData) withGoTestForStmts(ctx *GenCtx, dir string, stmt *UnknownSt
 	}()
 
 	visit([]Stmt{
-		newSetStmt("GO_TEST_IMPORT_PATH", envGO_TEST_IMPORT_PATH, forDir, stmt.Line),
-		newSetStmt("_GO_IMPORT_PATH", env_GO_IMPORT_PATH, forDir, stmt.Line),
-		&UnknownStmt{Name: tokSetAppend, Raw: tokSetAppend.str(), Args: []ANY{kwSRCDIR.any(), internStr(forDir).any()}, Line: stmt.Line},
+		newSetStmtID("GO_TEST_IMPORT_PATH", envGO_TEST_IMPORT_PATH, forDirID, stmt.Line),
+		newSetStmtID("_GO_IMPORT_PATH", env_GO_IMPORT_PATH, forDirID, stmt.Line),
+		&UnknownStmt{Name: tokSetAppend, Raw: tokSetAppend.str(), Args: []ANY{kwSRCDIR.any(), forDirID.any()}, Line: stmt.Line},
 	})
 
 	visit(ctx.parseFileCached(internJoined(forDir, "ya.make")))

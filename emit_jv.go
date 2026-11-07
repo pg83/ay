@@ -18,7 +18,7 @@ const jdkResourcePath = "$(B)/resources/JDK17/bin/java"
 
 func (e *EmitContext) emitJVDownstreamCPCC(
 	cpccPairs []struct{ cpp, h VFS },
-	outputIncludes []string,
+	outputIncludes []ANY,
 ) {
 	ctx, instance := e.ctx, e.instance
 
@@ -33,7 +33,7 @@ func (e *EmitContext) emitJVDownstreamCPCC(
 		emits = append(emits, IncludeDirective{kind: includeQuoted, target: includeTarget(srcH.any())})
 
 		for _, h := range outputIncludes {
-			emits = append(emits, IncludeDirective{kind: includeQuoted, target: includeTarget(internStr(h).any())})
+			emits = append(emits, IncludeDirective{kind: includeQuoted, target: includeTarget(h)})
 		}
 
 		ctx.na.dirs.commit(len(emits))

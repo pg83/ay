@@ -8,9 +8,15 @@ func copyFileParsedIncludes(na *NodeArenas, srcVFS, moduleDir VFS, entry CopyFil
 	}
 
 	for _, include := range entry.OutputIncludes {
+		target := include.textSTR()
+
+		if strHasDollar(include) {
+			target = internStr(copyFileIncludeTarget(moduleDir.relString(), include.string()))
+		}
+
 		out = append(out, IncludeDirective{
 			kind:   includeQuoted,
-			target: includeTarget(internStr(copyFileIncludeTarget(moduleDir.relString(), include)).any()),
+			target: includeTarget(target.any()),
 		})
 	}
 
@@ -50,13 +56,14 @@ func (e *EmitContext) registerCopyFile(entry CopyFileEntry) (CopyEmitState, *Gen
 	ctx, instance := e.ctx, e.instance
 	reg := e.codegen
 	resolved := entry.Resolved
-	srcVFS := resolved.withGeneratedDirs(reg, entry.Src, e.d.srcDirs)
+	src := entry.Src.string()
+	srcVFS := resolved.withGeneratedDirs(reg, src, e.d.srcDirs)
 
-	if _, rooted := moduleRootedVFS(instance.Path.relString(), entry.Src); !rooted && srcVFS.isSource() {
+	if rooted := strHasDollar(entry.Src.any()) && isModuleRooted(src); !rooted && srcVFS.isSource() {
 		candidate := srcVFS.rel().build()
 
 		if reg.lookup(candidate) == nil {
-			candidate = buildClean(entry.Src)
+			candidate = entry.Src.buildClean()
 		}
 
 		if reg.lookup(candidate) != nil && !resolved.Existing {
@@ -73,7 +80,7 @@ func (e *EmitContext) registerCopyFile(entry CopyFileEntry) (CopyEmitState, *Gen
 	}
 
 	if srcVFS != dstVFS {
-		e.requireProducedInput("COPY_FILE src", entry.Src, srcVFS)
+		e.requireProducedInput("COPY_FILE src", src, srcVFS)
 	}
 
 	parsed := copyFileParsedIncludes(ctx.na, srcVFS, instance.Path, entry)

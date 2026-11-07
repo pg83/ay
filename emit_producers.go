@@ -439,7 +439,7 @@ func (e *EmitContext) producerPositions(cythonPlans []CythonStmtPlan) ([]Produce
 	for i := range d.copyFiles {
 		entry := &d.copyFiles[i]
 
-		entry.Resolved = resolveSource(e.ctx, e.instance, entry.Src, d.srcDirs)
+		entry.Resolved = resolveSourceID(e.ctx, e.instance, entry.Src, d.srcDirs)
 
 		start := len(backing)
 
@@ -447,7 +447,7 @@ func (e *EmitContext) producerPositions(cythonPlans []CythonStmtPlan) ([]Produce
 
 		outEnd := len(backing)
 
-		backing = append(backing, e.schedulingSource(entry.Src, entry.Resolved))
+		backing = append(backing, e.schedulingSourceANY(entry.Src.any(), entry.Resolved))
 
 		push(prodCopyFile, i, start, outEnd)
 	}

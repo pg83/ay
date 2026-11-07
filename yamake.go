@@ -319,6 +319,10 @@ func newSetStmt(name string, nameEnv ENV, value string, line int) *SetStmt {
 	return &SetStmt{Name: name, NameEnv: nameEnv, Value: internStr(value), Plain: setValuePlain(value), Line: line}
 }
 
+func newSetStmtID(name string, nameEnv ENV, value STR, line int) *SetStmt {
+	return &SetStmt{Name: name, NameEnv: nameEnv, Value: value, Plain: setValuePlain(value.string()), Line: line}
+}
+
 func setValuePlain(value string) bool {
 	return strings.IndexByte(value, '$') < 0 && strings.IndexByte(value, '\\') < 0
 }

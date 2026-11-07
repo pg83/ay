@@ -31,6 +31,26 @@ func (a ANY) string() string {
 	return a.str().string()
 }
 
+func textANYs(in []ANY) []ANY {
+	var out []ANY
+
+	for i, a := range in {
+		if a.vfs() != 0 {
+			if out == nil {
+				out = slices.Clone(in)
+			}
+
+			out[i] = a.textSTR().any()
+		}
+	}
+
+	if out == nil {
+		return in
+	}
+
+	return out
+}
+
 func canonicalANYs(in []ANY) []ANY {
 	var out []ANY
 

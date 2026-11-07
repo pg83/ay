@@ -279,7 +279,7 @@ func applySdcInstall(module string, tokens []ANY, d *ModuleData, env Environment
 			if enabled || arg == "package.xml" && slices.Contains(allowed, "SHARE") {
 				out := sdcInstallLocation(packageName, kind, arg)
 
-				d.copyFiles = append(d.copyFiles, CopyFileEntry{Src: arg, Dst: out, DeclSeq: d.nextDeclSeq()})
+				d.copyFiles = append(d.copyFiles, CopyFileEntry{Src: internStr(arg), Dst: out, DeclSeq: d.nextDeclSeq()})
 				d.sdcInstallOutputs = append(d.sdcInstallOutputs, copyFileOutputVFS(module, out))
 			}
 		}

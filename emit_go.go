@@ -1336,7 +1336,7 @@ func (e *EmitContext) emitGoExe(resolved []ResolvedPeer, objRefs []NodeRef, objO
 
 	goCmd := Cmd{CmdArgs: na.chunkList(
 		head,
-		na.anyList(build(dir).any()),
+		na.anyList(instance.Path.rel().build().any()),
 		goToolCmdMid,
 		na.anyList(outPath.any()),
 		e.goToolCmdVetFor(),

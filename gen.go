@@ -1238,8 +1238,8 @@ func newModuleScanContext(ctx *GenCtx, instance ModuleInstance, d *ModuleData, c
 	scanCtx.cythonSys = cythonSysIncludes(d)
 	scanCtx.goAsmIncl = instance.Platform.Go.AsmIncludeDirs
 
-	if root := protoCPPOutRoot(d); root != "" {
-		scanCtx.protoOutRoot = source(root)
+	if root := protoCPPOutRootID(d); root != 0 {
+		scanCtx.protoOutRoot = root.source()
 	}
 
 	return scanCtx

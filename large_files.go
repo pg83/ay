@@ -86,7 +86,7 @@ func applyLargeFiles(fs FS, codegen *CodegenRegistry, modulePath string, stmt Un
 		if src := resolveLargeFileSource(fs, codegen, modulePath, arg, d.srcDirs); src != 0 && src.isSource() {
 			onWarn(Warn{Kind: WarnPlugin, Message: "Used local large file " + src.string() + ". Don't forget to run 'ya upload --update-external' and commit " + src.string() + ".external"})
 
-			d.copyFiles = append(d.copyFiles, CopyFileEntry{Src: src.string(), Dst: arg, DeclSeq: d.nextDeclSeq()})
+			d.copyFiles = append(d.copyFiles, CopyFileEntry{Src: src.any().textSTR(), Dst: arg, DeclSeq: d.nextDeclSeq()})
 
 			continue
 		}

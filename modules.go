@@ -523,11 +523,11 @@ type Lj21Archive struct {
 type CopyFileEntry struct {
 	Resolved       ResolvedSource
 	DeclSeq        int
-	Src            string
+	Src            STR
 	Dst            string
 	Auto           bool
 	WithContext    bool
-	OutputIncludes []string
+	OutputIncludes []ANY
 }
 
 type Antlr4GrammarInfo struct {
@@ -536,10 +536,10 @@ type Antlr4GrammarInfo struct {
 	Lexer          string
 	Parser         string
 	Grammar        string
-	Options        []string
+	Options        []ANY
 	Visitor        bool
 	Listener       bool
-	OutputIncludes []string
+	OutputIncludes []ANY
 }
 
 type AntlrRunInfo struct {
@@ -555,38 +555,38 @@ type AntlrRunInfo struct {
 	OutputIncludes []ANY
 }
 
-func parseCopyFileEntry(args []string, withContext bool, line int) CopyFileEntry {
+func parseCopyFileEntry(args []ANY, withContext bool, line int) CopyFileEntry {
 	entry := CopyFileEntry{WithContext: withContext}
 	positional := 0
-	section := ""
+	section := false
 
 	for _, arg := range args {
 		switch arg {
-		case "AUTO":
+		case strAuto.any():
 			entry.Auto = true
-			section = ""
+			section = false
 
 			continue
-		case "TEXT":
-			section = ""
+		case strText.any():
+			section = false
 
 			continue
-		case "OUTPUT_INCLUDES", "INDUCED_DEPS":
-			section = arg
+		case kwOUTPUT_INCLUDES.any(), kwINDUCED_DEPS.any():
+			section = true
 
 			continue
 		}
 
 		switch {
-		case section != "":
+		case section:
 			entry.OutputIncludes = append(entry.OutputIncludes, arg)
 		case positional == 0:
-			entry.Src = arg
+			entry.Src = arg.textSTR()
 		case positional == 1:
-			entry.Dst = arg
+			entry.Dst = arg.string()
 		}
 
-		if section == "" {
+		if !section {
 			positional++
 		}
 	}
@@ -751,6 +751,10 @@ func moduleRootedVFS(modulePath string, path string) (VFS, bool) {
 	default:
 		return 0, false
 	}
+}
+
+func isModuleRooted(path string) bool {
+	return vfsHasPrefix(path) || strings.HasPrefix(path, "${ARCADIA_ROOT}") || strings.HasPrefix(path, "${CURDIR}") || strings.HasPrefix(path, "${ARCADIA_BUILD_ROOT}") || strings.HasPrefix(path, "${BINDIR}")
 }
 
 func copyFileOutputVFS(modulePath string, dst string) VFS {
@@ -2703,21 +2707,21 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 				DeclSeq:        d.nextDeclSeq(),
 				IsSplit:        false,
 				Grammar:        expandStmtToken(v.Grammar.string(), env),
-				Options:        anyStrs(expandStmtTokens(v.Options, env)),
+				Options:        textANYs(expandStmtTokens(v.Options, env)),
 				Visitor:        v.Visitor,
 				Listener:       v.Listener,
-				OutputIncludes: anyStrs(expandStmtTokens(v.OutputIncludes, env)),
+				OutputIncludes: textANYs(expandStmtTokens(v.OutputIncludes, env)),
 			})
 		case *RunAntlr4CppSplitStmt:
 			d.antlr4Grammars = append(d.antlr4Grammars, Antlr4GrammarInfo{
 				DeclSeq:        d.nextDeclSeq(),
 				IsSplit:        true,
-				Options:        anyStrs(expandStmtTokens(v.Options, env)),
+				Options:        textANYs(expandStmtTokens(v.Options, env)),
 				Lexer:          expandStmtToken(v.Lexer.string(), env),
 				Parser:         expandStmtToken(v.Parser.string(), env),
 				Visitor:        v.Visitor,
 				Listener:       v.Listener,
-				OutputIncludes: anyStrs(expandStmtTokens(v.OutputIncludes, env)),
+				OutputIncludes: textANYs(expandStmtTokens(v.OutputIncludes, env)),
 			})
 		case *RunAntlr4PythonStmt:
 			collectAntlrPython(ctx.parsers, modulePath, v, env, d)
@@ -3806,7 +3810,7 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 		d.proto2Fbs = append(d.proto2Fbs, Proto2FbsStmt{Source: expandStmtTokenAny(v.Args[0], env), Seq: d.nextDeclSeq()})
 		d.hasFbs = true
 	case tokCopyFile, tokCopyFileWithContext:
-		entry := parseCopyFileEntry(anyStrs(v.Args), v.Name == tokCopyFileWithContext, v.Line)
+		entry := parseCopyFileEntry(v.Args, v.Name == tokCopyFileWithContext, v.Line)
 
 		entry.DeclSeq = d.nextDeclSeq()
 		d.copyFiles = append(d.copyFiles, entry)
@@ -4356,9 +4360,7 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 	case tokPyRegister:
 
 		for _, nameTok := range v.Args {
-			name := nameTok.string()
-
-			appendPyRegister(d, name, true)
+			appendPyRegisterID(d, nameTok.textSTR(), true)
 		}
 	case tokSetListPreSuf:
 		if len(v.Args) < 3 {
@@ -4529,7 +4531,11 @@ func cythonVariantBucket(s *CythonStmt) int {
 }
 
 func appendPyRegister(d *ModuleData, name string, renameInit bool) {
-	d.pyRegister = append(d.pyRegister, PyRegistration{Name: internStr(name), RenameInit: renameInit, DeclSeq: d.nextDeclSeq()})
+	appendPyRegisterID(d, internStr(name), renameInit)
+}
+
+func appendPyRegisterID(d *ModuleData, name STR, renameInit bool) {
+	d.pyRegister = append(d.pyRegister, PyRegistration{Name: name, RenameInit: renameInit, DeclSeq: d.nextDeclSeq()})
 }
 
 func finishPyRegisterCFlags(d *ModuleData) {
@@ -6347,6 +6353,7 @@ func appendCompilerFlags(args []ANY, env Environment, name string, allGlobal boo
 	}
 
 	var values []string
+	var ids []ANY
 
 	for _, arg := range args {
 		value := arg.string()
@@ -6356,15 +6363,22 @@ func appendCompilerFlags(args []ANY, env Environment, name string, allGlobal boo
 				return keepDeferredVar(key) || key == "ARCADIA_ROOT" || key == "ARCADIA_BUILD_ROOT"
 			}), " ")
 
-			values = append(values, slices.DeleteFunc(words, func(word string) bool { return word == "" })...)
+			for _, word := range words {
+				if word != "" {
+					values = append(values, word)
+					ids = append(ids, internAny(word))
+				}
+			}
 		} else {
 			values = append(values, value)
+			ids = append(ids, arg)
 		}
 	}
 
 	for i, value := range values {
 		if value == "&&" || value == ";" {
 			values[i] = `${quo:"` + value + `"}`
+			ids[i] = internAny(values[i])
 		}
 	}
 
@@ -6378,7 +6392,7 @@ func appendCompilerFlags(args []ANY, env Environment, name string, allGlobal boo
 		}
 	}
 
-	body, origins := compilerFlagForwardingWithoutRoots(name+" "+strings.Join(bound, " "), env, map[string][]string{"Flags": values})
+	body, origins := compilerFlagForwardingWithoutRoots(name+" "+strings.Join(bound, " "), env, map[string][]ANY{"Flags": ids})
 	words := sourceWordSpans(body, func(r rune) bool { return r == ' ' })
 
 	var globalValues, ownValues []string

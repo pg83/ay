@@ -210,11 +210,11 @@ func expandConfigMacroBody(value string, env Environment) string {
 	return continueConfigMacroBody(value, env, nil)
 }
 
-func continueConfigMacroBody(value string, env Environment, parameters map[string][]string) string {
+func continueConfigMacroBody(value string, env Environment, parameters map[string][]ANY) string {
 	return continueConfigMacroBodyTracked(value, env, parameters, nil)
 }
 
-func continueConfigMacroBodyTracked(value string, env Environment, parameters map[string][]string, track *SourceTextTracker) string {
+func continueConfigMacroBodyTracked(value string, env Environment, parameters map[string][]ANY, track *SourceTextTracker) string {
 	return substMacroDeeply(value, bindingsOf(parameters), env, nil, &substPolicy{keepModifiers: true, track: track})
 }
 

@@ -441,7 +441,7 @@ func collectJavaStmts(ctx *GenCtx, jm *JavaModule, d *JavaData, stmts []Stmt, en
 
 			if v.Name == tokCopyFile || v.Name == tokCopyFileWithContext {
 				args := expandStmtTokens(v.Args, env)
-				entry := parseCopyFileEntry(anyStrs(args), v.Name == tokCopyFileWithContext, v.Line)
+				entry := parseCopyFileEntry(args, v.Name == tokCopyFileWithContext, v.Line)
 
 				entry.DeclSeq = d.nextDeclSeq()
 				d.copyFiles = append(d.copyFiles, entry)
@@ -670,7 +670,7 @@ func applyJavaMacro(ctx *GenCtx, jm *JavaModule, d *JavaData, name STR, args []s
 	}
 
 	if name != strGenerateScript {
-		args = javaDropUnresolved(args)
+		args, ids = javaDropUnresolvedIDs(args, ids)
 	}
 
 	if len(args) > 0 {
@@ -743,8 +743,8 @@ func applyJavaMacro(ctx *GenCtx, jm *JavaModule, d *JavaData, name STR, args []s
 	case kwKAPT_ANNOTATION_PROCESSOR_CLASSPATH:
 		d.kaptAPClasspath = append(d.kaptAPClasspath, args...)
 
-		for _, a := range args {
-			d.peerStmts = append(d.peerStmts, JavaPeerSpec{dir: internStr(a)})
+		for _, id := range ids {
+			d.peerStmts = append(d.peerStmts, JavaPeerSpec{dir: id.textSTR()})
 		}
 	case kwKAPT_ANNOTATION_PROCESSOR_OPTIONS:
 		d.kaptAPOptions = append(d.kaptAPOptions, args...)
@@ -823,16 +823,16 @@ func applyJavaMacro(ctx *GenCtx, jm *JavaModule, d *JavaData, name STR, args []s
 			return true
 		}
 
-		for _, a := range args {
-			d.peerStmts = append(d.peerStmts, JavaPeerSpec{dir: internStr(a)})
+		for _, id := range ids {
+			d.peerStmts = append(d.peerStmts, JavaPeerSpec{dir: id.textSTR()})
 		}
 	case kwJAVA_API_PEERDIR:
-		for _, a := range args {
-			d.peerStmts = append(d.peerStmts, JavaPeerSpec{dir: internStr(a)})
+		for _, id := range ids {
+			d.peerStmts = append(d.peerStmts, JavaPeerSpec{dir: id.textSTR()})
 		}
 	case kwJAVA_IMPL_PEERDIR:
-		for _, a := range args {
-			d.peerStmts = append(d.peerStmts, JavaPeerSpec{dir: internStr(a)})
+		for _, id := range ids {
+			d.peerStmts = append(d.peerStmts, JavaPeerSpec{dir: id.textSTR()})
 		}
 
 		d.implPeers = append(d.implPeers, args...)
@@ -1531,6 +1531,16 @@ func javaAppendResolved(dst, src, expanded []ANY) []ANY {
 	}
 
 	return dst
+}
+
+func javaDropUnresolvedIDs(args []string, ids []ANY) ([]string, []ANY) {
+	out := javaDropUnresolved(args)
+
+	if ids == nil || slices.Equal(out, args) {
+		return out, ids
+	}
+
+	return out, internAnys(out)
 }
 
 func javaDropUnresolved(args []string) []string {

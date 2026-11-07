@@ -947,6 +947,24 @@ func assembleProtoCmdOutputs(na *NodeArenas, protoBase string, pbH, pbCC, pbDeps
 	return outputs[:len(outputs):len(outputs)]
 }
 
+func protoCPPOutRootID(d *ModuleData) STR {
+	if d.protoNamespace == nil {
+		return 0
+	}
+
+	if ns := d.protoNamespace.textSTR(); ns.cleanPath() {
+		if s := ns.string(); s[0] != '/' && s != "." {
+			return ns
+		}
+	}
+
+	if root := protoCPPOutRoot(d); root != "" {
+		return internStr(root)
+	}
+
+	return 0
+}
+
 func protoCPPOutRoot(d *ModuleData) string {
 	if d.protoNamespace == nil {
 		return ""
