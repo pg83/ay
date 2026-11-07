@@ -259,27 +259,12 @@ func selectResourceDescriptor(descriptor ResourceDescriptor, hostPlatform string
 
 func sortedResourceGlobals(in []ResourceDecl) []ResourceDecl {
 	if len(in) < 2 {
-		return append([]ResourceDecl(nil), in...)
+		return in
 	}
 
-	type keyed struct {
-		key  string
-		decl ResourceDecl
-	}
+	out := slices.Clone(in)
 
-	items := make([]keyed, len(in))
-
-	for i, decl := range in {
-		items[i] = keyed{decl.GlobalVar.string(), decl}
-	}
-
-	slices.SortFunc(items, func(a, b keyed) int { return strings.Compare(a.key, b.key) })
-
-	out := make([]ResourceDecl, len(items))
-
-	for i, item := range items {
-		out[i] = item.decl
-	}
+	slices.SortFunc(out, func(a, b ResourceDecl) int { return strings.Compare(a.GlobalVar.string(), b.GlobalVar.string()) })
 
 	return slices.Compact(out)
 }

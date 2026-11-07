@@ -51,7 +51,7 @@ func withDllForStmts(ctx *GenCtx, dir string, stmt *UnknownStmt, visit func([]St
 	}
 
 	set := func(name, value string) Stmt {
-		return &SetStmt{Name: name, NameEnv: internEnv(name), Value: value, Line: stmt.Line}
+		return newSetStmt(name, internEnv(name), value, stmt.Line)
 	}
 
 	out := []Stmt{

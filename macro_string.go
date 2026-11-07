@@ -398,7 +398,13 @@ func macroLookup(name string, locals []confMacroBinding, env Environment, consta
 		*constant = false
 	}
 
-	value, vfs, bound := env.lookupValue(name)
+	id := internedEnv(name)
+
+	if expansionMemo.tracing {
+		expansionMemo.note(env, id)
+	}
+
+	value, vfs, bound := env.lookupValueENV(id)
 
 	if !bound {
 		return macroValues{}, false
@@ -733,6 +739,28 @@ func (env Environment) subst(text string, locals []confMacroBinding, constant *b
 
 func (env Environment) expandVariableSTR(text string) STR {
 	return internStr(env.expandVariableView(text))
+}
+
+func (env Environment) expandVariableID(id ENV, bound EnvKind, raw STR) STR {
+	env.recordResourceUse(id)
+
+	key := expansionKey(uint32(raw), expansionVariable|uint32(bound)<<4)
+
+	if words, ok := expansionMemo.find(key, env); ok {
+		return words[0].str()
+	}
+
+	text := raw.string()
+
+	if bound == envVFS {
+		text = VFS(uint32(raw)).string()
+	}
+
+	value := internStr(env.expandVariableView(text))
+
+	expansionMemo.end(key, value.any())
+
+	return value
 }
 
 func (env Environment) expandVariableView(text string) string {

@@ -302,22 +302,23 @@ func collectJavaStmts(ctx *GenCtx, jm *JavaModule, d *JavaData, stmts []Stmt, en
 				d.peerStmts = append(d.peerStmts, JavaPeerSpec{dir: peerdirModulePath(p).string(), explicit: !v.Implicit})
 			}
 		case *SetStmt:
-			valueID := v.Plain
+			valueID := v.Value
 
-			if valueID == 0 {
-				valueID = expandSourceScalarVarRefSTR(v.Value, env)
+			if !v.Plain {
+				valueID = expandSourceScalarVarRefID(v.Value, env)
 			}
 
 			env.setFromSTR(v.NameEnv, valueID)
 			d.setVars.set(v.NameEnv.str(), valueID)
 			jm.instance.Platform.conf.set(env, v.NameEnv, &d.setVars)
 
-			raw := d.rawExpand(v.Value)
+			text := v.Value.string()
+			raw := d.rawExpand(text)
 
 			var rawID ANY
 
-			if v.Plain != 0 && raw == v.Value {
-				rawID = v.Plain.any()
+			if v.Plain && raw == text {
+				rawID = v.Value.any()
 			}
 
 			d.setRawVarID(v.NameEnv.str(), v.Name, raw, rawID)

@@ -80,7 +80,7 @@ func yqlEpilogue(ctx *GenCtx, modulePath string, kind ModuleKind, language Langu
 
 	collectStmts(ctx, modulePath, instance.Kind, instance.Language, []Stmt{
 		&UnknownStmt{Name: tokNoPlatform, Raw: tokNoPlatform.str()},
-		&SetStmt{Name: "NEED_PLATFORM_PEERDIRS", NameEnv: envNeedPlatformPeerdirs, Value: "no"},
+		&SetStmt{Name: "NEED_PLATFORM_PEERDIRS", NameEnv: envNeedPlatformPeerdirs, Value: strNo, Plain: true},
 		&UnknownStmt{Name: tokDisable, Args: []ANY{strCommonLinkSettings.any()}},
 		&UnknownStmt{Name: tokAllocator, Raw: tokAllocator.str(), Args: []ANY{strFAKE.any()}},
 	}, env, d, onWarn, instance.Platform)

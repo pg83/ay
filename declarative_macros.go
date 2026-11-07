@@ -73,7 +73,7 @@ func declarativeMacroAssignment(v *UnknownStmt, packageModule bool, env Environm
 	}
 
 	if parameter == "" && !strings.ContainsAny(value, "$ ") {
-		return &SetStmt{Name: name, NameEnv: internEnv(name), Value: value, Line: v.Line}
+		return newSetStmt(name, internEnv(name), value, v.Line)
 	}
 
 	locals := env.clone()
@@ -95,7 +95,7 @@ func declarativeMacroAssignment(v *UnknownStmt, packageModule bool, env Environm
 	words = slices.DeleteFunc(words, func(word string) bool { return word == "" })
 	value = strings.Join(words[1:], " ")
 
-	return &SetStmt{Name: name, NameEnv: internEnv(name), Value: value, Line: v.Line}
+	return newSetStmt(name, internEnv(name), value, v.Line)
 }
 
 func appendMacroEnv(env Environment, name, value string) {

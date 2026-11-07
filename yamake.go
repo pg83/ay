@@ -207,10 +207,18 @@ type SrcsStmt struct {
 type SetStmt struct {
 	Name         string
 	NameEnv      ENV
-	Plain        STR
-	Value        string
+	Value        STR
+	Plain        bool
 	LexicalValue string
 	Line         int
+}
+
+func newSetStmt(name string, nameEnv ENV, value string, line int) *SetStmt {
+	return &SetStmt{Name: name, NameEnv: nameEnv, Value: internStr(value), Plain: setValuePlain(value), Line: line}
+}
+
+func setValuePlain(value string) bool {
+	return strings.IndexByte(value, '$') < 0 && strings.IndexByte(value, '\\') < 0
 }
 
 type EndStmt struct {
@@ -1404,19 +1412,13 @@ func buildStmtForID(nameID STR, args []ANY, line int, fail func(format string, a
 			fail("SET expects at least 1 argument (name), got %d", len(args))
 		}
 
-		value := ""
+		value := strEmpty
 
 		if len(args) > 1 {
-			value = strings.Join(anyStrs(args[1:]), " ")
+			value = joinAnysSTR(args[1:], " ")
 		}
 
-		var plain STR
-
-		if strings.IndexByte(value, '$') < 0 && strings.IndexByte(value, '\\') < 0 {
-			plain = internStr(value)
-		}
-
-		return astOne(astSets, SetStmt{Name: args[0].string(), NameEnv: internEnvSTR(args[0].str()), Plain: plain, Value: value, Line: line})
+		return astOne(astSets, SetStmt{Name: args[0].string(), NameEnv: internEnvSTR(args[0].str()), Value: value, Plain: setValuePlain(value.string()), Line: line})
 	case "END":
 		return astOne(astEnds, EndStmt{Line: line})
 	case "JOIN_SRCS":

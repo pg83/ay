@@ -672,19 +672,13 @@ func (s *TestSuite) prepareNodeArgs() {
 	s.sortedGlobals = sortedResourceGlobals(s.globals)
 	s.envArgs = s.envArgs[:0]
 
-	var pairs [][2]string
-
-	if len(s.env) > 0 {
-		for _, g := range s.globals {
-			name, value, _ := strings.Cut(g.Token.string(), "::")
-
-			pairs = append(pairs, [2]string{"$" + name, value})
-		}
-	}
-
 	for _, e := range s.env {
-		for _, p := range pairs {
-			e = strings.ReplaceAll(e, p[0], p[1])
+		if strings.IndexByte(e, '$') >= 0 {
+			for _, g := range s.globals {
+				name, value, _ := strings.Cut(g.Token.string(), "::")
+
+				e = strings.ReplaceAll(e, "$"+name, value)
+			}
 		}
 
 		if !strings.Contains(e, "=") {

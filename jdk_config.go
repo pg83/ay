@@ -31,7 +31,7 @@ func jdkVersionMacroAssignment(v *UnknownStmt, env Environment) *SetStmt {
 
 	checkJdkVersion(value)
 
-	return &SetStmt{Name: "JDK_REAL_VERSION", NameEnv: envJdkRealVersion, Value: value, Line: v.Line}
+	return newSetStmt("JDK_REAL_VERSION", envJdkRealVersion, value, v.Line)
 }
 
 func checkJdkVersion(value string) {

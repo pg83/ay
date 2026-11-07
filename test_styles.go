@@ -465,7 +465,7 @@ func (ctx *GenCtx) styleSuite(check StyleCheck, project string, env []string, re
 		}
 
 		for _, r := range sortedResourceGlobals(resources) {
-			args = append(args, strGlobalResource.any(), testArg(r.Token.string()))
+			args = append(args, strGlobalResource.any(), r.Token.any())
 		}
 
 		for _, param := range check.ExtraParams {

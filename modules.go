@@ -1842,7 +1842,7 @@ func applyVarsAsMacros(ctx *GenCtx, modulePath string, kind ModuleKind, language
 		value := raw
 
 		if bound == envVFS || strHasDollar(raw.any()) {
-			value = env.expandVariableSTR(env.string(key))
+			value = env.expandVariableID(key, bound, raw)
 		} else {
 			env.recordResourceUse(key)
 		}
@@ -2462,16 +2462,15 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 			var valueID STR
 			var textInputs []SourceTextRange
 
-			if v.Plain != 0 && len(env.s.textInputs) == 0 && !(v.NameEnv == envImportMaskVariable && v.LexicalValue != "") {
-				valueID = v.Plain
-			} else {
-				sourceValue := v.Value
-
-				if v.NameEnv == envImportMaskVariable && v.LexicalValue != "" {
-					sourceValue = v.LexicalValue
-				}
-
-				valueID, textInputs = expandSourceScalarInputSTR(sourceValue, env)
+			switch {
+			case v.NameEnv == envImportMaskVariable && v.LexicalValue != "":
+				valueID, textInputs = expandSourceScalarInputSTR(v.LexicalValue, env)
+			case len(env.s.textInputs) != 0:
+				valueID, textInputs = expandSourceScalarInputSTR(v.Value.string(), env)
+			case v.Plain:
+				valueID = v.Value
+			default:
+				valueID = expandSourceScalarVarRefID(v.Value, env)
 			}
 
 			env.setFromSTR(v.NameEnv, valueID)
@@ -5706,6 +5705,10 @@ func expandSingleRef(text string, env Environment, phase TokenExpansion) ([]ANY,
 
 	k, v := env.s.lookup(id)
 
+	if expansionMemo.tracing {
+		expansionMemo.note(env, id)
+	}
+
 	if k != envStr && k != envInt || v != 0 && strHasDollar(v.any()) {
 		return nil, false
 	}
@@ -5731,6 +5734,24 @@ func expandTokens(items []ANY, env Environment, command bool, phase TokenExpansi
 			continue
 		}
 
+		tag := expansionTokens | uint32(phase)<<4
+
+		if command {
+			tag |= 1 << 12
+		}
+
+		key := expansionKey(uint32(item.str()), tag)
+
+		if words, ok := expansionMemo.find(key, env); ok {
+			if out == nil {
+				out = append(make([]ANY, 0, len(items)+len(words)), items[:i]...)
+			}
+
+			out = append(out, words...)
+
+			continue
+		}
+
 		text := item.string()
 
 		if !command {
@@ -5741,6 +5762,8 @@ func expandTokens(items []ANY, env Environment, command bool, phase TokenExpansi
 
 				out = append(out, words...)
 
+				expansionMemo.end(key, words...)
+
 				continue
 			}
 		}
@@ -5749,6 +5772,7 @@ func expandTokens(items []ANY, env Environment, command bool, phase TokenExpansi
 		expanded := expandTokenView(text, env, phase, &constant)
 
 		if !command && constant && expanded == text && !vfsHasPrefix(text) && strings.IndexFunc(text, unicode.IsSpace) < 0 {
+			expansionMemo.cancel()
 			strExpandsToSelf[phase].add(uint32(item.str()))
 
 			if out != nil {
@@ -5762,17 +5786,19 @@ func expandTokens(items []ANY, env Environment, command bool, phase TokenExpansi
 			out = append(make([]ANY, 0, len(items)+4), items[:i]...)
 		}
 
+		start := len(out)
+
 		if !command {
 			for f := range strings.FieldsSeq(expanded) {
 				out = append(out, internAny(f))
 			}
-
-			continue
+		} else {
+			for _, f := range splitShellWords(expanded) {
+				out = append(out, internAny(f))
+			}
 		}
 
-		for _, f := range splitShellWords(expanded) {
-			out = append(out, internAny(f))
-		}
+		expansionMemo.end(key, out[start:]...)
 	}
 
 	if out == nil {
@@ -5935,6 +5961,20 @@ func expandAssignedScalarVarRef(s string, env Environment) string {
 
 func expandSourceScalarVarRefSTR(s string, env Environment) STR {
 	return internStr(expandSourceScalarVarRefView(s, env))
+}
+
+func expandSourceScalarVarRefID(text STR, env Environment) STR {
+	key := expansionKey(uint32(text), expansionScalar)
+
+	if words, ok := expansionMemo.find(key, env); ok {
+		return words[0].str()
+	}
+
+	value := internStr(expandSourceScalarVarRefView(text.string(), env))
+
+	expansionMemo.end(key, value.any())
+
+	return value
 }
 
 func expandSourceScalarVarRefView(s string, env Environment) string {

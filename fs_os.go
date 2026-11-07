@@ -69,6 +69,8 @@ type OsFS struct {
 	readResult     [2][]byte
 	bundleKeys     []STR
 	bundleVals     []map[string]ResourceBundleEntry
+	walkQueue      []STR
+	walkBuf        []byte
 
 	fsBackend
 }
@@ -432,9 +434,9 @@ func (fs *OsFS) walk(rel string, visit func(rel string, isDir bool) bool) {
 		return
 	}
 
-	queue := []STR{dirKey(rel)}
+	queue, buf := append(fs.walkQueue[:0], dirKey(rel)), fs.walkBuf[:0]
 
-	var buf []byte
+	fs.walkQueue, fs.walkBuf = nil, nil
 
 	for head := 0; head < len(queue); head++ {
 		buf = buf[:0]
@@ -461,4 +463,6 @@ func (fs *OsFS) walk(rel string, visit func(rel string, isDir bool) bool) {
 			}
 		}
 	}
+
+	fs.walkQueue, fs.walkBuf = queue[:0], buf[:0]
 }

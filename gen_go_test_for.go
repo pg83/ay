@@ -25,8 +25,8 @@ func (d *ModuleData) withGoTestForStmts(ctx *GenCtx, dir string, stmt *UnknownSt
 	}()
 
 	visit([]Stmt{
-		&SetStmt{Name: "GO_TEST_IMPORT_PATH", NameEnv: envGO_TEST_IMPORT_PATH, Value: forDir, Line: stmt.Line},
-		&SetStmt{Name: "_GO_IMPORT_PATH", NameEnv: env_GO_IMPORT_PATH, Value: forDir, Line: stmt.Line},
+		newSetStmt("GO_TEST_IMPORT_PATH", envGO_TEST_IMPORT_PATH, forDir, stmt.Line),
+		newSetStmt("_GO_IMPORT_PATH", env_GO_IMPORT_PATH, forDir, stmt.Line),
 		&UnknownStmt{Name: tokSetAppend, Raw: tokSetAppend.str(), Args: []ANY{kwSRCDIR.any(), internStr(forDir).any()}, Line: stmt.Line},
 	})
 

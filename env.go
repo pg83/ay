@@ -516,9 +516,7 @@ func (e Environment) lookupENV(id ENV) (string, bool) {
 	return v.string(), true
 }
 
-func (e Environment) lookupValue(name string) (string, VFS, bool) {
-	id := internedEnv(name)
-
+func (e Environment) lookupValueENV(id ENV) (string, VFS, bool) {
 	if id == 0 {
 		return "", 0, false
 	}
