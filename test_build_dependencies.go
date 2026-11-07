@@ -7,7 +7,7 @@ type TestBuildDependency struct {
 	result   *ModuleEmitResult
 }
 
-func (ctx *GenCtx) testDependencyInstances(dir string) []ModuleInstance {
+func (ctx *GenCtx) testDependencyInstances(dir STR) []ModuleInstance {
 	if instances, ok := ctx.dependencyInstances[dir]; ok {
 		return instances
 	}
@@ -15,7 +15,7 @@ func (ctx *GenCtx) testDependencyInstances(dir string) []ModuleInstance {
 	instances := ctx.selectDependencyInstances(dir)
 
 	if ctx.dependencyInstances == nil {
-		ctx.dependencyInstances = map[string][]ModuleInstance{}
+		ctx.dependencyInstances = map[STR][]ModuleInstance{}
 	}
 
 	ctx.dependencyInstances[dir] = instances
@@ -23,14 +23,15 @@ func (ctx *GenCtx) testDependencyInstances(dir string) []ModuleInstance {
 	return instances
 }
 
-func (ctx *GenCtx) selectDependencyInstances(dir string) []ModuleInstance {
-	declaration := ctx.evaluateDir(dir, ctx.target).declaration
+func (ctx *GenCtx) selectDependencyInstances(dirID STR) []ModuleInstance {
+	dir := dirID.string()
+	declaration := ctx.evaluateDirVFS(dirID.sourceClean(), ctx.target).declaration
 
 	if declaration == nil {
 		throwFmt("gen: %s has no module declaration (PROGRAM/LIBRARY)", dir)
 	}
 
-	instance := ctx.rootInstanceForDeclaration(dir, demandSelf, declaration)
+	instance := ctx.rootInstanceForDeclarationVFS(dirID.sourceClean(), demandSelf, declaration)
 	name := declaration.Name
 
 	if isSandboxPythonTask(name) {
@@ -190,7 +191,7 @@ func (ctx *GenCtx) selectDependencyInstances(dir string) []ModuleInstance {
 	return selected
 }
 
-func (ctx *GenCtx) testBuildDependencies(dir string) []TestBuildDependency {
+func (ctx *GenCtx) testBuildDependencies(dir STR) []TestBuildDependency {
 	if dependencies, ok := ctx.dependencyBuilds[dir]; ok {
 		return dependencies
 	}
@@ -198,7 +199,7 @@ func (ctx *GenCtx) testBuildDependencies(dir string) []TestBuildDependency {
 	dependencies := ctx.buildTestDependencies(dir)
 
 	if ctx.dependencyBuilds == nil {
-		ctx.dependencyBuilds = map[string][]TestBuildDependency{}
+		ctx.dependencyBuilds = map[STR][]TestBuildDependency{}
 	}
 
 	ctx.dependencyBuilds[dir] = dependencies
@@ -206,7 +207,7 @@ func (ctx *GenCtx) testBuildDependencies(dir string) []TestBuildDependency {
 	return dependencies
 }
 
-func (ctx *GenCtx) buildTestDependencies(dir string) []TestBuildDependency {
+func (ctx *GenCtx) buildTestDependencies(dir STR) []TestBuildDependency {
 	var dependencies []TestBuildDependency
 
 	final := false
@@ -219,7 +220,7 @@ func (ctx *GenCtx) buildTestDependencies(dir string) []TestBuildDependency {
 	}
 
 	if len(dependencies) == 0 || len(dependencies) > 1 && !final {
-		ctx.onWarn(Warn{Kind: WarnBadMacroArgs, Message: fmt.Sprintf("DEPENDS(%s): directory has no selected module or multiple modules without a final target", dir)})
+		ctx.onWarn(Warn{Kind: WarnBadMacroArgs, Message: fmt.Sprintf("DEPENDS(%s): directory has no selected module or multiple modules without a final target", dir.string())})
 
 		return nil
 	}

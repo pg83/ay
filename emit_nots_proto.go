@@ -51,7 +51,7 @@ func (e *EmitContext) notsProtoInputs() (args []string, inputs []VFS, refs []Nod
 	args = append(args, "--protoc-bin", protocPath.string(), "--proto-srcs")
 
 	for _, src := range d.srcs {
-		file := e.protoSourceRel(src.Source.string()).source()
+		file := e.protoSourceRel(src.Source).source()
 
 		args = append(args, file.string())
 		inputs = append(inputs, file)

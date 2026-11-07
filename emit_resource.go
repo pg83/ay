@@ -396,7 +396,7 @@ func (e *EmitContext) packResources(p ResourcePack) ([]NodeRef, []VFS) {
 
 	for _, it := range p.Items {
 		if it.Path == "-" && it.ExpandedCmd.Args == nil && strings.ContainsAny(it.Cmd.string(), "\"'\\") {
-			it.ExpandedCmd.Args = e.ctx.na.anyList(internAnys(splitShellWords(it.Cmd.string()))...)
+			it.ExpandedCmd.Args = e.ctx.na.anyList(shellWordANYs(it.Cmd.string())...)
 		}
 
 		if e.instance.Platform.UseObjcopy && resourceCanObjcopy(it.Path, it.Key) {

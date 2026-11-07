@@ -113,14 +113,14 @@ func (ctx *GenCtx) javaCheckSourceDir(jm *JavaModule, dir string) VFS {
 	return jm.path
 }
 
-func (ctx *GenCtx) javaSrcDirsTestData(jm *JavaModule) []string {
-	var out []string
+func (ctx *GenCtx) javaSrcDirsTestData(jm *JavaModule) []ANY {
+	var out []ANY
 
 	for _, spec := range jm.data.javaSrcs {
 		dir := ctx.javaCheckSourceDir(jm, spec.srcDir)
 
 		if dir.isSource() {
-			out = append(out, sourceClean(dir.relString()).string())
+			out = append(out, dir.rel().sourceClean().any())
 		}
 	}
 
@@ -131,6 +131,14 @@ func sortedUnique(in []string) []string {
 	out := slices.Clone(in)
 
 	slices.Sort(out)
+
+	return slices.Compact(out)
+}
+
+func sortedUniqueSTR(in []STR) []STR {
+	out := slices.Clone(in)
+
+	slices.SortFunc(out, func(a, b STR) int { return strings.Compare(a.string(), b.string()) })
 
 	return slices.Compact(out)
 }
@@ -175,7 +183,7 @@ func (ctx *GenCtx) javaStyleSuite(jm *JavaModule) *TestSuite {
 	s.timeout = 240
 	s.requirements = map[string]string{"ram": "16"}
 	s.supportsTestParameters = true
-	s.relatedPaths = append([]ANY{srcJavaStyleMigrations.any()}, sortedUniqueByText(testArgs(dirs))...)
+	s.relatedPaths = append([]ANY{srcJavaStyleMigrations.any()}, sortedUniqueByText(dirs)...)
 	s.runInputs = append(s.runInputs, srclst)
 	s.deps = []NodeRef{ctx.javaProducer(jm, srclst)}
 	s.env = append(slices.Clone(d.testEnv), javaStyleServerEnv)
@@ -222,7 +230,7 @@ func (ctx *GenCtx) javaKtlintSuite(jm *JavaModule) *TestSuite {
 	binary := "$(" + strings.ToUpper(folder) + ")/run.bat"
 	srclist := build(jm.dir, "/all-kt-sources.txt")
 	s := ctx.javaSuiteBase(jm, strKtlint, strKtlint, strStyle)
-	dirs := []string{editorconfigPath}
+	dirs := []ANY{testArg(editorconfigPath)}
 
 	if !d.ktlintSkipSourceDirs {
 		dirs = append(dirs, ctx.javaSrcDirsTestData(jm)...)
@@ -230,7 +238,7 @@ func (ctx *GenCtx) javaKtlintSuite(jm *JavaModule) *TestSuite {
 
 	s.timeout = 120
 	s.requirements = map[string]string{"cpu": "2"}
-	s.relatedPaths = append([]ANY{jm.path.any(), editorconfig.any()}, sortedUniqueByText(testArgs(dirs))...)
+	s.relatedPaths = append([]ANY{jm.path.any(), editorconfig.any()}, sortedUniqueByText(dirs)...)
 	s.runInputs = append(s.runInputs, srclist)
 	s.projectBuildDeps = true
 	s.deps = []NodeRef{ctx.javaProducer(jm, srclist)}

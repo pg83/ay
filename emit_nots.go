@@ -594,7 +594,7 @@ func (e *EmitContext) notsPrepare() notsPreparation {
 	localPeers := pm.notsPeers(dir, pj)
 
 	if c.Hermetic {
-		ctx.recordConfiguration(e.instance, nil, localPeers)
+		ctx.recordConfiguration(e.instance, nil, internStrs(localPeers))
 	}
 
 	for _, peer := range localPeers {

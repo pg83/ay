@@ -838,5 +838,5 @@ func commandVariableArgs(env Environment, name ENV) []ANY {
 		return nil
 	}
 
-	return internAnys(splitShellWords(env.expand(value)))
+	return shellWordANYs(env.expand(value))
 }

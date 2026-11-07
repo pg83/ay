@@ -26,7 +26,7 @@ func (e *EmitContext) emitYmapsSprotoStmt(srcTok ANY) {
 	sprotocRes := e.toolResult(argMapsLibsSprotoSprotoc)
 	sprotocLDRef, sprotocBinary := sprotocRes.LDRef, *sprotocRes.LDPath
 	scanCtx := d.scanCtx
-	protoRel := e.protoSourceRel(srcTok.string())
+	protoRel := e.protoSourceRel(srcTok)
 	protoRelPath := protoRel.string()
 	sprotoH := build(strings.TrimSuffix(protoRelPath, ".proto"), ".sproto.h")
 	sprotoRef := ctx.emit.reserve()

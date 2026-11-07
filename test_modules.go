@@ -24,7 +24,7 @@ func applyCppTestModule(stmt *ModuleStmt, d *ModuleData, env Environment) {
 	case tokYqlUdfTest:
 		d.pyMain = ptr(strLibraryPythonPytestMainMain.any())
 		d.pyMainDeclSeq = d.nextDeclSeq()
-		d.test.depends = append(d.test.depends, "yql/essentials/tools/astdiff", "yql/tools/yqlrun", "yql/essentials/tools/udf_resolver")
+		d.test.depends = append(d.test.depends, strYqlEssentialsToolsAstdiff, strYqlToolsYqlrun, strYqlEssentialsToolsUdfResolver)
 		d.test.data = append(d.test.data, "arcadia/yql/essentials/cfg/udf_test")
 
 		d.test.env = append(d.test.env,
@@ -37,7 +37,7 @@ func applyCppTestModule(stmt *ModuleStmt, d *ModuleData, env Environment) {
 	case tokYqlUdfMinitest:
 		d.pyMain = ptr(strLibraryPythonPytestMainMain.any())
 		d.pyMainDeclSeq = d.nextDeclSeq()
-		d.test.depends = append(d.test.depends, "yql/essentials/tools/astdiff", "yql/essentials/tools/minirun", "yql/essentials/tools/udf_resolver")
+		d.test.depends = append(d.test.depends, strYqlEssentialsToolsAstdiff, strYqlEssentialsToolsMinirun, strYqlEssentialsToolsUdfResolver)
 		d.test.data = append(d.test.data, "arcadia/yql/essentials/cfg/tests")
 
 		d.test.env = append(d.test.env,

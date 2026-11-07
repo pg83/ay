@@ -58,7 +58,7 @@ func (d *ModuleData) collectCustomStyle(module string, args []ANY, env Environme
 		throwFmt("custom lint: NAME and WRAPPER_SCRIPT require one value each")
 	}
 
-	check := StyleCheck{Name: fields["NAME"][0], Wrapper: fields["WRAPPER_SCRIPT"][0], Depends: fields["DEPENDS"], ExtraParams: fields["EXTRA_PARAMS"]}
+	check := StyleCheck{Name: fields["NAME"][0], Wrapper: fields["WRAPPER_SCRIPT"][0], Depends: internStrs(fields["DEPENDS"]), ExtraParams: fields["EXTRA_PARAMS"]}
 
 	for _, file := range fields["FILES"] {
 		if strings.HasSuffix(file, "ya.make") {
@@ -79,7 +79,7 @@ func (d *ModuleData) collectCustomStyle(module string, args []ANY, env Environme
 	}
 
 	check.Files = sortedUniqueVFS(check.Files)
-	check.ConfigMap = strings.Join(fields["DEFAULT_CONFIGS"], "")
+	check.ConfigMap = internStr(strings.Join(fields["DEFAULT_CONFIGS"], ""))
 	check.ConfigType = strings.Join(fields["CONFIG_TYPE"], "")
 	check.ConfigDir, _ = env.lookupENV(envModuleCommonConfigsDir)
 

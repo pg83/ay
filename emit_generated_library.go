@@ -6,7 +6,7 @@ func (e *EmitContext) genGeneratedLibrary() *ModuleEmitResult {
 	var peerPaths []VFS
 
 	for _, peer := range e.d.peerdirs {
-		res := e.genPeerModule(ModuleInstance{Path: source(peer.string()), Kind: KindLib, Language: LangCPP, Platform: e.instance.Platform})
+		res := e.genPeerModule(ModuleInstance{Path: peer.peerSource(), Kind: KindLib, Language: LangCPP, Platform: e.instance.Platform})
 
 		closures = append(closures, res.ResourceGlobalClosure)
 		peerPaths = append(peerPaths, res.PeerArchiveClosurePaths...)

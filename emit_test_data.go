@@ -19,11 +19,11 @@ func resourceValidationEnabled(env Environment) bool {
 }
 
 func (ctx *GenCtx) dataValidationSuite(project STR, data, env []string, globals []ResourceDecl, uidExt string) *TestSuite {
-	var ids []string
+	var ids []STR
 
 	for _, entry := range data {
 		if match := dataValidationResourceID.FindStringSubmatch(entry); match != nil {
-			ids = append(ids, match[1])
+			ids = append(ids, internStr(match[1]))
 		}
 	}
 
@@ -31,21 +31,21 @@ func (ctx *GenCtx) dataValidationSuite(project STR, data, env []string, globals 
 }
 
 func (ctx *GenCtx) sandboxValidationSuite(project STR, fromSandboxes []*FromSandboxStmt, env []string, globals []ResourceDecl, uidExt string) *TestSuite {
-	ids := make([]string, len(fromSandboxes))
+	ids := make([]STR, len(fromSandboxes))
 
 	for i, stmt := range fromSandboxes {
-		ids[i] = stmt.ResourceId.string()
+		ids[i] = stmt.ResourceId.textSTR()
 	}
 
 	return ctx.resourceValidationSuite(project, "validate_resource", ids, env, globals, uidExt)
 }
 
-func (ctx *GenCtx) resourceValidationSuite(project STR, name string, ids, env []string, globals []ResourceDecl, uidExt string) *TestSuite {
+func (ctx *GenCtx) resourceValidationSuite(project STR, name string, ids []STR, env []string, globals []ResourceDecl, uidExt string) *TestSuite {
 	if len(ids) == 0 {
 		return nil
 	}
 
-	ids = sortedUnique(ids)
+	ids = sortedUniqueSTR(ids)
 
 	nameID := internStr(name)
 	s := &TestSuite{p: ctx.target, projectPath: project, name: nameID, testType: nameID, ciType: strTest, size: strSmall, timeout: 60, env: env, globals: globals, network: "full", setupPythonpathEnv: true, supportsTestParameters: true, clearEnvironment: true, noRetries: true, runInputs: []VFS{project.source()}, inputNames: ids}
@@ -66,11 +66,13 @@ func (ctx *GenCtx) resourceValidationSuite(project STR, name string, ids, env []
 		}
 
 		args := []string{testToolHostPath, "run_check", "--source-root", testSourceRoot, "--checker", checker, "--check-name", s.testType.string(), "--trace-path", work + "/ytest.report.trace", "--out-path", work + "/testing_out_stuff", "--log-path", work + "/testing_out_stuff/run_check.log"}
+		out := testArgs(args)
 
-		args = append(args, s.inputNames...)
-		args = append(args, "--batch", "--batch-name", path.Base(project.string()))
+		for _, id := range s.inputNames {
+			out = append(out, testArgANY(id.any()))
+		}
 
-		return testArgs(args)
+		return append(out, strBatch.any(), strBatchName.any(), testArg(path.Base(project.string())))
 	}
 
 	return s

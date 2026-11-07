@@ -363,6 +363,14 @@ func (e *EmitContext) moduleSourceRel(src ANY) string {
 	return src.string()
 }
 
+func (e *EmitContext) moduleSourceNameANY(src ANY) ANY {
+	if v := src.vfs(); v != 0 && v.isBuild() {
+		return internStr(e.moduleSourceRel(src)).any()
+	}
+
+	return src
+}
+
 func (e *EmitContext) moduleSourceName(src ANY) string {
 	if v := src.vfs(); v != 0 && v.isBuild() {
 		return e.moduleSourceRel(src)

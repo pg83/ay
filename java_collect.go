@@ -210,8 +210,8 @@ func collectJavaData(ctx *GenCtx, jm *JavaModule, stmts []Stmt, env Environment)
 	d.validateData = resourceValidationEnabled(env)
 	d.fakeModule = env.bool(envFakeModule)
 	d.moduleType = env.string(envMODULE_TYPE)
-	d.jarResource = env.string(envJarResourceID)
-	d.srcResource = env.string(envSrcResourceID)
+	d.jarResource = env.str(envJarResourceID)
+	d.srcResource = env.str(envSrcResourceID)
 	d.localJar = env.string(envLocalJarPath)
 	d.localSourcesJar = env.string(envLocalSourcesJarPath)
 	d.commonGoogleAPIs = !env.is(envCommonGoogleApis, strNone)
@@ -476,8 +476,8 @@ func collectJavaStmts(ctx *GenCtx, jm *JavaModule, d *JavaData, stmts []Stmt, en
 			stmt := *v
 
 			if v.Raw == strRunJavaProgram {
-				args = splitJavaCommandWords(expandStmtToken(strings.Join(anyStrs(raw), " "), env))
-				stmt.Args = internAnys(args)
+				stmt.Args = appendQuotedWords(nil, expandStmtToken(strings.Join(anyStrs(raw), " "), env), 1)
+				args = anyStrs(stmt.Args)
 			} else if v.Raw == strGenerateScript {
 				stmt.Args = expandSourceArguments(raw, env)
 				args = anyStrs(stmt.Args)
@@ -878,7 +878,9 @@ func applyJavaMacro(ctx *GenCtx, jm *JavaModule, d *JavaData, name STR, args []s
 	case kwUSE_RECIPE:
 		d.test.recipes = append(d.test.recipes, strings.Join(args, " "))
 	case kwDEPENDS:
-		d.test.depends = append(d.test.depends, args...)
+		for _, id := range ids {
+			d.test.depends = append(d.test.depends, id.textSTR())
+		}
 	case kwDOCKER_IMAGE:
 		applyJavaMacro(ctx, jm, d, strSetAppend, append([]string{envDockerImagesValue.string()}, args...), nil, append([]ANY{envDockerImagesValue.str().any()}, raw...), env)
 	case kwDATA:
@@ -932,7 +934,7 @@ func applyJavaMacro(ctx *GenCtx, jm *JavaModule, d *JavaData, name STR, args []s
 			return true
 		}
 
-		d.runJavaPrograms = append(d.runJavaPrograms, JavaRunProgram{args: args, raw: expanded})
+		d.runJavaPrograms = append(d.runJavaPrograms, JavaRunProgram{args: ids, raw: expanded})
 		d.commandPeers = append(d.commandPeers, jm.instance.Platform.conf.commandDirs(name.string(), env).peerdirs...)
 	case strGenerateScript:
 		d.generateScripts = append(d.generateScripts, args)

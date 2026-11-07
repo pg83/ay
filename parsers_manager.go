@@ -244,8 +244,13 @@ func (pm *IncludeParserManager) indexAddincl(a VFS) {
 	pm.addinclIndexed.add(uint32(a))
 
 	base := a.relString()
+	root := a.rel()
 
-	pm.fs.walk(base, func(rel string, isDir bool) bool {
+	if !root.cleanPath() {
+		root = dirKey(base)
+	}
+
+	pm.fs.walkDirID(root, func(rel string, _ STR, isDir bool) bool {
 		if isDir {
 			return true
 		}

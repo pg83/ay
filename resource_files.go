@@ -316,13 +316,19 @@ func globVisit(fs FS, pattern string, visit func(file string, view bool)) {
 					continue
 				}
 
-				fs.walk(d, func(rel string, isDir bool) bool {
+				visitFiles := func(rel string, _ STR, isDir bool) bool {
 					if !isDir {
 						visit(rel, true)
 					}
 
 					return true
-				})
+				}
+
+				if cleanRel(d) == d && gd.id != 0 {
+					fs.walkDirID(gd.id, visitFiles)
+				} else {
+					fs.walk(d, func(rel string, isDir bool) bool { return visitFiles(rel, 0, isDir) })
+				}
 
 				continue
 			}

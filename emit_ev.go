@@ -40,7 +40,7 @@ func (e *EmitContext) emitLibraryEvSource(meta SrcMeta) {
 	src := meta.Source
 	ctx, d := e.ctx, e.d
 	event2cppLDRef, event2cppBinary := e.tool(argToolsEvent2cpp)
-	evRel := e.protoSourceRel(e.moduleSourceName(src))
+	evRel := e.protoSourceRel(e.moduleSourceNameANY(src))
 	evRelPath := evRel.string()
 	evSource := e.sourceForEmission(meta)
 

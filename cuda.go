@@ -41,7 +41,7 @@ func (e *EmitContext) cudaSettings() *CudaSettings {
 	var flagUses []STR
 	env.resourceUses = &flagUses
 
-	flags := internAnys(splitShellWords(expandStmtToken(env.string(envNvccFlags), env)))
+	flags := shellWordANYs(expandStmtToken(env.string(envNvccFlags), env))
 	flagsValue := resourceGlobalArgumentValue(flags, e.peers.ResourceGlobals, &e.ctx.resourceEnv)
 
 	flags = flagsValue.Args

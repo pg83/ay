@@ -207,7 +207,7 @@ func (e *EmitContext) notsCheckSuites(target string, globals []ResourceDecl, fil
 		s.deps = slices.Clone(deps)
 
 		if e.d.nots.Kind == tokTsTestFor && e.d.nots.DependsOnBuild {
-			s.depends = append(slices.Clone(s.depends), target)
+			s.depends = append(slices.Clone(s.depends), internStr(target))
 		}
 
 		s.ciType = internStr(ciType)
@@ -301,7 +301,7 @@ func (e *EmitContext) notsForSuites(target string, ref NodeRef, globals []Resour
 	s.runInputs = []VFS{e.instance.Path}
 	s.supportsCanonization = true
 	s.smoothShutdown = []string{"SIGUSR2"}
-	s.inputNames = []string{target + "/package.json"}
+	s.inputNames = []STR{internV(target, "/package.json")}
 	s.recipes = e.notsRecipes(target, head, globals, false, true, false)
 
 	testConfig := name + ".config.js"

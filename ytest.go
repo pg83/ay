@@ -379,6 +379,14 @@ func testArg(s string) ANY {
 	return internStr(s).any()
 }
 
+func testArgANY(a ANY) ANY {
+	if a.vfs() == 0 && vfsHasPrefix(a.str().string()) {
+		return intern(a.str().string()).any()
+	}
+
+	return a
+}
+
 func testSizeTimeout(size STR) int {
 	switch size {
 	case strSmall:
@@ -411,7 +419,7 @@ func (o *TestOpts) sizeRequested(size STR) bool {
 
 type TestSuite struct {
 	dockerImages           []string
-	depends                []string
+	depends                []STR
 	dependencyProjects     []VFS
 	unpublishedDeps        []TestBuildDependency
 	data                   []string
@@ -421,7 +429,7 @@ type TestSuite struct {
 	corpusResources        []string
 	corpusPartsExceeded    int
 	recipes                string
-	files                  []string
+	files                  []ANY
 	pythonNoBytecode       bool
 	disableLeaks           bool
 	importCheckEnv         bool
@@ -436,7 +444,7 @@ type TestSuite struct {
 	timeout                int
 	relatedPaths           []ANY
 	runInputs              []VFS
-	inputNames             []string
+	inputNames             []STR
 	uidSalt                string
 	uidSaltID              STR
 	workBase               string
@@ -472,7 +480,7 @@ type TestSuite struct {
 
 type TestChunk struct {
 	split, index, retry int
-	file                string
+	file                ANY
 }
 
 func (s *TestSuite) workDir(chunk TestChunk) string {
@@ -486,8 +494,10 @@ func (s *TestSuite) workDir(chunk TestChunk) string {
 		dir += "/run" + strconv.Itoa(chunk.retry)
 	}
 
-	if chunk.file != "" {
-		dir = path.Join(dir, strings.TrimSuffix(chunk.file, path.Ext(chunk.file)))
+	if chunk.file != 0 {
+		file := chunk.file.string()
+
+		dir = path.Join(dir, strings.TrimSuffix(file, path.Ext(file)))
 	}
 
 	if chunk.split > 1 {
@@ -535,10 +545,10 @@ func (ctx *GenCtx) prepareTestDependencies(s *TestSuite) {
 		execDirs = append(execDirs, testExecDependencyDir(s.projectPath.string()))
 	}
 
-	var rewritten []string
+	var rewritten []STR
 
 	for _, dep := range s.depends {
-		s.dependencyProjects = append(s.dependencyProjects, source(dep))
+		s.dependencyProjects = append(s.dependencyProjects, dep.source())
 
 		published := !ctx.targetDirs[dep]
 
@@ -556,7 +566,7 @@ func (ctx *GenCtx) prepareTestDependencies(s *TestSuite) {
 			info, _ := reg.byRel.get(output.rel())
 
 			s.deps = append(s.deps, info.ProducerRef)
-			rewritten = append(rewritten, output.relString())
+			rewritten = append(rewritten, output.rel())
 
 			if s.testType == strExectest {
 				execDirs = append(execDirs, testExecDependencyDir(output.relString()))
@@ -570,7 +580,7 @@ func (ctx *GenCtx) prepareTestDependencies(s *TestSuite) {
 		}
 	}
 
-	s.depends = sortedUnique(rewritten)
+	s.depends = sortedUniqueSTR(rewritten)
 
 	if python {
 		s.pytestOutputDirs = sortedUnique(s.pytestOutputDirs)
@@ -655,7 +665,7 @@ func (ctx *GenCtx) emitTestSuite(s *TestSuite) []NodeRef {
 	files := s.files
 
 	if len(files) == 0 {
-		files = []string{""}
+		files = []ANY{0}
 	}
 
 	s.prepareNodeArgs()
@@ -870,8 +880,8 @@ func (ctx *GenCtx) testNode(s *TestSuite, chunk TestChunk) *Node {
 		head = append(head, strSplitCount.any(), intArg(chunk.split), strSplitIndex.any(), intArg(chunk.index))
 	}
 
-	if chunk.file != "" {
-		head = append(head, strSplitFile.any(), testArg(chunk.file))
+	if chunk.file != 0 {
+		head = append(head, strSplitFile.any(), testArgANY(chunk.file))
 	}
 
 	head = append(head, strCompressionFilter.any(), strZstd.any(), strCompressionLevel.any(), strOne.any())
@@ -941,7 +951,7 @@ func (ctx *GenCtx) testNode(s *TestSuite, chunk TestChunk) *Node {
 		if v := p.vfs(); v != 0 {
 			inputs = append(inputs, v)
 		} else {
-			inputNames = append(inputNames, p.string())
+			inputNames = append(inputNames, p.str())
 		}
 	}
 
@@ -955,10 +965,7 @@ func (ctx *GenCtx) testNode(s *TestSuite, chunk TestChunk) *Node {
 	deps := append(append(ctx.testDeps[:0], ctx.testContext()), s.deps...)
 	names := na.strs.alloc(len(inputNames))[:len(inputNames):len(inputNames)]
 
-	for i, name := range inputNames {
-		names[i] = internStr(name)
-	}
-
+	copy(names, inputNames)
 	na.strs.commit(len(names))
 
 	if len(s.globals) != 0 {

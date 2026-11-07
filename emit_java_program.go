@@ -315,11 +315,11 @@ func javaEntryPaths(closure javaClosureSeq) []VFS {
 }
 
 type javaRunProgram struct {
-	args      []string
-	in        []string
+	args      []ANY
+	in        []ANY
 	inNoParse int
-	out       []string
-	noauto    []string
+	out       []ANY
+	noauto    []ANY
 	inDirs    []string
 	outDir    string
 	cwd       string
@@ -333,15 +333,15 @@ func parseJavaRunProgram(dir string, rp JavaRunProgram) javaRunProgram {
 	r := javaRunProgram{}
 	mode := ""
 
-	var opaque []string
+	var opaque []ANY
 
-	for _, a := range rp.args {
-		switch a {
-		case "IN", "IN_NOPARSE", "IN_DIR", "OUT", "OUT_NOAUTO", "TOOL", "OUT_DIR", "CLASSPATH", "ENV", "CWD", "STDOUT", "STDOUT_NOAUTO":
-			mode = a
+	for _, arg := range rp.args {
+		switch arg {
+		case kwIN.any(), kwIN_NOPARSE.any(), strInDir.any(), kwOUT.any(), kwOUT_NOAUTO.any(), kwTOOL.any(), strOutDir.any(), strClasspath2.any(), kwENV.any(), kwCWD.any(), kwSTDOUT.any(), kwSTDOUT_NOAUTO.any():
+			mode = arg.string()
 
 			continue
-		case "ADD_SRCS_TO_CLASSPATH":
+		case strAddSrcsToClasspath.any():
 			mode = ""
 
 			continue
@@ -349,25 +349,25 @@ func parseJavaRunProgram(dir string, rp JavaRunProgram) javaRunProgram {
 
 		switch mode {
 		case "IN":
-			r.in = append(r.in, a)
+			r.in = append(r.in, arg)
 		case "IN_NOPARSE":
-			opaque = append(opaque, a)
+			opaque = append(opaque, arg)
 		case "OUT":
-			r.out = append(r.out, a)
+			r.out = append(r.out, arg)
 		case "OUT_NOAUTO":
-			r.noauto = append(r.noauto, a)
+			r.noauto = append(r.noauto, arg)
 		case "IN_DIR":
-			r.inDirs = append(r.inDirs, a)
+			r.inDirs = append(r.inDirs, arg.string())
 		case "OUT_DIR":
-			r.outDir = a
+			r.outDir = arg.string()
 		case "TOOL":
-			r.tools = append(r.tools, a)
+			r.tools = append(r.tools, arg.string())
 		case "CLASSPATH":
-			r.tool = a
+			r.tool = arg.string()
 		case "CWD":
-			r.cwd = a
+			r.cwd = arg.string()
 		case "":
-			r.args = append(r.args, a)
+			r.args = append(r.args, arg)
 		}
 	}
 
@@ -523,12 +523,6 @@ func (ctx *GenCtx) emitJavaRunProgram(dir string, platform *Platform, jdk string
 		}
 	}
 
-	ins := map[string]bool{}
-
-	for _, in := range r.in {
-		ins[in] = true
-	}
-
 	tools := resolveRunProgramAuxTools(ctx, r.tools)
 	toolTokens := prAuxToolTokens(tools)
 
@@ -538,19 +532,29 @@ func (ctx *GenCtx) emitJavaRunProgram(dir string, platform *Platform, jdk string
 	}
 
 	for _, a := range r.args {
+		in := slices.Contains(r.in, a)
+
 		switch {
-		case (r.output(a) || ins[a]) && javaRootedArg(a):
-			run = append(run, intern(a).any())
+		case (r.output(a) || in) && javaRootedArg(a):
+			run = append(run, a)
 		case r.output(a):
-			run = append(run, copyFileOutputVFS(dir, a).any())
-		case ins[a]:
-			run = append(run, input(a).any())
+			run = append(run, copyFileOutputVFS(dir, a.string()).any())
+		case in:
+			run = append(run, input(a.string()).any())
 		default:
-			if a = dropUnknownConfRefs(a); a == "" {
+			if strHasDollar(a) {
+				text := dropUnknownConfRefs(a.string())
+
+				if text == "" {
+					continue
+				}
+
+				a = internStr(text).any()
+			} else if a.vfs() == 0 && a.str().isEmpty() {
 				continue
 			}
 
-			argument, _ := replaceAuxToolArg(internStr(a).any(), toolTokens)
+			argument, _ := replaceAuxToolArg(a, toolTokens)
 
 			run = append(run, argument)
 		}
@@ -581,7 +585,7 @@ func (ctx *GenCtx) emitJavaRunProgram(dir string, platform *Platform, jdk string
 	b.cmd(tar, bindir)
 
 	for _, in := range r.in {
-		file := input(in)
+		file := input(in.string())
 
 		b.input(file)
 		b.inputRoots = append(b.inputRoots, file)
@@ -613,12 +617,12 @@ func (ctx *GenCtx) emitJavaRunProgram(dir string, platform *Platform, jdk string
 	b.emitTo(ref)
 }
 
-func (r *javaRunProgram) output(a string) bool {
+func (r *javaRunProgram) output(a ANY) bool {
 	return slices.Contains(r.out, a) || slices.Contains(r.noauto, a)
 }
 
-func javaRootedArg(a string) bool {
-	return strings.HasPrefix(a, "$(S)/") || strings.HasPrefix(a, "$(B)/")
+func javaRootedArg(a ANY) bool {
+	return a.vfs() != 0 || vfsHasPrefix(a.str().string())
 }
 
 func javaRunProgramOutputs(dir string, r javaRunProgram) []VFS {
@@ -626,7 +630,7 @@ func javaRunProgramOutputs(dir string, r javaRunProgram) []VFS {
 
 	for _, a := range r.args {
 		if r.output(a) && !javaRootedArg(a) {
-			outputs = append(outputs, copyFileOutputVFS(dir, a))
+			outputs = append(outputs, copyFileOutputVFS(dir, a.string()))
 		}
 	}
 
@@ -635,7 +639,7 @@ func javaRunProgramOutputs(dir string, r javaRunProgram) []VFS {
 	}
 
 	for _, name := range concat(r.noauto, r.out) {
-		outputs = append(outputs, copyFileOutputVFS(dir, name))
+		outputs = append(outputs, copyFileOutputVFS(dir, name.string()))
 	}
 
 	return dedupVFSKeepOrder(outputs)

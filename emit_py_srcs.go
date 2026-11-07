@@ -89,10 +89,10 @@ func (e *EmitContext) resolvePythonSource(src string) ResolvedSource {
 	return resolveSource(e.ctx, e.instance, path.Clean(src), e.d.srcDirs)
 }
 
-func resolvePySrcRelKnown(fs FS, srcDirs []VFS, moduleVFS VFS, srcRel string, srcRelClean bool) STR {
-	if srcRelClean {
-		target := internStr(srcRel)
+func resolvePySrcRelKnown(fs FS, srcDirs []VFS, moduleVFS VFS, target STR, srcRelClean bool) STR {
+	srcRel := target.string()
 
+	if srcRelClean {
 		if resolved := fs.resolveSourceUnderClean(moduleVFS.rel(), target, true); resolved != 0 {
 			return resolved
 		}
@@ -789,7 +789,7 @@ func (e *EmitContext) emitNoCheckImportsObjcopy() ([]NodeRef, []VFS) {
 	env := Environment{s: &e.frame.ifEnv}
 	raw := env.string(envImportMaskVariable)
 
-	item.ExpandedCmd = legacyConfigurationCommand(item.Key, env, importMaskVariable, raw, d.importMask.base)
+	item.ExpandedCmd = legacyConfigurationCommand(item.Key, env, importMaskVariable, raw, d.importMask.base.string())
 
 	return e.packResources(ResourcePack{Tag: d.unit.HashTag, DontCompress: true, Items: []ResourceItem{item}})
 }

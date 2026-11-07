@@ -14,7 +14,7 @@ var (
 const importMaskVariable = "NO_CHECK_IMPORTS_FOR_VALUE"
 
 type pythonImportMask struct {
-	base        string
+	base        STR
 	local       bool
 	original    string
 	hasOriginal bool
@@ -25,7 +25,7 @@ func initPythonImportMask(env Environment, d *ModuleData) {
 	key := envImportMaskVariable
 
 	env.setDefaultString(key, "None")
-	d.importMask.base = env.string(key)
+	d.importMask.base = env.str(key)
 }
 
 func setupPythonImportMask(env Environment, d *ModuleData) {
@@ -36,7 +36,7 @@ func setupPythonImportMask(env Environment, d *ModuleData) {
 			if d.importMask.hasOriginal {
 				env.setString(key, "$"+importMaskVariable+" "+d.importMask.original)
 			} else {
-				env.setString(key, d.importMask.base)
+				env.setANY(key, d.importMask.base.any())
 				d.importMask.local = false
 			}
 		}
@@ -83,7 +83,7 @@ func finishPythonImportMask(env Environment, d *ModuleData) {
 
 	base := runProgramSourceEnv(env, &d.sourceEnv)
 
-	base.setString(envImportMaskVariable, d.importMask.base)
+	base.setANY(envImportMaskVariable, d.importMask.base.any())
 
 	expanded := expandConfigMacroBody(raw, base)
 

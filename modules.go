@@ -115,8 +115,8 @@ func protoCmdPeers(d *ModuleData) []ANY {
 type TestMeta struct {
 	dockerImages    []string
 	commands        string
-	testFiles       []string
-	depends         []string
+	testFiles       []ANY
+	depends         []STR
 	recipes         []string
 	binaryArgs      []string
 	fuzzDicts       []string
@@ -145,7 +145,7 @@ type ModuleData struct {
 	selfPeers   []Language
 	rosInclude  []VFS
 
-	configurationDepends []string
+	configurationDepends []STR
 
 	discarded bool
 
@@ -873,8 +873,12 @@ func collectModuleInto(ctx *GenCtx, instance ModuleInstance, stmts []Stmt, env E
 
 	d.finishResourcePeerPolicy()
 
-	if pd := programSourceDir(d.moduleStmt); pd != nil {
-		d.srcDirs = slices.Insert(d.srcDirs, 0, dirKey(*pd).source())
+	if pd := unittestForPeer(d.moduleStmt); pd != 0 {
+		if pd == str4 {
+			pd = strEmpty
+		}
+
+		d.srcDirs = slices.Insert(d.srcDirs, 0, pd.source())
 	}
 
 	kindOfResolve, _ := env.s.lookup(envDontResolveIncludes)
@@ -898,8 +902,8 @@ func collectModuleInto(ctx *GenCtx, instance ModuleInstance, stmts []Stmt, env E
 		d.yqlCurrent = true
 	}
 
-	if value := env.string(envPyNamespaceValue); value != "" && d.pyNamespace == nil {
-		d.pyNamespace = ptr(internStr(value).any())
+	if value := env.str(envPyNamespaceValue); value != strEmpty && d.pyNamespace == nil {
+		d.pyNamespace = ptr(value.any())
 	}
 
 	nativeSources := d.srcs[:0]
@@ -2886,10 +2890,10 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 					continue
 				}
 
-				args := splitJavaCommandWords(expandStmtToken(joinAnys(raw, " "), env))
+				ids := appendQuotedWords(nil, expandStmtToken(joinAnys(raw, " "), env), 1)
 
-				d.runJavaPrograms = append(d.runJavaPrograms, NativeJavaProgram{Call: JavaRunProgram{args: args, raw: expanded}, DeclSeq: d.nextDeclSeq()})
-				recordHandledMacro(v.Name, internAnys(args))
+				d.runJavaPrograms = append(d.runJavaPrograms, NativeJavaProgram{Call: JavaRunProgram{args: ids, raw: expanded}, DeclSeq: d.nextDeclSeq()})
+				recordHandledMacro(v.Name, ids)
 
 				continue
 			}
@@ -3572,7 +3576,7 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 				importPath = imp
 			}
 
-			d.goEmbeds = append(d.goEmbeds, newGoEmbed(fs, v.Name == tokGoXTestEmbedPattern, importPath, v.Args[0].string()))
+			d.goEmbeds = append(d.goEmbeds, newGoEmbed(fs, v.Name == tokGoXTestEmbedPattern, importPath, v.Args[0]))
 		}
 	case tokGoEmbedBindir, tokGoTestEmbedBindir, tokGoXtestEmbedBindir:
 		if v.Name == tokGoEmbedBindir || d.moduleStmt != nil && d.moduleStmt.Name == tokGoTest {
@@ -4179,7 +4183,7 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 			args = relative
 		}
 
-		d.test.testFiles = append(d.test.testFiles, anyStrs(args)...)
+		d.test.testFiles = append(d.test.testFiles, args...)
 
 		before := len(d.pySrcGroups)
 
@@ -4245,11 +4249,11 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 		d.resources = append(d.resources, ResourceEntry{Path: "-", Key: "py/constructors/" + arg, DontCompress: true, DeclSeq: d.nextDeclSeq()})
 	case tokNoCheckImports:
 
-		value := joinAnys(v.Args, " ")
+		valueID := joinAnysSTR(v.Args, " ")
 
-		env.setString(envImportMaskVariable, value)
-		setPythonImportMask(value, d)
-		d.setVars.set(importMaskVariableSTR, internStr(value))
+		env.setANY(envImportMaskVariable, valueID.any())
+		setPythonImportMask(valueID.string(), d)
+		d.setVars.set(importMaskVariableSTR, valueID)
 	case tokCppProtoPlugin0, tokCppProtoPlugin, tokCppProtoPlugin2, tokCppEvProtoPlugin:
 		addCPPProtoPlugin(d, parseCPPProtoPlugin(v))
 	case tokTasklet:
@@ -4853,8 +4857,8 @@ func collectPySrcGroup(fs FS, modulePath string, v UnknownStmt, d *ModuleData, e
 
 	var namespace *ANY
 
-	if value := env.string(envPyNamespaceValue); value != "" {
-		namespace = ptr(internStr(value).any())
+	if value := env.str(envPyNamespaceValue); value != strEmpty {
+		namespace = ptr(value.any())
 	}
 
 	if namespace != nil && namespace.string() == "." {
@@ -5848,12 +5852,13 @@ func expandTokens(items []ANY, env Environment, command bool, phase TokenExpansi
 
 		start := len(out)
 
-		if !command {
+		switch {
+		case command:
+			out = appendQuotedWords(out, expanded, 0)
+		case expanded == text && text != "" && (item.vfs() != 0 || !vfsHasPrefix(text)) && strings.IndexFunc(text, unicode.IsSpace) < 0:
+			out = append(out, item)
+		default:
 			for f := range strings.FieldsSeq(expanded) {
-				out = append(out, internAny(f))
-			}
-		} else {
-			for _, f := range splitShellWords(expanded) {
 				out = append(out, internAny(f))
 			}
 		}
@@ -6112,15 +6117,16 @@ func allPySrcArgs(fs FS, modulePath string, v UnknownStmt) []ANY {
 
 	for _, dir := range dirs {
 		walkRoot := cleanRel(filepath.ToSlash(filepath.Join(moduleRootRel, dir)))
+		walkRootID := internStr(walkRoot)
 
 		if recursive {
-			fs.walk(walkRoot, func(rel string, isDir bool) bool {
-				if rel == walkRoot {
+			fs.walkDirID(walkRootID, func(rel string, id STR, isDir bool) bool {
+				if id == walkRootID {
 					return true
 				}
 
 				if isDir {
-					return !fs.isFileID(dirKey(rel), strYaMake)
+					return !fs.isFileID(id, strYaMake)
 				}
 
 				if pathDir(rel) != walkRoot && filepath.Ext(rel) == ".py" {
@@ -6131,7 +6137,7 @@ func allPySrcArgs(fs FS, modulePath string, v UnknownStmt) []ANY {
 			})
 		}
 
-		for _, packed := range fs.listdir(dirKey(walkRoot)).names {
+		for _, packed := range fs.listdir(walkRootID).names {
 			if packed&1 == 0 {
 				appendPyFile(joinRel(walkRoot, STR(packed>>1).string()))
 			}

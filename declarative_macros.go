@@ -98,6 +98,16 @@ func declarativeMacroAssignment(v *UnknownStmt, packageModule bool, env Environm
 	return newSetStmt(name, internEnv(name), value, v.Line)
 }
 
+func appendMacroEnvSTR(env Environment, name string, value STR) {
+	if previous, _ := env.lookup(name); previous != "" {
+		env.setString(internEnv(name), previous+" "+value.string())
+
+		return
+	}
+
+	env.setANY(internEnv(name), value.any())
+}
+
 func appendMacroEnv(env Environment, name, value string) {
 	if previous, _ := env.lookup(name); previous != "" {
 		value = previous + " " + value

@@ -91,6 +91,10 @@ func splitShellWords(s string) []string {
 	return splitQuotedWords(s, 0)
 }
 
+func shellWordANYs(s string) []ANY {
+	return appendQuotedWords(nil, s, 0)
+}
+
 func splitJavaCommandWords(s string) []string {
 	return splitQuotedWords(s, 1)
 }

@@ -541,14 +541,14 @@ func (ctx *GenCtx) javaEmitContrib(jm *JavaModule) {
 
 	b.outputs = jm.outputs()
 
-	fetch := func(id string, out VFS) {
+	fetch := func(id STR, out VFS) {
 		args := b.python(buildScriptsFetchFromSandboxPy)
 
 		b.script(buildScriptsFetchFromPy)
 
 		args = append(args,
-			strResourceFile.any(), internV("$(RESOURCE_ROOT)/sbr/", id, "/resource").any(),
-			strResourceId.any(), internStr(id).any(),
+			strResourceFile.any(), internV("$(RESOURCE_ROOT)/sbr/", id.string(), "/resource").any(),
+			strResourceId.any(), id.any(),
 			strCopyTo.any(), out.any())
 
 		b.cmd(args, bindir)
@@ -557,7 +557,7 @@ func (ctx *GenCtx) javaEmitContrib(jm *JavaModule) {
 	}
 
 	switch {
-	case d.jarResource != "":
+	case !d.jarResource.isEmpty():
 		fetch(d.jarResource, jm.target)
 	case d.localJar != "":
 		local := source(jm.dir, "/", d.localJar)
@@ -575,7 +575,7 @@ func (ctx *GenCtx) javaEmitContrib(jm *JavaModule) {
 	}
 
 	switch {
-	case d.srcResource != "":
+	case !d.srcResource.isEmpty():
 		fetch(d.srcResource, srcJar)
 	case d.localSourcesJar != "":
 		local := source(jm.dir, "/", d.localSourcesJar)
@@ -794,7 +794,7 @@ func (ctx *GenCtx) javaEmitProtoPB(jm *JavaModule, globals map[string]VFS, scanC
 	}
 
 	args = append(args, internAnys(d.protocFlags)...)
-	args = append(args, internStr(protoRel).any())
+	args = append(args, protoVFS.rel().any())
 
 	var extraEnv []EnvVar
 

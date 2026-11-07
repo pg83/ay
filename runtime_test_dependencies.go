@@ -100,7 +100,7 @@ func testDependencyOutput(result *ModuleEmitResult) VFS {
 	return 0
 }
 
-func (ctx *GenCtx) runtimeTestDependencies(dir string) []TestBuildDependency {
+func (ctx *GenCtx) runtimeTestDependencies(dir STR) []TestBuildDependency {
 	roots := ctx.testBuildDependencies(dir)
 
 	var artifacts []TestBuildDependency

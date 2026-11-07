@@ -330,7 +330,7 @@ func (e *EmitContext) emitPyProtoSource(srcTok ANY, protoSrcVFS VFS, srcGroup in
 
 	pe := e.newPyPBModuleEmission(event)
 	scanCtx := d.scanCtx
-	protoRel := e.protoSourceRel(protoSrcVFS.string())
+	protoRel := e.protoSourceRel(protoSrcVFS.any())
 	protoRelPath := protoRel.string()
 	protoBase := strings.TrimSuffix(protoRelPath, filepath.Ext(protoRelPath))
 	internal := "__int" + protoPythonVersion(d) + "__"

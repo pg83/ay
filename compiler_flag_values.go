@@ -173,11 +173,11 @@ func appendLiteralCompilerFlags(args []ANY, env Environment, name string, allGlo
 	}
 
 	if len(own) > ownStart {
-		appendMacroEnv(env, name, internAnyWords(own[ownStart:]).string())
+		appendMacroEnvSTR(env, name, internAnyWords(own[ownStart:]))
 	}
 
 	if len(global) > globalStart {
-		appendMacroEnv(env, name+"_GLOBAL", internAnyWords(global[globalStart:]).string())
+		appendMacroEnvSTR(env, name+"_GLOBAL", internAnyWords(global[globalStart:]))
 	}
 
 	return global, own

@@ -143,6 +143,14 @@ func (e *EmitContext) rootSourceOrGenerated(rel string) VFS {
 	return source(rel)
 }
 
+func (e *EmitContext) rootSourceOrGeneratedID(rel STR) VFS {
+	if present, isDir := e.ctx.fs.existsID(srcRootRel, rel); (!present || isDir) && e.codegen.use(rel.build()) != nil {
+		return rel.build()
+	}
+
+	return rel.source()
+}
+
 func (e *EmitContext) requireProducedInput(kind, token string, vfs VFS) VFS {
 	if vfs.isBuild() && e.codegen.lookup(vfs) == nil && relUnderDir(vfs.relString(), e.instance.Path.relString()) {
 		module := e.instance.Path.relString()
@@ -206,14 +214,14 @@ func (e *EmitContext) srcPosition(meta SrcMeta) ([]VFS, []VFS) {
 	switch class {
 	case srcExtProto:
 		protoInput = meta.Resolved.Path
-		protoRelID = e.protoSourceRel(protoInput.string())
+		protoRelID = e.protoSourceRel(protoInput.any())
 		protoRel = protoRelID.string()
 	case srcExtEv, srcExtCfgProto:
 		if class == srcExtEv && pyProto {
 			protoInput = meta.Resolved.Path
-			protoRelID = e.protoSourceRel(protoInput.string())
+			protoRelID = e.protoSourceRel(protoInput.any())
 		} else {
-			protoRelID = e.protoSourceRel(tok.string())
+			protoRelID = e.protoSourceRel(tok)
 		}
 
 		protoRel = protoRelID.string()
@@ -616,7 +624,7 @@ func (e *EmitContext) producerPositions(cythonPlans []CythonStmtPlan) ([]Produce
 
 		outEnd := len(backing)
 
-		runIns(internAnys(r.in))
+		runIns(r.in)
 		push(prodRunJava, i, start, outEnd)
 	}
 
@@ -775,7 +783,7 @@ func (e *EmitContext) producerPositions(cythonPlans []CythonStmtPlan) ([]Produce
 	}
 
 	for i, srcTok := range d.ymapsSprotoSrcs {
-		protoRelPath := e.protoSourceRelPath(srcTok.Value.string())
+		protoRelPath := e.protoSourceRel(srcTok.Value).string()
 		sprotoMark := len(e.prodVFS)
 
 		e.prodVFS = append(e.prodVFS, build(strings.TrimSuffix(protoRelPath, ".proto"), ".sproto.h"))
@@ -1122,7 +1130,7 @@ func (e *EmitContext) drainCommands(cythonPlans []CythonStmtPlan, srcs []SrcMeta
 		case prodRunJava:
 			call := parseJavaRunProgram(e.instance.Path.relString(), e.d.runJavaPrograms[pos.index].Call)
 
-			e.bindDeclaredProgramInputs(pos.ins, internAnys(call.in))
+			e.bindDeclaredProgramInputs(pos.ins, call.in)
 		}
 
 		ready := true

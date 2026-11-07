@@ -983,13 +983,13 @@ func (sc *ScanCtx) resolve(out []VFS, includerAbs, incDir VFS, d IncludeDirectiv
 		aliases = append([]VFS(nil), aliases...)
 
 		for _, alias := range aliases {
-			rel := alias.relString()
+			target := alias.rel()
 
-			if len(rel) > 2 && rel[0] == '$' && rel[2] == '/' {
-				rel = rel[3:]
+			if rel := target.string(); len(rel) > 2 && rel[0] == '$' && rel[2] == '/' {
+				target = internStr(rel[3:])
 			}
 
-			out = sc.resolve(out, includerAbs, incDir, IncludeDirective{kind: includeSystem, target: internStr(rel).any()})
+			out = sc.resolve(out, includerAbs, incDir, IncludeDirective{kind: includeSystem, target: target.any()})
 		}
 
 		if len(out) == mark {

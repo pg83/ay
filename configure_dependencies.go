@@ -4,7 +4,7 @@ import "path"
 
 type ConfigurationDependency struct {
 	from VFS
-	to   string
+	to   STR
 }
 
 type ConfigurationDependencies struct {
@@ -51,7 +51,7 @@ func appendConfigurationRecurses(out []VFS, dir string, stmt UnknownStmt, platfo
 	return out
 }
 
-func (ctx *GenCtx) recordConfiguration(instance ModuleInstance, recurses []VFS, depends []string) {
+func (ctx *GenCtx) recordConfiguration(instance ModuleInstance, recurses []VFS, depends []STR) {
 	if instance.Platform == ctx.host || !instance.Platform.ifEnv.bool(envTraverseDepends) {
 		return
 	}
@@ -94,7 +94,7 @@ func (ctx *GenCtx) configureDependencies() {
 		if declaration != nil {
 			root := ctx.roots[ctx.rootInstanceForDeclarationVFS(dir, demandNone, declaration)]
 
-			for _, instance := range ctx.testDependencyInstances(dir.relString()) {
+			for _, instance := range ctx.testDependencyInstances(dir.rel()) {
 				result := genModule(ctx, instance)
 
 				if root {
@@ -111,7 +111,7 @@ func (ctx *GenCtx) configureDependencies() {
 	for i := 0; i < len(configuration.depends); i++ {
 		dependency := configuration.depends[i]
 
-		configure(source(path.Clean(dependency.to)))
+		configure(dependency.to.sourceClean())
 
 		if ctx.peerTests || ctx.rootPaths[dependency.from] {
 			ctx.testBuildDependencies(dependency.to)

@@ -93,7 +93,7 @@ func (e *EmitContext) testRunSuites(binary VFS, ref NodeRef, globals []ResourceD
 	}
 
 	if meta.forkFiles {
-		s.files = sortedUnique(meta.testFiles)
+		s.files = sortedUniqueByText(meta.testFiles)
 	}
 
 	opts := e.ctx.tests

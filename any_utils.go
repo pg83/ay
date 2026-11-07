@@ -70,6 +70,20 @@ func anysOf(items ...string) []ANY {
 	return internAnys(items)
 }
 
+func internStrs(ss []string) []STR {
+	if len(ss) == 0 {
+		return nil
+	}
+
+	out := make([]STR, len(ss))
+
+	for i, s := range ss {
+		out[i] = internStr(s)
+	}
+
+	return out
+}
+
 func internAnys(ss []string) []ANY {
 	if len(ss) == 0 {
 		return nil

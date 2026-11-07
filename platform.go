@@ -172,8 +172,8 @@ func newPlatform(os OS, isa ISA, buildType string, tc *Toolchain, flags map[stri
 		BuildType:             strings.ToLower(buildType),
 		BuildRelease:          flags["_BUILD_RELEASE"] == "yes",
 		BuildSanitized:        flags["_BUILD_SANITIZED"] == "yes",
-		RlgenFlags:            internAnys(splitShellWords(flags["RLGEN_FLAGS"])),
-		Ragel6Flags:           internAnys(splitShellWords(flags["RAGEL6_FLAGS"])),
+		RlgenFlags:            shellWordANYs(flags["RLGEN_FLAGS"]),
+		Ragel6Flags:           shellWordANYs(flags["RAGEL6_FLAGS"]),
 		Triple:                string(isa) + "-" + string(os) + "-gnu",
 		March:                 marchFor(isa),
 		LinkPreludeExtra:      internAnys(linkPreludeExtra),
@@ -415,7 +415,7 @@ func debugInfoFlags(env Environment, flags map[string]string) []ANY {
 		return []ANY{argGlineTablesOnly.any()}
 	}
 
-	return internAnys(splitShellWords(flags["_DEBUG_INFO_FLAGS"]))
+	return shellWordANYs(flags["_DEBUG_INFO_FLAGS"])
 }
 
 func pythonNoStrip(env Environment) bool {

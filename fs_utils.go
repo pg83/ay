@@ -114,6 +114,22 @@ func sourceClean(rel string) VFS {
 	return source(filepath.ToSlash(filepath.Clean(rel)))
 }
 
+func (id STR) sourceClean() VFS {
+	if id.cleanPath() {
+		return id.source()
+	}
+
+	return source(filepath.ToSlash(filepath.Clean(id.string())))
+}
+
+func (id STR) buildClean() VFS {
+	if id.cleanPath() {
+		return id.build()
+	}
+
+	return build(filepath.ToSlash(filepath.Clean(id.string())))
+}
+
 func buildClean(rel string) VFS {
 	if rel != "" && pathIsClean(rel) {
 		return build(rel)

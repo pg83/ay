@@ -156,6 +156,17 @@ func globExcluded(excludes []*globMatcher, rel string, isDir bool) bool {
 }
 
 func ymakeGlob(fs FS, pattern string, excludePatterns ...string) []string {
+	ids := ymakeGlobIDs(fs, pattern, excludePatterns...)
+	matches := make([]string, len(ids))
+
+	for i, id := range ids {
+		matches[i] = id.string()
+	}
+
+	return matches
+}
+
+func ymakeGlobIDs(fs FS, pattern string, excludePatterns ...string) []STR {
 	excludes := make([]*globMatcher, len(excludePatterns))
 
 	for i, p := range excludePatterns {
@@ -165,7 +176,7 @@ func ymakeGlob(fs FS, pattern string, excludePatterns ...string) []string {
 	parts := globParts(pattern)
 	dirs := []globDir{{id: strEmpty}}
 
-	var matches []string
+	var matches []STR
 
 	for pi, part := range parts {
 		last := pi == len(parts)-1
@@ -186,7 +197,7 @@ func ymakeGlob(fs FS, pattern string, excludePatterns ...string) []string {
 				case isDir:
 					next = append(next, globDir{rel, relID})
 				case last && !globExcluded(excludes, rel, false):
-					matches = append(matches, rel)
+					matches = append(matches, relID)
 				}
 			case globPattern, globAnything:
 				for _, packed := range fs.listdir(d.key()).names {
@@ -202,7 +213,7 @@ func ymakeGlob(fs FS, pattern string, excludePatterns ...string) []string {
 					if isDir {
 						next = append(next, globDir{rel, relID})
 					} else if !globExcluded(excludes, rel, false) {
-						matches = append(matches, rel)
+						matches = append(matches, relID)
 					}
 				}
 			case globRecursive:

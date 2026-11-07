@@ -81,7 +81,7 @@ func (c *LinkerConf) flags(p *Platform) LinkerFlags {
 		value = strings.ReplaceAll(value, "$(BUILD_ROOT)", "$(B)")
 		value = strings.ReplaceAll(value, "$(SOURCE_ROOT)", "$(S)")
 
-		args := internAnys(splitShellWords(value))
+		args := shellWordANYs(value)
 
 		result.ArgCount += len(args)
 

@@ -40,7 +40,7 @@ const rosGenerator = "sdg/sdc/ros/misc/ros_msg_generator/yamakes/generator"
 
 type RosModule struct {
 	Package  string
-	Dir      string
+	Dir      STR
 	Partial  string
 	Language Language
 }
@@ -70,7 +70,7 @@ func setupRosModule(stmt *ModuleStmt, module string, language Language, env Envi
 	}
 
 	d.multimodule = stmt.Name
-	d.ros = &RosModule{Package: pkg, Dir: module, Language: language}
+	d.ros = &RosModule{Package: pkg, Dir: d.pathID, Language: language}
 	d.moduleVariants = 1<<LangCPP | 1<<LangRosBindings | 1<<LangPy | 1<<LangGo
 
 	switch language {
@@ -115,11 +115,17 @@ func applyRosStmt(module string, stmt UnknownStmt, env Environment, d *ModuleDat
 			throwFmt("ROS_DIR expects one directory")
 		}
 
-		d.ros.Dir = path.Clean(args[0])
-		d.addInclGlobal = append(d.addInclGlobal, build(d.ros.Dir), build(path.Dir(d.ros.Dir)))
+		dir := stmt.Args[0].textSTR()
+
+		if !dir.cleanPath() {
+			dir = internStr(path.Clean(dir.string()))
+		}
+
+		d.ros.Dir = dir
+		d.addInclGlobal = append(d.addInclGlobal, dir.build(), build(path.Dir(dir.string())))
 
 		for _, suffix := range []string{"", "/msg", "/srv"} {
-			d.rosInclude = append(d.rosInclude, source(d.ros.Package, ":", d.ros.Dir, suffix))
+			d.rosInclude = append(d.rosInclude, source(d.ros.Package, ":", dir.string(), suffix))
 		}
 	case tokRosPartial:
 		if len(args) != 1 {
@@ -171,7 +177,7 @@ func applyRosStmt(module string, stmt UnknownStmt, env Environment, d *ModuleDat
 			}
 
 			if d.ros.Language == LangPy || (isMsg || d.ros.Language != LangRosBindings) && (isMsg || d.ros.Language != LangGo) {
-				d.srcs = append(d.srcs, SrcMeta{Source: internStr(file).any(), Prio: stmtPrioDefault, Seq: d.nextDeclSeq(), RosZeroCopy: zero})
+				d.srcs = append(d.srcs, SrcMeta{Source: stmt.Args[i].textSTR().any(), Prio: stmtPrioDefault, Seq: d.nextDeclSeq(), RosZeroCopy: zero})
 			}
 
 			zero = false

@@ -58,12 +58,12 @@ func goModuleHasProtos(d *ModuleData) bool {
 	})
 }
 
-func (e *EmitContext) goProtoRel(src ANY) string {
+func (e *EmitContext) goProtoRel(src ANY) STR {
 	if v := src.vfs(); v != 0 && v.isSource() {
-		return v.relString()
+		return v.rel()
 	}
 
-	return e.protoSourceRelPath(e.moduleSourceName(src))
+	return e.protoSourceRel(e.moduleSourceNameANY(src))
 }
 
 func (e *EmitContext) goProtoNamespace() string {
@@ -74,7 +74,7 @@ func (e *EmitContext) goProtoNamespace() string {
 	return ""
 }
 
-func (e *EmitContext) emitGoProtoCmd(protoRel string, goOpts *string, plugins []GoProtoOpt, outs []VFS, seq int) {
+func (e *EmitContext) emitGoProtoCmd(protoRel STR, goOpts *string, plugins []GoProtoOpt, outs []VFS, seq int) {
 	ctx, instance, d := e.ctx, e.instance, e.d
 	na := ctx.na
 	protocRef, protoc := e.tool(argContribToolsProtoc)
@@ -133,11 +133,11 @@ func (e *EmitContext) emitGoProtoCmd(protoRel string, goOpts *string, plugins []
 	cmd := na.chunkList(
 		na.anyList(d.tc.Python3),
 		goProtoHead,
-		na.anyList(internV("./", ns).any(), strProto.any(), internStr(protoRel).any(), arg2.any(), protoc.any()),
+		na.anyList(internV("./", ns).any(), strProto.any(), protoRel.any(), arg2.any(), protoc.any()),
 		na.anyList(args...),
 	)
 
-	protoSrc := e.rootSourceOrGenerated(protoRel)
+	protoSrc := e.rootSourceOrGeneratedID(protoRel)
 	cwd := srcRootDirVFS
 
 	if protoSrc.isBuild() {
@@ -181,7 +181,7 @@ func (e *EmitContext) emitGoProtoSource(meta SrcMeta) {
 	d := e.d
 	dir := e.instance.Path.relString()
 	protoRel := e.goProtoRel(meta.Source)
-	base := strings.TrimSuffix(path.Base(protoRel), ".proto")
+	base := strings.TrimSuffix(path.Base(protoRel.string()), ".proto")
 	outs := []VFS{build(dir, "/", base, ".pb.go")}
 	goOpts := ""
 

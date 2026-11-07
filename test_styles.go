@@ -17,7 +17,7 @@ const yamlfmtResourcePeer = "build/external_resources/yamlfmt"
 
 type StyleCheck struct {
 	Name               string
-	ConfigMap          string
+	ConfigMap          STR
 	Config             string
 	ConfigType         string
 	ConfigDir          string
@@ -29,7 +29,7 @@ type StyleCheck struct {
 	FileProcessingTime float64
 	Python             bool
 	CPP                bool
-	Depends            []string
+	Depends            []STR
 	Peer               string
 }
 
@@ -79,7 +79,7 @@ func (d *ModuleData) collectPythonStyleChecks(env Environment) {
 }
 
 func pythonStyleCheck(name string, env Environment) StyleCheck {
-	check := StyleCheck{Name: name, Python: true, ConfigMap: "build/config/tests/py_style/default_configs.json", FileProcessingTime: 1.5}
+	check := StyleCheck{Name: name, Python: true, ConfigMap: strBuildConfigTestsPyStyleDefaultConfigsJson, FileProcessingTime: 1.5}
 	timeVar := "FLAKE8_FILE_PROCESSING_TIME"
 
 	switch name {
@@ -110,7 +110,7 @@ func pythonStyleCheck(name string, env Environment) StyleCheck {
 		check.ExtraParams = []string{"check_format=no", "run_in_source_root=no"}
 	}
 
-	if value, ok := env.lookupENV(envPythonLintersDefaultConfigs); ok && value != "" {
+	if value, ok := env.lookupSTR(envPythonLintersDefaultConfigs); ok && value != strEmpty {
 		check.ConfigMap = value
 	}
 
@@ -177,9 +177,9 @@ func styleChecksDisabled(env Environment) bool {
 }
 
 func yamlStyleCheck(env Environment) StyleCheck {
-	check := StyleCheck{Name: "yamlfmt", ConfigMap: "build/config/tests/yaml_style/default_configs.json", Wrapper: "tools/yamlfmt_linter/wrapper.py", Resource: strYamlfmtResourceGlobal, Peer: yamlfmtResourcePeer}
+	check := StyleCheck{Name: "yamlfmt", ConfigMap: strBuildConfigTestsYamlStyleDefaultConfigsJson, Wrapper: "tools/yamlfmt_linter/wrapper.py", Resource: strYamlfmtResourceGlobal, Peer: yamlfmtResourcePeer}
 
-	if value, ok := env.lookupENV(envYamlLinterDefaultConfigs); ok && value != "" {
+	if value, ok := env.lookupSTR(envYamlLinterDefaultConfigs); ok && value != strEmpty {
 		check.ConfigMap = value
 	}
 
@@ -227,9 +227,9 @@ func explicitStyleCheck(name TOK, env Environment) StyleCheck {
 		return StyleCheck{Name: "yqlfmt", Wrapper: "tools/yqlfmt_linter/wrapper.py"}
 	}
 
-	check := StyleCheck{Name: "clang_format_json", ConfigMap: "build/config/tests/json_style/default_configs.json", Wrapper: "tools/clang_format_json_linter/wrapper.py", Resource: strClangFormatResourceGlobal, Peer: "build/platform/clang/clang-format"}
+	check := StyleCheck{Name: "clang_format_json", ConfigMap: strBuildConfigTestsJsonStyleDefaultConfigsJson, Wrapper: "tools/clang_format_json_linter/wrapper.py", Resource: strClangFormatResourceGlobal, Peer: "build/platform/clang/clang-format"}
 
-	if value, ok := env.lookupENV(envJsonLinterDefaultConfigs); ok && value != "" {
+	if value, ok := env.lookupSTR(envJsonLinterDefaultConfigs); ok && value != strEmpty {
 		check.ConfigMap = value
 	}
 
@@ -414,11 +414,11 @@ func (ctx *GenCtx) resolveStyleConfig(check *StyleCheck, project string) {
 		}
 	}
 
-	if check.Config == "" && check.ConfigMap != "" {
-		config, ok := ctx.parsers.notsJSON(check.ConfigMap)[check.Name].(string)
+	if check.Config == "" && !check.ConfigMap.isEmpty() {
+		config, ok := ctx.parsers.notsJSONID(check.ConfigMap)[check.Name].(string)
 
 		if !ok {
-			throwFmt("STYLE: missing %s config in %s", check.Name, check.ConfigMap)
+			throwFmt("STYLE: missing %s config in %s", check.Name, check.ConfigMap.string())
 		}
 
 		check.Config = config
@@ -443,7 +443,6 @@ func styleCheckResources(check StyleCheck, globals []ResourceDecl) []ResourceDec
 
 func (ctx *GenCtx) styleSuite(check StyleCheck, projectID STR, env []string, resources []ResourceDecl) *TestSuite {
 	nameID := internStr(check.Name)
-	project := projectID.string()
 	s := &TestSuite{p: ctx.target, depends: slices.Clone(check.Depends), projectPath: projectID, name: nameID, testType: nameID, ciType: strStyle, size: strSmall, timeout: 60, supportsTestParameters: true, globals: resources, env: env, runInputs: []VFS{projectID.source()}, styleCheck: &check}
 
 	s.mergeStyleFiles(nil)
@@ -453,11 +452,11 @@ func (ctx *GenCtx) styleSuite(check StyleCheck, projectID STR, env []string, res
 	s.runCmd = func(work string, chunk TestChunk) []ANY {
 		args := []ANY{testToolHostPathArg, strRunCustomLint.any(), strSourceRoot2.any(), testSourceRootArg, strBuildRoot2.any(), testBuildRootArg, strProjectPath.any(), projectArg, strTracePath.any(), testArg(work + "/ytest.report.trace"), strOutPath.any(), testArg(work + "/testing_out_stuff"), strLintName.any(), nameArg, strWrapperScript.any(), wrapperArg}
 
-		for _, dependency := range sortedUnique(append(slices.Clone(s.depends), project)) {
+		for _, dependency := range sortedUniqueSTR(append(slices.Clone(s.depends), projectID)) {
 			arg := projectID.any()
 
-			if dependency != project {
-				arg = testArg(dependency)
+			if dependency != projectID {
+				arg = testArgANY(dependency.any())
 			}
 
 			args = append(args, strDepends.any(), arg)

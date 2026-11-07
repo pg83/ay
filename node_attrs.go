@@ -383,7 +383,11 @@ func appendKV(buf []byte, kv KV, extra *NodeExtra) []byte {
 	path, splitFile := "", ""
 
 	if extra != nil {
-		exts, path, splitFile = extra.KVExts, extra.KVPath, extra.SplitFile
+		exts, path = extra.KVExts, extra.KVPath
+
+		if extra.SplitFile != 0 {
+			splitFile = extra.SplitFile.string()
+		}
 	}
 
 	if kv.DisableCache {

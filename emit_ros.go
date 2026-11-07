@@ -9,7 +9,7 @@ var rosKV = KV{P: pkRS, PC: pcCyan}
 
 func (e *EmitContext) rosOutputPaths(src string, zero bool) []VFS {
 	base := strings.TrimSuffix(path.Base(src), path.Ext(src))
-	dir := e.d.ros.Dir
+	dir := e.d.ros.Dir.string()
 	suffixes := []string{".cc", ".h"}
 
 	switch e.d.ros.Language {
@@ -105,7 +105,7 @@ func (e *EmitContext) emitRosSource(meta SrcMeta, outputs []VFS) {
 
 	args = append(args, e.rosArgs...)
 
-	outDir := build(d.ros.Dir)
+	outDir := d.ros.Dir.build()
 
 	if d.ros.Language == LangPy {
 		outDir = build(path.Dir(outs[0].relString()))
@@ -139,7 +139,7 @@ func (e *EmitContext) emitRosSource(meta SrcMeta, outputs []VFS) {
 			"sdg/sdc/ros/misc/ros_msg_generator/py_cpp/bindings_support_lib/export.h",
 			"sdg/sdc/ros/misc/ros_msg_generator/py_cpp/bindings_support_lib/export_arrays.h",
 			"sdg/sdc/ros/misc/ros_msg_generator/py_cpp/bindings_support_lib/export_enum.h",
-			build(d.ros.Dir, "/", strings.TrimSuffix(path.Base(src.relString()), path.Ext(src.relString())), ".h").string())
+			build(d.ros.Dir.string(), "/", strings.TrimSuffix(path.Base(src.relString()), path.Ext(src.relString())), ".h").string())
 	}
 
 	if zero {

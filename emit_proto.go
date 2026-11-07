@@ -355,7 +355,7 @@ func (e *EmitContext) pbModuleEmission(cfg ProtoPBConfig, spec *ProtoSpec) *PbMo
 func (e *EmitContext) emitProtoPB(protoVFS VFS, cfg ProtoPBConfig, pe *PbModuleEmission, spec *ProtoSpec) []VFS {
 	ctx, d := e.ctx, e.d
 	na := ctx.na
-	protoRel := e.protoSourceRel(protoVFS.string())
+	protoRel := e.protoSourceRel(protoVFS.any())
 	protoRelPath := protoRel.string()
 	generatedProto := protoVFS.isBuild()
 
@@ -971,13 +971,15 @@ type ProtoSrcsResult struct {
 	ProtoLibName         string
 }
 
-func protoSourceRel(fs FS, instance ModuleInstance, d *ModuleData, src string) STR {
+func protoSourceRel(fs FS, instance ModuleInstance, d *ModuleData, srcID ANY) STR {
+	src := srcID.string()
+
 	if rooted, ok := moduleRootedVFS(instance.Path.relString(), src); ok {
 		return rooted.rel()
 	}
 
 	srcClean := src != "" && pathIsClean(src)
-	resolved := resolvePySrcRelKnown(fs, d.srcDirs, instance.Path, src, srcClean)
+	resolved := resolvePySrcRelKnown(fs, d.srcDirs, instance.Path, srcID.textSTR(), srcClean)
 
 	if srcClean {
 		return resolved
@@ -987,11 +989,15 @@ func protoSourceRel(fs FS, instance ModuleInstance, d *ModuleData, src string) S
 }
 
 type protoPathEntry struct {
-	src string
+	src ANY
 	rel STR
 }
 
-func (e *EmitContext) protoSourceRel(src string) STR {
+func (e *EmitContext) protoSourceRel(src ANY) STR {
+	if v := src.vfs(); v != 0 && v.rel().cleanPath() {
+		return v.rel()
+	}
+
 	for i := range e.protoPaths {
 		if e.protoPaths[i].src == src {
 			return e.protoPaths[i].rel
@@ -1011,10 +1017,6 @@ func (e *EmitContext) protoSourceRel(src string) STR {
 	e.protoPathPos = (e.protoPathPos + 1) & (protoPathCacheSize - 1)
 
 	return rel
-}
-
-func (e *EmitContext) protoSourceRelPath(src string) string {
-	return e.protoSourceRel(src).string()
 }
 
 type PbArgBlocks struct {

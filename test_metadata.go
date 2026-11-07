@@ -106,7 +106,7 @@ func applyTestMacro(v UnknownStmt, d *ModuleData, env Environment) bool {
 	case tokDepends:
 
 		for _, arg := range v.Args {
-			t.depends = append(t.depends, arg.relOrSelf().string())
+			t.depends = append(t.depends, arg.relOrSelf())
 		}
 	case tokUseRecipe:
 		t.recipes = append(t.recipes, value)
@@ -277,8 +277,8 @@ func testInnerCommand(s *TestSuite, meta TestMeta, binary VFS, work string, chun
 			}
 		}
 
-		if chunk.file != "" {
-			command = append(command, strTestFileFilter.any(), testArg(chunk.file))
+		if chunk.file != 0 {
+			command = append(command, strTestFileFilter.any(), testArgANY(chunk.file))
 		}
 
 		if s.testType == strExectest {

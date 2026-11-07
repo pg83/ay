@@ -33,8 +33,8 @@ func (e *EmitContext) emitNativeJavaProgram(program NativeJavaProgram) {
 	}
 
 	for _, name := range r.out {
-		if isCodegenProducingSrc(name) || isNativeSourceExt(name) {
-			e.enqueueSrc(SrcMeta{Source: copyFileOutputVFS(dir, name).any(), Prio: stmtPrioDefault})
+		if text := name.string(); isCodegenProducingSrc(text) || isNativeSourceExt(text) {
+			e.enqueueSrc(SrcMeta{Source: copyFileOutputVFS(dir, text).any(), Prio: stmtPrioDefault})
 		}
 	}
 }

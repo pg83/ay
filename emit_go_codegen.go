@@ -462,7 +462,7 @@ func initGoModuleName(modulePath string, env Environment, d *ModuleData, onWarn 
 	for i := 0; i < len(args); i++ {
 		if args[i] == kwPREFIX.any() {
 			if i+1 < len(args) {
-				env.setString(envMODULE_PREFIX, expandScalarVarRef(args[i+1].string(), env))
+				env.setANY(envMODULE_PREFIX, expandStmtTokenAny(args[i+1], env))
 				tail = append(tail, args[i:i+2]...)
 				i++
 			} else {
@@ -481,7 +481,7 @@ func initGoModuleName(modulePath string, env Environment, d *ModuleData, onWarn 
 	}
 
 	if hasLocalName {
-		env.setString(envGO_PACKAGE_VALUE, expandScalarVarRef(env.string(envREALPRJNAME), env))
+		env.setANY(envGO_PACKAGE_VALUE, expandStmtTokenAny(env.str(envREALPRJNAME).any(), env))
 	} else {
 		env.setString(envREALPRJNAME, path.Base(modulePath))
 	}
@@ -554,16 +554,16 @@ func applyGoResource(fs FS, modulePath string, entries []ResourceEntry, d *Modul
 type GoEmbed struct {
 	xtest   bool
 	root    VFS
-	pattern string
+	pattern ANY
 	files   []VFS
 }
 
-func newGoEmbed(fs FS, xtest bool, importPath, pattern string) GoEmbed {
-	base := importPath + "/" + pattern
+func newGoEmbed(fs FS, xtest bool, importPath string, pattern ANY) GoEmbed {
+	base := importPath + "/" + pattern.string()
 	em := GoEmbed{xtest: xtest, root: source(importPath), pattern: pattern}
 
-	for _, rel := range concat(ymakeGlob(fs, base+"/**/*", base+"/**/_*", base+"/**/.*"), ymakeGlob(fs, base)) {
-		em.files = append(em.files, source(rel))
+	for _, rel := range concat(ymakeGlobIDs(fs, base+"/**/*", base+"/**/_*", base+"/**/.*"), ymakeGlobIDs(fs, base)) {
+		em.files = append(em.files, rel.source())
 	}
 
 	return em
@@ -588,15 +588,15 @@ func newGoEmbedBindir(xtest bool, importPath string, args []ANY) GoEmbed {
 			files = args[i+1:]
 			i = len(args)
 		default:
-			if em.pattern != "" {
+			if em.pattern != 0 {
 				throwFmt("GO_EMBED_BINDIR expects one pattern")
 			}
 
-			em.pattern = args[i].string()
+			em.pattern = args[i]
 		}
 	}
 
-	if em.pattern == "" {
+	if em.pattern == 0 {
 		throwFmt("GO_EMBED_BINDIR expects a pattern")
 	}
 
@@ -611,18 +611,18 @@ func newGoEmbedBindir(xtest bool, importPath string, args []ANY) GoEmbed {
 
 func newGoEmbedDir(fs FS, xtest bool, importPath, dir string, all bool) GoEmbed {
 	base := importPath + "/" + dir
-	em := GoEmbed{xtest: xtest, root: source(importPath), pattern: dir}
+	em := GoEmbed{xtest: xtest, root: source(importPath), pattern: internStr(dir).any()}
 
 	var excludes []string
 
 	if all {
-		em.pattern = "all:" + dir
+		em.pattern = internV("all:", dir).any()
 	} else {
 		excludes = []string{base + "/**/_*", base + "/**/.*"}
 	}
 
-	for _, rel := range ymakeGlob(fs, base+"/**/*", excludes...) {
-		em.files = append(em.files, source(rel))
+	for _, rel := range ymakeGlobIDs(fs, base+"/**/*", excludes...) {
+		em.files = append(em.files, rel.source())
 	}
 
 	return em
@@ -647,7 +647,7 @@ func goEmbedArgs(na *NodeArenas, embeds []GoEmbed) ([]ANY, []VFS) {
 			flag = "++embed_xtest"
 		}
 
-		ka += copy(args[ka:], []ANY{internStr(flag).any(), em.root.any(), internStr(em.pattern).any()})
+		ka += copy(args[ka:], []ANY{internStr(flag).any(), em.root.any(), em.pattern})
 
 		for _, f := range em.files {
 			args[ka] = f.any()

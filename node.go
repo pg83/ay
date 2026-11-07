@@ -112,7 +112,7 @@ type NodeExtra struct {
 	UIDSalt       STR
 	DisableCache  bool
 	KVPath        string
-	SplitFile     string
+	SplitFile     ANY
 	SplitIndex    int
 	HasSplitIndex bool
 }

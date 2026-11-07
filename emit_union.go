@@ -30,7 +30,7 @@ func (e *EmitContext) genUnion() *ModuleEmitResult {
 	var peerContexts []ModuleInstance
 
 	for _, p := range e.d.peerdirs {
-		peer := e.derivePeerInstance(p.string())
+		peer := e.derivePeerInstanceVFS(p.peerSource())
 
 		peer.Demand = demandNone
 		peerContexts = append(peerContexts, peer)

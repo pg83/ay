@@ -167,8 +167,8 @@ type GenCtx struct {
 	varMacroStmtCache   map[varMacroKey][]Stmt
 	scanData            ModuleData
 	dirs                map[dirEvaluationKey]*DirEvaluation
-	dependencyInstances map[string][]ModuleInstance
-	dependencyBuilds    map[string][]TestBuildDependency
+	dependencyInstances map[STR][]ModuleInstance
+	dependencyBuilds    map[STR][]TestBuildDependency
 	configuration       ConfigurationDependencies
 	fs                  FS
 	parsers             *IncludeParserManager
@@ -249,7 +249,7 @@ type GenCtx struct {
 	testCmds            []Cmd
 	testDeps            []NodeRef
 	javaGlobKeys        []javaGlobKey
-	targetDirs          map[string]bool
+	targetDirs          map[STR]bool
 	rootDemand          ModuleDemand
 }
 
@@ -298,11 +298,11 @@ func runGenIntoWithResources(fs FS, parsers *IncludeParserManager, targets []str
 
 	ctx.roots = make(map[ModuleInstance]bool, len(all))
 	ctx.rootPaths = make(map[VFS]bool, len(all))
-	ctx.targetDirs = make(map[string]bool, len(targets))
+	ctx.targetDirs = make(map[STR]bool, len(targets))
 	ctx.rootDemand = rootDemand
 
 	for _, t := range targets {
-		ctx.targetDirs[filepath.Clean(t)] = true
+		ctx.targetDirs[internStr(filepath.Clean(t))] = true
 	}
 
 	for _, target := range all {
@@ -909,7 +909,7 @@ func mergeCheckSuite(suites []*TestSuite, s *TestSuite) bool {
 		}
 
 		if validation && prev.testType == s.testType && prev.projectPath == s.projectPath && prev.name == s.name {
-			prev.inputNames = sortedUnique(append(prev.inputNames, s.inputNames...))
+			prev.inputNames = sortedUniqueSTR(append(prev.inputNames, s.inputNames...))
 
 			return true
 		}
@@ -1079,16 +1079,6 @@ func moduleDerivedPrjName(dir string, unit ModuleUnit) string {
 	return realPrjName(dir)
 }
 
-func programSourceDir(moduleStmt *ModuleStmt) *string {
-	peerPath := unittestForPeerPath(moduleStmt)
-
-	if peerPath == "" {
-		return nil
-	}
-
-	return &peerPath
-}
-
 func unittestForPeer(moduleStmt *ModuleStmt) STR {
 	if moduleStmt == nil || moduleStmt.Name != tokUnittestFor || len(moduleStmt.Args) == 0 {
 		return 0
@@ -1099,14 +1089,6 @@ func unittestForPeer(moduleStmt *ModuleStmt) STR {
 	}
 
 	return internStr(path.Clean(moduleStmt.Args[0].string()))
-}
-
-func unittestForPeerPath(moduleStmt *ModuleStmt) string {
-	if moduleStmt == nil || moduleStmt.Name != tokUnittestFor || len(moduleStmt.Args) == 0 {
-		return ""
-	}
-
-	return path.Clean(moduleStmt.Args[0].string())
 }
 
 func parsedFileKey(id STR) STR {

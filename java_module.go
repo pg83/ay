@@ -247,7 +247,7 @@ type JavaPeerSpec struct {
 }
 
 type JavaRunProgram struct {
-	args []string
+	args []ANY
 	raw  []string
 }
 
@@ -293,8 +293,8 @@ type JavaData struct {
 	peerStmts              []JavaPeerSpec
 	dm                     []ANY
 	excludes               []ANY
-	jarResource            string
-	srcResource            string
+	jarResource            STR
+	srcResource            STR
 	localJar               string
 	localSourcesJar        string
 	protoSrcs              []string
@@ -360,7 +360,7 @@ type JavaData struct {
 type javaTestData struct {
 	dockerImages     []string
 	recipes          []string
-	depends          []string
+	depends          []STR
 	size             string
 	timeout          string
 	tags             []string

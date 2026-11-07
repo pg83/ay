@@ -69,7 +69,7 @@ func (e *EmitContext) emitDocsProtoSubmodule() *ModuleEmitResult {
 			continue
 		}
 
-		rel := e.protoSourceRel(meta.Source.string()).string()
+		rel := e.protoSourceRel(meta.Source).string()
 		src := source(rel)
 		out := build(strings.TrimSuffix(rel, ".proto"), ".md")
 

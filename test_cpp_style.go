@@ -14,27 +14,27 @@ func (d *JavaData) collectCPPStyle(fs FS, dir string, stmt UnknownStmt, env Envi
 	check := cppStyleCheck(stmt, env)
 
 	for _, file := range headerFiles(fs, dir, []ANY{str4.any()}) {
-		check.Files = append(check.Files, source(file))
+		check.Files = append(check.Files, file.source())
 	}
 
 	d.styleChecks = append(d.styleChecks, check)
 }
 
 func cppStyleCheck(stmt UnknownStmt, env Environment) StyleCheck {
-	check := StyleCheck{Name: "clang_format", CPP: true, ConfigMap: "build/config/tests/cpp_style/default_configs.json", Wrapper: testClangFormatWrapperRel, Resource: strClangFormatResourceGlobal, Peer: strBuildPlatformClangFormat.string()}
+	check := StyleCheck{Name: "clang_format", CPP: true, ConfigMap: strBuildConfigTestsCppStyleDefaultConfigsJson, Wrapper: testClangFormatWrapperRel, Resource: strClangFormatResourceGlobal, Peer: strBuildPlatformClangFormat.string()}
 
 	switch stmt.Name {
 	case tokStyleCppMaps:
 		check.Name = "clang_format_18_vanilla"
-		check.Depends = []string{"maps/tools/clang-format"}
+		check.Depends = []STR{strMapsToolsClangFormat}
 		check.ExtraParams = []string{"custom_clang_format=maps/tools/clang-format", "custom_clang_format_bin=clang-format"}
 	case tokStyleCppUserSessions:
 		check.Name = "clang_format_18_user_sessions"
-		check.Depends = []string{"quality/user_sessions/tools/clang-format"}
+		check.Depends = []STR{strQualityUserSessionsToolsClangFormat}
 		check.ExtraParams = []string{"custom_clang_format=quality/user_sessions/tools/clang-format", "custom_clang_format_bin=clang-format"}
 	case tokStyleCppYt:
 		check.Name = "clang_format_yt"
-		check.Depends = []string{"ads/core/contrib/libs/clang16/tools/clang-format"}
+		check.Depends = []STR{strAdsCoreContribLibsClang16ToolsClangFormat}
 		check.ExtraParams = []string{"custom_clang_format=ads/core/contrib/libs/clang16/tools/clang-format"}
 	}
 
@@ -43,7 +43,7 @@ func cppStyleCheck(stmt UnknownStmt, env Environment) StyleCheck {
 		check.Peer = ""
 	}
 
-	if value, ok := env.lookupENV(envCppLintersDefaultConfigs); ok && value != "" {
+	if value, ok := env.lookupSTR(envCppLintersDefaultConfigs); ok && value != strEmpty {
 		check.ConfigMap = value
 	}
 

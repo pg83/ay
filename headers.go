@@ -7,11 +7,11 @@ func applyHeaders(fs FS, modulePath string, args []ANY, d *ModuleData) {
 	stmt := d.nextDeclSeq()
 
 	for _, file := range files {
-		d.srcs = append(d.srcs, SrcMeta{Source: source(file).any(), Prio: stmtPrioSrcs, Seq: d.nextDeclSeq(), Stmt: stmt})
+		d.srcs = append(d.srcs, SrcMeta{Source: file.source().any(), Prio: stmtPrioSrcs, Seq: d.nextDeclSeq(), Stmt: stmt})
 	}
 }
 
-func headerFiles(fs FS, modulePath string, args []ANY) []string {
+func headerFiles(fs FS, modulePath string, args []ANY) []STR {
 	dirs, lists := goMacroLists(args, "EXCLUDE")
 
 	resolve := func(arg ANY) VFS {
@@ -28,7 +28,7 @@ func headerFiles(fs FS, modulePath string, args []ANY) []string {
 		excludes = append(excludes, resolve(exclude).relString())
 	}
 
-	var files []string
+	var files []STR
 
 	for _, dir := range dirs {
 		base := resolve(dir)
@@ -37,7 +37,7 @@ func headerFiles(fs FS, modulePath string, args []ANY) []string {
 			continue
 		}
 
-		files = append(files, ymakeGlob(fs, path.Join(base.relString(), "*.(h|H|hh|hpp|hxx|ipp)"), excludes...)...)
+		files = append(files, ymakeGlobIDs(fs, path.Join(base.relString(), "*.(h|H|hh|hpp|hxx|ipp)"), excludes...)...)
 	}
 
 	return files
