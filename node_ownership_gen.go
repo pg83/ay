@@ -59,6 +59,8 @@ func registerKnownGlobalChunks() {
 	registerOwnedSlice(gperfFlags)
 	registerOwnedSlice(hostDefines)
 	registerOwnedSlice(includeScannerBasePathsSlice)
+	registerOwnedSlice(javaSrcsScripts)
+	registerOwnedSlice(javacScripts)
 	registerOwnedSlice(ldScriptInputs)
 	registerOwnedSlice(macroPrefixMapFlags)
 	registerOwnedSlice(noLibcWarningSuppressions)

@@ -10,7 +10,20 @@ var (
 	javaReqCPU4         = Requirements{CPU: 4, Network: nwRestricted, RAM: 32}
 	javaReqNetworkAll   = Requirements{CPU: 1, Network: nwFull, RAM: 32}
 	resourceGlobalBases = map[STR]STR{}
+	recentResourceNames recentSTRs
 )
+
+var recentResourcePaths struct {
+	root   [4]VFS
+	suffix [4]string
+	path   [4]ANY
+	next   int
+}
+
+var javaProtoIncludeLast struct {
+	dirs []VFS
+	args []ANY
+}
 
 type javaNodeBuilder struct {
 	inputContext *EmitContext
@@ -532,8 +545,26 @@ func (ctx *GenCtx) javaGlobals(jm *JavaModule) map[STR]VFS {
 	return jm.globalsByName
 }
 
+func javaProtoIncludeArgs(dirs []VFS) []ANY {
+	last := &javaProtoIncludeLast
+
+	if last.args != nil && slices.Equal(last.dirs, dirs) {
+		return last.args
+	}
+
+	args := make([]ANY, len(dirs))
+
+	for i, inc := range dirs {
+		args[i] = internV("-I=", inc.string()).any()
+	}
+
+	last.dirs, last.args = append(last.dirs[:0], dirs...), args
+
+	return args
+}
+
 func (b *javaNodeBuilder) resourcePath(globals map[STR]VFS, name, suffix string) ANY {
-	id := interned(name)
+	id := recentResourceNames.interned(name)
 	v, ok := globals[id]
 
 	if !ok {
@@ -542,7 +573,20 @@ func (b *javaNodeBuilder) resourcePath(globals map[STR]VFS, name, suffix string)
 
 	b.useResource(id)
 
-	return internV(v.string(), suffix).any()
+	c := &recentResourcePaths
+
+	for i := range c.root {
+		if c.root[i] == v && c.path[i] != 0 && c.suffix[i] == suffix {
+			return c.path[i]
+		}
+	}
+
+	path := internV(v.string(), suffix)
+
+	c.root[c.next], c.suffix[c.next], c.path[c.next] = v, path.string()[len(path.string())-len(suffix):], path.any()
+	c.next = (c.next + 1) & 3
+
+	return path.any()
 }
 
 func javaJDKResource(jdk string) string {
@@ -801,10 +845,7 @@ func (ctx *GenCtx) javaEmitProtoPB(jm *JavaModule, globals map[STR]VFS, scanCtx 
 		strIB2.any(), strIS2.any(),
 	)
 
-	for _, inc := range jm.protoInclude {
-		args = append(args, internV("-I=", inc.string()).any())
-	}
-
+	args = append(args, javaProtoIncludeArgs(jm.protoInclude)...)
 	args = append(args, strIS2.any(), strJavaOutBJavaOut.any())
 
 	if d.kotlinProto {

@@ -71,7 +71,7 @@ func (e *EmitContext) goFmtSuites(globals []ResourceDecl) []*TestSuite {
 
 			seen[f] = true
 
-			dir := internStr(path.Dir(f.relString()))
+			dir := internDirText(path.Dir(f.relString()))
 
 			if _, ok := byDir[dir]; !ok {
 				dirs = append(dirs, dir)

@@ -381,7 +381,7 @@ func (v macroValues) at(i int) string {
 
 func macroLookup(name string, locals []confMacroBinding, env Environment, constant *bool, policy *substPolicy) (macroValues, bool) {
 	if len(locals) != 0 {
-		if id := interned(name); id != 0 {
+		if id := recentMacroLocals.interned(name); id != 0 {
 			for i := range locals {
 				if locals[i].name == id && locals[i].bound {
 					return macroValues{list: locals[i].values}, true
@@ -598,7 +598,7 @@ func substMacroAppend(out []byte, text string, locals []confMacroBinding, env En
 		var inserted []SourceTextRange
 
 		if policy.track != nil && bound && !ref.process {
-			inserted = env.s.textInputs[internedEnv(ref.name)]
+			inserted = env.s.textInputs[internedEnvRecent(ref.name)]
 		}
 
 		if !bound || ref.flags&modHide != 0 {

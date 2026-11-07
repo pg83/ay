@@ -7,18 +7,21 @@ import (
 	"sync/atomic"
 )
 
-var emptyDirNames = []uint32{}
-
-var recentNames struct {
-	text [4]string
-	id   [4]STR
-	next int
-}
+var (
+	emptyDirNames                  = []uint32{}
+	recentNames, recentMacroLocals recentSTRs
+)
 
 const (
 	readChunkSize      = 1 << 20
 	sourceUnderHotMask = 1<<18 - 1
 )
+
+type recentSTRs struct {
+	text [4]string
+	id   [4]STR
+	next int
+}
 
 type sourceUnderHotEntry struct {
 	key uint64
@@ -117,9 +120,24 @@ func (fs *OsFS) listdirSlow(dir STR) DirView {
 	return v
 }
 
-func internedRecent(name string) STR {
-	c := &recentNames
+func (c *recentSTRs) intern(name string) STR {
+	if id := c.interned(name); id != 0 {
+		return id
+	}
 
+	id := internStr(name)
+
+	c.text[c.next], c.id[c.next] = id.string(), id
+	c.next = (c.next + 1) & 3
+
+	return id
+}
+
+func internedRecent(name string) STR {
+	return recentNames.interned(name)
+}
+
+func (c *recentSTRs) interned(name string) STR {
 	for i := range c.text {
 		if c.id[i] != 0 && c.text[i] == name {
 			return c.id[i]

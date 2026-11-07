@@ -158,10 +158,10 @@ type ResolvedResource struct {
 	ProducerMainOut VFS
 }
 
-func (e *EmitContext) resolveResourceInput(rawPath string, fallback VFS) ResolvedResource {
+func (e *EmitContext) resolveResourceInput(rawPath string, fallback VFS, fixed bool) ResolvedResource {
 	output := fallback
 
-	if !fallback.isBuild() {
+	if !fallback.isBuild() && !fixed {
 		output = resourceOutputVFS(e.instance.Path.relString(), rawPath)
 	}
 
@@ -795,7 +795,7 @@ func (e *EmitContext) emitResourceFile(entries []ResourceEntry, moduleTag STR) (
 
 				it.Key = bytesString(e.resStrBuf[hashStart:])
 
-				r := e.resolveResourceInput(entry.SrcPath, e.resourceSource(entry.SrcPath, entry.Resolved))
+				r := e.resolveResourceInput(entry.SrcPath, e.resourceSource(entry.SrcPath, entry.Resolved), entry.Resolved.Fixed)
 				cmdStart := len(e.resStrBuf)
 
 				e.resStrBuf = append(e.resStrBuf, "resfs/src/"...)
@@ -818,7 +818,7 @@ func (e *EmitContext) emitResourceFile(entries []ResourceEntry, moduleTag STR) (
 				it.Key = entry.Key
 
 				if head, inner, tail, ok := rootrelSplit(entry.Key); ok {
-					r := e.resolveResourceInput(inner, e.resourceSource(inner, entry.Resolved))
+					r := e.resolveResourceInput(inner, e.resourceSource(inner, entry.Resolved), entry.Resolved.Fixed)
 
 					it.Cmd = internStr(renderResourceKvCmd(head+r.Input.relString()+tail, instance.Path.relString()))
 					it.setInput(r.Input)
@@ -831,7 +831,7 @@ func (e *EmitContext) emitResourceFile(entries []ResourceEntry, moduleTag STR) (
 			batch = append(batch, it)
 		} else {
 			fallback := e.resourceSource(entry.Path, entry.Resolved)
-			r := e.resolveResourceInput(entry.Path, fallback)
+			r := e.resolveResourceInput(entry.Path, fallback, entry.Resolved.Fixed)
 			it := ResourceItem{Path: entry.Path, Key: entry.Key, DontParse: entry.DontParse}
 
 			it.setInput(r.Input)

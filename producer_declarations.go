@@ -141,6 +141,9 @@ func (e *EmitContext) orderedProducerPositions(positions []ProducerPos, cythonPl
 			}
 
 			inputs := vfsScratches.get()
+			prevName := ""
+
+			var prevResolved ResolvedSource
 
 			for ri := lo; ri < hi; ri++ {
 				entry := &e.resources[ri]
@@ -155,7 +158,13 @@ func (e *EmitContext) orderedProducerPositions(positions []ProducerPos, cythonPl
 				}
 
 				if name != "" {
-					entry.Resolved = resolveSource(e.ctx, e.instance, name, e.d.srcDirs)
+					if name == prevName {
+						entry.Resolved = prevResolved
+					} else {
+						entry.Resolved = resolveSource(e.ctx, e.instance, name, e.d.srcDirs)
+					}
+
+					prevName, prevResolved = name, entry.Resolved
 					inputs = append(inputs, e.schedulingSource(name, entry.Resolved))
 				}
 			}

@@ -11,6 +11,7 @@ import (
 var (
 	flake8MigrationParams  = []string{"DISABLE_FLAKE8_MIGRATIONS=yes"}
 	flake8MigrationConfigs = []string{"build/rules/flake8/migrations.yaml"}
+	recentStyleConfigs     recentSTRs
 )
 
 const yamlfmtResourcePeer = "build/external_resources/yamlfmt"
@@ -463,7 +464,7 @@ func (ctx *GenCtx) styleSuite(check StyleCheck, projectID STR, env []string, res
 		}
 
 		if check.Config != "" {
-			args = append(args, strConfig.any(), source(check.Config).any())
+			args = append(args, strConfig.any(), recentStyleConfigs.intern(check.Config).source().any())
 		}
 
 		for _, config := range check.ExtraConfigs {

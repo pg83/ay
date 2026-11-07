@@ -8,6 +8,11 @@ import (
 	"strings"
 )
 
+var (
+	javaSrcsScripts = []VFS{buildScriptsProcessCommandFilesPy, source("build/scripts/java_pack_to_file.py"), buildScriptsAutotarGendirsPy, buildScriptsResolveJavaSrcsPy}
+	javacScripts    = []VFS{source("build/scripts/build_java_with_error_prone2.py"), buildScriptsSetupJavaTmpdirPy, source("build/scripts/javac_daemon_client.py"), source("build/scripts/JavacDaemon.jar")}
+)
+
 type javaSrcsGlob struct {
 	spec    JavaSrcsSpec
 	name    string
@@ -231,8 +236,8 @@ func (ctx *GenCtx) javaEmitJar(jm *JavaModule) {
 
 	prep = append(prep, strYaEndCommandFile.any())
 
-	for _, s := range []string{"build/scripts/process_command_files.py", "build/scripts/java_pack_to_file.py", "build/scripts/autotar_gendirs.py", "build/scripts/resolve_java_srcs.py"} {
-		b.script(source(s))
+	for _, s := range javaSrcsScripts {
+		b.script(s)
 	}
 
 	b.cmd(prep, bindir)
@@ -266,8 +271,8 @@ func (ctx *GenCtx) javaEmitJar(jm *JavaModule) {
 
 		kt := b.python(buildScriptsRunJavacPy)
 
-		for _, s := range []string{"build/scripts/build_java_with_error_prone2.py", "build/scripts/setup_java_tmpdir.py", "build/scripts/javac_daemon_client.py", "build/scripts/JavacDaemon.jar"} {
-			b.script(source(s))
+		for _, s := range javacScripts {
+			b.script(s)
 		}
 
 		kt = append(kt, strKotlin.any(), strSourcesList.any(), ktSrclist.any(), b.resourcePath(globals, jdk, "/bin/java"))
@@ -321,8 +326,8 @@ func (ctx *GenCtx) javaEmitJar(jm *JavaModule) {
 
 	javac := b.python(buildScriptsRunJavacPy)
 
-	for _, s := range []string{"build/scripts/build_java_with_error_prone2.py", "build/scripts/setup_java_tmpdir.py", "build/scripts/javac_daemon_client.py", "build/scripts/JavacDaemon.jar"} {
-		b.script(source(s))
+	for _, s := range javacScripts {
+		b.script(s)
 	}
 
 	javac = append(javac, strWithSetupJavaTmpdir.any(), strSourcesList.any(), srclst.any())
