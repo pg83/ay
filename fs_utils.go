@@ -6,6 +6,19 @@ import (
 	"strings"
 )
 
+var dirTextCache struct {
+	text [4]string
+	id   [4]STR
+	next int
+}
+
+var joinedDirCache struct {
+	prefix [4]STR
+	tail   [4]string
+	id     [4]STR
+	next   int
+}
+
 func cleanRel(rel string) string {
 	if rel == "" || rel == "." {
 		return ""
@@ -152,6 +165,41 @@ func baseName(s string) string {
 	}
 
 	return s
+}
+
+func internDirText(dir string) STR {
+	c := &dirTextCache
+
+	for i := range c.text {
+		if c.id[i] != 0 && c.text[i] == dir {
+			return c.id[i]
+		}
+	}
+
+	id := internStr(dir)
+
+	c.text[c.next], c.id[c.next] = id.string(), id
+	c.next = (c.next + 1) & 3
+
+	return id
+}
+
+func internJoinedDir(prefix STR, dname string) STR {
+	c := &joinedDirCache
+
+	for i := range c.id {
+		if c.id[i] != 0 && c.prefix[i] == prefix && c.tail[i] == dname {
+			return c.id[i]
+		}
+	}
+
+	id := internJoined(prefix.string(), dname)
+	joined := id.string()
+
+	c.prefix[c.next], c.tail[c.next], c.id[c.next] = prefix, joined[len(joined)-len(dname):], id
+	c.next = (c.next + 1) & 3
+
+	return id
 }
 
 func pathDir(p string) string {

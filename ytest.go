@@ -47,27 +47,33 @@ const (
 )
 
 type TestOpts struct {
-	retries      int
-	traceback    string
-	buildType    string
-	flags        []string
-	dist         bool
-	cacheTests   bool
-	removeTos    bool
-	dirOutputs   bool
-	commandFile  bool
-	jstyleServer bool
-	outputStyle  string
-	sizes        []string
-	tagFilter    TestTagFilter
-	descriptor   string
-	sizeIDs      []STR
-	styleArg     ANY
-	platformArg  ANY
-	context      []string
-	contextReqs  *Requirements
-	commonEnv    [][2]string
-	contextRef   NodeRef
+	retries            int
+	traceback          string
+	buildType          string
+	flags              []string
+	dist               bool
+	cacheTests         bool
+	removeTos          bool
+	dirOutputs         bool
+	commandFile        bool
+	jstyleServer       bool
+	outputStyle        string
+	sizes              []string
+	tagFilter          TestTagFilter
+	descriptor         string
+	sizeIDs            []STR
+	styleArg           ANY
+	platformArg        ANY
+	buildTypeArg       ANY
+	tracebackArg       ANY
+	flagArgs           []ANY
+	sanitizerArg       ANY
+	context            []string
+	contextReqs        *Requirements
+	commonEnv          [][2]string
+	commonEnvVarsCache EnvVars
+	commonEnvVarsDone  bool
+	contextRef         NodeRef
 
 	dirOutputsInNodes bool
 }
@@ -147,6 +153,15 @@ func newTestOpts(mf *MakeFlags, yaConf map[string]any) *TestOpts {
 	}
 
 	opts.styleArg, opts.platformArg = testArg(opts.outputStyle), testArg(opts.descriptor)
+	opts.buildTypeArg, opts.tracebackArg, opts.flagArgs = testArg(opts.buildType), testArg(opts.traceback), testArgs(opts.flags)
+
+	for _, flag := range opts.flags {
+		if sanitizer, found := strings.CutPrefix(flag, "SANITIZER_TYPE="); found && sanitizer != "" {
+			opts.sanitizerArg = testArg(sanitizer)
+
+			break
+		}
+	}
 
 	for _, size := range opts.sizes {
 		opts.sizeIDs = append(opts.sizeIDs, internStr(size))
@@ -377,6 +392,14 @@ func testArg(s string) ANY {
 	}
 
 	return internStr(s).any()
+}
+
+func testPartitionArg(partition string) ANY {
+	if partition == "" {
+		return strSequential.any()
+	}
+
+	return testArg(partition)
 }
 
 func testSizeTimeout(size STR) int {
@@ -736,14 +759,14 @@ func (ctx *GenCtx) testAccumulator(s *TestSuite, chunks []*Node, refs []NodeRef,
 	work := s.workDir(TestChunk{retry: retry})
 	log := work + "/results_accumulator.log"
 
-	strs := []string{testToolHostPath, "results_accumulator", "--accumulator-path", work, "--source-root", "$(S)", "--log-path", log,
-		"--concatenate-binaries", "report.exec", "--concatenate-binaries", "operation.log"}
+	args := []ANY{testToolHostPathArg, strResultsAccumulator.any(), strAccumulatorPath.any(), testArg(work), strSourceRoot2.any(), strS.any(), strLogPath.any(), testArg(log),
+		strConcatenateBinaries.any(), strReportExec.any(), strConcatenateBinaries.any(), strOperationLog.any()}
 
 	if o.dist {
-		strs = append(strs, "--truncate", "--log-level", "DEBUG")
+		args = append(args, strTruncate.any(), strLogLevel.any(), strDebug.any())
 	}
 
-	strs = append(strs, "--gdb-path", testGDBPath, "--tests-limit-in-suite", strconv.Itoa(testDefaultTestsLimit), "--keep-paths", testCmdFileStart)
+	args = append(args, strGdbPath.any(), testGDBPathArg, strTestsLimitInSuite.any(), testDefaultTestsLimitArg, strKeepPaths.any(), testCmdFileStartArg)
 
 	outputs := []string{work + "/meta.json", work + "/run_test.log", work + "/ytest.report.trace"}
 
@@ -752,7 +775,7 @@ func (ctx *GenCtx) testAccumulator(s *TestSuite, chunks []*Node, refs []NodeRef,
 	for i := range chunks {
 		dir := path.Dir(chunks[i].Outputs[0].string())
 
-		strs = append(strs, "--output", dir)
+		args = append(args, strOutput.any(), testArg(dir))
 		inputs = append(inputs, chunks[i].Outputs...)
 
 		if !o.dirOutputs {
@@ -760,12 +783,12 @@ func (ctx *GenCtx) testAccumulator(s *TestSuite, chunks []*Node, refs []NodeRef,
 		}
 	}
 
-	strs = append(strs, testCmdFileEnd)
+	args = append(args, testCmdFileEndArg)
 
 	if o.dirOutputs {
-		strs = append(strs, "--skip-dir", "testing_out_stuff", "--skip-file", "yt_run_test.tar")
+		args = append(args, strSkipDir.any(), strTestingOutStuff.any(), strSkipFile.any(), strYtRunTestTar.any())
 	} else {
-		strs = append(strs, "--skip-file", "testing_out_stuff.tar.zstd", "--skip-file", "yt_run_test.tar")
+		args = append(args, strSkipFile.any(), strTestingOutStuffTarZstd.any(), strSkipFile.any(), strYtRunTestTar.any())
 	}
 
 	outs := make([]VFS, 0, len(outputs)+1)
@@ -778,8 +801,8 @@ func (ctx *GenCtx) testAccumulator(s *TestSuite, chunks []*Node, refs []NodeRef,
 
 	return &Node{
 		Platform: testNoPlatform,
-		Cmds:     na.cmdList(Cmd{CmdArgs: na.chunkList(na.anyList(testArgs(strs)...)), Cwd: bld.cwd()}),
-		Env:      sortedEnvVars(o.commonEnvMap()), Inputs: na.inputList(na.vfsList(slices.Compact(inputs)...)), KV: &KV{P: pkTA, PC: pcLightCyan, ShowOutBool: true},
+		Cmds:     na.cmdList(Cmd{CmdArgs: na.chunkList(na.anyList(args...)), Cwd: bld.cwd()}),
+		Env:      o.commonEnvVars(), Inputs: na.inputList(na.vfsList(slices.Compact(inputs)...)), KV: &KV{P: pkTA, PC: pcLightCyan, ShowOutBool: true},
 		Outputs: na.vfsList(append(outs, intern(log))...),
 		DepRefs: na.refList(dedupRefs(refs)...),
 	}
@@ -973,7 +996,11 @@ func (ctx *GenCtx) testNode(s *TestSuite, chunk TestChunk) *Node {
 	}
 
 	if s.uidSaltID == 0 {
-		s.uidSaltID = internStr(s.uidSalt)
+		s.uidSaltID = strEmpty
+
+		if s.uidSalt != "" {
+			s.uidSaltID = internStr(s.uidSalt)
+		}
 	}
 
 	extra := na.extras.one()
@@ -1053,6 +1080,14 @@ func testRequirements(na *NodeArenas, s *TestSuite) *Requirements {
 	r.CPU, r.RAM = float64(cpu), float64(ram)
 
 	return r
+}
+
+func (o *TestOpts) commonEnvVars() EnvVars {
+	if !o.commonEnvVarsDone {
+		o.commonEnvVarsCache, o.commonEnvVarsDone = sortedEnvVars(o.commonEnvMap()), true
+	}
+
+	return o.commonEnvVarsCache
 }
 
 func (o *TestOpts) commonEnvMap() map[string]string {
@@ -1351,5 +1386,5 @@ func (ctx *GenCtx) testMerger(s *TestSuite, nodes []*Node, refs []NodeRef) *Node
 
 	slices.SortFunc(inputs, vfsCompare)
 
-	return &Node{Platform: testNoPlatform, Env: sortedEnvVars(o.commonEnvMap()), Cmds: na.cmdList(Cmd{CmdArgs: na.chunkList(testArgs(strs)), Cwd: bld.cwd()}), Inputs: na.inputList(na.vfsList(slices.Compact(inputs)...)), Outputs: na.vfsList(outs...), DepRefs: na.refList(dedupRefs(refs)...), KV: &KV{P: pkTR, PC: pcLightCyan, ShowOutBool: true}}
+	return &Node{Platform: testNoPlatform, Env: o.commonEnvVars(), Cmds: na.cmdList(Cmd{CmdArgs: na.chunkList(testArgs(strs)), Cwd: bld.cwd()}), Inputs: na.inputList(na.vfsList(slices.Compact(inputs)...)), Outputs: na.vfsList(outs...), DepRefs: na.refList(dedupRefs(refs)...), KV: &KV{P: pkTR, PC: pcLightCyan, ShowOutBool: true}}
 }

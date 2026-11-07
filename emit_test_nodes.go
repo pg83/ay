@@ -132,14 +132,14 @@ func (e *EmitContext) importTestSuites(binary VFS, globals []ResourceDecl) []*Te
 
 		checker += " --trace-dir=" + out
 
-		args := []string{testToolHostPath, "run_check", "--source-root", testSourceRoot, "--checker", checker, "--check-name", "import_test",
-			"--trace-path", work + "/ytest.report.trace", "--out-path", out, "--log-path", out + "/run_check.log"}
+		args := []ANY{testToolHostPathArg, strRunCheck.any(), strSourceRoot2.any(), testSourceRootArg, strChecker.any(), testArg(checker), strCheckName.any(), strImportTest.any(),
+			strTracePath.any(), testArg(work + "/ytest.report.trace"), strOutPath.any(), testArg(out), strLogPath.any(), testArg(out + "/run_check.log")}
 
 		for _, file := range s.checkFiles {
-			args = append(args, file.string())
+			args = append(args, file.any())
 		}
 
-		return testArgs(append(args, "--no-snippet-from-stdout"))
+		return append(args, strNoSnippetFromStdout.any())
 	}
 
 	return []*TestSuite{s}

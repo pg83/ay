@@ -104,7 +104,7 @@ func (e *EmitContext) pythonLinterFiles() []VFS {
 		}
 
 		if len(files) == 0 && slices.ContainsFunc(d.styleChecks, func(check StyleCheck) bool {
-			return check.Python && (!d.pythonLint.disableF8 || check.Name != "flake8" && check.Name != "py2_flake8")
+			return check.Python && (!d.pythonLint.disableF8 || check.Name != strFlake8 && check.Name != strPy2Flake8)
 		}) {
 			throwFmt("No files to lint for Python linter")
 		}

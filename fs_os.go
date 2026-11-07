@@ -214,7 +214,7 @@ func (fs *OsFS) existsClean(prefix STR, suffix string, clean bool) (present bool
 
 	dname, base := splitDirName(suffix)
 
-	v = fs.listdir(internJoined(prefix.string(), dname))
+	v = fs.listdir(internJoinedDir(prefix, dname))
 
 	if !v.listable() {
 		return false, false
@@ -251,7 +251,7 @@ func (fs *OsFS) isFileID(dir, name STR) bool {
 
 func (fs *OsFS) isFilePathClean(rel string) bool {
 	dir, name := splitDirName(rel)
-	v := fs.listdir(internStr(dir))
+	v := fs.listdir(internDirText(dir))
 
 	if !v.listable() {
 		return false

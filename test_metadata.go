@@ -1,7 +1,6 @@
 package main
 
 import (
-	"cmp"
 	"encoding/base64"
 	"path"
 	"slices"
@@ -237,16 +236,14 @@ func testInnerCommand(s *TestSuite, meta TestMeta, binary VFS, work string, chun
 			command = append(command, strCollectCores.any())
 		}
 
-		buildType := opts.buildType
-
-		command = append(command, strBuildType.any(), testArg(buildType))
+		command = append(command, strBuildType.any(), opts.buildTypeArg)
 
 		if opts.traceback != "" {
-			command = append(command, strTb.any(), testArg(opts.traceback))
+			command = append(command, strTb.any(), opts.tracebackArg)
 		}
 
 		if chunk.split > 1 {
-			command = append(command, strModulo.any(), intArg(chunk.split), strModuloIndex.any(), intArg(chunk.index), strPartitionMode.any(), testArg(cmp.Or(meta.partition, "SEQUENTIAL")))
+			command = append(command, strModulo.any(), intArg(chunk.split), strModuloIndex.any(), intArg(chunk.index), strPartitionMode.any(), testPartitionArg(meta.partition))
 		}
 
 		if meta.forkMode == "subtests" {
@@ -265,16 +262,12 @@ func testInnerCommand(s *TestSuite, meta TestMeta, binary VFS, work string, chun
 			command = append(command, strDepRoot.any(), arg)
 		}
 
-		for _, flag := range opts.flags {
-			command = append(command, strFlags.any(), testArg(flag))
+		for _, flag := range opts.flagArgs {
+			command = append(command, strFlags.any(), flag)
 		}
 
-		for _, flag := range opts.flags {
-			if sanitizer, found := strings.CutPrefix(flag, "SANITIZER_TYPE="); found && sanitizer != "" {
-				command = append(command, strSanitize.any(), testArg(sanitizer))
-
-				break
-			}
+		if opts.sanitizerArg != 0 {
+			command = append(command, strSanitize.any(), opts.sanitizerArg)
 		}
 
 		if chunk.file != 0 {
@@ -320,13 +313,7 @@ func testInnerCommand(s *TestSuite, meta TestMeta, binary VFS, work string, chun
 			args = append(args, strCorpusPartsLimitExceeded.any(), intArg(s.corpusPartsExceeded))
 		}
 	default:
-		partition := meta.partition
-
-		if partition == "" {
-			partition = "SEQUENTIAL"
-		}
-
-		args = append(args, strRunUt.any(), strBinary.any(), binary.any(), strTracePath.any(), trace, strOutputDir.any(), out, strModulo.any(), intArg(max(chunk.split, 1)), strModuloIndex.any(), intArg(chunk.index), strPartitionMode.any(), testArg(partition), strProjectPath.any(), s.projectPath.any(), strListTimeout.any(), intArg(s.timeout/2), strVerbose.any(), strGdbPath.any(), testGDBPathArg)
+		args = append(args, strRunUt.any(), strBinary.any(), binary.any(), strTracePath.any(), trace, strOutputDir.any(), out, strModulo.any(), intArg(max(chunk.split, 1)), strModuloIndex.any(), intArg(chunk.index), strPartitionMode.any(), testPartitionArg(meta.partition), strProjectPath.any(), s.projectPath.any(), strListTimeout.any(), intArg(s.timeout/2), strVerbose.any(), strGdbPath.any(), testGDBPathArg)
 
 		if opts.dist {
 			args = append(args, strTruncateLogs.any())

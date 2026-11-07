@@ -58,7 +58,7 @@ func (d *ModuleData) collectCustomStyle(module string, args []ANY, env Environme
 		throwFmt("custom lint: NAME and WRAPPER_SCRIPT require one value each")
 	}
 
-	check := StyleCheck{Name: fields["NAME"][0], Wrapper: fields["WRAPPER_SCRIPT"][0], Depends: internStrs(fields["DEPENDS"]), ExtraParams: fields["EXTRA_PARAMS"]}
+	check := StyleCheck{Name: internStr(fields["NAME"][0]), Wrapper: internStr(fields["WRAPPER_SCRIPT"][0]), Depends: internStrs(fields["DEPENDS"]), ExtraParams: fields["EXTRA_PARAMS"]}
 
 	for _, file := range fields["FILES"] {
 		if strings.HasSuffix(file, "ya.make") {

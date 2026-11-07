@@ -65,8 +65,8 @@ func (ctx *GenCtx) resourceValidationSuite(project STR, name string, ids []STR, 
 			checker += " --token " + token
 		}
 
-		args := []string{testToolHostPath, "run_check", "--source-root", testSourceRoot, "--checker", checker, "--check-name", s.testType.string(), "--trace-path", work + "/ytest.report.trace", "--out-path", work + "/testing_out_stuff", "--log-path", work + "/testing_out_stuff/run_check.log"}
-		out := testArgs(args)
+		out := []ANY{testToolHostPathArg, strRunCheck.any(), strSourceRoot2.any(), testSourceRootArg, strChecker.any(), testArg(checker), strCheckName.any(), canonicalANY(s.testType.any()),
+			strTracePath.any(), testArg(work + "/ytest.report.trace"), strOutPath.any(), testArg(work + "/testing_out_stuff"), strLogPath.any(), testArg(work + "/testing_out_stuff/run_check.log")}
 
 		for _, id := range s.inputNames {
 			out = append(out, canonicalANY(id.any()))
@@ -161,7 +161,7 @@ func (ctx *GenCtx) emitTestData(uri string) NodeRef {
 
 	requirements.Network = nwFull
 
-	ref := ctx.emit.emit(&Node{Platform: testNoPlatform, Env: sortedEnvVars(ctx.tests.commonEnvMap()), Cmds: ctx.na.cmdList(Cmd{CmdArgs: ctx.na.chunkList(testArgs(args)), Cwd: cwdVFS(testBuildRoot).cwd()}), Outputs: ctx.na.vfsList(outputs...), Extra: &NodeExtra{ResourceURIs: []STR{internStr("sbr:" + id)}}, KV: &KV{P: pkDL, PC: pcLightCyan, ShowOutBool: true}, Requirements: &requirements})
+	ref := ctx.emit.emit(&Node{Platform: testNoPlatform, Env: ctx.tests.commonEnvVars(), Cmds: ctx.na.cmdList(Cmd{CmdArgs: ctx.na.chunkList(testArgs(args)), Cwd: cwdVFS(testBuildRoot).cwd()}), Outputs: ctx.na.vfsList(outputs...), Extra: &NodeExtra{ResourceURIs: []STR{internStr("sbr:" + id)}}, KV: &KV{P: pkDL, PC: pcLightCyan, ShowOutBool: true}, Requirements: &requirements})
 
 	registry.register(GeneratedFileSpec{OutputPath: out, ProducerRef: ref})
 

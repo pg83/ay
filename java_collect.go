@@ -1039,10 +1039,10 @@ func applyJavaMacro(ctx *GenCtx, jm *JavaModule, d *JavaData, name STR, args []s
 	case kwTASKLET:
 		d.peerStmts = append(d.peerStmts, JavaPeerSpec{dir: strTaskletV1Api, explicit: true})
 	case kwSTYLE_RUFF, kwSTYLE_PYTHON:
-		style := "ruff"
+		style := strRuff
 
 		if name == kwSTYLE_PYTHON {
-			style = "black"
+			style = strBlack
 		}
 
 		d.styleChecks = append(d.styleChecks, pythonStyleCheck(style, env))

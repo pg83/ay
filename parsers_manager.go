@@ -211,7 +211,7 @@ func (pm *IncludeParserManager) sourceParsed(vfsPath VFS, ctxParser IncludeDirec
 	parsed := ParsedSource{local: out[parsedIncludesLocal], parser: includeParserKind(parser), bucket: bucket}
 
 	if len(parsed.local) > 0 {
-		parsed.dir = internStr(pathDir(rel))
+		parsed.dir = internDirText(pathDir(rel))
 	}
 
 	for _, entries := range out[1:] {
@@ -220,7 +220,7 @@ func (pm *IncludeParserManager) sourceParsed(vfsPath VFS, ctxParser IncludeDirec
 			parsed.extra = uint32(pm.cache.parsedExtras.len())
 
 			if parsed.dir == 0 {
-				parsed.dir = internStr(pathDir(rel))
+				parsed.dir = internDirText(pathDir(rel))
 			}
 
 			break

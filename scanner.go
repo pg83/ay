@@ -484,9 +484,13 @@ func (sc *ScanCtx) parserConfig() *ScanConfig {
 }
 
 func (s *IncludeScanner) includerDir(vfsPath VFS, info *GeneratedFileInfo) VFS {
+	if info == nil && vfsPath.isBuild() {
+		info, _ = s.codegen.byRel.get(vfsPath.rel())
+	}
+
 	if info != nil {
 		if info.dir == 0 {
-			info.dir = internStr(pathDir(vfsPath.relString()))
+			info.dir = internDirText(pathDir(vfsPath.relString()))
 		}
 
 		return info.dir.source()
@@ -498,7 +502,7 @@ func (s *IncludeScanner) includerDir(vfsPath VFS, info *GeneratedFileInfo) VFS {
 		}
 	}
 
-	return internStr(pathDir(vfsPath.relString())).source()
+	return internDirText(pathDir(vfsPath.relString())).source()
 }
 
 func (s *IncludeScanner) parsedIncludes(vfsPath VFS, ctxParser IncludeDirectiveParser) (own, compileExtra []IncludeDirective, info *GeneratedFileInfo, inducedBucket ParsedIncludeBucket) {

@@ -82,7 +82,7 @@ func (ctx *GenCtx) emitCanonicalTestData(resource string) NodeRef {
 
 	requirements.Network = nwFull
 
-	ref := ctx.emit.emit(&Node{Platform: testNoPlatform, Env: sortedEnvVars(ctx.tests.commonEnvMap()), Cmds: ctx.na.cmdList(Cmd{CmdArgs: ctx.na.chunkList(testArgs(args)), Cwd: cwdVFS(testBuildRoot).cwd()}), Inputs: ctx.na.inputList(ctx.na.vfsList(buildScriptsFetchFromPy, script)), Outputs: ctx.na.vfsList(output, log), KV: &KV{P: pkDL, PC: pcCyan, ShowOutBool: true}, Requirements: &requirements})
+	ref := ctx.emit.emit(&Node{Platform: testNoPlatform, Env: ctx.tests.commonEnvVars(), Cmds: ctx.na.cmdList(Cmd{CmdArgs: ctx.na.chunkList(testArgs(args)), Cwd: cwdVFS(testBuildRoot).cwd()}), Inputs: ctx.na.inputList(ctx.na.vfsList(buildScriptsFetchFromPy, script)), Outputs: ctx.na.vfsList(output, log), KV: &KV{P: pkDL, PC: pcCyan, ShowOutBool: true}, Requirements: &requirements})
 
 	registry.register(GeneratedFileSpec{OutputPath: output, ProducerRef: ref})
 

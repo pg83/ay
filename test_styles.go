@@ -16,12 +16,12 @@ var (
 const yamlfmtResourcePeer = "build/external_resources/yamlfmt"
 
 type StyleCheck struct {
-	Name               string
+	Name               STR
 	ConfigMap          STR
 	Config             string
 	ConfigType         string
 	ConfigDir          string
-	Wrapper            string
+	Wrapper            STR
 	Resource           STR
 	Files              []VFS
 	ExtraConfigs       []string
@@ -38,16 +38,16 @@ func (d *ModuleData) collectPythonStyleChecks(env Environment) {
 		return
 	}
 
-	name := ""
+	var name STR
 
 	switch d.moduleStmt.Name {
 	case tokPy2Program, tokPy2Library, tokPy2Test, tokPytestBin:
-		name = "py2_flake8"
+		name = strPy2Flake8
 	case tokPy3Program, tokPy3ProgramBin, tokPy3Library, tokPy23Library, tokPy3Test, tokPy3TestBin, tokYqlUdfMinitest:
-		name = "flake8"
+		name = strFlake8
 	}
 
-	if name != "" {
+	if name != 0 {
 		d.styleChecks = append(d.styleChecks, pythonStyleCheck(name, env))
 	}
 
@@ -78,32 +78,32 @@ func (d *ModuleData) collectPythonStyleChecks(env Environment) {
 	d.styleChecks = checks
 }
 
-func pythonStyleCheck(name string, env Environment) StyleCheck {
+func pythonStyleCheck(name STR, env Environment) StyleCheck {
 	check := StyleCheck{Name: name, Python: true, ConfigMap: strBuildConfigTestsPyStyleDefaultConfigsJson, FileProcessingTime: 1.5}
 	timeVar := envFlake8FileProcessingTime
 
 	switch name {
-	case "flake8", "py2_flake8":
+	case strFlake8, strPy2Flake8:
 		check.Peer = "build/external_resources/flake8_py3"
 		check.Resource = strFlake8Py3ResourceGlobal
 
-		if name == "py2_flake8" {
+		if name == strPy2Flake8 {
 			check.Peer = "build/external_resources/flake8_py2"
 			check.Resource = strFlake8Py2ResourceGlobal
 		}
 
-		check.Wrapper = "tools/flake8_linter/__main__.py"
+		check.Wrapper = strToolsFlake8LinterMainPy
 
 		if env.bool(envDisableFlake8Migrations) {
 			check.ExtraParams = flake8MigrationParams
 		} else {
 			check.ExtraConfigs = flake8MigrationConfigs
 		}
-	case "black":
-		check.Peer, check.Resource, check.Wrapper = "build/external_resources/black", strBlackResourceGlobal, "tools/black_linter/wrapper.py"
+	case strBlack:
+		check.Peer, check.Resource, check.Wrapper = "build/external_resources/black", strBlackResourceGlobal, strToolsBlackLinterWrapperPy
 		timeVar = envBlackFileProcessingTime
-	case "ruff":
-		check.Peer, check.Resource, check.Wrapper = "build/external_resources/ruff", strRuffResourceGlobal, "tools/ruff_linter/wrapper.py"
+	case strRuff:
+		check.Peer, check.Resource, check.Wrapper = "build/external_resources/ruff", strRuffResourceGlobal, strToolsRuffLinterWrapperPy
 		check.FileProcessingTime = 0.5
 
 		timeVar = envRuffFileProcessingTime
@@ -133,10 +133,10 @@ func (d *ModuleData) collectExplicitPythonStyle(stmt UnknownStmt, env Environmen
 		}
 	}
 
-	name := "black"
+	name := strBlack
 
 	if stmt.Name == tokStyleRuff {
-		name = "ruff"
+		name = strRuff
 	}
 
 	check := pythonStyleCheck(name, env)
@@ -153,13 +153,13 @@ func (d *ModuleData) collectExplicitPythonStyle(stmt UnknownStmt, env Environmen
 			check.ConfigType = stmt.Args[i].string()
 			check.ConfigDir, _ = env.lookupENV(envModuleCommonConfigsDir)
 		case strCheckFormat.any():
-			if name != "ruff" {
+			if name != strRuff {
 				throwFmt("STYLE: CHECK_FORMAT requires ruff")
 			}
 
 			check.ExtraParams[0] = "check_format=yes"
 		case strRunInSourceRoot.any():
-			if name != "ruff" {
+			if name != strRuff {
 				throwFmt("STYLE: RUN_IN_SOURCE_ROOT requires ruff")
 			}
 
@@ -177,7 +177,7 @@ func styleChecksDisabled(env Environment) bool {
 }
 
 func yamlStyleCheck(env Environment) StyleCheck {
-	check := StyleCheck{Name: "yamlfmt", ConfigMap: strBuildConfigTestsYamlStyleDefaultConfigsJson, Wrapper: "tools/yamlfmt_linter/wrapper.py", Resource: strYamlfmtResourceGlobal, Peer: yamlfmtResourcePeer}
+	check := StyleCheck{Name: strYamlfmt, ConfigMap: strBuildConfigTestsYamlStyleDefaultConfigsJson, Wrapper: strToolsYamlfmtLinterWrapperPy, Resource: strYamlfmtResourceGlobal, Peer: yamlfmtResourcePeer}
 
 	if value, ok := env.lookupSTR(envYamlLinterDefaultConfigs); ok && value != strEmpty {
 		check.ConfigMap = value
@@ -224,10 +224,10 @@ func explicitStyleCheck(name TOK, env Environment) StyleCheck {
 	case tokStyleYAML, tokStyleYAMLConf:
 		return yamlStyleCheck(env)
 	case tokStyleYQL:
-		return StyleCheck{Name: "yqlfmt", Wrapper: "tools/yqlfmt_linter/wrapper.py"}
+		return StyleCheck{Name: strYqlfmt, Wrapper: strToolsYqlfmtLinterWrapperPy}
 	}
 
-	check := StyleCheck{Name: "clang_format_json", ConfigMap: strBuildConfigTestsJsonStyleDefaultConfigsJson, Wrapper: "tools/clang_format_json_linter/wrapper.py", Resource: strClangFormatResourceGlobal, Peer: "build/platform/clang/clang-format"}
+	check := StyleCheck{Name: strClangFormatJson, ConfigMap: strBuildConfigTestsJsonStyleDefaultConfigsJson, Wrapper: strToolsClangFormatJsonLinterWrapperPy, Resource: strClangFormatResourceGlobal, Peer: "build/platform/clang/clang-format"}
 
 	if value, ok := env.lookupSTR(envJsonLinterDefaultConfigs); ok && value != strEmpty {
 		check.ConfigMap = value
@@ -368,7 +368,7 @@ func (e *EmitContext) styleSuites(globals []ResourceDecl) []*TestSuite {
 
 		e.ctx.resolveStyleConfig(&check, project)
 
-		if check.Python && (check.Name == "flake8" || check.Name == "py2_flake8") && e.d.pythonLint.disableF8 {
+		if check.Python && (check.Name == strFlake8 || check.Name == strPy2Flake8) && e.d.pythonLint.disableF8 {
 			continue
 		}
 
@@ -376,7 +376,7 @@ func (e *EmitContext) styleSuites(globals []ResourceDecl) []*TestSuite {
 			continue
 		}
 
-		if check.CPP && slices.ContainsFunc(suites, func(suite *TestSuite) bool { return suite.testType.string() == check.Name }) {
+		if check.CPP && slices.ContainsFunc(suites, func(suite *TestSuite) bool { return suite.testType == check.Name }) {
 			continue
 		}
 
@@ -390,11 +390,11 @@ func (ctx *GenCtx) resolveStyleConfig(check *StyleCheck, project string) {
 	if check.ConfigType != "" {
 		validType := check.ConfigType == ".clang-format" && check.CPP ||
 			check.ConfigType == "pyproject.toml" && !check.CPP ||
-			check.ConfigType == "ruff.toml" && check.Name == "ruff" ||
-			check.ConfigType == ".yamlfmt.yml" && check.Name == "yamlfmt"
+			check.ConfigType == "ruff.toml" && check.Name == strRuff ||
+			check.ConfigType == ".yamlfmt.yml" && check.Name == strYamlfmt
 
 		if !validType {
-			throwFmt("STYLE: unknown %s config type %s", check.Name, check.ConfigType)
+			throwFmt("STYLE: unknown %s config type %s", check.Name.string(), check.ConfigType)
 		}
 
 		if check.ConfigDir == "" {
@@ -415,10 +415,10 @@ func (ctx *GenCtx) resolveStyleConfig(check *StyleCheck, project string) {
 	}
 
 	if check.Config == "" && !check.ConfigMap.isEmpty() {
-		config, ok := ctx.parsers.notsJSONID(check.ConfigMap)[check.Name].(string)
+		config, ok := ctx.parsers.notsJSONID(check.ConfigMap)[check.Name.string()].(string)
 
 		if !ok {
-			throwFmt("STYLE: missing %s config in %s", check.Name, check.ConfigMap.string())
+			throwFmt("STYLE: missing %s config in %s", check.Name.string(), check.ConfigMap.string())
 		}
 
 		check.Config = config
@@ -442,12 +442,12 @@ func styleCheckResources(check StyleCheck, globals []ResourceDecl) []ResourceDec
 }
 
 func (ctx *GenCtx) styleSuite(check StyleCheck, projectID STR, env []string, resources []ResourceDecl) *TestSuite {
-	nameID := internStr(check.Name)
+	nameID := check.Name
 	s := &TestSuite{p: ctx.target, depends: slices.Clone(check.Depends), projectPath: projectID, name: nameID, testType: nameID, ciType: strStyle, size: strSmall, timeout: 60, supportsTestParameters: true, globals: resources, env: env, runInputs: []VFS{projectID.source()}, styleCheck: &check}
 
 	s.mergeStyleFiles(nil)
 
-	projectArg, nameArg, wrapperArg := projectID.source().any(), testArg(check.Name), testArg(check.Wrapper)
+	projectArg, nameArg, wrapperArg := projectID.source().any(), check.Name.any(), canonicalANY(check.Wrapper.any())
 
 	s.runCmd = func(work string, chunk TestChunk) []ANY {
 		args := []ANY{testToolHostPathArg, strRunCustomLint.any(), strSourceRoot2.any(), testSourceRootArg, strBuildRoot2.any(), testBuildRootArg, strProjectPath.any(), projectArg, strTracePath.any(), testArg(work + "/ytest.report.trace"), strOutPath.any(), testArg(work + "/testing_out_stuff"), strLintName.any(), nameArg, strWrapperScript.any(), wrapperArg}
@@ -506,7 +506,7 @@ func (s *TestSuite) mergeStyleFiles(files []VFS) {
 		s.relatedPaths = append(s.relatedPaths, source(config).any())
 	}
 
-	s.relatedPaths = append(s.relatedPaths, source(check.Wrapper).any())
+	s.relatedPaths = append(s.relatedPaths, check.Wrapper.source().any())
 
 	if check.FileProcessingTime > 0 {
 		s.split = max(1, int(math.Ceil(check.FileProcessingTime*float64(len(check.Files))/float64(s.timeout))))

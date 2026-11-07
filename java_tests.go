@@ -11,7 +11,7 @@ import (
 )
 
 var (
-	javaDetekt             = &javaLinter{name: "detekt", wrapper: "tools/detekt_linter/wrapper.py", resourcePeer: "build/platform/java/detekt", resource: "DETEKT_RESOURCE_GLOBAL"}
+	javaDetekt             = &javaLinter{name: internStr("detekt"), wrapper: internStr("tools/detekt_linter/wrapper.py"), resourcePeer: "build/platform/java/detekt", resource: internStr("DETEKT_RESOURCE_GLOBAL")}
 	srcJavaStyleMigrations = source(javaStyleMigrations)
 )
 
@@ -29,10 +29,10 @@ const (
 )
 
 type javaLinter struct {
-	name         string
-	wrapper      string
+	name         STR
+	wrapper      STR
 	resourcePeer string
-	resource     string
+	resource     STR
 }
 
 type javaCustomLint struct {
@@ -194,20 +194,21 @@ func (ctx *GenCtx) javaStyleSuite(jm *JavaModule) *TestSuite {
 
 	globals := ctx.javaGlobals(jm)
 	jdk := "JDK" + javaConfGlobals["JDK_LATEST_VERSION"]
+	javaArg := testArg(globals[interned(jdk)].string() + "/bin/java")
+	configArg := testArg(javaStyleConfigs[d.lintLevel])
+	srclstArg := testArg(srclst.string() + "::$(S)")
 
 	s.runCmd = func(work string, _ TestChunk) []ANY {
-		strs := []string{testToolHostPath, "run_javastyle", "--source-root", "$(S)", "--trace-path", work + "/ytest.report.trace",
-			"--out-path", work + "/testing_out_stuff", "--java", globals[interned(jdk)].string() + "/bin/java",
-			"--runner-lib-path", javaStyleRunnerLib, "--config-xml", javaStyleConfigs[d.lintLevel], "--verbose",
-			"--modulo", "1", "--modulo-index", "0"}
+		args := []ANY{testToolHostPathArg, strRunJavastyle.any(), strSourceRoot2.any(), strS.any(), strTracePath.any(), testArg(work + "/ytest.report.trace"),
+			strOutPath.any(), testArg(work + "/testing_out_stuff"), strJava.any(), javaArg,
+			strRunnerLibPath.any(), internStr(javaStyleRunnerLib).any(), strConfigXml.any(), configArg, strVerbose.any(),
+			strModulo.any(), strOne.any(), strModuloIndex.any(), strZero.any()}
 
 		if ctx.tests.jstyleServer {
-			strs = append(strs, "--use-jstyle-server")
+			args = append(args, strUseJstyleServer.any())
 		}
 
-		strs = append(strs, "--jstyle-migrations", "$(S)/"+javaStyleMigrations, srclst.string()+"::$(S)")
-
-		return testArgs(strs)
+		return append(args, strJstyleMigrations.any(), srcJavaStyleMigrations.any(), srclstArg)
 	}
 
 	return s
@@ -244,10 +245,12 @@ func (ctx *GenCtx) javaKtlintSuite(jm *JavaModule) *TestSuite {
 	s.deps = []NodeRef{ctx.javaProducer(jm, srclist)}
 	s.env = slices.Clone(d.testEnv)
 
+	binaryArg, editorconfigArg := testArg(binary), testArg(editorconfigPath)
+
 	s.runCmd = func(work string, _ TestChunk) []ANY {
-		return testArgs([]string{testToolHostPath, "run_ktlint_test", "--srclist-path", srclist.string(), "--binary", binary,
-			"--trace-path", work + "/ytest.report.trace", "--source-root", "$(S)", "--build-root", "$(B)",
-			"--project-path", jm.dir, "--output-dir", work + "/testing_out_stuff", "--editorconfig", editorconfigPath})
+		return []ANY{testToolHostPathArg, strRunKtlintTest.any(), strSrclistPath.any(), srclist.any(), strBinary.any(), binaryArg,
+			strTracePath.any(), testArg(work + "/ytest.report.trace"), strSourceRoot2.any(), strS.any(), strBuildRoot2.any(), strB.any(),
+			strProjectPath.any(), jm.path.rel().any(), strOutputDir.any(), testArg(work + "/testing_out_stuff"), strEditorconfig.any(), editorconfigArg}
 	}
 
 	return s
@@ -322,7 +325,7 @@ func (ctx *GenCtx) javaCustomLintSuite(jm *JavaModule, l javaCustomLint) *TestSu
 		configs = append(configs, path.Join(path.Dir(inc.relString()), c))
 	}
 
-	check := StyleCheck{Name: l.linter.name, Wrapper: l.linter.wrapper, Resource: internStr(l.linter.resource), Files: files, ExtraConfigs: configs}
+	check := StyleCheck{Name: l.linter.name, Wrapper: l.linter.wrapper, Resource: l.linter.resource, Files: files, ExtraConfigs: configs}
 	s := ctx.styleSuite(check, jm.path.rel(), slices.Clone(jm.data.testEnv), styleCheckResources(check, ctx.javaResourceGlobals(jm)))
 
 	s.p = jm.instance.Platform

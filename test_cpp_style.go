@@ -21,19 +21,19 @@ func (d *JavaData) collectCPPStyle(fs FS, dir string, stmt UnknownStmt, env Envi
 }
 
 func cppStyleCheck(stmt UnknownStmt, env Environment) StyleCheck {
-	check := StyleCheck{Name: "clang_format", CPP: true, ConfigMap: strBuildConfigTestsCppStyleDefaultConfigsJson, Wrapper: testClangFormatWrapperRel, Resource: strClangFormatResourceGlobal, Peer: strBuildPlatformClangFormat.string()}
+	check := StyleCheck{Name: strClangFormat, CPP: true, ConfigMap: strBuildConfigTestsCppStyleDefaultConfigsJson, Wrapper: internStr(testClangFormatWrapperRel), Resource: strClangFormatResourceGlobal, Peer: strBuildPlatformClangFormat.string()}
 
 	switch stmt.Name {
 	case tokStyleCppMaps:
-		check.Name = "clang_format_18_vanilla"
+		check.Name = strClangFormat18Vanilla
 		check.Depends = []STR{strMapsToolsClangFormat}
 		check.ExtraParams = []string{"custom_clang_format=maps/tools/clang-format", "custom_clang_format_bin=clang-format"}
 	case tokStyleCppUserSessions:
-		check.Name = "clang_format_18_user_sessions"
+		check.Name = strClangFormat18UserSessions
 		check.Depends = []STR{strQualityUserSessionsToolsClangFormat}
 		check.ExtraParams = []string{"custom_clang_format=quality/user_sessions/tools/clang-format", "custom_clang_format_bin=clang-format"}
 	case tokStyleCppYt:
-		check.Name = "clang_format_yt"
+		check.Name = strClangFormatYt
 		check.Depends = []STR{strAdsCoreContribLibsClang16ToolsClangFormat}
 		check.ExtraParams = []string{"custom_clang_format=ads/core/contrib/libs/clang16/tools/clang-format"}
 	}
@@ -70,7 +70,7 @@ func (ctx *GenCtx) javaCPPStyleSuites(jm *JavaModule) []*TestSuite {
 	var suites []*TestSuite
 
 	for _, check := range jm.data.styleChecks {
-		if !check.CPP || slices.ContainsFunc(suites, func(suite *TestSuite) bool { return suite.testType.string() == check.Name }) {
+		if !check.CPP || slices.ContainsFunc(suites, func(suite *TestSuite) bool { return suite.testType == check.Name }) {
 			continue
 		}
 
