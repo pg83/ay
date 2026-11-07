@@ -50,7 +50,8 @@ func allPytestSrcArgs(fs FS, module string, stmt UnknownStmt) []ANY {
 				pattern += "/**"
 			}
 
-			for _, file := range ymakeGlob(fs, pattern+"/"+suffix) {
+			for _, fileID := range ymakeGlobIDs(fs, pattern+"/"+suffix) {
+				file := fileID.string()
 				rel := strings.TrimPrefix(file, module+"/")
 
 				if rel == "ya.make" {
@@ -61,7 +62,7 @@ func allPytestSrcArgs(fs FS, module string, stmt UnknownStmt) []ANY {
 					throwFmt("ALL_PYTEST_SRCS: glob selected nested ya.make %s", rel)
 				}
 
-				files = append(files, source(file))
+				files = append(files, fileID.source())
 			}
 		}
 	}

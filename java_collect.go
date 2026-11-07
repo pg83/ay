@@ -776,11 +776,7 @@ func applyJavaMacro(ctx *GenCtx, jm *JavaModule, d *JavaData, name STR, args []s
 		d.abiJar = true
 		d.recalcKotlincOpts(jm)
 	case kwJAVAC_FLAGS:
-		if len(ids) == len(args) {
-			d.javacOpts.appendStmtIDs(args, canonicalANYs(ids))
-		} else {
-			d.javacOpts.appendStmt(args...)
-		}
+		d.javacOpts.appendStmtIDs(args, canonicalANYs(javaMacroIDs(args, ids)))
 	case kwENABLE_PREVIEW:
 		d.jvmArgs = append(d.jvmArgs, "--enable-preview")
 		d.javacOpts.appendStmt("--enable-preview", "--release", d.jdkReal)
@@ -1534,13 +1530,30 @@ func javaAppendResolved(dst, src, expanded []ANY) []ANY {
 }
 
 func javaDropUnresolvedIDs(args []string, ids []ANY) ([]string, []ANY) {
-	out := javaDropUnresolved(args)
-
-	if ids == nil || slices.Equal(out, args) {
-		return out, ids
+	if ids == nil {
+		return javaDropUnresolved(args), nil
 	}
 
-	return out, nil
+	if !slices.ContainsFunc(args, func(arg string) bool { return strings.IndexByte(arg, '$') >= 0 }) {
+		return args, ids
+	}
+
+	out := make([]string, 0, len(args))
+	outIDs := make([]ANY, 0, len(args))
+
+	for i, arg := range args {
+		if a := javaDropUnresolvedArg(arg); a != "" {
+			out = append(out, a)
+
+			if a == arg {
+				outIDs = append(outIDs, ids[i])
+			} else {
+				outIDs = append(outIDs, 0)
+			}
+		}
+	}
+
+	return out, outIDs
 }
 
 func javaMacroIDs(args []string, ids []ANY) []ANY {
@@ -1548,7 +1561,19 @@ func javaMacroIDs(args []string, ids []ANY) []ANY {
 		return internAnys(args)
 	}
 
-	return ids
+	if !slices.Contains(ids, 0) {
+		return ids
+	}
+
+	out := slices.Clone(ids)
+
+	for i, id := range out {
+		if id == 0 {
+			out[i] = internAny(args[i])
+		}
+	}
+
+	return out
 }
 
 func javaDropUnresolved(args []string) []string {
@@ -1559,30 +1584,32 @@ func javaDropUnresolved(args []string) []string {
 	out := make([]string, 0, len(args))
 
 	for _, arg := range args {
-		a := strings.ReplaceAll(arg, `${"$"}`, "$")
-
-		for {
-			start := strings.Index(a, "${")
-
-			if start < 0 {
-				break
-			}
-
-			end := strings.IndexByte(a[start:], '}')
-
-			if end < 0 {
-				break
-			}
-
-			a = a[:start] + a[start+end+1:]
-		}
-
-		if a != "" {
+		if a := javaDropUnresolvedArg(arg); a != "" {
 			out = append(out, a)
 		}
 	}
 
 	return out
+}
+
+func javaDropUnresolvedArg(arg string) string {
+	a := strings.ReplaceAll(arg, `${"$"}`, "$")
+
+	for {
+		start := strings.Index(a, "${")
+
+		if start < 0 {
+			return a
+		}
+
+		end := strings.IndexByte(a[start:], '}')
+
+		if end < 0 {
+			return a
+		}
+
+		a = a[:start] + a[start+end+1:]
+	}
 }
 
 func replaceJavaRunProgramRefs(value string, fn func(string) string) string {
