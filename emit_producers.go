@@ -885,10 +885,10 @@ func (e *EmitContext) producerPositions(cythonPlans []CythonStmtPlan) ([]Produce
 		outs := e.prodVFSTake(outsMark)
 		insMark := len(e.prodVFS)
 
-		e.prodVFS = append(e.prodVFS, build(e.enumHeaderSourceInput(stmt.Header, d.srcDirs).relString()))
+		e.prodVFS = append(e.prodVFS, e.enumHeaderSourceInput(stmt.Header, d.srcDirs).rel().build())
 
-		if _, rooted := moduleRootedVFS(module, stmt.Header); !rooted {
-			e.prodVFS = append(e.prodVFS, buildClean(stmt.Header))
+		if _, rooted := moduleRootedVFS(module, stmt.Header.string()); !rooted {
+			e.prodVFS = append(e.prodVFS, enumHeaderBuildClean(stmt.Header))
 		}
 
 		positions = append(positions, ProducerPos{

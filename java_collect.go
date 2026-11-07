@@ -348,13 +348,14 @@ func collectJavaStmts(ctx *GenCtx, jm *JavaModule, d *JavaData, stmts []Stmt, en
 
 			collectJavaStmts(ctx, jm, d, taken, env)
 		case *SrcsStmt:
-			srcs := anyStrs(expandStmtTokens(v.Sources, env))
+			ids := expandStmtTokens(v.Sources, env)
+			srcs := anyStrs(ids)
 
 			if jm.unit.jni {
-				srcs = javaJNISwigSrcs(srcs)
+				srcs, ids = javaJNISwigSrcs(srcs), nil
 			}
 
-			for _, ss := range srcs {
+			for i, ss := range srcs {
 				if ss == "GLOBAL" {
 					continue
 				}
@@ -363,7 +364,11 @@ func collectJavaStmts(ctx *GenCtx, jm *JavaModule, d *JavaData, stmts []Stmt, en
 
 				switch {
 				case jm.unit.proto && (extIsProto(ss) || extIsGztproto(ss)):
-					d.protoSrcs = append(d.protoSrcs, ss)
+					if ids != nil {
+						d.protoSrcs = append(d.protoSrcs, ids[i])
+					} else {
+						d.protoSrcs = append(d.protoSrcs, internAny(ss))
+					}
 				case jm.unit.proto && strings.HasSuffix(ss, ".ev"):
 					d.evSrcs = append(d.evSrcs, ss)
 				default:
@@ -995,7 +1000,7 @@ func applyJavaMacro(ctx *GenCtx, jm *JavaModule, d *JavaData, name STR, args []s
 	case kwWITH_KOTLIN_GRPC:
 		d.javaProtoArgs = append(d.javaProtoArgs, JavaProtoPlugin{kotlinGrpc: true})
 	case kwJAVA_PROTO_PLUGIN:
-		javaProtoPluginMacro(d, args)
+		javaProtoPluginMacro(d, args, ids)
 	case kwPROTO_NAMESPACE:
 		env.setString(envProtoNamespace, args[len(args)-1])
 		d.addProtoInclude(args, true)
@@ -1048,12 +1053,12 @@ func applyJavaMacro(ctx *GenCtx, jm *JavaModule, d *JavaData, name STR, args []s
 	return true
 }
 
-func javaProtoPluginMacro(d *JavaData, args []string) {
+func javaProtoPluginMacro(d *JavaData, args []string, ids []ANY) {
 	if len(args) < 2 {
 		return
 	}
 
-	d.javaProtoArgs = append(d.javaProtoArgs, JavaProtoPlugin{name: args[0], tool: args[1]})
+	d.javaProtoArgs = append(d.javaProtoArgs, JavaProtoPlugin{name: args[0], tool: internArgSTR(javaArgSTR(ids, 1, args[1]))})
 }
 
 func javaArgSTR(ids []ANY, i int, text string) STR {
@@ -1521,7 +1526,11 @@ func javaAppendResolved(dst, src, expanded []ANY) []ANY {
 			continue
 		}
 
-		for _, s := range javaDropUnresolved([]string{a.string()}) {
+		text := a.string()
+
+		if s := javaDropUnresolvedArg(text); s == text {
+			dst = append(dst, a.str().any())
+		} else if s != "" {
 			dst = append(dst, internStr(s).any())
 		}
 	}
@@ -1530,27 +1539,45 @@ func javaAppendResolved(dst, src, expanded []ANY) []ANY {
 }
 
 func javaDropUnresolvedIDs(args []string, ids []ANY) ([]string, []ANY) {
-	if ids == nil {
-		return javaDropUnresolved(args), nil
-	}
-
 	if !slices.ContainsFunc(args, func(arg string) bool { return strings.IndexByte(arg, '$') >= 0 }) {
 		return args, ids
 	}
 
-	out := make([]string, 0, len(args))
-	outIDs := make([]ANY, 0, len(args))
+	var out []string
+	var outIDs []ANY
 
 	for i, arg := range args {
-		if a := javaDropUnresolvedArg(arg); a != "" {
-			out = append(out, a)
+		a := javaDropUnresolvedArg(arg)
 
+		if out == nil {
+			if a == arg && a != "" {
+				continue
+			}
+
+			out = append(make([]string, 0, len(args)), args[:i]...)
+
+			if ids != nil {
+				outIDs = append(make([]ANY, 0, len(args)), ids[:i]...)
+			}
+		}
+
+		if a == "" {
+			continue
+		}
+
+		out = append(out, a)
+
+		if ids != nil {
 			if a == arg {
 				outIDs = append(outIDs, ids[i])
 			} else {
 				outIDs = append(outIDs, 0)
 			}
 		}
+	}
+
+	if out == nil {
+		return args, ids
 	}
 
 	return out, outIDs
@@ -1570,22 +1597,6 @@ func javaMacroIDs(args []string, ids []ANY) []ANY {
 	for i, id := range out {
 		if id == 0 {
 			out[i] = internAny(args[i])
-		}
-	}
-
-	return out
-}
-
-func javaDropUnresolved(args []string) []string {
-	if !slices.ContainsFunc(args, func(arg string) bool { return strings.IndexByte(arg, '$') >= 0 }) {
-		return args
-	}
-
-	out := make([]string, 0, len(args))
-
-	for _, arg := range args {
-		if a := javaDropUnresolvedArg(arg); a != "" {
-			out = append(out, a)
 		}
 	}
 

@@ -198,8 +198,7 @@ func (e *EmitContext) emitDescProtoSubmodule() *ModuleEmitResult {
 			protocLDRef, protocBinary = e.tool(argContribToolsProtoc)
 		}
 
-		srcRel := src.string()
-		protoVFS := resolveSourceOrGeneratedVFS(ctx, instance, srcRel, d.srcDirs)
+		protoVFS := resolveSourceOrGeneratedANY(ctx, instance, src, d.srcDirs)
 
 		if seen[protoVFS] {
 			continue
@@ -209,7 +208,7 @@ func (e *EmitContext) emitDescProtoSubmodule() *ModuleEmitResult {
 
 		protoRelPath := protoVFS.relString()
 		imports := e.scanner.walkClosure(protoVFS, d.scanCtx, scanDomainProto)
-		descOut := build(descProtoOutputRel(instance.Path.relString(), srcRel, protoRelPath))
+		descOut := build(descProtoOutputRel(instance.Path.relString(), src.string(), protoRelPath))
 		rawprotoOut := build(protoRelPath, ".", hash, ".rawproto")
 
 		ref := e.emitProtoDescProducer(protoVFS, descOut, rawprotoOut,

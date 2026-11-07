@@ -8,14 +8,15 @@ import (
 
 type UsrvFile struct {
 	DeclSeq  int
-	Tar      string
+	Tar      ANY
 	File     string
-	DepsFile string
+	DepsFile ANY
 	Auto     bool
 }
 
-func (d *ModuleData) collectUsrvFiles(args []string) {
-	tar, deps := "", "NO_DEPS"
+func (d *ModuleData) collectUsrvFiles(args []ANY) {
+	noDeps := strNoDeps.any()
+	tar, deps := ANY(0), noDeps
 
 	var files, noauto []string
 
@@ -23,33 +24,33 @@ func (d *ModuleData) collectUsrvFiles(args []string) {
 
 	for i := 0; i < len(args); i++ {
 		switch args[i] {
-		case "FROM", "DEPS_FILE":
+		case kwFROM.any(), strDepsFile.any():
 			key := args[i]
 
 			i++
 
 			if i == len(args) {
-				throwFmt("USRV_BUILD: missing %s argument", key)
+				throwFmt("USRV_BUILD: missing %s argument", key.string())
 			}
 
-			if key == "FROM" {
+			if key == kwFROM.any() {
 				tar = args[i]
 			} else {
 				deps = args[i]
 			}
-		case "OUT_NOAUTO":
+		case kwOUT_NOAUTO.any():
 			dst = &noauto
 		default:
-			*dst = append(*dst, args[i])
+			*dst = append(*dst, args[i].string())
 		}
 	}
 
-	if tar == "" {
+	if tar == 0 || tar == strEmpty.any() {
 		throwFmt("USRV_BUILD: FROM is required")
 	}
 
 	for _, f := range files {
-		d.usrvFiles = append(d.usrvFiles, UsrvFile{DeclSeq: d.nextDeclSeq(), Tar: tar, File: f, DepsFile: deps, Auto: deps != "NO_DEPS" || strings.HasSuffix(f, ".cpp")})
+		d.usrvFiles = append(d.usrvFiles, UsrvFile{DeclSeq: d.nextDeclSeq(), Tar: tar, File: f, DepsFile: deps, Auto: deps != noDeps || strings.HasSuffix(f, ".cpp")})
 	}
 
 	for _, f := range noauto {
@@ -63,17 +64,17 @@ func (e *EmitContext) emitUsrvFile(file UsrvFile) {
 	na := e.ctx.na
 	toolValue := resourceGlobalArgumentValue([]ANY{strUsrvUnpackTarResourceGlobalUnpackTar.any()}, e.peers.ResourceGlobals, &e.ctx.resourceEnv)
 	toolArgs := toolValue.Args
-	src := e.runProgramInputVFS(file.Tar)
+	src := e.runProgramInputVFSOf(file.Tar)
 	out := copyFileOutputVFS(e.instance.Path.relString(), file.File)
 
 	var parsed []IncludeDirective
 
-	if file.DepsFile != "NO_DEPS" {
-		depFile := copyFileInputVFS(e.ctx.fs, e.instance.Path, file.DepsFile)
+	if file.DepsFile != strNoDeps.any() {
+		depFile := copyFileInputVFSOf(e.ctx.fs, e.instance.Path, file.DepsFile)
 		deps, ok := e.ctx.parsers.usrvDepsID(depFile.rel()).deps(file.File)
 
 		if !ok {
-			throwFmt("USRV_BUILD: dependencies for %s missing in %s", file.File, file.DepsFile)
+			throwFmt("USRV_BUILD: dependencies for %s missing in %s", file.File, file.DepsFile.string())
 		}
 
 		parsed = deps

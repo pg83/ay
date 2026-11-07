@@ -297,7 +297,7 @@ type JavaData struct {
 	srcResource            STR
 	localJar               string
 	localSourcesJar        string
-	protoSrcs              []string
+	protoSrcs              []ANY
 	flatcFlags             []ANY
 	evSrcs                 []string
 	copyFiles              []CopyFileEntry
@@ -379,7 +379,7 @@ type javaTestData struct {
 
 type JavaProtoPlugin struct {
 	name       string
-	tool       string
+	tool       ARG
 	kotlinGrpc bool
 }
 

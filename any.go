@@ -51,6 +51,14 @@ func textANYs(in []ANY) []ANY {
 	return out
 }
 
+func canonicalANY(a ANY) ANY {
+	if a.vfs() == 0 && vfsHasPrefix(a.str().string()) {
+		return intern(a.str().string()).any()
+	}
+
+	return a
+}
+
 func canonicalANYs(in []ANY) []ANY {
 	var out []ANY
 

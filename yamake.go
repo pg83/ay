@@ -426,7 +426,7 @@ type GlobalSrcsStmt struct {
 
 type GenerateEnumSerializationStmt struct {
 	Macro   STR
-	Header  string
+	Header  ANY
 	Variant string
 	Line    int
 	DeclSeq int
@@ -1346,7 +1346,7 @@ func appendMacroCallStmts(out []Stmt, nameID STR, args, lexical []ANY, line int,
 				continue
 			}
 
-			out = append(out, astOne(astEnumSers, GenerateEnumSerializationStmt{Macro: kwGENERATE_ENUM_SERIALIZATION_WITH_HEADER, Header: args[i].string(), Variant: "with_header", Line: line}))
+			out = append(out, astOne(astEnumSers, GenerateEnumSerializationStmt{Macro: kwGENERATE_ENUM_SERIALIZATION_WITH_HEADER, Header: args[i], Variant: "with_header", Line: line}))
 		}
 
 		return out
@@ -1556,25 +1556,25 @@ func buildStmtForID(nameID STR, args []ANY, line int, fail func(format string, a
 			fail("GENERATE_ENUM_SERIALIZATION expects exactly 1 argument (header path), got %d", len(args))
 		}
 
-		return astOne(astEnumSers, GenerateEnumSerializationStmt{Macro: kwGENERATE_ENUM_SERIALIZATION, Header: args[0].string(), Variant: "plain", Line: line})
+		return astOne(astEnumSers, GenerateEnumSerializationStmt{Macro: kwGENERATE_ENUM_SERIALIZATION, Header: args[0], Variant: "plain", Line: line})
 	case stmtKindAliceGenerateNoexceptEnumSerialization:
 		if len(args) != 1 {
 			fail("ALICE_GENERATE_NOEXCEPT_ENUM_SERIALIZATION expects exactly 1 argument (header path), got %d", len(args))
 		}
 
-		return astOne(astEnumSers, GenerateEnumSerializationStmt{Macro: strAliceGenerateNoexceptEnumSerialization, Header: args[0].string(), Variant: "noexcept_header", Line: line})
+		return astOne(astEnumSers, GenerateEnumSerializationStmt{Macro: strAliceGenerateNoexceptEnumSerialization, Header: args[0], Variant: "noexcept_header", Line: line})
 	case stmtKindGenerateEnumSerializationWithHeader:
 		if len(args) != 1 {
 			fail("GENERATE_ENUM_SERIALIZATION_WITH_HEADER expects exactly 1 argument (header path), got %d", len(args))
 		}
 
-		return &GenerateEnumSerializationStmt{Macro: kwGENERATE_ENUM_SERIALIZATION_WITH_HEADER, Header: args[0].string(), Variant: "with_header", Line: line}
+		return &GenerateEnumSerializationStmt{Macro: kwGENERATE_ENUM_SERIALIZATION_WITH_HEADER, Header: args[0], Variant: "with_header", Line: line}
 	case stmtKindGenerateEnumSerializationNoutf:
 		if len(args) != 1 {
 			fail("GENERATE_ENUM_SERIALIZATION_NOUTF expects exactly 1 argument (header path), got %d", len(args))
 		}
 
-		return &GenerateEnumSerializationStmt{Macro: kwGENERATE_ENUM_SERIALIZATION_NOUTF, Header: args[0].string(), Variant: "noutf", Line: line}
+		return &GenerateEnumSerializationStmt{Macro: kwGENERATE_ENUM_SERIALIZATION_NOUTF, Header: args[0], Variant: "noutf", Line: line}
 	case stmtKindDefault:
 
 		varName := ""

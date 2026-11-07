@@ -7,12 +7,12 @@ import (
 
 var enKV = KV{P: pkEN, PC: pcYellow}
 
-func (e *EmitContext) enumHeaderSourceInput(headerRel string, srcDirs []VFS) VFS {
+func (e *EmitContext) enumHeaderSourceInput(header ANY, srcDirs []VFS) VFS {
 	ctx, instance := e.ctx, e.instance
-	headerInput := resolveSourceVFS(ctx, instance, headerRel, srcDirs)
+	headerInput := resolveSourceANY(ctx, instance, header, srcDirs).Path
 
 	if !ctx.fs.isFileVFS(headerInput) {
-		if vfs, ok := sourceInputVFS(ctx.fs, instance.Path, headerRel); ok && vfs.isSource() {
+		if vfs, ok := sourceInputVFS(ctx.fs, instance.Path, header.string()); ok && vfs.isSource() {
 			headerInput = vfs
 		}
 	}
@@ -20,15 +20,23 @@ func (e *EmitContext) enumHeaderSourceInput(headerRel string, srcDirs []VFS) VFS
 	return headerInput
 }
 
-func (e *EmitContext) resolveEnumHeaderInput(headerRel string, srcDirs []VFS) VFS {
-	headerInput := e.enumHeaderSourceInput(headerRel, srcDirs)
+func enumHeaderBuildClean(header ANY) VFS {
+	if header.vfs() == 0 {
+		return header.str().buildClean()
+	}
+
+	return buildClean(header.string())
+}
+
+func (e *EmitContext) resolveEnumHeaderInput(header ANY, srcDirs []VFS) VFS {
+	headerInput := e.enumHeaderSourceInput(header, srcDirs)
 	buildHeader := headerInput.rel().build()
 
 	if e.codegen.lookup(buildHeader) != nil {
 		return buildHeader
 	}
 
-	rootHeader := buildClean(headerRel)
+	rootHeader := enumHeaderBuildClean(header)
 
 	if e.codegen.lookup(rootHeader) != nil {
 		return rootHeader
@@ -38,15 +46,17 @@ func (e *EmitContext) resolveEnumHeaderInput(headerRel string, srcDirs []VFS) VF
 }
 
 func (e *EmitContext) enumSerializedBaseParts(stmt *GenerateEnumSerializationStmt) (dir, sep, base string) {
-	if _, ok := moduleRootedVFS(e.instance.Path.relString(), stmt.Header); ok {
+	header := stmt.Header.string()
+
+	if _, ok := moduleRootedVFS(e.instance.Path.relString(), header); ok {
 		return e.enumHeaderSourceInput(stmt.Header, e.d.srcDirs).relString(), "", ""
 	}
 
-	if !pathIsClean(stmt.Header) {
-		return buildJoinClean(e.instance.Path.relString(), stmt.Header).relString(), "", ""
+	if !pathIsClean(header) {
+		return buildJoinClean(e.instance.Path.relString(), header).relString(), "", ""
 	}
 
-	return e.instance.Path.relString(), "/", stmt.Header
+	return e.instance.Path.relString(), "/", header
 }
 
 func (e *EmitContext) emitEnumSrcStmt(stmt *GenerateEnumSerializationStmt) {

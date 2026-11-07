@@ -69,7 +69,7 @@ func (ctx *GenCtx) resourceValidationSuite(project STR, name string, ids []STR, 
 		out := testArgs(args)
 
 		for _, id := range s.inputNames {
-			out = append(out, testArgANY(id.any()))
+			out = append(out, canonicalANY(id.any()))
 		}
 
 		return append(out, strBatch.any(), strBatchName.any(), testArg(path.Base(project.string())))

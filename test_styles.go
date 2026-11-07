@@ -456,7 +456,7 @@ func (ctx *GenCtx) styleSuite(check StyleCheck, projectID STR, env []string, res
 			arg := projectID.any()
 
 			if dependency != projectID {
-				arg = testArgANY(dependency.any())
+				arg = canonicalANY(dependency.any())
 			}
 
 			args = append(args, strDepends.any(), arg)

@@ -379,14 +379,6 @@ func testArg(s string) ANY {
 	return internStr(s).any()
 }
 
-func testArgANY(a ANY) ANY {
-	if a.vfs() == 0 && vfsHasPrefix(a.str().string()) {
-		return intern(a.str().string()).any()
-	}
-
-	return a
-}
-
 func testSizeTimeout(size STR) int {
 	switch size {
 	case strSmall:
@@ -881,7 +873,7 @@ func (ctx *GenCtx) testNode(s *TestSuite, chunk TestChunk) *Node {
 	}
 
 	if chunk.file != 0 {
-		head = append(head, strSplitFile.any(), testArgANY(chunk.file))
+		head = append(head, strSplitFile.any(), canonicalANY(chunk.file))
 	}
 
 	head = append(head, strCompressionFilter.any(), strZstd.any(), strCompressionLevel.any(), strOne.any())

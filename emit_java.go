@@ -643,9 +643,9 @@ func (ctx *GenCtx) javaEmitExternal(jm *JavaModule) {
 		var generated []VFS
 
 		for _, src := range d.protoSrcs {
-			input := resolveSourceOrGeneratedVFS(ctx, jm.instance, src, d.srcDirs)
+			input := resolveSourceOrGeneratedANY(ctx, jm.instance, src, d.srcDirs)
 
-			if extIsGztproto(src) {
+			if extIsGztproto(src.string()) {
 				generated = append(generated, ctx.gztProtoSource(jm.instance, input, scanCtx, jm.protoInclude))
 			} else {
 				protoSources = append(protoSources, input)
@@ -830,7 +830,7 @@ func (ctx *GenCtx) javaEmitProtoPB(jm *JavaModule, globals map[STR]VFS, scanCtx 
 			continue
 		}
 
-		ref, bin := ctx.toolRef(jm.instance.Platform, internArg(plugin.tool))
+		ref, bin := ctx.toolRef(jm.instance.Platform, plugin.tool)
 
 		b.deps = append(b.deps, ref)
 		b.input(bin)

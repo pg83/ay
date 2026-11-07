@@ -176,6 +176,14 @@ func resolveSourceOrGeneratedID(ctx *GenCtx, instance ModuleInstance, src STR, s
 	return resolveSourceID(ctx, instance, src, srcDirs).withGenerated(ctx.scannerForPlatform(instance.Platform).codegen, src.string(), srcDirs)
 }
 
+func resolveSourceOrGeneratedANY(ctx *GenCtx, instance ModuleInstance, src ANY, srcDirs []VFS) VFS {
+	if src.vfs() == 0 {
+		return resolveSourceOrGeneratedID(ctx, instance, src.str(), srcDirs)
+	}
+
+	return resolveSourceOrGeneratedVFS(ctx, instance, src.string(), srcDirs)
+}
+
 func resolveSourceOrGeneratedVFS(ctx *GenCtx, instance ModuleInstance, src string, srcDirs []VFS) VFS {
 	return resolveSource(ctx, instance, src, srcDirs).withGenerated(ctx.scannerForPlatform(instance.Platform).codegen, src, srcDirs)
 }

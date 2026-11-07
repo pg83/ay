@@ -1568,7 +1568,7 @@ func (d *ModuleData) bindBody(ctx *GenCtx, modulePath string, kind ModuleKind, l
 		d.expandBodyAtParse(ctx, modulePath, kind, language, kwRESOURCE, nil, v.Line, env, func(Warn) {}, platform)
 	case *GenerateEnumSerializationStmt:
 		if !enumSerializationSkipped(d, language, env, v) {
-			d.expandBodyAtParse(ctx, modulePath, kind, language, v.Macro, []ANY{internAny(v.Header)}, v.Line, env, func(Warn) {}, platform)
+			d.expandBodyAtParse(ctx, modulePath, kind, language, v.Macro, []ANY{canonicalANY(v.Header)}, v.Line, env, func(Warn) {}, platform)
 		}
 	case *RunAntlrStmt:
 		d.expandBodyAtParse(ctx, modulePath, kind, language, internStr(v.Macro), nil, v.Line, env, onWarn, platform)
@@ -4150,7 +4150,7 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 
 		env.setString(envYamlLintSrcs, strings.Join(texts, " "))
 	case tokUsrvBuild:
-		d.collectUsrvFiles(anyStrs(v.Args))
+		d.collectUsrvFiles(v.Args)
 	case tokUsrvAllSrcs:
 		for _, f := range usrvAllSources(fs, modulePath, anyStrs(v.Args)) {
 			d.srcs = append(d.srcs, SrcMeta{Source: internStr(f).any(), Prio: stmtPrioSrcs, Seq: d.nextDeclSeq()})

@@ -109,7 +109,7 @@ func (e *EmitContext) orderedProducerPositions(positions []ProducerPos, cythonPl
 	for i, file := range e.d.usrvFiles {
 		positions = append(positions, ProducerPos{kind: prodUsrvFile, index: i,
 			outs: na.vfsList(copyFileOutputVFS(module, file.File)),
-			ins:  na.vfsList(e.sourceInputForScheduling(file.Tar)),
+			ins:  na.vfsList(e.sourceInputForSchedulingOf(file.Tar)),
 		})
 	}
 

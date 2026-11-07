@@ -278,7 +278,7 @@ func testInnerCommand(s *TestSuite, meta TestMeta, binary VFS, work string, chun
 		}
 
 		if chunk.file != 0 {
-			command = append(command, strTestFileFilter.any(), testArgANY(chunk.file))
+			command = append(command, strTestFileFilter.any(), canonicalANY(chunk.file))
 		}
 
 		if s.testType == strExectest {
