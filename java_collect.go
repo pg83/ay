@@ -1116,7 +1116,7 @@ type javaCondVar struct {
 }
 
 func (v *javaCondVar) setBase(items ...string) {
-	v.base, v.cur, v.withIDs = items, items, true
+	v.withIDs = true
 	v.baseIDs = internAnys(items)
 	v.curIDs = v.baseIDs
 }
@@ -1132,21 +1132,25 @@ func (v *javaCondVar) appendStmt(items ...string) {
 }
 
 func (v *javaCondVar) appendStmtIDs(items []string, ids []ANY) {
-	v.cur = append(v.cur, items...)
-	v.orig = append(v.orig, items...)
-
 	if v.withIDs {
 		v.curIDs = append(v.curIDs, ids...)
 		v.origIDs = append(v.origIDs, ids...)
+
+		return
 	}
+
+	v.cur = append(v.cur, items...)
+	v.orig = append(v.orig, items...)
 }
 
 func (v *javaCondVar) recalc(conds []string) {
-	v.cur = append(append(append([]string(nil), v.base...), v.orig...), conds...)
-
 	if v.withIDs {
 		v.curIDs = append(append(append([]ANY(nil), v.baseIDs...), v.origIDs...), internAnys(conds)...)
+
+		return
 	}
+
+	v.cur = append(append(append([]string(nil), v.base...), v.orig...), conds...)
 }
 
 func (d *JavaData) recalcKotlincOpts(jm *JavaModule) {
