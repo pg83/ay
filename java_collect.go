@@ -118,7 +118,7 @@ func javaModulePrologue(ctx *GenCtx, jm *JavaModule, d *JavaData, env Environmen
 		}
 	}
 
-	javaSetJDK(d, env, d.jdkReal)
+	javaSetJDK(d, env, d.jdkReal, 0)
 	jm.instance.Platform.conf.set(env, envJdkRealVersion, nil)
 
 	if jm.unit.proto {
@@ -710,7 +710,7 @@ func applyJavaMacro(ctx *GenCtx, jm *JavaModule, d *JavaData, name STR, args []s
 		}
 	case kwJDK_VERSION, kwDEFAULT_JDK_VERSION:
 		checkJdkVersion(arg0)
-		javaSetJDK(d, env, arg0)
+		javaSetJDK(d, env, arg0, javaArgSTR(ids, 0, arg0))
 		jm.instance.Platform.conf.set(env, envJdkRealVersion, nil)
 
 		d.hasPerModuleJDK = true
@@ -1097,12 +1097,21 @@ func javaErrorProne(jdk string) javaErrorProneInfo {
 	return javaErrorProneInfo{"2.7.1", "build/platform/java/error_prone", "ERROR_PRONE"}
 }
 
-func javaSetJDK(d *JavaData, env Environment, jdk string) {
+func javaSetJDK(d *JavaData, env Environment, jdk string, jdkID STR) {
 	d.jdkReal = jdk
 
-	env.setString(envJdkRealVersion, jdk)
+	if jdkID == 0 {
+		jdkID = internStr(jdk)
+	}
+
+	env.setStringID(envJdkRealVersion, jdkID)
 	env.setString(envErrorProneVersion, javaErrorProne(jdk).version)
-	env.setString(envKotlinJvmTarget, javaKotlinJVMTarget(jdk))
+
+	if target := javaKotlinJVMTarget(jdk); target != jdk {
+		env.setString(envKotlinJvmTarget, target)
+	} else {
+		env.setStringID(envKotlinJvmTarget, jdkID)
+	}
 }
 
 type javaCondVar struct {

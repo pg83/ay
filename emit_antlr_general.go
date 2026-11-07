@@ -13,7 +13,7 @@ func (e *EmitContext) emitAntlrRunStmt(run AntlrRunInfo) {
 	}
 
 	if run.Jar != 0 {
-		jarVFS = e.requireProducedInput("ANTLR jar", run.Jar.string(), copyFileInputVFS(ctx.fs, instance.Path, run.Jar.string()))
+		jarVFS = e.requireProducedInput("ANTLR jar", run.Jar.string(), copyFileInputVFSOf(ctx.fs, instance.Path, run.Jar))
 	}
 
 	inVFSByToken := make(map[ANY]VFS, len(run.INFiles))
@@ -23,7 +23,7 @@ func (e *EmitContext) emitAntlrRunStmt(run AntlrRunInfo) {
 	hiddenInputs := make([]VFS, 0, len(run.INFiles))
 
 	for _, inTok := range run.INFiles {
-		vfs := e.requireProducedInput("IN", inTok.string(), copyFileInputVFS(ctx.fs, instance.Path, inTok.string()))
+		vfs := e.requireProducedInput("IN", inTok.string(), copyFileInputVFSOf(ctx.fs, instance.Path, inTok))
 
 		if run.Python {
 			vfs = e.runProgramInputVFS(inTok.string())

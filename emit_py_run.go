@@ -61,7 +61,7 @@ func (e *EmitContext) emitRunPythonStmt(rp *RunPythonStmt) {
 func (e *EmitContext) emitRunPython(stmt *RunPythonStmt, resourceUses []STR) []ANY {
 	ctx, instance, d := e.ctx, e.instance, e.d
 	auxTools := resolveRunProgramAuxTools(ctx, anyStrs(stmt.ToolPaths))
-	scriptVFS := copyFileInputVFS(ctx.fs, instance.Path, stmt.ScriptPath.string())
+	scriptVFS := copyFileInputVFSOf(ctx.fs, instance.Path, stmt.ScriptPath)
 	inVFSByToken := make(map[ANY]VFS, len(stmt.INFiles))
 	inVFSs := make([]VFS, 0, len(stmt.INFiles))
 	inSources := make([]VFS, 0, len(stmt.INFiles))

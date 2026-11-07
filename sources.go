@@ -172,6 +172,10 @@ func joinedSource(dir, rel STR) VFS {
 	return internJoined(dir.string(), rel.string()).source()
 }
 
+func resolveSourceOrGeneratedID(ctx *GenCtx, instance ModuleInstance, src STR, srcDirs []VFS) VFS {
+	return resolveSourceID(ctx, instance, src, srcDirs).withGenerated(ctx.scannerForPlatform(instance.Platform).codegen, src.string(), srcDirs)
+}
+
 func resolveSourceOrGeneratedVFS(ctx *GenCtx, instance ModuleInstance, src string, srcDirs []VFS) VFS {
 	return resolveSource(ctx, instance, src, srcDirs).withGenerated(ctx.scannerForPlatform(instance.Platform).codegen, src, srcDirs)
 }
@@ -348,7 +352,7 @@ func (e *EmitContext) resolveModuleSourceVFS(srcAny ANY, srcDirs []VFS) VFS {
 		return v
 	}
 
-	return resolveSourceOrGeneratedVFS(e.ctx, e.instance, srcAny.str().string(), srcDirs)
+	return resolveSourceOrGeneratedID(e.ctx, e.instance, srcAny.str(), srcDirs)
 }
 
 func (e *EmitContext) moduleSourceRel(src ANY) string {

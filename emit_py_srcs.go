@@ -61,6 +61,24 @@ type PySrc struct {
 	PySourceMeta
 }
 
+func (e *EmitContext) resolvePythonSourceID(src STR) ResolvedSource {
+	for _, dir := range e.d.srcDirs {
+		if !dir.isSource() {
+			continue
+		}
+
+		if present, isDir := e.ctx.fs.existsID(dir.rel(), src); present && !isDir {
+			if rel := dir.rel(); rel == srcRootRel || !rel.cleanPath() {
+				return ResolvedSource{Path: sourceJoinClean(dir.relString(), src.string()), Existing: true}
+			}
+
+			return ResolvedSource{Path: joinedSource(dir.rel(), src), Existing: true}
+		}
+	}
+
+	return resolveSourceID(e.ctx, e.instance, src, e.d.srcDirs)
+}
+
 func (e *EmitContext) resolvePythonSource(src string) ResolvedSource {
 	for _, dir := range e.d.srcDirs {
 		if dir.isSource() && e.ctx.fs.isFile(dir.rel(), src) {
@@ -1081,6 +1099,10 @@ func (e *EmitContext) resolvePythonDeclaration(src ANY, sourceRoot bool) Resolve
 		if v, ok := moduleRootedANY(e.instance.Path, src); ok {
 			return e.resolveDeclaredSource(v.any())
 		}
+	}
+
+	if s := src.str(); s != 0 && s.cleanPath() && !strHasDollar(src) {
+		return e.resolvePythonSourceID(s)
 	}
 
 	return e.resolvePythonSource(src.string())

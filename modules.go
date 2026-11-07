@@ -641,6 +641,41 @@ func sourceInputVFS(fs FS, moduleDir VFS, path string) (VFS, bool) {
 	return 0, false
 }
 
+func sourceInputID(fs FS, moduleDir VFS, rel STR) (VFS, bool) {
+	modulePath := moduleDir.relString()
+	clean := rel.string()
+
+	if clean == modulePath || (len(clean) > len(modulePath) && clean[len(modulePath)] == '/' && clean[:len(modulePath)] == modulePath) {
+		return rel.source(), true
+	}
+
+	if present, isDir := fs.existsID(moduleDir.rel(), rel); present && !isDir {
+		if modulePath == "." {
+			return rel.source(), true
+		}
+
+		return source(modulePath, "/", clean), true
+	}
+
+	if present, isDir := fs.existsID(srcRootRel, rel); present && !isDir {
+		return rel.source(), true
+	}
+
+	return 0, false
+}
+
+func copyFileInputVFSOf(fs FS, moduleDir VFS, src ANY) VFS {
+	if s := src.str(); s != 0 && s.cleanPath() && !strHasDollar(src) {
+		if vfs, ok := sourceInputID(fs, moduleDir, s); ok {
+			return vfs
+		}
+
+		return sourceJoinClean(moduleDir.relString(), s.string())
+	}
+
+	return copyFileInputVFS(fs, moduleDir, src.string())
+}
+
 func copyFileInputVFS(fs FS, moduleDir VFS, src string) VFS {
 	if vfs, ok := sourceInputVFS(fs, moduleDir, src); ok {
 		return vfs
