@@ -21,7 +21,7 @@ func (d *JavaData) collectCPPStyle(fs FS, dir string, stmt UnknownStmt, env Envi
 }
 
 func cppStyleCheck(stmt UnknownStmt, env Environment) StyleCheck {
-	check := StyleCheck{Name: "clang_format", CPP: true, ConfigMap: "build/config/tests/cpp_style/default_configs.json", Wrapper: testClangFormatWrapperRel, Resource: "CLANG_FORMAT_RESOURCE_GLOBAL", Peer: strBuildPlatformClangFormat.string()}
+	check := StyleCheck{Name: "clang_format", CPP: true, ConfigMap: "build/config/tests/cpp_style/default_configs.json", Wrapper: testClangFormatWrapperRel, Resource: strClangFormatResourceGlobal, Peer: strBuildPlatformClangFormat.string()}
 
 	switch stmt.Name {
 	case tokStyleCppMaps:
@@ -39,7 +39,7 @@ func cppStyleCheck(stmt UnknownStmt, env Environment) StyleCheck {
 	}
 
 	if len(check.Depends) != 0 {
-		check.Resource = ""
+		check.Resource = 0
 		check.Peer = ""
 	}
 

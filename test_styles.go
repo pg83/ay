@@ -22,7 +22,7 @@ type StyleCheck struct {
 	ConfigType         string
 	ConfigDir          string
 	Wrapper            string
-	Resource           string
+	Resource           STR
 	Files              []VFS
 	ExtraConfigs       []string
 	ExtraParams        []string
@@ -85,11 +85,11 @@ func pythonStyleCheck(name string, env Environment) StyleCheck {
 	switch name {
 	case "flake8", "py2_flake8":
 		check.Peer = "build/external_resources/flake8_py3"
-		check.Resource = "FLAKE8_PY3_RESOURCE_GLOBAL"
+		check.Resource = strFlake8Py3ResourceGlobal
 
 		if name == "py2_flake8" {
 			check.Peer = "build/external_resources/flake8_py2"
-			check.Resource = "FLAKE8_PY2_RESOURCE_GLOBAL"
+			check.Resource = strFlake8Py2ResourceGlobal
 		}
 
 		check.Wrapper = "tools/flake8_linter/__main__.py"
@@ -100,10 +100,10 @@ func pythonStyleCheck(name string, env Environment) StyleCheck {
 			check.ExtraConfigs = flake8MigrationConfigs
 		}
 	case "black":
-		check.Peer, check.Resource, check.Wrapper = "build/external_resources/black", "BLACK_RESOURCE_GLOBAL", "tools/black_linter/wrapper.py"
+		check.Peer, check.Resource, check.Wrapper = "build/external_resources/black", strBlackResourceGlobal, "tools/black_linter/wrapper.py"
 		timeVar = "BLACK_FILE_PROCESSING_TIME"
 	case "ruff":
-		check.Peer, check.Resource, check.Wrapper = "build/external_resources/ruff", "RUFF_RESOURCE_GLOBAL", "tools/ruff_linter/wrapper.py"
+		check.Peer, check.Resource, check.Wrapper = "build/external_resources/ruff", strRuffResourceGlobal, "tools/ruff_linter/wrapper.py"
 		check.FileProcessingTime = 0.5
 
 		timeVar = "RUFF_FILE_PROCESSING_TIME"
@@ -177,7 +177,7 @@ func styleChecksDisabled(env Environment) bool {
 }
 
 func yamlStyleCheck(env Environment) StyleCheck {
-	check := StyleCheck{Name: "yamlfmt", ConfigMap: "build/config/tests/yaml_style/default_configs.json", Wrapper: "tools/yamlfmt_linter/wrapper.py", Resource: "YAMLFMT_RESOURCE_GLOBAL", Peer: yamlfmtResourcePeer}
+	check := StyleCheck{Name: "yamlfmt", ConfigMap: "build/config/tests/yaml_style/default_configs.json", Wrapper: "tools/yamlfmt_linter/wrapper.py", Resource: strYamlfmtResourceGlobal, Peer: yamlfmtResourcePeer}
 
 	if value, ok := env.lookupENV(envYamlLinterDefaultConfigs); ok && value != "" {
 		check.ConfigMap = value
@@ -227,7 +227,7 @@ func explicitStyleCheck(name TOK, env Environment) StyleCheck {
 		return StyleCheck{Name: "yqlfmt", Wrapper: "tools/yqlfmt_linter/wrapper.py"}
 	}
 
-	check := StyleCheck{Name: "clang_format_json", ConfigMap: "build/config/tests/json_style/default_configs.json", Wrapper: "tools/clang_format_json_linter/wrapper.py", Resource: "CLANG_FORMAT_RESOURCE_GLOBAL", Peer: "build/platform/clang/clang-format"}
+	check := StyleCheck{Name: "clang_format_json", ConfigMap: "build/config/tests/json_style/default_configs.json", Wrapper: "tools/clang_format_json_linter/wrapper.py", Resource: strClangFormatResourceGlobal, Peer: "build/platform/clang/clang-format"}
 
 	if value, ok := env.lookupENV(envJsonLinterDefaultConfigs); ok && value != "" {
 		check.ConfigMap = value
@@ -426,14 +426,14 @@ func (ctx *GenCtx) resolveStyleConfig(check *StyleCheck, project string) {
 }
 
 func styleCheckResources(check StyleCheck, globals []ResourceDecl) []ResourceDecl {
-	if check.Resource == "" {
+	if check.Resource == 0 {
 		return globals
 	}
 
-	resource := interned(check.Resource)
+	resource := check.Resource
 
 	for i, r := range globals {
-		if resource != 0 && r.GlobalVar == resource {
+		if r.GlobalVar == resource {
 			return globals[i : i+1 : i+1]
 		}
 	}
