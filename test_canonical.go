@@ -10,7 +10,7 @@ import (
 )
 
 func (ctx *GenCtx) canonicalTestResources(s *TestSuite) []string {
-	file := path.Join(s.projectPath, "canondata", s.canonizeSubPath, "result.json")
+	file := path.Join(s.projectPath.string(), "canondata", s.canonizeSubPath, "result.json")
 
 	if !ctx.fs.isFilePathClean(file) {
 		return nil
@@ -26,7 +26,7 @@ func (ctx *GenCtx) canonicalTestResources(s *TestSuite) []string {
 
 	if !json.Valid(data) {
 		if parsed := ctx.parsers.parsedJSON(file); parsed.Error != nil {
-			fmt.Fprintf(os.Stderr, "malformed canonical data in %s: %s (%s)\n", s.projectPath, parsed.Error, file)
+			fmt.Fprintf(os.Stderr, "malformed canonical data in %s: %s (%s)\n", s.projectPath.string(), parsed.Error, file)
 
 			return nil
 		}

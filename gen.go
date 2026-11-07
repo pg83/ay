@@ -2,7 +2,6 @@ package main
 
 import (
 	"fmt"
-	"github.com/zeebo/xxh3"
 	"os"
 	"path"
 	"path/filepath"
@@ -873,7 +872,7 @@ func newSuiteIndex() *SuiteIndex {
 }
 
 func (x *SuiteIndex) add(s *TestSuite) {
-	same, _ := x.byKey.cell(mix64(xxh3.HashString(s.testType)^mix64(xxh3.HashString(s.projectPath)^mix64(xxh3.HashString(s.name)))) | 1)
+	same, _ := x.byKey.cell(mix64(splitMix64(uint32(s.testType), uint32(s.projectPath))^uint64(s.name)) | 1)
 
 	if !mergeCheckSuite(*same, s) {
 		*same = append(*same, s)
@@ -882,7 +881,7 @@ func (x *SuiteIndex) add(s *TestSuite) {
 }
 
 func mergeCheckSuite(suites []*TestSuite, s *TestSuite) bool {
-	validation := s.testType == "validate_resource" || s.testType == "validate_data_sbr"
+	validation := s.testType == strValidateResource || s.testType == strValidateDataSbr
 
 	if len(s.checkFiles) == 0 && s.styleCheck == nil && !validation {
 		return false
@@ -906,7 +905,7 @@ func mergeCheckSuite(suites []*TestSuite, s *TestSuite) bool {
 			prev.deps = append(prev.deps, s.deps...)
 			prev.relatedPaths = sortedUniqueByText(append(prev.relatedPaths, s.relatedPaths...))
 
-			sortVFSByText(prev.checkFiles)
+			slices.SortFunc(prev.checkFiles, vfsCompare)
 
 			prev.checkFiles = slices.Compact(prev.checkFiles)
 

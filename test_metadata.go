@@ -9,33 +9,33 @@ import (
 	"strings"
 )
 
-func testSuiteName(name TOK) string {
+func testSuiteName(name TOK) STR {
 	if isUnitTestModule(name) {
 		if name == tokGtest {
-			return "gtest"
+			return strGtest
 		}
 
-		return "unittest"
+		return strUnittest
 	}
 
 	switch name {
 	case tokExectest:
-		return "exectest"
+		return strExectest
 	case tokPy3Test:
-		return "py3test"
+		return strPy3test
 	case tokPy2Test, tokPytestBin:
-		return "pytest"
+		return strPytest
 	case tokGBenchmark:
-		return "g_benchmark"
+		return strGBenchmark
 	case tokYBenchmark:
-		return "benchmark"
+		return strBenchmark
 	case tokFuzz:
-		return "fuzz"
+		return strFuzz
 	case tokBoosttest, tokBoosttestWithMain:
-		return "boost_test"
+		return strBoostTest
 	}
 
-	return ""
+	return 0
 }
 
 func testExecDependencyDir(dep string) string {
@@ -224,14 +224,14 @@ func testInnerCommand(s *TestSuite, meta TestMeta, binary VFS, work string, chun
 	args := []ANY{testToolHostPathArg}
 
 	switch s.testType {
-	case "py3test", "pytest", "exectest":
+	case strPy3test, strPytest, strExectest:
 		command := []ANY{binary.any()}
 
-		if s.testType == "exectest" {
+		if s.testType == strExectest {
 			command = []ANY{strTestParam.any(), testArg("commands=" + base64.StdEncoding.EncodeToString([]byte(meta.commands))), testToolHostPathArg, strRunExectest.any()}
 		}
 
-		command = append(command, strBasetemp.any(), testBasetempArg, strCapture.any(), strNo.any(), strC2.any(), strPkgLibraryPythonPytestPytestYatestIni.any(), strP2.any(), strNoFactor.any(), strDoctestModules.any(), strYaTrace.any(), trace, strBuildRoot2.any(), testBuildRootArg, strSourceRoot2.any(), testSourceRootArg, strOutputDir.any(), out, strDurations.any(), strZero.any(), strProjectPath.any(), testArg(s.projectPath), strTestToolBin.any(), testToolHostPathArg, strYaVersion.any(), str22.any())
+		command = append(command, strBasetemp.any(), testBasetempArg, strCapture.any(), strNo.any(), strC2.any(), strPkgLibraryPythonPytestPytestYatestIni.any(), strP2.any(), strNoFactor.any(), strDoctestModules.any(), strYaTrace.any(), trace, strBuildRoot2.any(), testBuildRootArg, strSourceRoot2.any(), testSourceRootArg, strOutputDir.any(), out, strDurations.any(), strZero.any(), strProjectPath.any(), s.projectPath.any(), strTestToolBin.any(), testToolHostPathArg, strYaVersion.any(), str22.any())
 
 		if !opts.dist {
 			command = append(command, strCollectCores.any())
@@ -273,20 +273,20 @@ func testInnerCommand(s *TestSuite, meta TestMeta, binary VFS, work string, chun
 			command = append(command, strTestFileFilter.any(), testArg(chunk.file))
 		}
 
-		if s.testType == "exectest" {
+		if s.testType == strExectest {
 			command = append(command, strNoconftest.any())
 		}
 
 		return command
 
-	case "g_benchmark", "benchmark":
+	case strGBenchmark, strBenchmark:
 		runner := strRunGBenchmark.any()
 
-		if s.testType == "benchmark" {
+		if s.testType == strBenchmark {
 			runner = strRunYBenchmark.any()
 		}
 
-		args = append(args, runner, strBinary.any(), binary.any(), strTracefile.any(), trace, strOutputDir.any(), out, strProjectPath.any(), testArg(s.projectPath), strVerbose.any(), strGdbPath.any(), testGDBPathArg)
+		args = append(args, runner, strBinary.any(), binary.any(), strTracefile.any(), trace, strOutputDir.any(), out, strProjectPath.any(), s.projectPath.any(), strVerbose.any(), strGdbPath.any(), testGDBPathArg)
 
 		if opts.dist {
 			args = append(args, strTruncateLogs.any())
@@ -295,10 +295,10 @@ func testInnerCommand(s *TestSuite, meta TestMeta, binary VFS, work string, chun
 		for _, a := range meta.binaryArgs {
 			args = append(args, testArg("--test-binary-args="+a))
 		}
-	case "boost_test":
-		args = append(args, strRunBoostTest.any(), strBinary.any(), binary.any(), strTracefile.any(), trace, strOutputDir.any(), out, strProjectPath.any(), testArg(s.projectPath), strVerbose.any(), strGdbPath.any(), testGDBPathArg)
-	case "fuzz":
-		args = append(args, strRunFuzz.any(), strBinary.any(), binary.any(), strTracefile.any(), trace, strModulo.any(), intArg(max(chunk.split, 1)), strModuloIndex.any(), intArg(chunk.index), strOutputDir.any(), out, strProjectPath.any(), testArg(s.projectPath), strSourceRoot2.any(), testSourceRootArg, strVerbose.any(), strGdbPath.any(), testGDBPathArg)
+	case strBoostTest:
+		args = append(args, strRunBoostTest.any(), strBinary.any(), binary.any(), strTracefile.any(), trace, strOutputDir.any(), out, strProjectPath.any(), s.projectPath.any(), strVerbose.any(), strGdbPath.any(), testGDBPathArg)
+	case strFuzz:
+		args = append(args, strRunFuzz.any(), strBinary.any(), binary.any(), strTracefile.any(), trace, strModulo.any(), intArg(max(chunk.split, 1)), strModuloIndex.any(), intArg(chunk.index), strOutputDir.any(), out, strProjectPath.any(), s.projectPath.any(), strSourceRoot2.any(), testSourceRootArg, strVerbose.any(), strGdbPath.any(), testGDBPathArg)
 
 		if opts.dist {
 			args = append(args, strTruncateLogs.any())
@@ -318,7 +318,7 @@ func testInnerCommand(s *TestSuite, meta TestMeta, binary VFS, work string, chun
 			partition = "SEQUENTIAL"
 		}
 
-		args = append(args, strRunUt.any(), strBinary.any(), binary.any(), strTracePath.any(), trace, strOutputDir.any(), out, strModulo.any(), intArg(max(chunk.split, 1)), strModuloIndex.any(), intArg(chunk.index), strPartitionMode.any(), testArg(partition), strProjectPath.any(), testArg(s.projectPath), strListTimeout.any(), intArg(s.timeout/2), strVerbose.any(), strGdbPath.any(), testGDBPathArg)
+		args = append(args, strRunUt.any(), strBinary.any(), binary.any(), strTracePath.any(), trace, strOutputDir.any(), out, strModulo.any(), intArg(max(chunk.split, 1)), strModuloIndex.any(), intArg(chunk.index), strPartitionMode.any(), testArg(partition), strProjectPath.any(), s.projectPath.any(), strListTimeout.any(), intArg(s.timeout/2), strVerbose.any(), strGdbPath.any(), testGDBPathArg)
 
 		if opts.dist {
 			args = append(args, strTruncateLogs.any())

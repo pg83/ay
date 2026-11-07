@@ -128,7 +128,7 @@ func (ctx *GenCtx) prepareDiscoveredModuleTests(discovered []DiscoveredTargets) 
 		ctx.prepareTestDependencies(suite)
 
 		if err := ctx.testDataReadError(suite); err != nil {
-			ctx.onWarn(Warn{Kind: WarnModuleFailed, Message: fmt.Sprintf("suite configuration failed for %s: %s", suite.projectPath, err)})
+			ctx.onWarn(Warn{Kind: WarnModuleFailed, Message: fmt.Sprintf("suite configuration failed for %s: %s", suite.projectPath.string(), err)})
 
 			continue
 		}
@@ -149,8 +149,8 @@ func (ctx *GenCtx) emitDiscoveredModuleTests(suites []*TestSuite) {
 	outputs, mainOutputs := ctx.projectModuleIndex(suites)
 
 	for _, suite := range suites {
-		if suite.importCheckEnv && ctx.testSuiteSelected(suite) && len(outputs[source(suite.projectPath)]) == 0 {
-			ctx.onWarn(Warn{Kind: WarnTestDependency, Message: fmt.Sprintf("cannot resolve project dependency %s for import_test", suite.projectPath)})
+		if suite.importCheckEnv && ctx.testSuiteSelected(suite) && len(outputs[suite.projectPath.source()]) == 0 {
+			ctx.onWarn(Warn{Kind: WarnTestDependency, Message: fmt.Sprintf("cannot resolve project dependency %s for import_test", suite.projectPath.string())})
 
 			continue
 		}
@@ -160,7 +160,7 @@ func (ctx *GenCtx) emitDiscoveredModuleTests(suites []*TestSuite) {
 		}
 
 		if suite.projectBuildDeps {
-			suite.deps = append(suite.deps, outputs[source(suite.projectPath)]...)
+			suite.deps = append(suite.deps, outputs[suite.projectPath.source()]...)
 		}
 
 		for _, ref := range ctx.emitTestSuite(suite) {
@@ -196,12 +196,12 @@ func (ctx *GenCtx) resolvedTestSuites(suites []*TestSuite) []*TestSuite {
 			if !live.has(uint32(info.ProducerRef)) {
 				missing = true
 
-				ctx.onWarn(Warn{Kind: WarnTestDependency, Message: fmt.Sprintf("Cannot resolve dependency '%s' for test '%s (%s)'", output.relString(), suite.projectPath, suite.name)})
+				ctx.onWarn(Warn{Kind: WarnTestDependency, Message: fmt.Sprintf("Cannot resolve dependency '%s' for test '%s (%s)'", output.relString(), suite.projectPath.string(), suite.name.string())})
 			}
 		}
 
 		if missing {
-			ctx.onWarn(Warn{Kind: WarnTestDependency, Message: fmt.Sprintf("Skipping test '%s (%s)' due to unresolved dependencies", suite.projectPath, suite.name)})
+			ctx.onWarn(Warn{Kind: WarnTestDependency, Message: fmt.Sprintf("Skipping test '%s (%s)' due to unresolved dependencies", suite.projectPath.string(), suite.name.string())})
 
 			continue
 		}

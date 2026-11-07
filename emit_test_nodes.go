@@ -36,25 +36,25 @@ func (e *EmitContext) testRunSuites(binary VFS, ref NodeRef, globals []ResourceD
 
 	testType := testSuiteName(e.d.moduleStmt.Name)
 
-	if testType == "" {
+	if testType == 0 {
 		return nil
 	}
 
 	meta := e.d.test
 	project := e.instance.Path.relString()
 	name := testType
-	benchmark := testType == "g_benchmark" || testType == "benchmark"
+	benchmark := testType == strGBenchmark || testType == strBenchmark
 
-	if benchmark || testType == "boost_test" {
-		name = path.Base(binary.relString())
+	if benchmark || testType == strBoostTest {
+		name = internStr(path.Base(binary.relString()))
 	}
 
-	s := &TestSuite{p: e.ctx.target, projectPath: project, name: name, testType: testType, ciType: "test", deps: depRefs(ref), globals: globals, smoothShutdown: []string{"SIGUSR2"}, runInputs: []VFS{source(project)}}
+	s := &TestSuite{p: e.ctx.target, projectPath: e.instance.Path.rel(), name: name, testType: testType, ciType: strTest, deps: depRefs(ref), globals: globals, smoothShutdown: []string{"SIGUSR2"}, runInputs: []VFS{e.instance.Path.rel().source()}}
 
-	s.applyTestMeta(meta, testType != "benchmark" && e.d.setVars.get(strADD_SRCDIR_TO_TEST_DATA) != strNo)
+	s.applyTestMeta(meta, testType != strBenchmark && e.d.setVars.get(strADD_SRCDIR_TO_TEST_DATA) != strNo)
 	s.skipped = !Environment{s: &e.frame.ifEnv}.is(envSKIP_TEST_VALUE, strEmpty)
 
-	if testType == "fuzz" {
+	if testType == strFuzz {
 		for _, file := range meta.fuzzDicts {
 			s.relatedPaths = append(s.relatedPaths, source(file).any())
 		}
@@ -78,7 +78,7 @@ func (e *EmitContext) testRunSuites(binary VFS, ref NodeRef, globals []ResourceD
 		s.relatedPaths = append([]ANY{corpusArg}, s.relatedPaths...)
 	}
 
-	python := testType == "pytest" || testType == "py3test" || testType == "exectest"
+	python := testType == strPytest || testType == strPy3test || testType == strExectest
 
 	s.canonicalData = python
 	s.projectBuildDeps = python
@@ -86,9 +86,9 @@ func (e *EmitContext) testRunSuites(binary VFS, ref NodeRef, globals []ResourceD
 	s.pythonNoBytecode = python
 	s.disableLeaks = python
 	s.supportsCanonization = python || benchmark
-	s.supportsTestParameters = python || testType == "unittest" || testType == "gtest"
+	s.supportsTestParameters = python || testType == strUnittest || testType == strGtest
 
-	if benchmark || testType == "boost_test" {
+	if benchmark || testType == strBoostTest {
 		s.split = 1
 	}
 
@@ -116,10 +116,8 @@ func (e *EmitContext) importTestSuites(binary VFS, globals []ResourceDecl) []*Te
 		return nil
 	}
 
-	project := e.instance.Path.relString()
-
-	s := &TestSuite{p: e.ctx.target, projectPath: project, name: "import_test", testType: "import_test", ciType: "test", size: "small",
-		timeout: testSizeTimeouts["small"], runInputs: []VFS{source(project)}, checkFiles: []VFS{binary}, globals: globals,
+	s := &TestSuite{p: e.ctx.target, projectPath: e.instance.Path.rel(), name: strImportTest, testType: strImportTest, ciType: strTest, size: strSmall,
+		timeout: 60, runInputs: []VFS{e.instance.Path.rel().source()}, checkFiles: []VFS{binary}, globals: globals,
 		env: d.test.env, supportsTestParameters: true, smoothShutdown: []string{"SIGUSR2"}, importCheckEnv: true, noRetries: true, projectBuildDeps: true}
 
 	skips := slices.Clone(d.noCheckImports)
@@ -160,11 +158,11 @@ func (s *TestSuite) applyRequirements(entries []string) {
 }
 
 func (s *TestSuite) applyTestMeta(meta TestMeta, addSource bool) {
-	s.size = cmp.Or(meta.size, "small")
+	s.size = internStr(cmp.Or(meta.size, "small"))
 	s.timeout = meta.timeout
 
 	if s.timeout == 0 {
-		s.timeout = testSizeTimeouts[s.size]
+		s.timeout = testSizeTimeout(s.size)
 	}
 
 	s.tags = sortedUnique(meta.tags)
@@ -177,7 +175,7 @@ func (s *TestSuite) applyTestMeta(meta TestMeta, addSource bool) {
 	s.data = normalizedTestData(meta.data)
 
 	if addSource && !meta.explicitData {
-		s.data = append(s.data, "arcadia/"+s.projectPath)
+		s.data = append(s.data, "arcadia/"+s.projectPath.string())
 	}
 
 	slices.Sort(s.data)

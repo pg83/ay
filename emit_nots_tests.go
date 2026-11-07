@@ -76,7 +76,8 @@ func notsFilterFiles(files []VFS, dir string, excludes []string) []VFS {
 }
 
 func (e *EmitContext) notsSuite(name string, globals []ResourceDecl, addSource bool) *TestSuite {
-	s := &TestSuite{p: e.instance.Platform, projectPath: e.instance.Path.relString(), name: name, testType: name, ciType: "test", globals: globals, noCleanEnvironment: true}
+	nameID := internStr(name)
+	s := &TestSuite{p: e.instance.Platform, projectPath: e.instance.Path.rel(), name: nameID, testType: nameID, ciType: strTest, globals: globals, noCleanEnvironment: true}
 
 	s.applyTestMeta(e.d.test, addSource)
 	s.split = 1
@@ -209,13 +210,13 @@ func (e *EmitContext) notsCheckSuites(target string, globals []ResourceDecl, fil
 			s.depends = append(slices.Clone(s.depends), target)
 		}
 
-		s.ciType = ciType
+		s.ciType = internStr(ciType)
 		s.noRetries = true
 
 		if check.Medium {
-			s.size, s.timeout = "medium", 600
+			s.size, s.timeout = strMedium, 600
 		} else if check.Lint {
-			s.size, s.timeout = "small", 60
+			s.size, s.timeout = strSmall, 60
 		}
 
 		if check.Lint {
@@ -241,7 +242,7 @@ func (e *EmitContext) notsCheckSuites(target string, globals []ResourceDecl, fil
 				args = append(args, "--command", check.Command)
 			}
 
-			args = append(args, "--test-type", s.testType)
+			args = append(args, "--test-type", s.testType.string())
 			args = append(args, names...)
 
 			return testArgs(args)
@@ -329,7 +330,7 @@ func (e *EmitContext) notsForSuites(target string, ref NodeRef, globals []Resour
 
 	dataDirs = sortedUnique(dataDirs)
 	s.runCmd = func(work string, _ TestChunk) []ANY {
-		args := []string{testToolHostPath, "run_" + name, "--source-root", testSourceRoot, "--build-root", testBuildRoot, "--project-path", s.projectPath, "--test-work-dir", work, "--output-dir", work + "/testing_out_stuff", "--tracefile", work + "/ytest.report.trace", "--test-for-path", build(target).string(), "--node-path", build(target, "/node_modules").string(), "--nodejs", node}
+		args := []string{testToolHostPath, "run_" + name, "--source-root", testSourceRoot, "--build-root", testBuildRoot, "--project-path", s.projectPath.string(), "--test-work-dir", work, "--output-dir", work + "/testing_out_stuff", "--tracefile", work + "/ytest.report.trace", "--test-for-path", build(target).string(), "--node-path", build(target, "/node_modules").string(), "--nodejs", node}
 
 		if len(dataDirs) > 0 {
 			args = append(args, "--test-data-dirs")
@@ -410,7 +411,7 @@ func (e *EmitContext) notsLegacyStyles(dir string, state *NotsPrepared, head []s
 
 		s := e.notsSuite(check.name, state.Globals, false)
 
-		s.ciType = "style"
+		s.ciType = strStyle
 		s.relatedPaths = sortedUniqueByText(append(related, source(path.Join(dir, check.config)).any(), source(dir, "/package.json").any()))
 		s.runInputs = []VFS{build(dir, "/package.json")}
 		s.deps = e.notsSuiteDependencies(dir)

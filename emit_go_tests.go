@@ -88,8 +88,8 @@ func (e *EmitContext) goFmtSuites(globals []ResourceDecl) []*TestSuite {
 	return suites
 }
 
-func (e *EmitContext) goSuiteBase(name, testType, ciType string, globals []ResourceDecl) *TestSuite {
-	project := e.instance.Path.relString()
+func (e *EmitContext) goSuiteBase(name, testType, ciType STR, globals []ResourceDecl) *TestSuite {
+	project := e.instance.Path.rel()
 
 	return &TestSuite{
 		p:                      e.ctx.target,
@@ -97,9 +97,9 @@ func (e *EmitContext) goSuiteBase(name, testType, ciType string, globals []Resou
 		name:                   name,
 		testType:               testType,
 		ciType:                 ciType,
-		size:                   "small",
-		timeout:                testSizeTimeouts["small"],
-		runInputs:              []VFS{source(project)},
+		size:                   strSmall,
+		timeout:                60,
+		runInputs:              []VFS{project.source()},
 		globals:                globals,
 		env:                    e.d.test.env,
 		supportsTestParameters: true,
@@ -111,7 +111,7 @@ func (e *EmitContext) goTestRunSuite(binRef NodeRef, globals []ResourceDecl) *Te
 	project := instance.Path.relString()
 	name := programBinaryName(instance, d.moduleStmt)
 	binary := build(project, "/", name)
-	s := e.goSuiteBase(name, "go_test", "test", globals)
+	s := e.goSuiteBase(internStr(name), strGoTest, strTest, globals)
 
 	s.applyTestMeta(d.test, d.setVars.get(strADD_SRCDIR_TO_TEST_DATA) != strNo)
 	s.skipped = !Environment{s: &e.frame.ifEnv}.is(envSKIP_TEST_VALUE, strEmpty)
@@ -144,10 +144,10 @@ func (e *EmitContext) goTestRunSuite(binRef NodeRef, globals []ResourceDecl) *Te
 func (e *EmitContext) goFmtSuite(files []VFS, globals []ResourceDecl) *TestSuite {
 	slices.SortFunc(files, vfsCompare)
 
-	s := e.goSuiteBase("gofmt", "gofmt", "style", globals)
+	s := e.goSuiteBase(strGofmt2, strGofmt2, strStyle, globals)
 
-	s.projectPath = path.Dir(files[0].relString())
-	s.runInputs = []VFS{source(s.projectPath)}
+	s.projectPath = internStr(path.Dir(files[0].relString()))
+	s.runInputs = []VFS{s.projectPath.source()}
 	s.checkFiles = files
 
 	gofmt := strGoToolsResourceGlobalBinGofmt.any()
@@ -182,7 +182,7 @@ func (e *EmitContext) goFmtSuite(files []VFS, globals []ResourceDecl) *TestSuite
 }
 
 func (e *EmitContext) goVetSuite(vetReport VFS, globals []ResourceDecl) *TestSuite {
-	s := e.goSuiteBase("govet", "govet", "style", globals)
+	s := e.goSuiteBase(strGovet, strGovet, strStyle, globals)
 
 	s.runInputs = append(s.runInputs, vetReport)
 	s.projectBuildDeps = true

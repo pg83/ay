@@ -1,9 +1,6 @@
 package main
 
-import (
-	"slices"
-	"strings"
-)
+import "strings"
 
 const vfsPrefixLen = len("$(S)/")
 
@@ -135,45 +132,6 @@ func vfsCompare(a, b VFS) int {
 	}
 
 	return strings.Compare(a.relString(), b.relString())
-}
-
-func sortVFSByText(vs []VFS) {
-	if len(vs) <= 12 {
-		slices.SortFunc(vs, vfsCompare)
-
-		return
-	}
-
-	type keyed struct {
-		rel string
-		v   VFS
-	}
-
-	items := make([]keyed, len(vs))
-
-	for i, v := range vs {
-		items[i] = keyed{v.relString(), v}
-	}
-
-	slices.SortFunc(items, func(a, b keyed) int {
-		if a.v == b.v {
-			return 0
-		}
-
-		if ab, bb := a.v.isBuild(), b.v.isBuild(); ab != bb {
-			if ab {
-				return -1
-			}
-
-			return 1
-		}
-
-		return strings.Compare(a.rel, b.rel)
-	})
-
-	for i := range items {
-		vs[i] = items[i].v
-	}
 }
 
 func (v VFS) sharedString() string {

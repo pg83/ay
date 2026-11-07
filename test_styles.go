@@ -379,7 +379,7 @@ func (e *EmitContext) styleSuites(globals []ResourceDecl) []*TestSuite {
 			continue
 		}
 
-		if check.CPP && slices.ContainsFunc(suites, func(suite *TestSuite) bool { return suite.testType == check.Name }) {
+		if check.CPP && slices.ContainsFunc(suites, func(suite *TestSuite) bool { return suite.testType.string() == check.Name }) {
 			continue
 		}
 
@@ -445,7 +445,8 @@ func styleCheckResources(check StyleCheck, globals []ResourceDecl) []ResourceDec
 }
 
 func (ctx *GenCtx) styleSuite(check StyleCheck, project string, env []string, resources []ResourceDecl) *TestSuite {
-	s := &TestSuite{p: ctx.target, depends: slices.Clone(check.Depends), projectPath: project, name: check.Name, testType: check.Name, ciType: "style", size: "small", timeout: 60, supportsTestParameters: true, globals: resources, env: env, runInputs: []VFS{source(project)}, styleCheck: &check}
+	nameID := internStr(check.Name)
+	s := &TestSuite{p: ctx.target, depends: slices.Clone(check.Depends), projectPath: internStr(project), name: nameID, testType: nameID, ciType: strStyle, size: strSmall, timeout: 60, supportsTestParameters: true, globals: resources, env: env, runInputs: []VFS{source(project)}, styleCheck: &check}
 
 	s.mergeStyleFiles(nil)
 

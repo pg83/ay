@@ -47,7 +47,8 @@ func (ctx *GenCtx) resourceValidationSuite(project, name string, ids, env []stri
 
 	ids = sortedUnique(ids)
 
-	s := &TestSuite{p: ctx.target, projectPath: project, name: name, testType: name, ciType: "test", size: "small", timeout: 60, env: env, globals: globals, network: "full", setupPythonpathEnv: true, supportsTestParameters: true, clearEnvironment: true, noRetries: true, runInputs: []VFS{source(project)}, inputNames: ids}
+	nameID := internStr(name)
+	s := &TestSuite{p: ctx.target, projectPath: internStr(project), name: nameID, testType: nameID, ciType: strTest, size: strSmall, timeout: 60, env: env, globals: globals, network: "full", setupPythonpathEnv: true, supportsTestParameters: true, clearEnvironment: true, noRetries: true, runInputs: []VFS{source(project)}, inputNames: ids}
 
 	if uidExt != "" {
 		s.uidSalt = "sbr_uid_ext=" + uidExt
@@ -64,7 +65,7 @@ func (ctx *GenCtx) resourceValidationSuite(project, name string, ids, env []stri
 			checker += " --token " + token
 		}
 
-		args := []string{testToolHostPath, "run_check", "--source-root", testSourceRoot, "--checker", checker, "--check-name", s.testType, "--trace-path", work + "/ytest.report.trace", "--out-path", work + "/testing_out_stuff", "--log-path", work + "/testing_out_stuff/run_check.log"}
+		args := []string{testToolHostPath, "run_check", "--source-root", testSourceRoot, "--checker", checker, "--check-name", s.testType.string(), "--trace-path", work + "/ytest.report.trace", "--out-path", work + "/testing_out_stuff", "--log-path", work + "/testing_out_stuff/run_check.log"}
 
 		args = append(args, s.inputNames...)
 		args = append(args, "--batch", "--batch-name", path.Base(project))

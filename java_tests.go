@@ -135,14 +135,14 @@ func sortedUnique(in []string) []string {
 	return slices.Compact(out)
 }
 
-func (ctx *GenCtx) javaSuiteBase(jm *JavaModule, name, testType, ciType string) *TestSuite {
+func (ctx *GenCtx) javaSuiteBase(jm *JavaModule, name, testType, ciType STR) *TestSuite {
 	return &TestSuite{
 		p:           jm.instance.Platform,
-		projectPath: jm.dir,
+		projectPath: internStr(jm.dir),
 		name:        name,
 		testType:    testType,
 		ciType:      ciType,
-		size:        "small",
+		size:        strSmall,
 		timeout:     60,
 		globals:     ctx.javaResourceGlobals(jm),
 		runInputs:   []VFS{source(jm.dir)},
@@ -162,7 +162,7 @@ func (ctx *GenCtx) javaStyleSuite(jm *JavaModule) *TestSuite {
 	}
 
 	srclst := build(jm.dir, "/lint-java.srclst")
-	s := ctx.javaSuiteBase(jm, "java_style", "java.style", "style")
+	s := ctx.javaSuiteBase(jm, strJavaStyle, strJavaStyle2, strStyle)
 
 	s.timeout = 240
 	s.requirements = map[string]string{"ram": "16"}
@@ -213,7 +213,7 @@ func (ctx *GenCtx) javaKtlintSuite(jm *JavaModule) *TestSuite {
 	editorconfigPath := "$(S)/build/platform/java/" + folder + "/.editorconfig"
 	binary := "$(" + strings.ToUpper(folder) + ")/run.bat"
 	srclist := build(jm.dir, "/all-kt-sources.txt")
-	s := ctx.javaSuiteBase(jm, "ktlint", "ktlint", "style")
+	s := ctx.javaSuiteBase(jm, strKtlint, strKtlint, strStyle)
 	dirs := []string{editorconfigPath}
 
 	if !d.ktlintSkipSourceDirs {
@@ -344,10 +344,10 @@ func (ctx *GenCtx) javaJunitSuite(jm *JavaModule) *TestSuite {
 		jdkForTests = globals[jdk]
 	}
 
-	s := ctx.javaSuiteBase(jm, path.Base(path.Dir(jm.dir))+"-"+path.Base(jm.dir), "java", "test")
+	s := ctx.javaSuiteBase(jm, internStr(path.Base(path.Dir(jm.dir))+"-"+path.Base(jm.dir)), strJava5, strTest)
 
-	s.size = cmp.Or(t.size, "small")
-	s.timeout = testSizeTimeouts[s.size]
+	s.size = internStr(cmp.Or(t.size, "small"))
+	s.timeout = testSizeTimeout(s.size)
 
 	if t.timeout != "" {
 		s.timeout, _ = strconv.Atoi(t.timeout)
@@ -583,7 +583,7 @@ func (jm *JavaModule) checksClasspathClash() bool {
 func (ctx *GenCtx) javaClasspathClashSuite(jm *JavaModule) *TestSuite {
 	d := jm.data
 	name := strings.Trim(path.Base(path.Dir(jm.dir))+"-"+path.Base(jm.dir)+"-dependencies", "-")
-	s := ctx.javaSuiteBase(jm, name, "classpath.clash", "style")
+	s := ctx.javaSuiteBase(jm, internStr(name), strClasspathClash, strStyle)
 
 	s.setupPythonpathEnv = true
 	s.supportsTestParameters = true

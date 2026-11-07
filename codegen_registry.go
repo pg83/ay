@@ -7,7 +7,11 @@ import (
 	"github.com/zeebo/xxh3"
 )
 
-const splitBucketBits = 18
+const (
+	splitBucketBits = 18
+	splitTailBits   = 24
+	splitDepthBits  = 12
+)
 
 type GeneratedFileInfo struct {
 	attributes      *GeneratedFileAttributes
@@ -237,6 +241,8 @@ type CodegenRegistry struct {
 	textTemplates   SparseMap[VFS, []VFS]
 	splitGeneration uint32
 	splitGens       []uint32
+	splitTails      BitSet
+	prefixDepths    []prefixDepth
 	na              *NodeArenas
 
 	moduleOutputDeps func(*GeneratedFileInfo) []IncludeDirective
@@ -247,10 +253,16 @@ type splitLookup struct {
 	generation uint32
 }
 
+type prefixDepth struct {
+	rel   STR
+	depth int32
+}
+
 func newCodegenRegistry(na *NodeArenas) *CodegenRegistry {
 	return &CodegenRegistry{
 		na:            na,
 		splitGens:     make([]uint32, 1<<splitBucketBits),
+		prefixDepths:  make([]prefixDepth, 1<<splitDepthBits),
 		textTemplates: newSparseMap[VFS, []VFS](16),
 		files:         ScannedFileCache{diagnostics: newSparseMap[uint32, *IncludeDiagnostics](16)},
 		attributes: GeneratedFileAttributes{
@@ -266,31 +278,59 @@ func newCodegenRegistry(na *NodeArenas) *CodegenRegistry {
 }
 
 type splitKey struct {
-	base, parent uint64
-	hasParent    bool
+	tail    uint64
+	base    string
+	depth   int32
+	hasTail bool
 }
 
 func splitKeyOf(suffix string) splitKey {
 	slash := strings.LastIndexByte(suffix, '/')
-	key := splitKey{base: xxh3.HashString(suffix[slash+1:])}
 
-	if slash >= 0 {
-		key.parent, key.hasParent = xxh3.HashString(suffix[strings.LastIndexByte(suffix[:slash], '/')+1:slash]), true
+	if slash < 0 {
+		return splitKey{base: suffix, depth: 1}
 	}
 
-	return key
+	return splitKey{tail: xxh3.HashString(suffix[strings.LastIndexByte(suffix[:slash], '/')+1:]), depth: int32(strings.Count(suffix, "/")) + 1, hasTail: true}
 }
 
-func (k splitKey) bucket(prefix VFS) uint32 {
-	parent := k.parent
-
-	if !k.hasParent {
-		dir := prefix.relString()
-
-		parent = xxh3.HashString(dir[strings.LastIndexByte(dir, '/')+1:])
+func pathDepth(rel string) int32 {
+	if rel == "" {
+		return 0
 	}
 
-	return uint32(mix64(k.base^(parent<<29|parent>>35))) & (1<<splitBucketBits - 1)
+	return int32(strings.Count(rel, "/")) + 1
+}
+
+func (k splitKey) tailOf(prefix VFS) uint64 {
+	if k.hasTail {
+		return k.tail
+	}
+
+	dir := prefix.relString()
+
+	var buf [256]byte
+
+	return xxh3.Hash(append(append(append(buf[:0], dir[strings.LastIndexByte(dir, '/')+1:]...), '/'), k.base...))
+}
+
+func splitBucket(tail uint64) uint32 {
+	return uint32(mix64(tail)) & (1<<splitBucketBits - 1)
+}
+
+func splitTailBit(tail uint64, depth int32) uint32 {
+	return uint32(mix64(tail^uint64(depth)*0x9e3779b97f4a7c15) >> (64 - splitTailBits))
+}
+
+func (r *CodegenRegistry) prefixDepth(prefix VFS) int32 {
+	rel := prefix.rel()
+	slot := &r.prefixDepths[uint32(rel)*0x9e3779b1>>(32-splitDepthBits)]
+
+	if slot.rel != rel || rel == 0 {
+		slot.rel, slot.depth = rel, pathDepth(rel.string())
+	}
+
+	return slot.depth
 }
 
 func (r *CodegenRegistry) putRel(info *GeneratedFileInfo) {
@@ -299,8 +339,12 @@ func (r *CodegenRegistry) putRel(info *GeneratedFileInfo) {
 }
 
 func (r *CodegenRegistry) splitChanged(output VFS) {
+	key := splitKeyOf(output.relString())
+	tail := key.tailOf(bldRootDirVFS)
+
 	r.splitGeneration++
-	r.splitGens[splitKeyOf(output.relString()).bucket(bldRootDirVFS)]++
+	r.splitGens[splitBucket(tail)]++
+	r.splitTails.add(splitTailBit(tail, key.depth))
 }
 
 func (r *CodegenRegistry) use(path VFS) *GeneratedFileInfo {
@@ -640,7 +684,13 @@ func (r *CodegenRegistry) lookupSplitAny(prefix VFS, suffixID STR, split splitKe
 	generation := r.splitGeneration
 
 	if suffixID.cleanPath() {
-		if generation = r.splitGens[split.bucket(prefix)]; generation == 0 {
+		tail := split.tailOf(prefix)
+
+		if generation = r.splitGens[splitBucket(tail)]; generation == 0 {
+			return nil
+		}
+
+		if !r.splitTails.has(splitTailBit(tail, r.prefixDepth(prefix)+split.depth)) {
 			return nil
 		}
 	}

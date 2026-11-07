@@ -1202,7 +1202,10 @@ func (sc *ScanCtx) resolveContextSearchTier(targetID STR) VFS {
 	}
 
 	buildSuffix := targetID
-	buildKey := splitKeyOf(normTarget)
+
+	var buildKey splitKey
+
+	keyed := false
 
 	if !cleanTarget {
 		buildSuffix = interned(normTarget)
@@ -1218,6 +1221,10 @@ func (sc *ScanCtx) resolveContextSearchTier(targetID STR) VFS {
 		if prefix == bldRootDirVFS {
 			info = s.codegen.lookupIncludeSTR(buildSuffix)
 		} else {
+			if !keyed {
+				buildKey, keyed = splitKeyOf(normTarget), true
+			}
+
 			info = s.codegen.lookupIncludeSplit(prefix.rel().source(), buildSuffix, buildKey)
 		}
 
@@ -1283,6 +1290,10 @@ func (sc *ScanCtx) resolveContextSearchTier(targetID STR) VFS {
 
 					if b.rank >= bestRank {
 						continue
+					}
+
+					if !keyed {
+						buildKey, keyed = splitKeyOf(normTarget), true
 					}
 
 					info := s.codegen.lookupIncludeSplit(b.prefixSrc, buildSuffix, buildKey)

@@ -14,8 +14,6 @@ var (
 	testContextAllowedFlags    = []string{"AUTOCHECK", "TESTS_REQUESTED", "USE_ARCADIA_PYTHON", "USE_SYSTEM_PYTHON"}
 	testDescriptorExtraFlags   = []string{"MUSL", "ALLOCATOR", "FAKEID", "RACE"}
 	testDescriptorFlagTags     = map[string]string{"USE_LTO": "lto", "USE_THINLTO": "thinlto", "MUSL": "musl", "USE_AFL": "AFL", "RACE": "race"}
-	testSizeTimeouts           = map[string]int{"small": 60, "medium": 600, "large": 3600}
-	testSizeKinds              = map[string]ProcKind{"small": pkTS, "medium": pkTM, "large": pkTL}
 	testNodeKVs                = map[ProcKind]*KV{0: testNodeKV(0), pkTS: testNodeKV(pkTS), pkTM: testNodeKV(pkTM), pkTL: testNodeKV(pkTL)}
 	testCommonEnvSkip          = []string{"YA_CACHE_DIR", "YA_TIMEOUT", "YA_TOKEN", "YA_SOURCE_ROOT"}
 	testSanitizerOptVars       = []string{"LSAN_OPTIONS", "ASAN_OPTIONS", "UBSAN_OPTIONS", "MSAN_OPTIONS", "TSAN_OPTIONS"}
@@ -372,6 +370,32 @@ func testArg(s string) ANY {
 	return internStr(s).any()
 }
 
+func testSizeTimeout(size STR) int {
+	switch size {
+	case strSmall:
+		return 60
+	case strMedium:
+		return 600
+	case strLarge:
+		return 3600
+	}
+
+	return 0
+}
+
+func testSizeKind(size STR) ProcKind {
+	switch size {
+	case strSmall:
+		return pkTS
+	case strMedium:
+		return pkTM
+	case strLarge:
+		return pkTL
+	}
+
+	return 0
+}
+
 func (o *TestOpts) sizeRequested(size string) bool {
 	return len(o.sizes) == 0 || slices.Contains(o.sizes, size)
 }
@@ -395,11 +419,11 @@ type TestSuite struct {
 	checkFiles             []VFS
 	styleCheck             *StyleCheck
 	p                      *Platform
-	projectPath            string
-	name                   string
-	testType               string
-	ciType                 string
-	size                   string
+	projectPath            STR
+	name                   STR
+	testType               STR
+	ciType                 STR
+	size                   STR
 	timeout                int
 	relatedPaths           []ANY
 	runInputs              []VFS
@@ -444,7 +468,7 @@ type TestChunk struct {
 
 func (s *TestSuite) workDir(chunk TestChunk) string {
 	if s.workBase == "" {
-		s.workBase = path.Join("$(B)", s.projectPath, "test-results", s.name)
+		s.workBase = path.Join("$(B)", s.projectPath.string(), "test-results", s.name.string())
 	}
 
 	dir := s.workBase
@@ -492,14 +516,14 @@ func (ctx *GenCtx) testContext() NodeRef {
 func (ctx *GenCtx) prepareTestDependencies(s *TestSuite) {
 	var execDirs []string
 
-	python := s.testType == "pytest" || s.testType == "py3test" || s.testType == "exectest"
+	python := s.testType == strPytest || s.testType == strPy3test || s.testType == strExectest
 
 	if python {
-		s.pytestOutputDirs = append(s.pytestOutputDirs, s.projectPath)
+		s.pytestOutputDirs = append(s.pytestOutputDirs, s.projectPath.string())
 	}
 
-	if s.testType == "exectest" {
-		execDirs = append(execDirs, testExecDependencyDir(s.projectPath))
+	if s.testType == strExectest {
+		execDirs = append(execDirs, testExecDependencyDir(s.projectPath.string()))
 	}
 
 	var rewritten []string
@@ -525,7 +549,7 @@ func (ctx *GenCtx) prepareTestDependencies(s *TestSuite) {
 			s.deps = append(s.deps, info.ProducerRef)
 			rewritten = append(rewritten, output.relString())
 
-			if s.testType == "exectest" {
+			if s.testType == strExectest {
 				execDirs = append(execDirs, testExecDependencyDir(output.relString()))
 			}
 
@@ -543,13 +567,13 @@ func (ctx *GenCtx) prepareTestDependencies(s *TestSuite) {
 		s.pytestOutputDirs = sortedUnique(s.pytestOutputDirs)
 	}
 
-	if s.testType == "exectest" {
+	if s.testType == strExectest {
 		s.execPath = strings.Join(sortedUnique(execDirs), ":")
 	}
 }
 
 func (ctx *GenCtx) testSuiteSelected(s *TestSuite) bool {
-	return !s.skipped && ctx.tests.sizeRequested(s.size) && ctx.tests.tagFilter.matches(s.tags)
+	return !s.skipped && ctx.tests.sizeRequested(s.size.string()) && ctx.tests.tagFilter.matches(s.tags)
 }
 
 func (ctx *GenCtx) emitTestSuite(s *TestSuite) []NodeRef {
@@ -573,7 +597,7 @@ func (ctx *GenCtx) emitTestSuite(s *TestSuite) []NodeRef {
 		} else if resource, ok := strings.CutPrefix(entry, "mds:"); ok && s.supportsCanonization {
 			s.deps = append(s.deps, ctx.emitCanonicalTestData(resource))
 		} else if file, ok := strings.CutPrefix(entry, "ext:"); ok {
-			rel := path.Join(s.projectPath, strings.TrimSuffix(file, ".external"))
+			rel := path.Join(s.projectPath.string(), strings.TrimSuffix(file, ".external"))
 
 			if present, isDir := ctx.fs.exists(srcRootRel, rel); present && !isDir {
 				s.externalLocalFiles = append(s.externalLocalFiles, rel)
@@ -598,7 +622,7 @@ func (ctx *GenCtx) emitTestSuite(s *TestSuite) []NodeRef {
 		var ok bool
 
 		if s.corpusResources, s.corpusPartsExceeded, ok = ctx.fuzzCorpusResources(s.corpus); !ok {
-			ctx.onWarn(Warn{Kind: WarnTestDependency, Message: "Broken suite: <Test [type=" + s.testType + ", project=" + s.projectPath + ", name=" + s.name + "]>: corpus description " + s.corpus + " is not a JSON object"})
+			ctx.onWarn(Warn{Kind: WarnTestDependency, Message: "Broken suite: <Test [type=" + s.testType.string() + ", project=" + s.projectPath.string() + ", name=" + s.name.string() + "]>: corpus description " + s.corpus + " is not a JSON object"})
 
 			return nil
 		}
@@ -615,7 +639,7 @@ func (ctx *GenCtx) emitTestSuite(s *TestSuite) []NodeRef {
 	split := max(s.split, 1)
 	retries := 1
 
-	if s.ciType == "test" && !s.noRetries && !slices.Contains(s.tags, "ya:noretries") {
+	if s.ciType == strTest && !s.noRetries && !slices.Contains(s.tags, "ya:noretries") {
 		retries = ctx.tests.retries
 	}
 
@@ -668,7 +692,7 @@ func (ctx *GenCtx) emitTestSuite(s *TestSuite) []NodeRef {
 }
 
 func (s *TestSuite) prepareNodeArgs() {
-	s.nodeArgs = [5]ANY{testArg(s.size), testArg(s.testType), testArg(s.ciType), testArg(s.name), testArg(s.projectPath)}
+	s.nodeArgs = [5]ANY{s.size.any(), s.testType.any(), s.ciType.any(), s.name.any(), s.projectPath.any()}
 	s.sortedGlobals = sortedResourceGlobals(s.globals)
 	s.envArgs = s.envArgs[:0]
 
@@ -739,7 +763,7 @@ func (ctx *GenCtx) testAccumulator(s *TestSuite, chunks []*Node, refs []NodeRef,
 		outs = append(outs, intern(out))
 	}
 
-	sortVFSByText(inputs)
+	slices.SortFunc(inputs, vfsCompare)
 
 	return &Node{
 		Platform: testNoPlatform,
@@ -912,11 +936,11 @@ func (ctx *GenCtx) testNode(s *TestSuite, chunk TestChunk) *Node {
 		}
 	}
 
-	sortVFSByText(inputs)
+	slices.SortFunc(inputs, vfsCompare)
 	ctx.testInputs = inputs[:0]
 
 	if s.kvPath == "" {
-		s.kvPath = s.projectPath + "/" + s.name
+		s.kvPath = s.projectPath.string() + "/" + s.name.string()
 	}
 
 	deps := append(append(ctx.testDeps[:0], ctx.testContext()), s.deps...)
@@ -954,7 +978,7 @@ func (ctx *GenCtx) testNode(s *TestSuite, chunk TestChunk) *Node {
 		Platform: s.p,
 		Cmds:     na.cmdList(cmds...),
 		Env:      ctx.testEnv(s), Inputs: na.inputList(na.vfsList(slices.Compact(inputs)...)), Extra: extra,
-		KV:           testNodeKVs[testSizeKinds[s.size]],
+		KV:           testNodeKVs[testSizeKind(s.size)],
 		Outputs:      na.vfsList(outputs...),
 		Requirements: req,
 		DepRefs:      na.refList(dedupRefs(deps)...),
@@ -972,7 +996,7 @@ func testRequirements(na *NodeArenas, s *TestSuite) *Requirements {
 	*r = Requirements{Network: nwRestricted, HasRAMDisk: true}
 	r.DNS = s.requirements["dns"]
 
-	if s.network == "full" || s.size == "large" {
+	if s.network == "full" || s.size == strLarge {
 		r.Network = nwFull
 	}
 
@@ -1046,7 +1070,7 @@ type testEnvTemplate struct {
 func (ctx *GenCtx) testEnv(s *TestSuite) EnvVars {
 	key := testEnvKey{clearEnvironment: s.clearEnvironment, pythonNoBytecode: s.pythonNoBytecode, disableLeaks: s.disableLeaks, importCheckEnv: s.importCheckEnv}
 
-	if s.testType == "exectest" {
+	if s.testType == strExectest {
 		key.execPath = s.execPath
 	}
 
@@ -1071,7 +1095,7 @@ func (ctx *GenCtx) testEnv(s *TestSuite) EnvVars {
 	copy(out, template.vars)
 
 	if template.name >= 0 {
-		out[template.name].Value = internStr(s.name).any()
+		out[template.name].Value = s.name.any()
 	}
 
 	ctx.na.envs.commit(n)
@@ -1155,7 +1179,7 @@ func (ctx *GenCtx) testEnvVars(s *TestSuite) EnvVars {
 		env["LSAN_OPTIONS"] += ":detect_leaks=0"
 	}
 
-	if s.testType == "exectest" {
+	if s.testType == strExectest {
 		env["PATH"] = s.execPath
 	}
 
@@ -1299,7 +1323,7 @@ func (ctx *GenCtx) testMerger(s *TestSuite, nodes []*Node, refs []NodeRef) *Node
 		}
 	}
 
-	strs := []string{testToolHostPath, "results_merger", "--project-path", s.projectPath, "--suite-name", s.name, "--source-root", testSourceRoot, "--log-path", log}
+	strs := []string{testToolHostPath, "results_merger", "--project-path", s.projectPath.string(), "--suite-name", s.name.string(), "--source-root", testSourceRoot, "--log-path", log}
 
 	if o.removeTos {
 		strs = append(strs, "--remove-tos")
@@ -1317,7 +1341,7 @@ func (ctx *GenCtx) testMerger(s *TestSuite, nodes []*Node, refs []NodeRef) *Node
 		outs = append(outs, intern(out))
 	}
 
-	sortVFSByText(inputs)
+	slices.SortFunc(inputs, vfsCompare)
 
 	return &Node{Platform: testNoPlatform, Env: sortedEnvVars(o.commonEnvMap()), Cmds: na.cmdList(Cmd{CmdArgs: na.chunkList(testArgs(strs)), Cwd: bld.cwd()}), Inputs: na.inputList(na.vfsList(slices.Compact(inputs)...)), Outputs: na.vfsList(outs...), DepRefs: na.refList(dedupRefs(refs)...), KV: &KV{P: pkTR, PC: pcLightCyan, ShowOutBool: true}}
 }
