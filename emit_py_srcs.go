@@ -30,6 +30,7 @@ type PySourceKind uint8
 
 type PySourceMeta struct {
 	Module STR
+	Yapyc  VFS
 	Scope  PyScope
 	Token  ANY
 	Group  int
@@ -58,7 +59,6 @@ func pyResourceKeyPrefix(topLevel bool, namespace *ANY, modulePath string) strin
 type PySrc struct {
 	Existing bool
 	Path     VFS
-	Yapyc    VFS
 	PySourceMeta
 }
 
@@ -248,7 +248,7 @@ func (e *EmitContext) pyYapycExt() string {
 }
 
 func (e *EmitContext) collectPySource(ps PySrc) {
-	e.pySrcsReg = append(e.pySrcsReg, PySrc{Path: ps.Path, Yapyc: ps.Yapyc, PySourceMeta: ps.PySourceMeta})
+	e.pySrcsReg = append(e.pySrcsReg, PySrc{Path: ps.Path, PySourceMeta: ps.PySourceMeta})
 }
 
 func (e *EmitContext) pyYapycOutFor(ps PySrc) VFS {
