@@ -182,7 +182,7 @@ func applyGoCodegenStmt(modulePath string, v UnknownStmt, d *ModuleData, env Env
 
 func (e *EmitContext) goToolEnv(includeHome bool) EnvVars {
 	toolsRoot := strGoToolsRoot.string()
-	bindir := build(e.instance.Path.relString())
+	bindir := e.instance.Path.rel().build()
 
 	env := [...]EnvVar{
 		{Name: envARCADIA_ROOT_DISTBUILD, Value: strS.any()},

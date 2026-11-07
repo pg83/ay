@@ -29,6 +29,7 @@ var (
 	astEnds              = newBumpAllocator[EndStmt]()
 	condFalse            = []CondNode{{Kind: ckString, Name: "no"}}
 	strStructCodegenTool = internStr(structCodegenTool)
+	includeStmtCount     uint32
 )
 
 var runAntlrKeywords = strKeySet(
@@ -330,6 +331,7 @@ type IncludeStmt struct {
 	File string
 	Path string
 	Line int
+	id   uint32
 }
 
 func (*IncludeStmt) stmtMarker() {
@@ -2706,7 +2708,8 @@ func (p *Parser) expandInclude(nameTok Token) {
 
 func (p *Parser) expandOneInclude(nameTok Token, rel string) {
 	if strings.ContainsRune(strings.TrimPrefix(rel, "${ARCADIA_ROOT}/"), '$') {
-		p.stmtScratch = append(p.stmtScratch, &IncludeStmt{File: p.name, Path: rel, Line: nameTok.line})
+		includeStmtCount++
+		p.stmtScratch = append(p.stmtScratch, &IncludeStmt{File: p.name, Path: rel, Line: nameTok.line, id: includeStmtCount})
 
 		return
 	}

@@ -253,18 +253,20 @@ func (e *EmitContext) pyYapycOutFor(ps PySrc) VFS {
 		return build(rooted.relString(), suffix)
 	}
 
+	clean := ps.Kind != pySourceGenerated && e.instance.Path.rel().cleanPath() && ps.Token.str().cleanPath()
+
 	if ps.Kind == pySourceGenerated {
 		srcRel = trimModulePrefix(ps.Path.relString(), module)
 	}
 
 	if ps.Kind == pySourceGenerated || strings.Contains(srcRel, "/") {
-		return pyYapycPath(module, srcRel, ".", e.d.pyYapycSuffix, e.pyYapycExt())
+		return pyYapycPath(module, srcRel, clean, ".", e.d.pyYapycSuffix, e.pyYapycExt())
 	}
 
-	return pyYapycPath(module, srcRel, e.pyYapycExt())
+	return pyYapycPath(module, srcRel, clean, e.pyYapycExt())
 }
 
-func pyYapycPath(module, src string, suffix ...string) VFS {
+func pyYapycPath(module, src string, clean bool, suffix ...string) VFS {
 	n := len(module) + 1 + len(src)
 
 	for _, part := range suffix {
@@ -282,13 +284,11 @@ func pyYapycPath(module, src string, suffix ...string) VFS {
 		k += copy(block[k:], part)
 	}
 
-	if pathIsClean(bytesString(block[:k])) {
+	if clean || pathIsClean(bytesString(block[:k])) {
 		return internBlock(block, k).build()
 	}
 
-	clean := path.Clean(bytesString(block[:k]))
-
-	return build(clean)
+	return build(path.Clean(bytesString(block[:k])))
 }
 
 func (e *EmitContext) appendPyResEntries(out []PyGenResEntry, ps PySrc) []PyGenResEntry {

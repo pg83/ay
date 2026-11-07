@@ -115,11 +115,31 @@ func consumerPeerTags(d *ModuleData, env Environment) STR {
 		return 0
 	}
 
+	bound, raw := env.s.lookup(envPeerdirTags)
+
+	if bound == envAbsent {
+		return internBytes(nil)
+	}
+
+	env.recordResourceUse(envPeerdirTags)
+
+	key := expansionKey(uint32(raw), expansionPeerTags|uint32(bound)<<4)
+
+	if words, ok := expansionMemo.find(key, env); ok {
+		return words[0].str()
+	}
+
+	text := raw.string()
+
+	if bound == envVFS {
+		text = VFS(uint32(raw)).string()
+	}
+
 	var buf [256]byte
 
 	joined := buf[:0]
 
-	for f := range strings.FieldsSeq(env.expandVariableView(env.string(envPeerdirTags))) {
+	for f := range strings.FieldsSeq(env.expandVariableView(text)) {
 		if len(joined) != 0 {
 			joined = append(joined, ' ')
 		}
@@ -127,7 +147,11 @@ func consumerPeerTags(d *ModuleData, env Environment) STR {
 		joined = append(joined, f...)
 	}
 
-	return internBytes(joined)
+	tags := internBytes(joined)
+
+	expansionMemo.end(key, tags.any())
+
+	return tags
 }
 
 func (ctx *GenCtx) resolvePeerInstance(request ModuleInstance, declaration *ModuleStmt) (ModuleInstance, *ModuleEmitResult) {

@@ -61,6 +61,8 @@ type TestOpts struct {
 	sizes        []string
 	tagFilter    TestTagFilter
 	descriptor   string
+	styleArg     ANY
+	platformArg  ANY
 	context      []string
 	contextReqs  *Requirements
 	commonEnv    [][2]string
@@ -142,6 +144,8 @@ func newTestOpts(mf *MakeFlags, yaConf map[string]any) *TestOpts {
 			opts.commonEnv = append(opts.commonEnv, [2]string{k, v})
 		}
 	}
+
+	opts.styleArg, opts.platformArg = testArg(opts.outputStyle), testArg(opts.descriptor)
 
 	return opts
 }
@@ -797,7 +801,7 @@ func (ctx *GenCtx) testNode(s *TestSuite, chunk TestChunk) *Node {
 		head = append(head, strNoCleanEnvironment.any())
 	}
 
-	head = append(head, strTargetPlatformDescriptor.any(), testArg(o.descriptor))
+	head = append(head, strTargetPlatformDescriptor.any(), o.platformArg)
 
 	if o.removeTos {
 		head = append(head, strRemoveTos.any())
@@ -819,7 +823,7 @@ func (ctx *GenCtx) testNode(s *TestSuite, chunk TestChunk) *Node {
 		head = append(head, strDataToEnvironment.any(), strCopy.any())
 	}
 
-	head = append(head, strTestsLimitInChunk.any(), testDefaultTestsLimitArg, strOutputStyle.any(), testArg(o.outputStyle), strPythonBin.any(), testPythonBinArg)
+	head = append(head, strTestsLimitInChunk.any(), testDefaultTestsLimitArg, strOutputStyle.any(), o.styleArg, strPythonBin.any(), testPythonBinArg)
 
 	if chunk.retry > 0 {
 		head = append(head, strRetry.any(), intArg(chunk.retry))

@@ -159,11 +159,10 @@ type ResolvedResource struct {
 }
 
 func (e *EmitContext) resolveResourceInput(rawPath string, fallback VFS) ResolvedResource {
-	_, instance := e.ctx, e.instance
-	output := resourceOutputVFS(instance.Path.relString(), rawPath)
+	output := fallback
 
-	if fallback.isBuild() {
-		output = fallback
+	if !fallback.isBuild() {
+		output = resourceOutputVFS(e.instance.Path.relString(), rawPath)
 	}
 
 	if info := e.codegen.use(output); info != nil {

@@ -447,8 +447,10 @@ func (ctx *GenCtx) styleSuite(check StyleCheck, project string, env []string, re
 
 	s.mergeStyleFiles(nil)
 
+	projectArg, nameArg, wrapperArg := source(project).any(), testArg(check.Name), testArg(check.Wrapper)
+
 	s.runCmd = func(work string, chunk TestChunk) []ANY {
-		args := []ANY{testToolHostPathArg, strRunCustomLint.any(), strSourceRoot2.any(), testArg(testSourceRoot), strBuildRoot2.any(), testArg(testBuildRoot), strProjectPath.any(), source(project).any(), strTracePath.any(), testArg(work + "/ytest.report.trace"), strOutPath.any(), testArg(work + "/testing_out_stuff"), strLintName.any(), testArg(check.Name), strWrapperScript.any(), testArg(check.Wrapper)}
+		args := []ANY{testToolHostPathArg, strRunCustomLint.any(), strSourceRoot2.any(), testSourceRootArg, strBuildRoot2.any(), testBuildRootArg, strProjectPath.any(), projectArg, strTracePath.any(), testArg(work + "/ytest.report.trace"), strOutPath.any(), testArg(work + "/testing_out_stuff"), strLintName.any(), nameArg, strWrapperScript.any(), wrapperArg}
 
 		for _, dependency := range sortedUnique(append(slices.Clone(s.depends), project)) {
 			args = append(args, strDepends.any(), testArg(dependency))

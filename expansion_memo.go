@@ -14,6 +14,8 @@ const (
 	expansionRunProgram
 	expansionCompilerFlags
 	expansionRunProgramPrepare
+	expansionInclude
+	expansionPeerTags
 )
 
 type ExpansionStep struct {

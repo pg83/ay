@@ -6,7 +6,7 @@ import (
 	"strings"
 )
 
-func (ctx *GenCtx) withIncludedStmts(stmt *IncludeStmt, env Environment, visit func([]Stmt)) {
+func (ctx *GenCtx) includeTarget(stmt *IncludeStmt, env Environment) STR {
 	rel := expandSourceScalarVarRefView(stmt.Path, env)
 
 	var target string
@@ -31,6 +31,23 @@ func (ctx *GenCtx) withIncludedStmts(stmt *IncludeStmt, env Environment, visit f
 		throwFmt("%s:%d: INCLUDE file %s not found", stmt.File, stmt.Line, target)
 	}
 
+	return targetID
+}
+
+func (ctx *GenCtx) withIncludedStmts(stmt *IncludeStmt, env Environment, visit func([]Stmt)) {
+	key := expansionKey(stmt.id, expansionInclude)
+	words, ok := expansionMemo.find(key, env)
+
+	var targetID STR
+
+	if ok {
+		targetID = words[0].str()
+	} else {
+		targetID = ctx.includeTarget(stmt, env)
+
+		expansionMemo.end(key, targetID.any())
+	}
+
 	stmts := ctx.parseFileCached(targetID)
 
 	if ctx.parsedFiles[parsedFileKey(targetID)].IncludeOnce {
@@ -46,7 +63,7 @@ func (ctx *GenCtx) withIncludedStmts(stmt *IncludeStmt, env Environment, visit f
 	}
 
 	if slices.Contains(ctx.includeStack, targetID) {
-		throwFmt("%s:%d: INCLUDE cycle: %s -> %s", stmt.File, stmt.Line, strings.Join(strStrings(ctx.includeStack), " -> "), target)
+		throwFmt("%s:%d: INCLUDE cycle: %s -> %s", stmt.File, stmt.Line, strings.Join(strStrings(ctx.includeStack), " -> "), targetID.string())
 	}
 
 	ctx.includeStack = append(ctx.includeStack, targetID)

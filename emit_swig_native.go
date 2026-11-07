@@ -39,11 +39,11 @@ func (e *EmitContext) emitNativeSwigSource(meta SrcMeta, python bool) {
 		if python {
 			args = []ANY{swigBin.any(), strModule.any(), internStr(name).any(), strCpperraswarn.any(),
 				strC5.any(), argPython.any(), argInterface.any(), internStr(module).any(),
-				argDashO.any(), cpp.any(), strOutdir2.any(), build(instance.Path.relString()).any()}
+				argDashO.any(), cpp.any(), strOutdir2.any(), instance.Path.rel().build().any()}
 		} else {
 			args = []ANY{swigBin.any(), strC5.any(), strCpperraswarn.any(),
 				strModule.any(), internStr(name).any(), strShadow.any(), strPerl.any(),
-				argDashO.any(), cpp.any(), strOutdir2.any(), build(instance.Path.relString()).any()}
+				argDashO.any(), cpp.any(), strOutdir2.any(), instance.Path.rel().build().any()}
 		}
 
 		args = append(args, swigJNIIncludeArgs(d.cc.SwigInclude)[1:]...)
