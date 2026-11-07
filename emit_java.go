@@ -29,9 +29,7 @@ type javaNodeBuilder struct {
 	env          EnvVars
 }
 
-func (b *javaNodeBuilder) useResource(name string) {
-	id := internStr(name)
-
+func (b *javaNodeBuilder) useResource(id STR) {
 	for _, r := range b.resources {
 		if r == id {
 			return
@@ -74,24 +72,22 @@ func (b *javaNodeBuilder) input(vs ...VFS) {
 	b.inputs = append(b.inputs, vs...)
 }
 
-func (b *javaNodeBuilder) script(rel string) VFS {
-	v := source(rel)
-
+func (b *javaNodeBuilder) script(v VFS) VFS {
 	b.inputs = append(b.inputs, v)
 
 	return v
 }
 
-func (b *javaNodeBuilder) python(script string) []ANY {
-	b.useResource("YMAKE_PYTHON3")
+func (b *javaNodeBuilder) python(script VFS) []ANY {
+	b.useResource(strYMakePython3Name)
 
 	return []ANY{javaPython3.any(), b.script(script).any()}
 }
 
 func (b *javaNodeBuilder) fsTools(args ...ANY) []ANY {
-	out := b.python("build/scripts/fs_tools.py")
+	out := b.python(antlr4FsToolsVFS)
 
-	b.script("build/scripts/process_command_files.py")
+	b.script(buildScriptsProcessCommandFilesPy)
 
 	return append(out, args...)
 }
@@ -451,9 +447,9 @@ func (ctx *GenCtx) javaEmitTest(jm *JavaModule) {
 	closure := ctx.javaManagedPeersClosure(jm)
 	runBf := build(jm.dir, "/run-bf.txt")
 	b := ctx.javaBuilder(jm)
-	w := b.python("build/scripts/writer.py")
+	w := b.python(buildScriptsWriterPy)
 
-	b.script("build/scripts/process_command_files.py")
+	b.script(buildScriptsProcessCommandFilesPy)
 
 	w = append(w, strFile.any(), runBf.any(), strQ.any(), strM.any(), strYaStartCommandFile.any())
 
@@ -462,7 +458,7 @@ func (ctx *GenCtx) javaEmitTest(jm *JavaModule) {
 	}
 
 	b.cmd(append(w, strYaEndCommandFile.any()), 0)
-	b.cmd(append(b.python("build/scripts/make_manifest_from_bf.py"), runBf.any(), jm.target.any()), 0)
+	b.cmd(append(b.python(buildScriptsMakeManifestFromBfPy), runBf.any(), jm.target.any()), 0)
 	b.closure(closure, ctx.javaManagedLen(jm))
 	b.macroOuts(jm)
 	b.setKV(pkJT, pcNone, false)
@@ -526,7 +522,7 @@ func (b *javaNodeBuilder) resourcePath(globals map[string]VFS, name, suffix stri
 		return internStr(suffix).any()
 	}
 
-	b.useResource(name)
+	b.useResource(internStr(name))
 
 	return internV(v.string(), suffix).any()
 }
@@ -546,9 +542,9 @@ func (ctx *GenCtx) javaEmitContrib(jm *JavaModule) {
 	b.outputs = jm.outputs()
 
 	fetch := func(id string, out VFS) {
-		args := b.python("build/scripts/fetch_from_sandbox.py")
+		args := b.python(buildScriptsFetchFromSandboxPy)
 
-		b.script("build/scripts/fetch_from.py")
+		b.script(buildScriptsFetchFromPy)
 
 		args = append(args,
 			strResourceFile.any(), internV("$(RESOURCE_ROOT)/sbr/", id, "/resource").any(),
@@ -572,7 +568,7 @@ func (ctx *GenCtx) javaEmitContrib(jm *JavaModule) {
 	default:
 		mf := build(jm.dir, "/", jm.name, ".jar.__vcs_version__.mf")
 
-		b.cmd(append(b.python("build/scripts/vcs_info.py"), strOutputJava.any(), bldVcsJson.any(), mf.any()), 0)
+		b.cmd(append(b.python(ldVcsInfoVFS), strOutputJava.any(), bldVcsJson.any(), mf.any()), 0)
 		b.cmd([]ANY{b.resourcePath(globals, jdk, "/bin/jar"), strCfvm.any(), jm.target.any(), mf.any(), str4.any()}, bindir)
 		b.setKV(pkFS, pcYellow, false)
 		b.deps = append(b.deps, ctx.vcsRef)
@@ -596,7 +592,7 @@ func (ctx *GenCtx) javaEmitContrib(jm *JavaModule) {
 	}
 
 	if d.sbomComponent {
-		args := append(b.python(sbomGenScriptRel), strOutput.any(), build(jm.dir, "/", jm.name, ".component.sbom").any(),
+		args := append(b.python(source(sbomGenScriptRel)), strOutput.any(), build(jm.dir, "/", jm.name, ".component.sbom").any(),
 			strType.any(), strLibrary.any(), strPath.any(), internStr(jm.dir).any(), strVer.any())
 
 		if d.modver != "" {
@@ -656,7 +652,7 @@ func (ctx *GenCtx) javaEmitExternal(jm *JavaModule) {
 		extJDK = jdk
 	}
 
-	args := b.python("build/scripts/compile_java.py")
+	args := b.python(buildScriptsCompileJavaPy)
 
 	args = append(args,
 		strYaStartCommandFile.any(),
@@ -688,7 +684,7 @@ func (ctx *GenCtx) javaEmitExternal(jm *JavaModule) {
 	b.input(autoInputs...)
 
 	for _, s := range []string{"build/scripts/java_command_file.py", "build/scripts/process_command_files.py", "build/scripts/javac_daemon_client.py", "build/scripts/JavacDaemon.jar", "build/scripts/canonicalize_java_abi_jar.py"} {
-		b.script(s)
+		b.script(source(s))
 	}
 
 	b.setKV(pkJV, pcLightBlue, true)
@@ -777,7 +773,7 @@ func (ctx *GenCtx) javaEmitProtoPB(jm *JavaModule, globals map[string]VFS, scanC
 	out := build(strings.TrimSuffix(protoRel, path.Ext(protoRel)), ".jsrc")
 	b := ctx.javaBuilder(jm)
 	javaOut := strBJavaOut.any()
-	args := b.python("build/scripts/tared_protoc.py")
+	args := b.python(buildScriptsTaredProtocPy)
 
 	args = append(args,
 		strTarOutput.any(), out.any(),

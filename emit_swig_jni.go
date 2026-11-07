@@ -176,7 +176,7 @@ func (ctx *GenCtx) javaEmitSwigJsrc(jm *JavaModule, src string, srcVFS, jsrc VFS
 
 	args := swigJNIHead(javaPython3.any(), swigBin, srcVFS, src)
 
-	b.useResource("YMAKE_PYTHON3")
+	b.useResource(strYMakePython3Name)
 	args = append(args, swigJNIPackageArgs(srcVFS)...)
 	args = append(args, argJsrc.any(), jsrc.any())
 	args = append(args, swigJNIIncludeArgs(scanCtx.swigInclude)...)

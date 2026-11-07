@@ -45,10 +45,10 @@ func (b *javaNodeBuilder) javaSbom(jm *JavaModule, closure javaClosureSeq) {
 		return
 	}
 
-	args := b.python("build/internal/scripts/link_java_sbom.py")
+	args := b.python(buildInternalScriptsLinkJavaSbomPy)
 
-	b.script("build/internal/scripts/link_sbom.py")
-	b.script(sbomGenScriptRel)
+	b.script(linkSbomScriptVFS)
+	b.script(source(sbomGenScriptRel))
 
 	if d.needSbomInfo {
 		peers := []string{"build/platform/java/jdk/jdk" + d.jdkReal}

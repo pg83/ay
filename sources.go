@@ -115,7 +115,15 @@ func resolveSourceANY(ctx *GenCtx, srcInstance ModuleInstance, src ANY, srcDirs 
 }
 
 func resolveSourceID(ctx *GenCtx, srcInstance ModuleInstance, src STR, srcDirs []VFS) ResolvedSource {
-	if strHasDollar(src.any()) || !src.cleanPath() {
+	if strHasDollar(src.any()) {
+		if vfs, ok := rootedPathSTR(srcInstance.Path, src); ok {
+			return ResolvedSource{Path: vfs, Existing: vfs.isSource() && ctx.fs.isFileVFS(vfs), Fixed: true}
+		}
+
+		return resolveSource(ctx, srcInstance, src.string(), srcDirs)
+	}
+
+	if !src.cleanPath() {
 		return resolveSource(ctx, srcInstance, src.string(), srcDirs)
 	}
 

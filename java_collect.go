@@ -311,7 +311,16 @@ func collectJavaStmts(ctx *GenCtx, jm *JavaModule, d *JavaData, stmts []Stmt, en
 			env.setFromSTR(v.NameEnv, valueID)
 			d.setVars.set(v.NameEnv.str(), valueID)
 			jm.instance.Platform.conf.set(env, v.NameEnv, &d.setVars)
-			d.setRawVar(v.Name, d.rawExpand(v.Value))
+
+			raw := d.rawExpand(v.Value)
+
+			var rawID ANY
+
+			if v.Plain != 0 && raw == v.Value {
+				rawID = v.Plain.any()
+			}
+
+			d.setRawVarID(v.NameEnv.str(), v.Name, raw, rawID)
 		case *DefaultVarStmt:
 			value := expandSourceScalarVarRef(v.Value, env)
 			bound := env.hasBindingID(v.NameEnv)
@@ -1201,17 +1210,33 @@ func (d *JavaData) setRawVar(name, value string) {
 		return
 	}
 
-	id := internStr(name)
+	d.bindRawVar(internStr(name), internAny(value))
+}
 
+func (d *JavaData) setRawVarID(id STR, name, value string, valueID ANY) {
+	d.rawVars[name] = value
+
+	if d.rawBindings == nil {
+		return
+	}
+
+	if valueID == 0 {
+		valueID = internAny(value)
+	}
+
+	d.bindRawVar(id, valueID)
+}
+
+func (d *JavaData) bindRawVar(id STR, value ANY) {
 	for i := range d.rawBindings {
 		if d.rawBindings[i].name == id {
-			d.rawBindings[i].values = []ANY{internAny(value)}
+			d.rawBindings[i].values = []ANY{value}
 
 			return
 		}
 	}
 
-	d.rawBindings = slices.Insert(d.rawBindings, len(d.rawBindings)-len(javaConfGlobals), confMacroBinding{name: id, values: []ANY{internAny(value)}, bound: true})
+	d.rawBindings = slices.Insert(d.rawBindings, len(d.rawBindings)-len(javaConfGlobals), confMacroBinding{name: id, values: []ANY{value}, bound: true})
 }
 
 func (d *JavaData) javaRawArgs(raw []string) []string {

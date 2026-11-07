@@ -13,6 +13,7 @@ type GeneratedFileInfo struct {
 	attributes      *GeneratedFileAttributes
 	rare            *GeneratedFileRare
 	id              uint32
+	dir             STR
 	GeneratorRefs   []NodeRef
 	OutputPath      VFS
 	SourcePath      VFS
@@ -264,8 +265,32 @@ func newCodegenRegistry(na *NodeArenas) *CodegenRegistry {
 	}
 }
 
-func splitBucketOf(rel string) uint32 {
-	return uint32(xxh3.HashString(rel[strings.LastIndexByte(rel, '/')+1:])) & (1<<splitBucketBits - 1)
+type splitKey struct {
+	base, parent uint64
+	hasParent    bool
+}
+
+func splitKeyOf(suffix string) splitKey {
+	slash := strings.LastIndexByte(suffix, '/')
+	key := splitKey{base: xxh3.HashString(suffix[slash+1:])}
+
+	if slash >= 0 {
+		key.parent, key.hasParent = xxh3.HashString(suffix[strings.LastIndexByte(suffix[:slash], '/')+1:slash]), true
+	}
+
+	return key
+}
+
+func (k splitKey) bucket(prefix VFS) uint32 {
+	parent := k.parent
+
+	if !k.hasParent {
+		dir := prefix.relString()
+
+		parent = xxh3.HashString(dir[strings.LastIndexByte(dir, '/')+1:])
+	}
+
+	return uint32(mix64(k.base^(parent<<29|parent>>35))) & (1<<splitBucketBits - 1)
 }
 
 func (r *CodegenRegistry) putRel(info *GeneratedFileInfo) {
@@ -275,7 +300,7 @@ func (r *CodegenRegistry) putRel(info *GeneratedFileInfo) {
 
 func (r *CodegenRegistry) splitChanged(output VFS) {
 	r.splitGeneration++
-	r.splitGens[splitBucketOf(output.relString())]++
+	r.splitGens[splitKeyOf(output.relString()).bucket(bldRootDirVFS)]++
 }
 
 func (r *CodegenRegistry) use(path VFS) *GeneratedFileInfo {
@@ -561,7 +586,7 @@ func (r *CodegenRegistry) lookupSTR(id STR) *GeneratedFileInfo {
 }
 
 func (r *CodegenRegistry) lookupSplit(prefix VFS, suffixID STR) *GeneratedFileInfo {
-	info := r.lookupSplitAny(prefix, suffixID, splitBucketOf(suffixID.string()))
+	info := r.lookupSplitAny(prefix, suffixID, splitKeyOf(suffixID.string()))
 
 	if info != nil && info.InputsOnly {
 		return nil
@@ -584,8 +609,8 @@ func (r *CodegenRegistry) lookupIncludeSTR(id STR) *GeneratedFileInfo {
 	return info
 }
 
-func (r *CodegenRegistry) lookupIncludeSplit(prefix VFS, suffixID STR, bucket uint32) *GeneratedFileInfo {
-	info := r.lookupSplitAny(prefix, suffixID, bucket)
+func (r *CodegenRegistry) lookupIncludeSplit(prefix VFS, suffixID STR, key splitKey) *GeneratedFileInfo {
+	info := r.lookupSplitAny(prefix, suffixID, key)
 
 	if info != nil && !info.includable() {
 		return nil
@@ -611,11 +636,11 @@ func (r *CodegenRegistry) moduleOutputIncludes(path VFS) ([]IncludeDirective, bo
 	return set[parsedIncludesLocal], true
 }
 
-func (r *CodegenRegistry) lookupSplitAny(prefix VFS, suffixID STR, bucket uint32) *GeneratedFileInfo {
+func (r *CodegenRegistry) lookupSplitAny(prefix VFS, suffixID STR, split splitKey) *GeneratedFileInfo {
 	generation := r.splitGeneration
 
 	if suffixID.cleanPath() {
-		if generation = r.splitGens[bucket]; generation == 0 {
+		if generation = r.splitGens[split.bucket(prefix)]; generation == 0 {
 			return nil
 		}
 	}

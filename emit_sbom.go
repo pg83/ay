@@ -10,14 +10,10 @@ var (
 )
 
 const (
-	sbomGenScriptRel        = "build/internal/scripts/gen_sbom.py"
-	sbomConfRel             = "build/internal/conf/sbom.conf"
-	clangToolchainInfoRel   = "build/internal/platform/clang_toolchain_info"
-	pythonToolchainInfoRel  = "build/platform/python/ymake_python3"
-	moduleLangTokenCpp      = "CPP"
-	moduleLangTokenPy2      = "PY2"
-	moduleLangTokenPy3      = "PY3"
-	moduleLangTokenAgnostic = "AGNOSTIC"
+	sbomGenScriptRel       = "build/internal/scripts/gen_sbom.py"
+	sbomConfRel            = "build/internal/conf/sbom.conf"
+	clangToolchainInfoRel  = "build/internal/platform/clang_toolchain_info"
+	pythonToolchainInfoRel = "build/platform/python/ymake_python3"
 )
 
 func clangToolchainSbomComponent(ctx *GenCtx, platform *Platform) (*NodeRef, *VFS) {
@@ -55,12 +51,12 @@ func sbomQualifies(d *ModuleData) bool {
 	return d.hasLicense
 }
 
-func sbomComponentLang(moduleName TOK) string {
+func sbomComponentLang(moduleName TOK) STR {
 	switch {
 	case isRustModule(moduleName):
-		return "RUST"
+		return strRust
 	case isGoModuleType(moduleName):
-		return "GO"
+		return strGo
 	case moduleName == tokPrebuiltProgram:
 		return moduleLangTokenAgnostic
 	case moduleName == tokPy23NativeLibrary:
@@ -118,7 +114,7 @@ func (e *EmitContext) emitSbomComponent(realPrjName string) (*NodeRef, *VFS) {
 	}
 
 	modver := sbomModuleVersion(Environment{s: &e.frame.ifEnv})
-	out := build(moddir, "/", realPrjName, ".", lang, ".component.sbom")
+	out := build(moddir, "/", realPrjName, ".", lang.string(), ".component.sbom")
 
 	if info := e.registeredSbomComponent(out); info != nil {
 		return &info.ProducerRef, &info.OutputPath
@@ -133,9 +129,9 @@ func (e *EmitContext) emitSbomComponent(realPrjName string) (*NodeRef, *VFS) {
 			scriptVFS.any(),
 			strOutput.any(), out.any(),
 			strType.any(), strLibrary.any(),
-			strPath.any(), internStr(moddir).any(),
+			strPath.any(), instance.Path.rel().any(),
 			strVer.any()), na.anyList(sbomVersionArg(modver)...), na.anyList(
-			strLang.any(), internStr(lang).any())), Env: env}),
+			strLang.any(), lang.any())), Env: env}),
 		Env: env, Inputs: na.inputList(na.vfsList(scriptVFS)), KV: &sbomKV,
 		Outputs:   na.vfsList(out),
 		Resources: usesPython3},

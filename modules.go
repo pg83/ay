@@ -21,6 +21,7 @@ var (
 	listPreSufScratch   []byte
 	trackedSubstBufs    [2][2][]byte
 	valueWordsMemo      = map[STR][]ANY{}
+	rootedPaths         = newIntMap[VFS](1 << 10)
 )
 
 var dontExpandVarNames = func() (names [len(dontExpandVars)]string) {
@@ -32,18 +33,19 @@ var dontExpandVarNames = func() (names [len(dontExpandVars)]string) {
 }()
 
 const (
-	event2cppPluginName = "event2cpp"
-	event2cppToolPath   = "tools/event2cpp"
-	stmtPrioDefault     = 2
-	stmtPrioSrcs        = 4
-	prioAddIncl         = 0
-	prioRuleAddIncl     = 2
-	prioOutputAddIncl   = 3
-	yaffPluginPath      = "library/cpp/yaff/tools/protoc_plugin"
-	yabsConfRel         = "build/internal/conf/project_specific/yabs.conf"
-	declSeqBlock        = 1 << 24
-	declSeqModuleEnd    = 1 << 40
-	declSeqText         = declSeqModuleEnd - 1
+	event2cppPluginName     = "event2cpp"
+	event2cppToolPath       = "tools/event2cpp"
+	stmtPrioDefault         = 2
+	stmtPrioSrcs            = 4
+	prioAddIncl             = 0
+	prioRuleAddIncl         = 2
+	prioOutputAddIncl       = 3
+	yaffPluginPath          = "library/cpp/yaff/tools/protoc_plugin"
+	yabsConfRel             = "build/internal/conf/project_specific/yabs.conf"
+	declSeqBlock            = 1 << 24
+	declSeqModuleEnd        = 1 << 40
+	declSeqText             = declSeqModuleEnd - 1
+	notRootedPath       VFS = 1<<32 - 1
 )
 
 const (
@@ -669,7 +671,31 @@ func moduleRootedANY(module VFS, a ANY) (VFS, bool) {
 		return 0, false
 	}
 
-	return moduleRootedVFS(module.relString(), a.string())
+	return rootedPathSTR(module, a.str())
+}
+
+func rootedPathSTR(module VFS, path STR) (VFS, bool) {
+	if v := rootedPaths.get(uint64(path)); v != nil {
+		return *v, *v != notRootedPath
+	}
+
+	text := path.string()
+
+	if strings.HasPrefix(text, "${CURDIR}") || strings.HasPrefix(text, "${BINDIR}") {
+		return moduleRootedVFS(module.relString(), text)
+	}
+
+	v, ok := moduleRootedVFS("", text)
+
+	if !ok {
+		rootedPaths.put(uint64(path), notRootedPath)
+
+		return 0, false
+	}
+
+	rootedPaths.put(uint64(path), v)
+
+	return v, true
 }
 
 func moduleRootedVFS(modulePath string, path string) (VFS, bool) {
@@ -693,6 +719,10 @@ func moduleRootedVFS(modulePath string, path string) (VFS, bool) {
 
 func copyFileOutputVFS(modulePath string, dst string) VFS {
 	if vfs, ok := moduleRootedVFS(modulePath, dst); ok {
+		if rel := vfs.rel(); rel.cleanPath() {
+			return rel.build()
+		}
+
 		return buildClean(vfs.relString())
 	}
 
@@ -2095,8 +2125,8 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 				env.setString(envREALPRJNAME, moduleRealPrjName(modulePath, v, d.unit))
 			}
 
-			if moduleType := confModuleType(v.Name, d); moduleType != "" {
-				env.setString(envMODULE_TYPE, moduleType)
+			if moduleType := confModuleType(v.Name, d); moduleType != 0 {
+				env.setStringID(envMODULE_TYPE, moduleType)
 			}
 
 			if (v.Name == tokUnittestFor || v.Name == tokJtestFor) && len(v.Args) > 0 {
@@ -2253,7 +2283,7 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 			}
 
 			if v.Name == tokProtoLibrary {
-				env.setString(envMODULE_TAG, protoModuleTag(language, v.Schema))
+				env.setStringID(envMODULE_TAG, protoModuleTag(language, v.Schema))
 			}
 
 			moduleLang := sbomComponentLang(d.moduleStmt.Name)
@@ -2263,7 +2293,7 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 			}
 
 			if d.moduleStmt.Name == tokProtoLibrary && language == LangDescProto {
-				moduleLang = ""
+				moduleLang = strEmpty
 			}
 
 			if d.usePython2 {
@@ -2275,7 +2305,7 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 			}
 
 			if moduleAssignsLang(d.moduleStmt.Name) {
-				env.setString(envMODULE_LANG, moduleLang)
+				env.setStringID(envMODULE_LANG, moduleLang)
 			}
 
 		case *SrcsStmt:
@@ -4667,21 +4697,21 @@ func moduleAssignsLang(name TOK) bool {
 	return !isUnionModule(name)
 }
 
-func pythonSourceModuleType(name TOK) string {
+func pythonSourceModuleType(name TOK) STR {
 	if name == tokGoDll || isDllModuleType(name) {
-		return "DLL"
+		return kwDLL
 	}
 
 	if isProgramModuleType(name) || name == tokSoProgram {
-		return "PROGRAM"
+		return kwPROGRAM
 	}
 
-	return ""
+	return 0
 }
 
-func confModuleType(name TOK, d *ModuleData) string {
+func confModuleType(name TOK, d *ModuleData) STR {
 	if name == tokGoLibrary || d.nots != nil {
-		return "LIBRARY"
+		return kwLIBRARY
 	}
 
 	return pythonSourceModuleType(d.unit.Type)
@@ -4886,6 +4916,12 @@ func collectPySrcGroup(fs FS, modulePath string, v UnknownStmt, d *ModuleData, e
 
 		src, modNameOverride, explicitModule := strings.Cut(a.string(), "=")
 
+		var srcID STR
+
+		if !explicitModule && a.vfs() == 0 && !vfsHasPrefix(src) {
+			srcID = a.str()
+		}
+
 		if extIsGztproto(src) {
 			if d.moduleStmt.Name != tokProtoLibrary {
 				continue
@@ -4893,6 +4929,7 @@ func collectPySrcGroup(fs FS, modulePath string, v UnknownStmt, d *ModuleData, e
 
 			if !explicitModule {
 				src = strings.TrimSuffix(src, ".gztproto") + ".proto"
+				srcID = 0
 
 				if env.is(envOptimizePyProtosFlag, strYes) {
 					d.peerdirs = append(d.peerdirs, strKernelGazetteerProto.any())
@@ -5033,8 +5070,14 @@ func collectPySrcGroup(fs FS, modulePath string, v UnknownStmt, d *ModuleData, e
 			throwFmt("TOP_LEVEL __main__.py is not allowed in PY3_PROGRAM")
 		}
 
-		d.pySrcs = append(d.pySrcs, internStr(src).any())
-		d.pyGroupSrcs = append(d.pyGroupSrcs, DeclaredSource{Token: internAny(src)})
+		if srcID == 0 {
+			d.pySrcs = append(d.pySrcs, internStr(src).any())
+			d.pyGroupSrcs = append(d.pyGroupSrcs, DeclaredSource{Token: internAny(src)})
+		} else {
+			d.pySrcs = append(d.pySrcs, srcID.any())
+			d.pyGroupSrcs = append(d.pyGroupSrcs, DeclaredSource{Token: srcID.any()})
+		}
+
 		d.pyGroupScopes = append(d.pyGroupScopes, scope)
 	}
 

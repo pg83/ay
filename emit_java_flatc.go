@@ -55,7 +55,7 @@ func (ctx *GenCtx) javaRegisterFbsSources(jm *JavaModule) {
 				}
 			}
 
-			tar := b.python("build/scripts/tar_sources.py")
+			tar := b.python(buildScriptsTarSourcesPy)
 
 			tar = append(tar, strInput.any(), build(jm.dir).any(), strOutput.any(), out.any(), strExts.any(), strJava3.any())
 			b.cmd(tar, 0)

@@ -483,7 +483,15 @@ func (sc *ScanCtx) parserConfig() *ScanConfig {
 	}
 }
 
-func (s *IncludeScanner) includerDir(vfsPath VFS) VFS {
+func (s *IncludeScanner) includerDir(vfsPath VFS, info *GeneratedFileInfo) VFS {
+	if info != nil {
+		if info.dir == 0 {
+			info.dir = internStr(pathDir(vfsPath.relString()))
+		}
+
+		return info.dir.source()
+	}
+
 	if vfsPath.isSource() {
 		if cached, ok := s.parsers.cache.parsed.get(vfsPath.rel()); ok && cached.dir != 0 {
 			return cached.dir.source()
@@ -558,7 +566,7 @@ func (sc *ScanCtx) appendResolvedChildren(out []VFS, vfsPath VFS, previous Scann
 		return out
 	}
 
-	incDir := s.includerDir(vfsPath)
+	incDir := s.includerDir(vfsPath, info)
 
 	if previous.Deferred && previous.Diagnostics != nil {
 		for _, diagnostic := range previous.Diagnostics.Entries {
@@ -1194,7 +1202,7 @@ func (sc *ScanCtx) resolveContextSearchTier(targetID STR) VFS {
 	}
 
 	buildSuffix := targetID
-	buildBucket := splitBucketOf(normTarget)
+	buildKey := splitKeyOf(normTarget)
 
 	if !cleanTarget {
 		buildSuffix = interned(normTarget)
@@ -1210,7 +1218,7 @@ func (sc *ScanCtx) resolveContextSearchTier(targetID STR) VFS {
 		if prefix == bldRootDirVFS {
 			info = s.codegen.lookupIncludeSTR(buildSuffix)
 		} else {
-			info = s.codegen.lookupIncludeSplit(prefix.rel().source(), buildSuffix, buildBucket)
+			info = s.codegen.lookupIncludeSplit(prefix.rel().source(), buildSuffix, buildKey)
 		}
 
 		if info == nil {
@@ -1277,7 +1285,7 @@ func (sc *ScanCtx) resolveContextSearchTier(targetID STR) VFS {
 						continue
 					}
 
-					info := s.codegen.lookupIncludeSplit(b.prefixSrc, buildSuffix, buildBucket)
+					info := s.codegen.lookupIncludeSplit(b.prefixSrc, buildSuffix, buildKey)
 
 					if info == nil {
 						continue
@@ -1362,7 +1370,7 @@ func (sc *ScanCtx) resolveSearchPath(out []VFS, includerAbs, incDir VFS, d Inclu
 			out = append(out, sv.source())
 			searchPathFound = true
 		} else if includerAbs.isBuild() {
-			if info := s.codegen.lookupIncludeSplit(incDir, targetID, splitBucketOf(targetID.string())); info != nil {
+			if info := s.codegen.lookupIncludeSplit(incDir, targetID, splitKeyOf(targetID.string())); info != nil {
 				if !outHas(info.OutputPath) {
 					out = append(out, info.OutputPath)
 					searchPathFound = true

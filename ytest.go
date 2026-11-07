@@ -745,7 +745,7 @@ func (ctx *GenCtx) testAccumulator(s *TestSuite, chunks []*Node, refs []NodeRef,
 		outs = append(outs, intern(out))
 	}
 
-	slices.SortFunc(inputs, vfsCompare)
+	sortVFSByText(inputs)
 
 	return &Node{
 		Platform: testNoPlatform,
@@ -918,7 +918,7 @@ func (ctx *GenCtx) testNode(s *TestSuite, chunk TestChunk) *Node {
 		}
 	}
 
-	slices.SortFunc(inputs, vfsCompare)
+	sortVFSByText(inputs)
 	ctx.testInputs = inputs[:0]
 
 	if s.kvPath == "" {
@@ -1323,7 +1323,7 @@ func (ctx *GenCtx) testMerger(s *TestSuite, nodes []*Node, refs []NodeRef) *Node
 		outs = append(outs, intern(out))
 	}
 
-	slices.SortFunc(inputs, vfsCompare)
+	sortVFSByText(inputs)
 
 	return &Node{Platform: testNoPlatform, Env: sortedEnvVars(o.commonEnvMap()), Cmds: na.cmdList(Cmd{CmdArgs: na.chunkList(testArgs(strs)), Cwd: bld.cwd()}), Inputs: na.inputList(na.vfsList(slices.Compact(inputs)...)), Outputs: na.vfsList(outs...), DepRefs: na.refList(dedupRefs(refs)...), KV: &KV{P: pkTR, PC: pcLightCyan, ShowOutBool: true}}
 }

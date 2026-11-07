@@ -108,7 +108,7 @@ func (ctx *GenCtx) selectDependencyInstances(dir string) []ModuleInstance {
 			{LangDescProto, true},
 			{LangProtoDescriptions, true},
 		} {
-			excluded, specified := d.excludeTags[internStr(protoModuleTag(unit.language, true))]
+			excluded, specified := d.excludeTags[protoModuleTag(unit.language, true)]
 
 			if excluded || d.onlyTags && !specified || !unit.included && !specified {
 				continue

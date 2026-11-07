@@ -134,7 +134,7 @@ func (ctx *GenCtx) javaEmitJar(jm *JavaModule) {
 
 	b.outputs = []VFS{jm.target}
 
-	prep := b.python("build/scripts/prepare_jar_build.py")
+	prep := b.python(buildScriptsPrepareJarBuildPy)
 
 	if d.sourcesJar {
 		prep = append(prep, strWithSourcesJar.any())
@@ -232,7 +232,7 @@ func (ctx *GenCtx) javaEmitJar(jm *JavaModule) {
 	prep = append(prep, strYaEndCommandFile.any())
 
 	for _, s := range []string{"build/scripts/process_command_files.py", "build/scripts/java_pack_to_file.py", "build/scripts/autotar_gendirs.py", "build/scripts/resolve_java_srcs.py"} {
-		b.script(s)
+		b.script(source(s))
 	}
 
 	b.cmd(prep, bindir)
@@ -246,9 +246,9 @@ func (ctx *GenCtx) javaEmitJar(jm *JavaModule) {
 	if d.withKotlin {
 		ktBfg := build(jm.dir, "/kt_bfg.txt")
 		ktCp := build(jm.dir, "/kt_cp.txt")
-		w := b.python("build/scripts/writer.py")
+		w := b.python(buildScriptsWriterPy)
 
-		b.script("build/scripts/process_command_files.py")
+		b.script(buildScriptsProcessCommandFilesPy)
 
 		w = append(w, strFile.any(), ktBfg.any(), strM.any(), strYaStartCommandFile.any())
 
@@ -260,14 +260,14 @@ func (ctx *GenCtx) javaEmitJar(jm *JavaModule) {
 
 		w = append(w, strYaEndCommandFile.any())
 		b.cmd(w, 0)
-		b.cmd(append(b.python("build/scripts/make_java_classpath_file.py"), ktBfg.any(), ktCp.any()), 0)
-		b.script("build/scripts/process_command_files.py")
+		b.cmd(append(b.python(buildScriptsMakeJavaClasspathFilePy), ktBfg.any(), ktCp.any()), 0)
+		b.script(buildScriptsProcessCommandFilesPy)
 		b.cmd(b.fsTools(strMd.any(), ktCls.any()), 0)
 
-		kt := b.python("build/scripts/run_javac.py")
+		kt := b.python(buildScriptsRunJavacPy)
 
 		for _, s := range []string{"build/scripts/build_java_with_error_prone2.py", "build/scripts/setup_java_tmpdir.py", "build/scripts/javac_daemon_client.py", "build/scripts/JavacDaemon.jar"} {
-			b.script(s)
+			b.script(source(s))
 		}
 
 		kt = append(kt, strKotlin.any(), strSourcesList.any(), ktSrclist.any(), b.resourcePath(globals, jdk, "/bin/java"))
@@ -295,14 +295,14 @@ func (ctx *GenCtx) javaEmitJar(jm *JavaModule) {
 
 		allKt := build(jm.dir, "/all-kt-sources.txt")
 
-		b.cmd(append(b.python("build/scripts/kt_copy.py"), ktSrclist.any(), allKt.any(), strS.any(), strB.any()), 0)
+		b.cmd(append(b.python(buildScriptsKtCopyPy), ktSrclist.any(), allKt.any(), strS.any(), strB.any()), 0)
 		b.outputs = append(b.outputs, allKt)
 	}
 
 	bfg := build(jm.dir, "/bfg.txt")
-	w := b.python("build/scripts/writer.py")
+	w := b.python(buildScriptsWriterPy)
 
-	b.script("build/scripts/process_command_files.py")
+	b.script(buildScriptsProcessCommandFilesPy)
 
 	w = append(slices.Grow(w, 6+ctx.javaManagedLen(jm)), strFile.any(), bfg.any(), strM.any(), strYaStartCommandFile.any())
 
@@ -317,12 +317,12 @@ func (ctx *GenCtx) javaEmitJar(jm *JavaModule) {
 	w = append(w, strYaEndCommandFile.any())
 	b.cmd(w, 0)
 	b.javaSbom(jm, closure)
-	b.cmd(append(b.python("build/scripts/make_manifest_from_bf.py"), bfg.any(), bldBfgJar.any()), 0)
+	b.cmd(append(b.python(buildScriptsMakeManifestFromBfPy), bfg.any(), bldBfgJar.any()), 0)
 
-	javac := b.python("build/scripts/run_javac.py")
+	javac := b.python(buildScriptsRunJavacPy)
 
 	for _, s := range []string{"build/scripts/build_java_with_error_prone2.py", "build/scripts/setup_java_tmpdir.py", "build/scripts/javac_daemon_client.py", "build/scripts/JavacDaemon.jar"} {
-		b.script(s)
+		b.script(source(s))
 	}
 
 	javac = append(javac, strWithSetupJavaTmpdir.any(), strSourcesList.any(), srclst.any())
@@ -347,10 +347,10 @@ func (ctx *GenCtx) javaEmitJar(jm *JavaModule) {
 		abiDir := build(jm.dir, "/abi")
 
 		b.cmd(b.fsTools(strMd.any(), abiDir.any()), 0)
-		b.cmd(append(b.python("build/conf/copy_kotlin_inline_sam_classes.py"), ktCls.any(), abiDir.any()), 0)
+		b.cmd(append(b.python(buildConfCopyKotlinInlineSamClassesPy), ktCls.any(), abiDir.any()), 0)
 		b.cmd(b.fsTools(strLinkOrCopyAllFiles.any(), cls.any(), abiDir.any()), 0)
 		b.cmd([]ANY{b.resourcePath(globals, jdk, "/bin/jar"), strCfm.any(), strippedJar.any(), str4.any()}, abiDir, lcAll)
-		b.cmd(append(b.python("build/scripts/canonicalize_java_abi_jar.py"), strippedJar.any()), 0)
+		b.cmd(append(b.python(buildScriptsCanonicalizeJavaAbiJarPy), strippedJar.any()), 0)
 		b.outputs = append(b.outputs, strippedJar)
 	}
 
@@ -362,7 +362,7 @@ func (ctx *GenCtx) javaEmitJar(jm *JavaModule) {
 		b.cmd(b.fsTools(strCopyFiles.any(), g.absDir.any(), javaClassesDir(cls, g.spec.packagePrefix).any(), g.resTxt.any()), 0)
 	}
 
-	b.cmd(append(b.python("build/scripts/vcs_info.py"), strOutputJava.any(), bldVcsJson.any(), mf.any(), str4.any()), cls)
+	b.cmd(append(b.python(ldVcsInfoVFS), strOutputJava.any(), bldVcsJson.any(), mf.any(), str4.any()), cls)
 	b.deps = append(b.deps, ctx.vcsRef)
 
 	if d.sourcesJar {
@@ -394,9 +394,9 @@ func (ctx *GenCtx) javaEmitJar(jm *JavaModule) {
 
 	if d.lintLevel != "none" {
 		lint := build(jm.dir, "/lint-java.srclst")
-		w := b.python("build/scripts/writer.py")
+		w := b.python(buildScriptsWriterPy)
 
-		b.script("build/scripts/process_command_files.py")
+		b.script(buildScriptsProcessCommandFilesPy)
 
 		w = append(w, strFile.any(), lint.any(), strM.any(), strYaStartCommandFile.any())
 
@@ -491,7 +491,7 @@ func (ctx *GenCtx) javaEmitIJar(jm *JavaModule) {
 	args = append(args, strTargetLabel.any(), internV("//", jm.dir, ":", jm.name).any(), strInjectingRuleKind.any(), strArcadiaIjar.any(), input.any(), jm.target.any())
 
 	b.cmd(args, 0)
-	b.cmd(append(b.python("build/scripts/canonicalize_java_abi_jar.py"), strIjar.any(), jm.target.any()), 0)
+	b.cmd(append(b.python(buildScriptsCanonicalizeJavaAbiJarPy), strIjar.any(), jm.target.any()), 0)
 	b.input(ijar, full.target)
 	b.setKV(pkIJ, pcLightBlue, false)
 	b.exts = []KVExt{{Key: "exclude_from_idea", Val: "yes"}}
@@ -506,7 +506,7 @@ func (ctx *GenCtx) javaKaptCmds(jm *JavaModule, b *javaNodeBuilder, compileKt []
 	d := jm.data
 	bindir := jm.path.rel().build().string()
 	ap := ctx.javaToolJar(jm, b, "contrib/java/org/jetbrains/kotlin/kotlin-annotation-processing/"+javaKotlinVersion)
-	args := b.python("build/scripts/with_kapt_args.py")
+	args := b.python(buildScriptsWithKaptArgsPy)
 
 	args = append(args, strApClasspath.any())
 
@@ -535,7 +535,7 @@ func (ctx *GenCtx) javaKaptCmds(jm *JavaModule, b *javaNodeBuilder, compileKt []
 
 	b.cmd(args, bldRootDirVFS, EnvVar{Name: envLcAll, Value: strEnUsUtf8.any()})
 
-	res := b.python("build/scripts/resolve_java_srcs.py")
+	res := b.python(buildScriptsResolveJavaSrcsPy)
 
 	res = append(res, strD.any(), internV(bindir, "/kapt_gen_src").any(), strIncludePatterns.any(),
 		strJava2.any(), strKt.any(), strResolveKotlin.any(), strAppend.any(),
@@ -581,9 +581,9 @@ func (ctx *GenCtx) javaLinkUberjar(jm *JavaModule, b *javaNodeBuilder, globals m
 
 	mf := build(jm.dir, "/", jm.name, ".jar.__vcs_version__.mf")
 
-	b.cmd(append(b.python("build/scripts/mkdir.py"), internV(bindir, "/_empty/META-INF").any()), 0)
-	b.cmd(append(b.python("build/scripts/touch.py"), internV(bindir, "/_empty/META-INF/MANIFEST.MF").any()), 0)
-	b.cmd(append(b.python("build/scripts/vcs_info.py"), strOutputJava.any(), bldVcsJson.any(), mf.any(), jm.target.any()), 0)
+	b.cmd(append(b.python(buildScriptsMkdirPy), internV(bindir, "/_empty/META-INF").any()), 0)
+	b.cmd(append(b.python(buildScriptsTouchPy), internV(bindir, "/_empty/META-INF/MANIFEST.MF").any()), 0)
+	b.cmd(append(b.python(ldVcsInfoVFS), strOutputJava.any(), bldVcsJson.any(), mf.any(), jm.target.any()), 0)
 	b.cmd([]ANY{b.resourcePath(globals, jdk, "/bin/jar"), strUfv.any(), jm.target.any(), strMetaInfManifestMf.any()}, build(jm.dir, "/_empty"))
 	b.cmd([]ANY{b.resourcePath(globals, jdk, "/bin/jar"), strUfvm.any(), jm.target.any(), mf.any()}, 0)
 }

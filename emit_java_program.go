@@ -164,7 +164,7 @@ func (b *javaNodeBuilder) javaScriptgenScripts(jm *JavaModule, globals map[strin
 	if d.withJDK {
 		jdkTar := build(jm.dir, "/jdk.tar")
 		withJDK := b.resourcePath(globals, "WITH_JDK"+d.jdkReal, "")
-		args := b.python("build/scripts/tar_directory.py")
+		args := b.python(buildScriptsTarDirectoryPy)
 
 		args = append(args, strTarByPy.any(), strExclude.any(), strResourceInfoJson.any(),
 			strExclude.any(), strInstalled.any(), strExclude.any(), strLnk.any(),
@@ -210,9 +210,9 @@ func (ctx *GenCtx) javaEmitRunnable(jm *JavaModule) {
 
 	if d.uberjar {
 		self := build(jm.dir, "/", jm.name, ".jar")
-		mk := b.python("build/scripts/make_java_classpath_file.py")
+		mk := b.python(buildScriptsMakeJavaClasspathFilePy)
 
-		b.script("build/scripts/process_command_files.py")
+		b.script(buildScriptsProcessCommandFilesPy)
 		b.cmd(append(mk, strFromArgs.any(), cplst.any(), jm.target.any()), 0)
 		b.cmd(b.fsTools(strMd.any(), cpDir.any()), 0)
 		b.cmd(b.fsTools(strLinkOrCopy.any(), self.any(), jm.target.any()), 0)
@@ -225,7 +225,7 @@ func (ctx *GenCtx) javaEmitRunnable(jm *JavaModule) {
 			b.deps = append(b.deps, ref)
 		}
 
-		b.cmd(append(b.python("build/scripts/find_and_tar.py"), tarball.any()), cpDir)
+		b.cmd(append(b.python(buildScriptsFindAndTarPy), tarball.any()), cpDir)
 		b.javaScriptgenScripts(jm, globals, closure, jdk)
 		b.outputs = append(b.outputs, lateOuts...)
 		b.setKV(pkUJ, pcNone, false)
@@ -258,9 +258,9 @@ func (ctx *GenCtx) javaEmitRunnable(jm *JavaModule) {
 	}
 
 	runBf := build(jm.dir, "/run-bf.txt")
-	w := b.python("build/scripts/writer.py")
+	w := b.python(buildScriptsWriterPy)
 
-	b.script("build/scripts/process_command_files.py")
+	b.script(buildScriptsProcessCommandFilesPy)
 
 	w = append(w, strFile.any(), runBf.any(), strQ.any(), strM.any(), strYaStartCommandFile.any())
 
@@ -269,11 +269,11 @@ func (ctx *GenCtx) javaEmitRunnable(jm *JavaModule) {
 	}
 
 	b.cmd(append(w, strYaEndCommandFile.any()), 0)
-	b.cmd(append(b.python("build/scripts/make_manifest_from_bf.py"), runBf.any(), jm.target.any()), 0)
+	b.cmd(append(b.python(buildScriptsMakeManifestFromBfPy), runBf.any(), jm.target.any()), 0)
 
-	mk := b.python("build/scripts/make_java_classpath_file.py")
+	mk := b.python(buildScriptsMakeJavaClasspathFilePy)
 
-	b.script("build/scripts/process_command_files.py")
+	b.script(buildScriptsProcessCommandFilesPy)
 
 	mk = append(mk, strFromArgs.any(), cplst.any(), strYaStartCommandFile.any())
 
@@ -282,7 +282,7 @@ func (ctx *GenCtx) javaEmitRunnable(jm *JavaModule) {
 	}
 
 	b.cmd(append(mk, strYaEndCommandFile.any()), 0)
-	b.cmd(append(b.python("build/scripts/find_and_tar.py"), tarball.any()), cpDir)
+	b.cmd(append(b.python(buildScriptsFindAndTarPy), tarball.any()), cpDir)
 	b.javaScriptgenScripts(jm, globals, closure, jdk)
 	b.outputs = append(b.outputs, lateOuts...)
 	b.closure(closure, ctx.javaManagedLen(jm))
@@ -487,7 +487,7 @@ func (ctx *GenCtx) emitJavaRunProgram(dir string, platform *Platform, jdk string
 	b := &javaNodeBuilder{ctx: ctx, p: platform, inputContext: e}
 	bindir := build(dir)
 	outDir := r.outDir
-	mkdir := b.python("build/scripts/mkdir.py")
+	mkdir := b.python(buildScriptsMkdirPy)
 
 	if outDir != "" {
 		mkdir = append(mkdir, internStr(outDir).any())
@@ -495,10 +495,10 @@ func (ctx *GenCtx) emitJavaRunProgram(dir string, platform *Platform, jdk string
 
 	b.cmd(mkdir, bindir)
 
-	run := b.python("build/scripts/setup_java_tmpdir.py")
+	run := b.python(buildScriptsSetupJavaTmpdirPy)
 
-	run = append(run, b.python("build/scripts/stdout2stderr.py")...)
-	run = append(run, b.python("build/scripts/fix_java_command_file_cp.py")...)
+	run = append(run, b.python(stdout2stderrVFS)...)
+	run = append(run, b.python(buildScriptsFixJavaCommandFileCpPy)...)
 
 	run = append(run, strBuildRoot2.any(), strB.any(), b.resourcePath(globals, javaJDKResource(jdk), "/bin/java"),
 		strDfileEncodingUtf8.any(), strClasspath.any())
@@ -564,7 +564,7 @@ func (ctx *GenCtx) emitJavaRunProgram(dir string, platform *Platform, jdk string
 
 	b.cmdIn(run, cwd)
 
-	tar := b.python("build/scripts/autotar_gendirs.py")
+	tar := b.python(buildScriptsAutotarGendirsPy)
 
 	tar = append(tar, strPack.any())
 

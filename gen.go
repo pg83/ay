@@ -667,7 +667,12 @@ func (ctx *GenCtx) scanModuleConfiguration(instance ModuleInstance) (*ModuleStmt
 				v = d.moduleContentDeclaration(v)
 				module = v
 
-				instance = ctx.rootInstanceForDeclaration(dir, demandNone, v)
+				if rel := instance.Path.rel(); rel.cleanPath() {
+					instance = ctx.rootInstanceForDeclarationVFS(rel.source(), demandNone, v)
+				} else {
+					instance = ctx.rootInstanceForDeclaration(dir, demandNone, v)
+				}
+
 				instance.Platform = platform
 
 				if d.readModuleContentOnly {
@@ -901,7 +906,7 @@ func mergeCheckSuite(suites []*TestSuite, s *TestSuite) bool {
 			prev.deps = append(prev.deps, s.deps...)
 			prev.relatedPaths = sortedUniqueByText(append(prev.relatedPaths, s.relatedPaths...))
 
-			slices.SortFunc(prev.checkFiles, vfsCompare)
+			sortVFSByText(prev.checkFiles)
 
 			prev.checkFiles = slices.Compact(prev.checkFiles)
 
@@ -1587,7 +1592,7 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 
 	if d.nots != nil {
 		if d.moduleStmt.Name == tokProtoLibrary {
-			_, included := d.excludeTags[internStr(protoModuleTag(instance.Language, d.moduleStmt.Schema))]
+			_, included := d.excludeTags[protoModuleTag(instance.Language, d.moduleStmt.Schema)]
 
 			if !included {
 				result := &ModuleEmitResult{ModuleStmtName: d.moduleStmt.Name}
