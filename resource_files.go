@@ -17,6 +17,10 @@ const (
 	yaToolchainSuffix  = ".toolchain.json"
 )
 
+func expandResourceFileArgs(args []ANY, env Environment) []string {
+	return anyStrs(expandRootDeferredTokens(args, env, tokenExpandLazy))
+}
+
 func expandRootDeferredTokens(args []ANY, env Environment, phase TokenExpansion) []ANY {
 	if !slices.ContainsFunc(args, func(arg ANY) bool { return strHasDollar(arg.str().any()) }) {
 		return args
@@ -36,7 +40,6 @@ func expandRootDeferredTokens(args []ANY, env Environment, phase TokenExpansion)
 
 func expandResourcePairs(args []ANY, line int, env Environment) ([]ResourcePair, bool, bool) {
 	var expanded []string
-	var ids []STR
 
 	for _, arg := range args {
 		value := arg.string()
@@ -47,12 +50,10 @@ func expandResourcePairs(args []ANY, line int, env Environment) ([]ResourcePair,
 			for _, word := range strings.Split(value, " ") {
 				if word != "" {
 					expanded = append(expanded, word)
-					ids = append(ids, 0)
 				}
 			}
 		} else {
 			expanded = append(expanded, value)
-			ids = append(ids, arg.str())
 		}
 	}
 
@@ -74,7 +75,6 @@ func expandResourcePairs(args []ANY, line int, env Environment) ([]ResourcePair,
 	}
 
 	rest := expanded[start:]
-	restIDs := ids[start:]
 
 	if len(rest)%2 != 0 {
 		throwFmt("RESOURCE at line %d: argument count after DONT_PARSE/DONT_COMPRESS strip must be even (got %d)", line, len(rest))
@@ -86,16 +86,10 @@ func expandResourcePairs(args []ANY, line int, env Environment) ([]ResourcePair,
 		path := strings.ReplaceAll(rest[i], "$(S)", "${ARCADIA_ROOT}")
 		key := strings.ReplaceAll(rest[i+1], "$(S)", "${ARCADIA_ROOT}")
 
-		pair := ResourcePair{
+		pairs = append(pairs, ResourcePair{
 			Path: strings.ReplaceAll(path, "$(B)", "${ARCADIA_BUILD_ROOT}"),
 			Key:  strings.ReplaceAll(key, "$(B)", "${ARCADIA_BUILD_ROOT}"),
-		}
-
-		if strings.IndexByte(rest[i], '$') < 0 {
-			pair.PathID = restIDs[i]
-		}
-
-		pairs = append(pairs, pair)
+		})
 	}
 
 	return pairs, dontParse, dontCompress
@@ -117,7 +111,7 @@ func expandMakeExpressionTracked(value string, env Environment, reserved func(st
 	return substMacroDeeply(value, nil, env, nil, &substPolicy{makefile: true, emptyUnknown: true, literal: reserved, track: track})
 }
 
-func expandResourceFiles(d *ModuleData, out []ResourceEntry, args []string, ids []ANY) []ResourceEntry {
+func expandResourceFiles(d *ModuleData, out []ResourceEntry, args []string) []ResourceEntry {
 	prefix := ""
 	prefixToStrip := ""
 	dest := ""
@@ -157,12 +151,6 @@ func expandResourceFiles(d *ModuleData, out []ResourceEntry, args []string, ids 
 		default:
 			path := tok
 
-			var pathID STR
-
-			if len(ids) == len(args) {
-				pathID = ids[i].str()
-			}
-
 			i++
 
 			keyTail := path
@@ -179,8 +167,8 @@ func expandResourceFiles(d *ModuleData, out []ResourceEntry, args []string, ids 
 				fileKey = d.resStr4("resfs/file/", prefix, keyTail, "")
 			}
 
-			out = append(out, ResourceEntry{Path: "-", Key: fileKey, SrcPath: path, SrcPathID: pathID, DontParse: true, DontCompress: dontCompress})
-			out = append(out, ResourceEntry{Path: path, PathID: pathID, Key: fileKey, DontParse: true, DontCompress: dontCompress})
+			out = append(out, ResourceEntry{Path: "-", Key: fileKey, SrcPath: path, DontParse: true, DontCompress: dontCompress})
+			out = append(out, ResourceEntry{Path: path, Key: fileKey, DontParse: true, DontCompress: dontCompress})
 		}
 	}
 
@@ -251,7 +239,7 @@ func expandAllResourceFiles(d *ModuleData, out []ResourceEntry, fs FS, modulePat
 		}
 	})
 
-	return expandResourceFiles(d, out, rfArgs, nil)
+	return expandResourceFiles(d, out, rfArgs)
 }
 
 func allResourceDir(modulePath, dir string) (rel string, ok bool) {

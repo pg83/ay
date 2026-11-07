@@ -144,20 +144,17 @@ func (e *EmitContext) orderedProducerPositions(positions []ProducerPos, cythonPl
 
 			for ri := lo; ri < hi; ri++ {
 				entry := &e.resources[ri]
-				name, nameID := entry.Path, entry.PathID
+				name := entry.Path
 
 				if name == "-" {
-					name, nameID = entry.SrcPath, entry.SrcPathID
+					name = entry.SrcPath
 
 					if _, inner, _, ok := rootrelSplit(entry.Key); ok {
-						name, nameID = inner, 0
+						name = inner
 					}
 				}
 
-				if name != "" && nameID != 0 && nameID.cleanPath() && !strHasDollar(nameID.any()) {
-					entry.Resolved = resolveSourceID(e.ctx, e.instance, nameID, e.d.srcDirs)
-					inputs = append(inputs, e.schedulingSource(name, entry.Resolved))
-				} else if name != "" {
+				if name != "" {
 					entry.Resolved = resolveSource(e.ctx, e.instance, name, e.d.srcDirs)
 					inputs = append(inputs, e.schedulingSource(name, entry.Resolved))
 				}

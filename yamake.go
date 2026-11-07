@@ -556,9 +556,8 @@ type RunAntlrStmt struct {
 }
 
 type ResourcePair struct {
-	Path   string
-	Key    string
-	PathID STR
+	Path string
+	Key  string
 }
 
 type ResourceStmt struct {

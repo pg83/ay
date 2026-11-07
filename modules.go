@@ -443,8 +443,6 @@ type ResourceEntry struct {
 	Path         string
 	Key          string
 	SrcPath      string
-	PathID       STR
-	SrcPathID    STR
 	EndsBatch    bool
 	DontParse    bool
 	DontCompress bool
@@ -1186,9 +1184,9 @@ func (d *ModuleData) sourceCommandDirs(moduleID STR, env Environment, platform *
 	return peers, addincls
 }
 
-func applyResourceFiles(fs FS, modulePath string, args []string, ids []ANY, line int, d *ModuleData) {
+func applyResourceFiles(fs FS, modulePath string, args []string, line int, d *ModuleData) {
 	if isGoModuleType(d.unit.Type) {
-		applyGoResource(fs, modulePath, expandResourceFiles(d, nil, args, ids), d)
+		applyGoResource(fs, modulePath, expandResourceFiles(d, nil, args), d)
 
 		return
 	}
@@ -1197,7 +1195,7 @@ func applyResourceFiles(fs FS, modulePath string, args []string, ids []ANY, line
 
 	before := len(d.resources)
 
-	d.resources = expandResourceFiles(d, d.resources, args, ids)
+	d.resources = expandResourceFiles(d, d.resources, args)
 
 	seq := d.nextDeclSeq()
 
@@ -2774,7 +2772,7 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 				entries := make([]ResourceEntry, len(pairs))
 
 				for i, pair := range pairs {
-					entries[i] = ResourceEntry{Path: pair.Path, PathID: pair.PathID, Key: pair.Key}
+					entries[i] = ResourceEntry{Path: pair.Path, Key: pair.Key}
 				}
 
 				applyGoResource(fs, modulePath, entries, d)
@@ -2790,7 +2788,6 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 				d.resources = append(d.resources, ResourceEntry{
 					DeclSeq:      seq,
 					Path:         pair.Path,
-					PathID:       pair.PathID,
 					Key:          pair.Key,
 					EndsBatch:    i == len(pairs)-1,
 					DontParse:    dontParse,
@@ -2798,9 +2795,7 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 				})
 			}
 		case *ResourceFilesStmt:
-			resourceArgs := expandRootDeferredTokens(v.Args, env, tokenExpandLazy)
-
-			applyResourceFiles(fs, modulePath, anyStrs(resourceArgs), resourceArgs, v.Line, d)
+			applyResourceFiles(fs, modulePath, expandResourceFileArgs(v.Args, env), v.Line, d)
 		case *AllResourceFilesStmt:
 			if isGoModuleType(d.unit.Type) {
 				entries := expandAllResourceFiles(d, nil, fs, modulePath, env, v)
@@ -3421,7 +3416,7 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 		}
 
 		for _, args := range yaToolsConfResourceFiles(fs, expandStmtTokenAny(v.Args[0], env).string()) {
-			applyResourceFiles(fs, modulePath, args, nil, v.Line, d)
+			applyResourceFiles(fs, modulePath, args, v.Line, d)
 		}
 	case tokSetResourceUriFromJson:
 
@@ -5106,7 +5101,7 @@ func collectPySrcGroup(fs FS, modulePath string, v UnknownStmt, d *ModuleData, e
 
 			dest := "py/" + strings.ReplaceAll(modName, ".", "/") + ".pyi"
 
-			d.pyPyiResources = expandResourceFiles(d, d.pyPyiResources, []string{"DONT_COMPRESS", "DEST", dest, src}, nil)
+			d.pyPyiResources = expandResourceFiles(d, d.pyPyiResources, []string{"DONT_COMPRESS", "DEST", dest, src})
 			mainNext = false
 
 			continue
