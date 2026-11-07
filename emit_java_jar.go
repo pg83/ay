@@ -332,7 +332,7 @@ func (ctx *GenCtx) javaEmitJar(jm *JavaModule) {
 	}
 
 	javac = append(javac, b.resourcePath(globals, jdk, "/bin/javac"), internV("@", srclst.string()).any(), strClasspath.any(), bldBfgJar.any(), strXpkginfoAlways.any())
-	javac = append(javac, internAnys(d.javacOpts.cur)...)
+	javac = append(javac, d.javacOpts.curIDs...)
 
 	if len(d.annotationProcs) > 0 {
 		javac = append(javac, strProcessor.any(), internStr(strings.Join(d.annotationProcs, ",")).any())

@@ -29,6 +29,7 @@ type FS interface {
 
 	walk(rel string, visit func(rel string, isDir bool) bool)
 	walkDirID(root STR, visit func(rel string, dir STR, isDir bool) bool)
+	isFileVFSAny(v VFS) bool
 	testPathReadError(rel string) error
 
 	confRoot() string

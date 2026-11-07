@@ -60,6 +60,7 @@ var javaConfGlobalBindings = func() []confMacroBinding {
 }()
 
 const (
+	javacActiveProcessorsOpt = "-J-XX:ActiveProcessorCount=4"
 	javaKotlinVersion        = "2.3.10"
 	javaProtoRuntimeVersion  = "4.33.0"
 	javaProtoCommonVersion   = "2.63.2"
@@ -136,8 +137,7 @@ func collectJavaData(ctx *GenCtx, jm *JavaModule, stmts []Stmt, env Environment)
 
 	defer func() { ctx.javaSetVars.parts = d.setVars.parts[:0] }()
 
-	d.javacOpts.base = []string{"-J-XX:ActiveProcessorCount=4"}
-	d.javacOpts.cur = d.javacOpts.base
+	d.javacOpts.setBase(javacActiveProcessorsOpt)
 	clear(d.rawVars)
 	collectJavaStmts(ctx, jm, d, stmts, env)
 
@@ -317,11 +317,11 @@ func collectJavaStmts(ctx *GenCtx, jm *JavaModule, d *JavaData, stmts []Stmt, en
 
 			var rawID ANY
 
-			if v.Plain && raw == text {
+			if raw == text && !vfsHasPrefix(text) {
 				rawID = v.Value.any()
 			}
 
-			d.setRawVarID(v.NameEnv.str(), v.Name, raw, rawID)
+			d.setRawVarID(v.NameEnv.str(), raw, rawID)
 		case *DefaultVarStmt:
 			value := expandSourceScalarVarRef(v.Value, env)
 			bound := env.hasBindingID(v.NameEnv)
@@ -329,9 +329,9 @@ func collectJavaStmts(ctx *GenCtx, jm *JavaModule, d *JavaData, stmts []Stmt, en
 			env.setDefaultString(v.NameEnv, value)
 
 			if !bound {
-				d.setVars.set(internStr(v.VarName), internStr(value))
+				d.setVars.set(v.NameEnv.str(), internStr(value))
 				jm.instance.Platform.conf.set(env, v.NameEnv, &d.setVars)
-				d.setRawVar(v.VarName, d.rawExpand(v.Value))
+				d.setRawVar(v.NameEnv.str(), d.rawExpand(v.Value))
 			}
 		case *IfStmt:
 			taken := v.Then
@@ -686,22 +686,24 @@ func applyJavaMacro(ctx *GenCtx, jm *JavaModule, d *JavaData, name STR, args []s
 		}
 
 		value := strings.Join(args[1:], " ")
+		nameID := javaArgSTR(ids, 0, args[0])
+		nameEnv := internEnvSTR(nameID)
 
-		if prev, ok := env.lookup(args[0]); ok && prev != "" {
+		if prev, ok := env.lookupENV(nameEnv); ok && prev != "" {
 			value = prev + " " + value
 		}
 
-		env.setString(internEnv(args[0]), value)
-		d.setVars.set(internStr(args[0]), internStr(value))
-		jm.instance.Platform.conf.set(env, internEnv(args[0]), &d.setVars)
+		env.setString(nameEnv, value)
+		d.setVars.set(nameID, internStr(value))
+		jm.instance.Platform.conf.set(env, nameEnv, &d.setVars)
 
 		rawValue := d.rawExpand(strings.Join(anyStrs(raw[1:]), " "))
 
-		if prev := d.rawVars[args[0]]; prev != "" {
+		if prev := d.rawVars[nameID].text; prev != "" {
 			rawValue = prev + " " + rawValue
 		}
 
-		d.setRawVar(args[0], rawValue)
+		d.setRawVar(nameID, rawValue)
 
 		if args[0] == "_PROTOC_FLAGS" {
 			d.protocFlags = append(d.protocFlags, args[1:]...)
@@ -764,7 +766,11 @@ func applyJavaMacro(ctx *GenCtx, jm *JavaModule, d *JavaData, name STR, args []s
 		d.abiJar = true
 		d.recalcKotlincOpts(jm)
 	case kwJAVAC_FLAGS:
-		d.javacOpts.appendStmt(args...)
+		if len(ids) == len(args) {
+			d.javacOpts.appendStmtIDs(args, canonicalANYs(ids))
+		} else {
+			d.javacOpts.appendStmt(args...)
+		}
 	case kwENABLE_PREVIEW:
 		d.jvmArgs = append(d.jvmArgs, "--enable-preview")
 		d.javacOpts.appendStmt("--enable-preview", "--release", d.jdkReal)
@@ -1100,18 +1106,47 @@ func javaSetJDK(d *JavaData, env Environment, jdk string) {
 }
 
 type javaCondVar struct {
-	orig []string
-	cur  []string
-	base []string
+	orig    []string
+	cur     []string
+	base    []string
+	origIDs []ANY
+	curIDs  []ANY
+	baseIDs []ANY
+	withIDs bool
+}
+
+func (v *javaCondVar) setBase(items ...string) {
+	v.base, v.cur, v.withIDs = items, items, true
+	v.baseIDs = internAnys(items)
+	v.curIDs = v.baseIDs
 }
 
 func (v *javaCondVar) appendStmt(items ...string) {
+	var ids []ANY
+
+	if v.withIDs {
+		ids = internAnys(items)
+	}
+
+	v.appendStmtIDs(items, ids)
+}
+
+func (v *javaCondVar) appendStmtIDs(items []string, ids []ANY) {
 	v.cur = append(v.cur, items...)
 	v.orig = append(v.orig, items...)
+
+	if v.withIDs {
+		v.curIDs = append(v.curIDs, ids...)
+		v.origIDs = append(v.origIDs, ids...)
+	}
 }
 
 func (v *javaCondVar) recalc(conds []string) {
 	v.cur = append(append(append([]string(nil), v.base...), v.orig...), conds...)
+
+	if v.withIDs {
+		v.curIDs = append(append(append([]ANY(nil), v.baseIDs...), v.origIDs...), internAnys(conds)...)
+	}
 }
 
 func (d *JavaData) recalcKotlincOpts(jm *JavaModule) {
@@ -1206,8 +1241,14 @@ func (d *JavaData) rawExpand(s string) string {
 	if d.rawBindings == nil {
 		d.rawBindings = make([]confMacroBinding, 0, len(d.rawVars)+len(javaConfGlobalBindings))
 
-		for name, value := range d.rawVars {
-			d.rawBindings = append(d.rawBindings, confMacroBinding{name: internStr(name), values: []ANY{internAny(value)}, bound: true})
+		for name, v := range d.rawVars {
+			value := v.value
+
+			if value == 0 {
+				value = internAny(v.text)
+			}
+
+			d.rawBindings = append(d.rawBindings, confMacroBinding{name: name, values: []ANY{value}, bound: true})
 		}
 
 		d.rawBindings = append(d.rawBindings, javaConfGlobalBindings...)
@@ -1220,18 +1261,17 @@ func javaPathVar(name string) bool {
 	return javaPathVars[name]
 }
 
-func (d *JavaData) setRawVar(name, value string) {
-	d.rawVars[name] = value
-
-	if d.rawBindings == nil {
-		return
-	}
-
-	d.bindRawVar(internStr(name), internAny(value))
+type javaRawVar struct {
+	text  string
+	value ANY
 }
 
-func (d *JavaData) setRawVarID(id STR, name, value string, valueID ANY) {
-	d.rawVars[name] = value
+func (d *JavaData) setRawVar(name STR, value string) {
+	d.setRawVarID(name, value, 0)
+}
+
+func (d *JavaData) setRawVarID(id STR, value string, valueID ANY) {
+	d.rawVars[id] = javaRawVar{text: value, value: valueID}
 
 	if d.rawBindings == nil {
 		return
@@ -1288,7 +1328,7 @@ func malformedCommandReference(args []string) string {
 	return ""
 }
 
-func javaRunProgramRawArgs(raw []string, env Environment, rawVars map[string]string) []string {
+func javaRunProgramRawArgs(raw []string, env Environment, rawVars map[STR]javaRawVar) []string {
 	active := map[string]bool{}
 
 	var expand func(string) string
@@ -1305,7 +1345,8 @@ func javaRunProgramRawArgs(raw []string, env Environment, rawVars map[string]str
 				throwFmt("RUN_JAVA_PROGRAM: recursive variable expansion for %s", name)
 			}
 
-			value, ok := rawVars[name]
+			rv, ok := rawVars[interned(name)]
+			value := rv.text
 
 			if !ok {
 				value, ok = javaConfGlobals[name]

@@ -124,6 +124,10 @@ func (e *EmitContext) sourceInputForSchedulingOf(input ANY) VFS {
 		return v
 	}
 
+	if input.vfs() == 0 {
+		return e.schedulingSourceANY(input, resolveSourceANY(e.ctx, e.instance, input, e.d.srcDirs))
+	}
+
 	return e.sourceInputForScheduling(input.string())
 }
 

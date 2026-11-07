@@ -196,7 +196,7 @@ type GenCtx struct {
 	jc                  javaClosureScratch
 	javaDMBuf           []ANY
 	javaExclBuf         []ANY
-	javaRawVars         map[string]string
+	javaRawVars         map[STR]javaRawVar
 	javaScratch         []byte
 	javaRuleTokens      map[ANY]javaRuleToken
 	javaRuleExpansions  map[javaRuleExpansion][]ANY
@@ -379,7 +379,7 @@ func newGenCtx(fs FS, parsers *IncludeParserManager, hostP, targetP *Platform, e
 		tcMemo:      map[ToolchainKey]ModuleToolchain{},
 		javaRules:   newIntMap[[]*javaDMRules](0),
 		jc:          newJavaClosureScratch(),
-		javaRawVars: map[string]string{},
+		javaRawVars: map[STR]javaRawVar{},
 
 		javaRuleTokens:     map[ANY]javaRuleToken{},
 		javaRuleExpansions: map[javaRuleExpansion][]ANY{},

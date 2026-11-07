@@ -450,12 +450,18 @@ func (ctx *GenCtx) styleSuite(check StyleCheck, projectID STR, env []string, res
 
 	projectArg, nameArg, wrapperArg := projectID.source().any(), testArg(check.Name), testArg(check.Wrapper)
 
+	var dependsArgs []ANY
+
 	s.runCmd = func(work string, chunk TestChunk) []ANY {
 		args := []ANY{testToolHostPathArg, strRunCustomLint.any(), strSourceRoot2.any(), testSourceRootArg, strBuildRoot2.any(), testBuildRootArg, strProjectPath.any(), projectArg, strTracePath.any(), testArg(work + "/ytest.report.trace"), strOutPath.any(), testArg(work + "/testing_out_stuff"), strLintName.any(), nameArg, strWrapperScript.any(), wrapperArg}
 
-		for _, dependency := range sortedUnique(append(slices.Clone(s.depends), project)) {
-			args = append(args, strDepends.any(), testArg(dependency))
+		if dependsArgs == nil {
+			for _, dependency := range sortedUnique(append(slices.Clone(s.depends), project)) {
+				dependsArgs = append(dependsArgs, strDepends.any(), testArg(dependency))
+			}
 		}
+
+		args = append(args, dependsArgs...)
 
 		if check.Config != "" {
 			args = append(args, strConfig.any(), source(check.Config).any())

@@ -3247,7 +3247,12 @@ func (s *ConfState) macroArgs(text STR) []ANY {
 	n := 0
 
 	for arg := range macroArgsSeq(value) {
-		block[n] = internStr(arg).any()
+		if len(arg) == len(value) {
+			block[n] = text.any()
+		} else {
+			block[n] = internStr(arg).any()
+		}
+
 		n++
 	}
 

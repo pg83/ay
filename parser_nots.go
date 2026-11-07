@@ -35,8 +35,10 @@ type ParsedJSON struct {
 }
 
 func (pm *IncludeParserManager) parsedJSON(rel string) ParsedJSON {
-	key := internStr(rel)
+	return pm.parsedJSONID(internStr(rel))
+}
 
+func (pm *IncludeParserManager) parsedJSONID(key STR) ParsedJSON {
 	if v, ok := pm.cache.notsJSON.get(key); ok {
 		return v
 	}
@@ -51,8 +53,10 @@ func (pm *IncludeParserManager) parsedJSON(rel string) ParsedJSON {
 }
 
 func (pm *IncludeParserManager) usrvDeps(rel string) *usrvDepsIndex {
-	key := internStr(rel)
+	return pm.usrvDepsID(internStr(rel))
+}
 
+func (pm *IncludeParserManager) usrvDepsID(key STR) *usrvDepsIndex {
 	if v, ok := pm.cache.usrvDeps.get(key); ok {
 		return v
 	}
@@ -62,7 +66,7 @@ func (pm *IncludeParserManager) usrvDeps(rel string) *usrvDepsIndex {
 	var index *usrvDepsIndex
 
 	if !json.Valid(data) || data[jsonSkipSpace(data, 0)] != '{' {
-		pm.notsJSON(rel)
+		pm.notsJSONID(key)
 
 		index = &usrvDepsIndex{}
 	} else {
@@ -75,7 +79,11 @@ func (pm *IncludeParserManager) usrvDeps(rel string) *usrvDepsIndex {
 }
 
 func (pm *IncludeParserManager) notsJSON(rel string) map[string]any {
-	parsed := pm.parsedJSON(rel)
+	return pm.notsJSONID(internStr(rel))
+}
+
+func (pm *IncludeParserManager) notsJSONID(key STR) map[string]any {
+	parsed := pm.parsedJSONID(key)
 
 	if parsed.Error != nil {
 		parsed.Error.throw()
@@ -88,7 +96,7 @@ func (pm *IncludeParserManager) notsJSON(rel string) map[string]any {
 	object, ok := parsed.Value.(map[string]any)
 
 	if !ok {
-		throwFmt("expected JSON object in %s", rel)
+		throwFmt("expected JSON object in %s", key.string())
 	}
 
 	return object

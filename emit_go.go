@@ -1113,7 +1113,7 @@ func (e *EmitContext) emitGoPackage(resolved []ResolvedPeer, objRefs []NodeRef, 
 	node := NodeSpec{Node: Node{Platform: instance.Platform,
 		Cmds: na.cmdList(Cmd{CmdArgs: na.chunkList(
 			instance.Platform.Go.HeadLib,
-			na.anyList(build(dir).any()),
+			na.anyList(instance.Path.rel().build().any()),
 			goToolCmdMid,
 			na.anyList(outPath.any()),
 			e.goToolCmdVetFor(),

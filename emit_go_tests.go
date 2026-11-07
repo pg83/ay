@@ -61,7 +61,7 @@ func (e *EmitContext) goFmtSuites(globals []ResourceDecl) []*TestSuite {
 			f := e.moduleSourceVFS(src)
 			_, rooted := moduleRootedVFS(e.instance.Path.relString(), src.string())
 
-			if !rooted && f.isSource() && !e.ctx.fs.isFile(srcRootRel, f.relString()) {
+			if !rooted && f.isSource() && !e.ctx.fs.isFileVFSAny(f) {
 				continue
 			}
 

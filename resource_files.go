@@ -272,7 +272,7 @@ func globMatch(fs FS, pattern string) []string {
 }
 
 func globVisit(fs FS, pattern string, visit func(file string, view bool)) {
-	dirs := []string{""}
+	dirs := []globDir{{id: strEmpty}}
 
 	var joinBuf [256]byte
 
@@ -284,22 +284,34 @@ func globVisit(fs FS, pattern string, visit func(file string, view bool)) {
 
 		i = segEnd + 1
 
-		var next []string
+		var next []globDir
 
-		for _, d := range dirs {
+		for _, gd := range dirs {
+			d := gd.text
+
 			if seg == "**" {
 				if !last {
 					root := cleanRel(d)
 
-					fs.walk(root, func(rel string, isDir bool) bool {
-						if isDir && rel != root {
-							next = append(next, rel)
-						}
+					if root == d && gd.id != 0 {
+						fs.walkDirID(gd.id, func(rel string, id STR, isDir bool) bool {
+							if isDir && id != gd.id {
+								next = append(next, globDir{rel, id})
+							}
 
-						return true
-					})
+							return true
+						})
+					} else {
+						fs.walk(root, func(rel string, isDir bool) bool {
+							if isDir && rel != root {
+								next = append(next, globDir{text: rel})
+							}
 
-					next = append(next, d)
+							return true
+						})
+					}
+
+					next = append(next, gd)
 
 					continue
 				}
@@ -328,13 +340,13 @@ func globVisit(fs FS, pattern string, visit func(file string, view bool)) {
 						visit(bytesString(child), true)
 					}
 				} else if isDir {
-					next = append(next, string(child))
+					next = append(next, globDir{text: string(child)})
 				}
 
 				continue
 			}
 
-			view := fs.listdir(internStr(d))
+			view := fs.listdir(gd.key())
 
 			for _, packed := range view.names {
 				name := STR(packed >> 1).string()
@@ -349,8 +361,10 @@ func globVisit(fs FS, pattern string, visit func(file string, view bool)) {
 					if !isDir {
 						visit(bytesString(joinRelInto(joinBuf[:0], d, name)), true)
 					}
+				} else if isDir && d == "" {
+					next = append(next, globDir{name, STR(packed >> 1)})
 				} else if isDir {
-					next = append(next, joinRel(d, name))
+					next = append(next, globDir{text: joinRel(d, name)})
 				}
 			}
 		}

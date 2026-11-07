@@ -278,6 +278,14 @@ func (fs *OsFS) isFileVFS(v VFS) bool {
 	return true
 }
 
+func (fs *OsFS) isFileVFSAny(v VFS) bool {
+	if v.rel().cleanPath() {
+		return fs.isFileVFS(v)
+	}
+
+	return fs.isFile(srcRootRel, v.relString())
+}
+
 func (fs *OsFS) noteFile(v VFS) {
 	fs.knownFiles.add(uint32(v.rel()))
 }

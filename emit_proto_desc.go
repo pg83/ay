@@ -3,6 +3,7 @@ package main
 import (
 	"crypto/md5"
 	enchex "encoding/hex"
+	"path/filepath"
 	"slices"
 	"strings"
 )
@@ -76,19 +77,25 @@ func descPeerClosure(e *EmitContext, peerdirs []ANY, injectBuiltins, commonGoogl
 		}
 	}
 
-	enter := func(peerPath string) {
-		if !peerYaMakeExists(ctx.fs, source(peerPath)) {
+	enter := func(peer VFS) {
+		if !peerYaMakeExists(ctx.fs, peer) {
 			return
 		}
 
-		name := ctx.moduleName(peerPath)
+		nameDir := peer
+
+		if !peer.rel().cleanPath() {
+			nameDir = source(filepath.Clean(peer.relString()))
+		}
+
+		name := ctx.moduleNameVFS(nameDir)
 
 		if name != tokProtoLibrary && name != tokResourcesLibrary {
 			return
 		}
 
 		peerInstance := ModuleInstance{
-			Path:     source(peerPath),
+			Path:     peer,
 			Kind:     KindLib,
 			Language: LangDescProto,
 			Platform: instance.Platform,
@@ -111,11 +118,11 @@ func descPeerClosure(e *EmitContext, peerdirs []ANY, injectBuiltins, commonGoogl
 	}
 
 	if commonGoogle {
-		enter("contrib/libs/googleapis-common-protos")
+		enter(contribLibsGoogleapisCommonProtos)
 	}
 
 	if injectBuiltins && instance.Path.relString() != protosFromProtocPeer {
-		enter(protosFromProtocPeer)
+		enter(source(protosFromProtocPeer))
 	}
 
 	for _, p := range peerdirs {
@@ -123,7 +130,7 @@ func descPeerClosure(e *EmitContext, peerdirs []ANY, injectBuiltins, commonGoogl
 			continue
 		}
 
-		enter(p.string())
+		enter(p.peerSource())
 	}
 
 	dedupers.with(func(deduper *DeDuper) {

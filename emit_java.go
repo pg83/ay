@@ -669,7 +669,7 @@ func (ctx *GenCtx) javaEmitExternal(jm *JavaModule) {
 	}
 
 	args = append(args, strDelim.any())
-	args = append(args, internAnys(d.javacOpts.cur)...)
+	args = append(args, d.javacOpts.curIDs...)
 	args = append(args, strSource.any(), str11.any(), strTarget.any(), str11.any(), strDelim.any())
 
 	for e := range closure {

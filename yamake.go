@@ -607,7 +607,7 @@ func parseFileClean(fs FS, key STR, memos *IncludeMemos) (mf *MakeFile, err erro
 
 		defer releaseParseBuf(bp)
 
-		mf = throw2(parse(fs, key.string(), *bp, memos))
+		mf = throw2(parse(fs, key, *bp, memos))
 	})
 
 	if exc != nil {
@@ -1124,9 +1124,9 @@ func (l *Lexer) readNumberOrWord(startLine, startCol int) Token {
 	return newToken(kind, l.src[start:pos], startLine, startCol)
 }
 
-func parse(fs FS, name string, src []byte, memos *IncludeMemos) (mf *MakeFile, err error) {
+func parse(fs FS, nameID STR, src []byte, memos *IncludeMemos) (mf *MakeFile, err error) {
 	exc := try(func() {
-		mf = parseInternal(fs, name, src, memos)
+		mf = parseInternal(fs, nameID, src, memos)
 	})
 
 	if exc != nil {
@@ -1137,19 +1137,21 @@ func parse(fs FS, name string, src []byte, memos *IncludeMemos) (mf *MakeFile, e
 	return mf, err
 }
 
-func parseInternal(fs FS, name string, src []byte, memos *IncludeMemos) *MakeFile {
-	return parseInternalWithStack(fs, name, src, nil, memos)
+func parseInternal(fs FS, nameID STR, src []byte, memos *IncludeMemos) *MakeFile {
+	return parseInternalWithStack(fs, nameID, src, nil, memos)
 }
 
-func parseInternalWithStack(fs FS, name string, src []byte, stack []string, memos *IncludeMemos) *MakeFile {
+func parseInternalWithStack(fs FS, nameID STR, src []byte, stack []string, memos *IncludeMemos) *MakeFile {
 	st := acquireIncludeState(memos)
 
 	defer releaseIncludeState(st)
 
-	return parseInternalWithState(fs, name, src, stack, st)
+	return parseInternalWithState(fs, nameID, src, stack, st)
 }
 
-func parseInternalWithState(fs FS, name string, src []byte, stack []string, includes *IncludeState) *MakeFile {
+func parseInternalWithState(fs FS, nameID STR, src []byte, stack []string, includes *IncludeState) *MakeFile {
+	name := nameID.string()
+
 	src = bytes.TrimPrefix(src, []byte{0xEF, 0xBB, 0xBF})
 
 	p := parserPool.Get().(*Parser)
@@ -1164,7 +1166,6 @@ func parseInternalWithState(fs FS, name string, src []byte, stack []string, incl
 
 	argScratch := p.argScratch
 	stmtScratch := scrubCap(p.stmtScratch)
-	nameID := internStr(name)
 
 	*p = Parser{lex: lex, name: name, nameID: nameID, includeStack: stack, includes: includes, fs: fs, condScratch: condScratch[:0], condTokBuf: condTokBuf[:0], argScratch: argScratch[:0], stmtScratch: stmtScratch}
 	includes.chain = append(includes.chain, nameID)
@@ -2776,7 +2777,7 @@ func (p *Parser) expandOneInclude(nameTok Token, rel string) {
 	defer releaseParseBuf(bp)
 
 	start := len(p.includes.events)
-	included := parseInternalWithState(p.fs, target, *bp, chain, p.includes)
+	included := parseInternalWithState(p.fs, internStr(target), *bp, chain, p.includes)
 
 	p.includes.memos.byTarget[targetID] = append(p.includes.memos.byTarget[targetID], &includeMemo{stmts: included.Stmts, events: slices.Clone(p.includes.events[start:])})
 	p.stmtScratch = append(p.stmtScratch, included.Stmts...)

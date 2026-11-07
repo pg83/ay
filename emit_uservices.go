@@ -70,7 +70,7 @@ func (e *EmitContext) emitUsrvFile(file UsrvFile) {
 
 	if file.DepsFile != "NO_DEPS" {
 		depFile := copyFileInputVFS(e.ctx.fs, e.instance.Path, file.DepsFile)
-		deps, ok := e.ctx.parsers.usrvDeps(depFile.relString()).deps(file.File)
+		deps, ok := e.ctx.parsers.usrvDepsID(depFile.rel()).deps(file.File)
 
 		if !ok {
 			throwFmt("USRV_BUILD: dependencies for %s missing in %s", file.File, file.DepsFile)

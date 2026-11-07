@@ -319,7 +319,7 @@ type JavaData struct {
 	commonGoogleAPIs       bool
 	lintLevel              string
 	noLint                 string
-	rawVars                map[string]string
+	rawVars                map[STR]javaRawVar
 	rawBindings            []confMacroBinding
 	annotationProcs        []string
 	jarMainClass           string

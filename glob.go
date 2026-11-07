@@ -163,40 +163,44 @@ func ymakeGlob(fs FS, pattern string, excludePatterns ...string) []string {
 	}
 
 	parts := globParts(pattern)
-	dirs := []string{""}
+	dirs := []globDir{{id: strEmpty}}
 
 	var matches []string
 
 	for pi, part := range parts {
 		last := pi == len(parts)-1
 
-		var next []string
+		var next []globDir
 
-		for _, dir := range dirs {
+		for _, d := range dirs {
+			dir := d.text
+
 			switch part.kind {
 			case globFixed:
-				rel := internJoined(dir, part.fixed).string()
+				relID := internJoined(dir, part.fixed)
+				rel := relID.string()
 				present, isDir := fs.exists(srcRootRel, rel)
 
 				switch {
 				case !present:
 				case isDir:
-					next = append(next, rel)
+					next = append(next, globDir{rel, relID})
 				case last && !globExcluded(excludes, rel, false):
 					matches = append(matches, rel)
 				}
 			case globPattern, globAnything:
-				for _, packed := range fs.listdir(internStr(dir)).names {
+				for _, packed := range fs.listdir(d.key()).names {
 					name, isDir := STR(packed>>1).string(), packed&1 != 0
 
 					if !isDir && !last || part.kind == globPattern && !part.re.match(name) {
 						continue
 					}
 
-					rel := internJoined(dir, name).string()
+					relID := internJoined(dir, name)
+					rel := relID.string()
 
 					if isDir {
-						next = append(next, rel)
+						next = append(next, globDir{rel, relID})
 					} else if !globExcluded(excludes, rel, false) {
 						matches = append(matches, rel)
 					}
@@ -204,25 +208,41 @@ func ymakeGlob(fs FS, pattern string, excludePatterns ...string) []string {
 			case globRecursive:
 				root := cleanRel(dir)
 
-				fs.walk(root, func(rel string, isDir bool) bool {
-					if rel == root {
+				if root == dir && d.id != 0 {
+					fs.walkDirID(d.id, func(rel string, id STR, isDir bool) bool {
+						if id == d.id {
+							return true
+						}
+
+						if !isDir || globExcluded(excludes, rel, true) {
+							return false
+						}
+
+						next = append(next, globDir{rel, id})
+
 						return true
-					}
+					})
+				} else {
+					fs.walk(root, func(rel string, isDir bool) bool {
+						if rel == root {
+							return true
+						}
 
-					if root != dir {
-						rel = joinRel(dir, strings.TrimPrefix(rel, root+"/"))
-					}
+						if root != dir {
+							rel = joinRel(dir, strings.TrimPrefix(rel, root+"/"))
+						}
 
-					if !isDir || globExcluded(excludes, rel, true) {
-						return false
-					}
+						if !isDir || globExcluded(excludes, rel, true) {
+							return false
+						}
 
-					next = append(next, rel)
+						next = append(next, globDir{text: rel})
 
-					return true
-				})
+						return true
+					})
+				}
 
-				next = append(next, dir)
+				next = append(next, d)
 			}
 		}
 
@@ -230,6 +250,19 @@ func ymakeGlob(fs FS, pattern string, excludePatterns ...string) []string {
 	}
 
 	return matches
+}
+
+type globDir struct {
+	text string
+	id   STR
+}
+
+func (d globDir) key() STR {
+	if d.id != 0 {
+		return d.id
+	}
+
+	return internStr(d.text)
 }
 
 func applyGlobStmt(fs FS, module string, args []ANY, env Environment, onWarn func(Warn)) {
