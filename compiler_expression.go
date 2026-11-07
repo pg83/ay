@@ -21,7 +21,13 @@ func compilerFlagExpression(text string, env Environment, expanding []string) ([
 			throwFmt("self-contradictory variable definition (%s)", name)
 		}
 
-		value, _ := env.lookup(name)
+		id := internedEnv(name)
+
+		if expansionMemo.tracing {
+			expansionMemo.note(env, id)
+		}
+
+		value, _ := env.lookupENV(id)
 
 		return compilerFlagExpression(value, env, append(expanding, name))
 	})

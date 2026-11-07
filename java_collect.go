@@ -299,7 +299,7 @@ func collectJavaStmts(ctx *GenCtx, jm *JavaModule, d *JavaData, stmts []Stmt, en
 					continue
 				}
 
-				d.peerStmts = append(d.peerStmts, JavaPeerSpec{dir: peerdirModulePath(p).string(), explicit: !v.Implicit})
+				d.peerStmts = append(d.peerStmts, JavaPeerSpec{dir: peerdirModulePath(p), explicit: !v.Implicit})
 			}
 		case *SetStmt:
 			valueID := v.Value
@@ -732,7 +732,7 @@ func applyJavaMacro(ctx *GenCtx, jm *JavaModule, d *JavaData, name STR, args []s
 		d.kaptAPClasspath = append(d.kaptAPClasspath, args...)
 
 		for _, a := range args {
-			d.peerStmts = append(d.peerStmts, JavaPeerSpec{dir: a})
+			d.peerStmts = append(d.peerStmts, JavaPeerSpec{dir: internStr(a)})
 		}
 	case kwKAPT_ANNOTATION_PROCESSOR_OPTIONS:
 		d.kaptAPOptions = append(d.kaptAPOptions, args...)
@@ -808,15 +808,15 @@ func applyJavaMacro(ctx *GenCtx, jm *JavaModule, d *JavaData, name STR, args []s
 		}
 
 		for _, a := range args {
-			d.peerStmts = append(d.peerStmts, JavaPeerSpec{dir: a})
+			d.peerStmts = append(d.peerStmts, JavaPeerSpec{dir: internStr(a)})
 		}
 	case kwJAVA_API_PEERDIR:
 		for _, a := range args {
-			d.peerStmts = append(d.peerStmts, JavaPeerSpec{dir: a})
+			d.peerStmts = append(d.peerStmts, JavaPeerSpec{dir: internStr(a)})
 		}
 	case kwJAVA_IMPL_PEERDIR:
 		for _, a := range args {
-			d.peerStmts = append(d.peerStmts, JavaPeerSpec{dir: a})
+			d.peerStmts = append(d.peerStmts, JavaPeerSpec{dir: internStr(a)})
 		}
 
 		d.implPeers = append(d.implPeers, args...)
@@ -824,10 +824,10 @@ func applyJavaMacro(ctx *GenCtx, jm *JavaModule, d *JavaData, name STR, args []s
 		if u.kind == juTest && len(args) > 0 {
 			d.unittestDir = arg0
 			d.unittestMod = path.Join(args...)
-			d.peerStmts = append(d.peerStmts, JavaPeerSpec{dir: arg0})
+			d.peerStmts = append(d.peerStmts, JavaPeerSpec{dir: internStr(arg0)})
 		}
 	case kwAUTO_SERVICE:
-		d.peerStmts = append(d.peerStmts, JavaPeerSpec{dir: "contrib/java/com/google/auto/service/auto-service-annotations/" + arg0})
+		d.peerStmts = append(d.peerStmts, JavaPeerSpec{dir: internStr("contrib/java/com/google/auto/service/auto-service-annotations/" + arg0)})
 	case kwUSE_ANNOTATION_PROCESSOR:
 	case kwANNOTATION_PROCESSOR, kwJAR_ANNOTATION_PROCESSOR:
 		d.annotationProcs = append(d.annotationProcs, args...)
@@ -969,9 +969,9 @@ func applyJavaMacro(ctx *GenCtx, jm *JavaModule, d *JavaData, name STR, args []s
 			jm.instance.Platform.conf.set(env, internEnv(a), &d.setVars)
 		}
 	case kwGO_GRPC_GATEWAY_SWAGGER_SRCS:
-		d.peerStmts = append(d.peerStmts, JavaPeerSpec{dir: goGatewayV1Options, explicit: true})
+		d.peerStmts = append(d.peerStmts, JavaPeerSpec{dir: internStr(goGatewayV1Options), explicit: true})
 	case kwGO_GRPC_GATEWAY_V2_OPENAPI_SRCS:
-		d.peerStmts = append(d.peerStmts, JavaPeerSpec{dir: goGatewayV2Options, explicit: true})
+		d.peerStmts = append(d.peerStmts, JavaPeerSpec{dir: internStr(goGatewayV2Options), explicit: true})
 	case kwWITH_KOTLIN_GRPC:
 		d.javaProtoArgs = append(d.javaProtoArgs, JavaProtoPlugin{kotlinGrpc: true})
 	case kwJAVA_PROTO_PLUGIN:
@@ -1012,7 +1012,7 @@ func applyJavaMacro(ctx *GenCtx, jm *JavaModule, d *JavaData, name STR, args []s
 			d.excludeTags[a] = name == kwEXCLUDE_TAGS
 		}
 	case kwTASKLET:
-		d.peerStmts = append(d.peerStmts, JavaPeerSpec{dir: strTaskletV1Api.string(), explicit: true})
+		d.peerStmts = append(d.peerStmts, JavaPeerSpec{dir: strTaskletV1Api, explicit: true})
 	case kwSTYLE_RUFF, kwSTYLE_PYTHON:
 		style := "ruff"
 

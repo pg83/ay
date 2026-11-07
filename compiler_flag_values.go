@@ -1,6 +1,7 @@
 package main
 
 import (
+	"slices"
 	"strings"
 	"unicode"
 )
@@ -77,29 +78,40 @@ func (e *EmitContext) ownCompilerFlagValues(args []ANY, kind CompilerFlagKind) [
 }
 
 func compilerCommandFlags(args []ANY, env Environment) CompilerFlagValue {
+	identity := internAnyWords(args)
+
+	if !slices.ContainsFunc(args, compilerFlagExpands) {
+		return CompilerFlagValue{Name: identity, Args: args}
+	}
+
 	var resources []STR
 
 	parentUses := env.resourceUses
 
 	env.resourceUses = &resources
 
-	identity := internAnyWords(args)
+	key := expansionKey(uint32(identity), expansionCompilerFlags)
+	words, ok := expansionMemo.find(key, env)
 
-	for _, arg := range args {
-		text := arg.relOrSelf().string()
+	if !ok {
+		values, name := compilerFlagExpression(identity.string(), env, compilerFlagExpanding[:0])
 
-		if arg.vfs() != 0 || strings.ContainsAny(text, "$\\\"'&") || strings.ContainsFunc(text, unicode.IsSpace) {
-			values, identity := compilerFlagExpression(identity.string(), env, compilerFlagExpanding[:0])
+		words = append(append(make([]ANY, 0, len(values)+1), internStr(name).any()), internAnys(values)...)
 
-			if parentUses != nil {
-				*parentUses = resourceKeyUnion(*parentUses, resources)
-			}
-
-			return CompilerFlagValue{Name: internStr(identity), Args: internAnys(values), Resources: resources}
-		}
+		expansionMemo.end(key, words...)
 	}
 
-	return CompilerFlagValue{Name: identity, Args: args}
+	if parentUses != nil {
+		*parentUses = resourceKeyUnion(*parentUses, resources)
+	}
+
+	return CompilerFlagValue{Name: words[0].str(), Args: words[1:len(words):len(words)], Resources: resources}
+}
+
+func compilerFlagExpands(arg ANY) bool {
+	text := arg.relOrSelf().string()
+
+	return arg.vfs() != 0 || strings.ContainsAny(text, "$\\\"'&") || strings.ContainsFunc(text, unicode.IsSpace)
 }
 
 func ownCompilerFlagArgs(values []CompilerFlagValue, own []ANY) []ANY {

@@ -56,14 +56,14 @@ func (d *ModuleData) collectPythonLintFiles(module string, group int) {
 	}
 }
 
-func (e *EmitContext) pythonLinterFiles() []string {
+func (e *EmitContext) pythonLinterFiles() []VFS {
 	d := e.d
 
-	var files []string
+	var files []VFS
 
 	for _, ps := range e.pySrcsReg {
 		if ps.Kind == pySourcePlain && ps.Path.isSource() && d.pySrcGroups[ps.Group].Lint {
-			files = append(files, ps.Path.relString())
+			files = append(files, ps.Path)
 		}
 	}
 
@@ -73,7 +73,7 @@ func (e *EmitContext) pythonLinterFiles() []string {
 				v := resolveSourceOrGeneratedVFS(e.ctx, e.instance, stmt.Src, d.srcDirs)
 
 				if v.isSource() {
-					files = append(files, v.relString())
+					files = append(files, v)
 				}
 			}
 		}
@@ -83,7 +83,7 @@ func (e *EmitContext) pythonLinterFiles() []string {
 			_, rooted := moduleRootedVFS(e.instance.Path.relString(), extra)
 
 			if v.isSource() && (rooted || e.ctx.fs.isFileVFS(v)) {
-				files = append(files, v.relString())
+				files = append(files, v)
 			}
 		}
 	}
@@ -97,9 +97,9 @@ func (e *EmitContext) pythonLinterFiles() []string {
 
 		for _, file := range seed {
 			if strings.HasPrefix(file, "$S/") {
-				files = append(files, strings.TrimPrefix(file, "$S/"))
+				files = append(files, source(strings.TrimPrefix(file, "$S/")))
 			} else if strings.HasPrefix(file, "${ARCADIA_ROOT}/") {
-				files = append(files, strings.TrimPrefix(file, "${ARCADIA_ROOT}/"))
+				files = append(files, source(strings.TrimPrefix(file, "${ARCADIA_ROOT}/")))
 			}
 		}
 
@@ -110,5 +110,5 @@ func (e *EmitContext) pythonLinterFiles() []string {
 		}
 	}
 
-	return sortedUnique(files)
+	return sortedUniqueVFS(files)
 }

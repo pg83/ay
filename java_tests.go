@@ -135,6 +135,14 @@ func sortedUnique(in []string) []string {
 	return slices.Compact(out)
 }
 
+func sortedUniqueVFS(in []VFS) []VFS {
+	out := slices.Clone(in)
+
+	slices.SortFunc(out, vfsCompare)
+
+	return slices.Compact(out)
+}
+
 func (ctx *GenCtx) javaSuiteBase(jm *JavaModule, name, testType, ciType STR) *TestSuite {
 	return &TestSuite{
 		p:           jm.instance.Platform,
@@ -256,7 +264,7 @@ func javaMacroKeyword(args []string, keyword string, others ...string) []string 
 	return out
 }
 
-func (ctx *GenCtx) javaKotlinLintFiles(jm *JavaModule) []string {
+func (ctx *GenCtx) javaKotlinLintFiles(jm *JavaModule) []VFS {
 	args := jm.data.collectKotlinLint
 
 	if args == nil {
@@ -281,15 +289,15 @@ func (ctx *GenCtx) javaKotlinLintFiles(jm *JavaModule) []string {
 
 	ex := newJavaExcludeMatcher(jm.dir, []string{"ya.make", "canondata/**"})
 
-	var files []string
+	var files []VFS
 
 	for _, p := range patterns {
 		for _, f := range ctx.javaGlob(jm.dir, p, ex) {
-			files = append(files, f.string())
+			files = append(files, f.source())
 		}
 	}
 
-	return sortedUnique(files)
+	return sortedUniqueVFS(files)
 }
 
 func (ctx *GenCtx) javaCustomLintSuite(jm *JavaModule, l javaCustomLint) *TestSuite {

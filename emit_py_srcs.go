@@ -209,7 +209,7 @@ func (e *EmitContext) pyModuleKey(keyPrefix string, scope PyScope, src string) S
 		return strMain
 	}
 
-	return internStr(pythonModuleName(e.instance.Path.relString(), src, scope.TopLevel, scope.Namespace))
+	return pythonModuleNameSTR(e.instance.Path.relString(), src, scope.TopLevel, scope.Namespace)
 }
 
 func (e *EmitContext) pyYapycExt() string {
@@ -671,21 +671,30 @@ func (e *EmitContext) emitPyNamespaceForGroup(groupIndex int, group PySrcGroup) 
 		h.Write([]byte(group.Scopes[si].moduleName(instance.Path.relString(), srcRel)))
 	}
 
+	var nsValue STR
+	var nsScope *ANY
+
+	nsKnown, nsTop := false, false
+
 	for _, ps := range e.pySrcsReg {
 		if ps.Group != groupIndex || ps.Kind != pySourcePlain || !ps.Path.isSource() || srcExtClassOf(ps.Token) != srcExtPy || ps.Scope.ModuleName != nil {
 			continue
 		}
 
 		srcRel := ps.Token.string()
-		nsValue := pythonModuleName(instance.Path.relString(), "", ps.Scope.TopLevel, ps.Scope.Namespace)
 
-		if nsValue == "" {
-			nsValue = "."
+		if !nsKnown || ps.Scope.TopLevel != nsTop || ps.Scope.Namespace != nsScope {
+			nsKnown, nsTop, nsScope = true, ps.Scope.TopLevel, ps.Scope.Namespace
+			nsValue = pythonModuleNameSTR(instance.Path.relString(), "", nsTop, nsScope)
+
+			if nsValue.isEmpty() {
+				nsValue = str4
+			}
 		}
 
 		resolvedRel := ps.Path.relString()
 		root := resolvedRel[:max(len(resolvedRel)-len(srcRel)-1, 0)]
-		entry := pyNamespaceEntry{internStr(root), internStr(nsValue)}
+		entry := pyNamespaceEntry{internStr(root), nsValue}
 
 		if !slices.Contains(namespaces, entry) {
 			namespaces = append(namespaces, entry)

@@ -69,7 +69,7 @@ func (d *ModuleData) collectCustomStyle(module string, args []ANY, env Environme
 			continue
 		}
 
-		check.Files = append(check.Files, styleSourcePath(module, file))
+		check.Files = append(check.Files, source(styleSourcePath(module, file)))
 	}
 
 	for _, param := range check.ExtraParams {
@@ -78,7 +78,7 @@ func (d *ModuleData) collectCustomStyle(module string, args []ANY, env Environme
 		}
 	}
 
-	check.Files = sortedUnique(check.Files)
+	check.Files = sortedUniqueVFS(check.Files)
 	check.ConfigMap = strings.Join(fields["DEFAULT_CONFIGS"], "")
 	check.ConfigType = strings.Join(fields["CONFIG_TYPE"], "")
 	check.ConfigDir, _ = env.lookupENV(envModuleCommonConfigsDir)

@@ -4083,12 +4083,13 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 		d.collectYAMLStyleWithConfig(modulePath, v, env)
 	case tokCollectYAML:
 		files := collectStyleFiles(fs, modulePath, v)
+		texts := make([]string, len(files))
 
 		for i, file := range files {
-			files[i] = source(file).string()
+			texts[i] = file.string()
 		}
 
-		env.setString(envYamlLintSrcs, strings.Join(files, " "))
+		env.setString(envYamlLintSrcs, strings.Join(texts, " "))
 	case tokUsrvBuild:
 		d.collectUsrvFiles(anyStrs(v.Args))
 	case tokUsrvAllSrcs:
@@ -4952,7 +4953,7 @@ func collectPySrcGroup(fs FS, modulePath string, v UnknownStmt, d *ModuleData, e
 		} else if !explicitModule && d.pyMain == nil && d.moduleStmt != nil &&
 			(d.moduleStmt.Name == tokPy3Program || d.moduleStmt.Name == tokPy3ProgramBin || d.pythonSourceEntry && !d.usePython2) &&
 			(src == "__main__.py" || strings.HasSuffix(src, "/__main__.py")) {
-			d.pyMain = ptr(internStr(pythonModuleName(modulePath, src, topLevel, namespace)).any())
+			d.pyMain = ptr(pythonModuleNameSTR(modulePath, src, topLevel, namespace).any())
 			d.pyMainDeclSeq = d.nextDeclSeq()
 		}
 
@@ -5123,6 +5124,10 @@ func (s PyScope) isMain(src string) bool {
 }
 
 func pythonModuleName(modulePath, src string, topLevel bool, namespace *ANY) string {
+	return pythonModuleNameSTR(modulePath, src, topLevel, namespace).string()
+}
+
+func pythonModuleNameSTR(modulePath, src string, topLevel bool, namespace *ANY) STR {
 	prefix := modulePath
 
 	if namespace != nil {
@@ -5165,7 +5170,7 @@ func pythonModuleName(modulePath, src string, topLevel bool, namespace *ANY) str
 		}
 	}
 
-	return internBlock(block, n).string()
+	return internBlock(block, n)
 }
 
 func pythonInitSuffix(name string) string {

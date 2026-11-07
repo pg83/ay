@@ -11,6 +11,9 @@ const (
 	expansionVariable = iota + 1
 	expansionScalar
 	expansionTokens
+	expansionRunProgram
+	expansionCompilerFlags
+	expansionRunProgramPrepare
 )
 
 type ExpansionStep struct {

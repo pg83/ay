@@ -23,7 +23,7 @@ type StyleCheck struct {
 	ConfigDir          string
 	Wrapper            string
 	Resource           string
-	Files              []string
+	Files              []VFS
 	ExtraConfigs       []string
 	ExtraParams        []string
 	FileProcessingTime float64
@@ -195,7 +195,7 @@ func (d *ModuleData) collectYAMLStyleWithConfig(module string, stmt UnknownStmt,
 	files, _ := env.lookupENV(envYamlLintSrcs)
 
 	for _, file := range strings.Fields(files) {
-		check.Files = append(check.Files, styleSourcePath(module, file))
+		check.Files = append(check.Files, source(styleSourcePath(module, file)))
 	}
 
 	args := stmt.Args
@@ -236,8 +236,9 @@ func explicitStyleCheck(name TOK, env Environment) StyleCheck {
 	return check
 }
 
-func collectStyleFiles(fs FS, module string, stmt UnknownStmt) []string {
-	var dirs, recursive, files []string
+func collectStyleFiles(fs FS, module string, stmt UnknownStmt) []VFS {
+	var dirs, recursive []string
+	var files []VFS
 	var excludes []*globMatcher
 
 	ext := ".json"
@@ -299,21 +300,17 @@ func collectStyleFiles(fs FS, module string, stmt UnknownStmt) []string {
 				return
 			}
 
-			if view {
-				file = strings.Clone(file)
-			}
-
-			files = append(files, file)
+			files = append(files, source(file))
 		})
 	}
 
-	return sortedUnique(files)
+	return sortedUniqueVFS(files)
 }
 
 func (d *ModuleData) addFileStyleCheck(check StyleCheck) {
 	for _, file := range check.Files {
-		if path.Base(file) == "ya.make" {
-			throwFmt("STYLE: nested module %s", file)
+		if path.Base(file.relString()) == "ya.make" {
+			throwFmt("STYLE: nested module %s", file.relString())
 		}
 	}
 
@@ -327,7 +324,7 @@ func (d *ModuleData) addFileStyleCheck(check StyleCheck) {
 
 	for i := range d.styleChecks {
 		if previous := &d.styleChecks[i]; previous.Name == check.Name {
-			previous.Files = sortedUnique(append(previous.Files, check.Files...))
+			previous.Files = sortedUniqueVFS(append(previous.Files, check.Files...))
 
 			return
 		}
@@ -435,9 +432,9 @@ func styleCheckResources(check StyleCheck, globals []ResourceDecl) []ResourceDec
 
 	resource := interned(check.Resource)
 
-	for _, r := range globals {
+	for i, r := range globals {
 		if resource != 0 && r.GlobalVar == resource {
-			return []ResourceDecl{r}
+			return globals[i : i+1 : i+1]
 		}
 	}
 
@@ -474,7 +471,7 @@ func (ctx *GenCtx) styleSuite(check StyleCheck, project string, env []string, re
 		}
 
 		for i := chunk.index; i < len(check.Files); i += max(chunk.split, 1) {
-			args = append(args, source(check.Files[i]).any())
+			args = append(args, check.Files[i].any())
 		}
 
 		return args
@@ -483,14 +480,14 @@ func (ctx *GenCtx) styleSuite(check StyleCheck, project string, env []string, re
 	return s
 }
 
-func (s *TestSuite) mergeStyleFiles(files []string) {
+func (s *TestSuite) mergeStyleFiles(files []VFS) {
 	check := s.styleCheck
 
-	check.Files = sortedUnique(append(check.Files, files...))
+	check.Files = sortedUniqueVFS(append(check.Files, files...))
 	s.relatedPaths = nil
 
 	for _, file := range check.Files {
-		s.relatedPaths = append(s.relatedPaths, source(file).any())
+		s.relatedPaths = append(s.relatedPaths, file.any())
 	}
 
 	if check.Config != "" {

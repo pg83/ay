@@ -31,6 +31,17 @@ func runProgramSourceArgumentValues(args []ANY, env Environment, withText bool) 
 			continue
 		}
 
+		key := expansionKey(uint32(arg), expansionRunProgram)
+
+		if !withText {
+			if words, ok := expansionMemo.find(key, env); ok {
+				values = append(values, words...)
+
+				continue
+			}
+		}
+
+		start := len(values)
 		value := arg.string()
 
 		var track SourceTextTracker
@@ -64,6 +75,10 @@ func runProgramSourceArgumentValues(args []ANY, env Environment, withText bool) 
 			if withText {
 				text = append(text, track.contains(span.Start, span.End))
 			}
+		}
+
+		if !withText {
+			expansionMemo.end(key, values[start:]...)
 		}
 	}
 
@@ -176,8 +191,16 @@ func prepareRunProgramArguments(args []ANY, env Environment) []ANY {
 			continue
 		}
 
+		key := expansionKey(uint32(a), expansionRunProgramPrepare)
+
+		if words, ok := expansionMemo.find(key, env); ok {
+			out = append(out, words...)
+
+			continue
+		}
+
 		text := expandConfigMacroBody(bytesString(appendANYText(buf[:0], a)), env)
-		start := -1
+		start, mark := -1, len(out)
 
 		for i := 0; i <= len(text); i++ {
 			if i == len(text) || text[i] == ' ' || text[i] == ',' {
@@ -189,6 +212,8 @@ func prepareRunProgramArguments(args []ANY, env Environment) []ANY {
 				start = i
 			}
 		}
+
+		expansionMemo.end(key, out[mark:]...)
 	}
 
 	if len(out) == 0 {

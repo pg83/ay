@@ -242,7 +242,7 @@ type JavaSrcsSpec struct {
 }
 
 type JavaPeerSpec struct {
-	dir      string
+	dir      STR
 	explicit bool
 }
 
@@ -679,18 +679,20 @@ func (ctx *GenCtx) javaResolvePeers(jm *JavaModule) {
 		jm.managedPeers = append(jm.managedPeers, res.java)
 	}
 
-	seen := map[string]bool{}
+	seen := map[STR]bool{}
 
-	add := func(dir string, explicit bool) {
-		dir = path.Clean(dir)
+	add := func(dir STR, explicit bool) {
+		if !dir.cleanPath() {
+			dir = internStr(path.Clean(dir.string()))
+		}
 
-		if dir == "" || dir == "." || seen[dir] {
+		if dir.isEmpty() || dir == str4 || seen[dir] {
 			return
 		}
 
 		seen[dir] = true
 
-		res := ctx.javaPeerResult(jm, internStr(dir), explicit)
+		res := ctx.javaPeerResult(jm, dir, explicit)
 
 		if res == nil {
 			return
@@ -699,13 +701,19 @@ func (ctx *GenCtx) javaResolvePeers(jm *JavaModule) {
 		if res.java != nil {
 			jm.managedPeers = append(jm.managedPeers, res.java)
 		} else {
-			jm.unmanageable = append(jm.unmanageable, javaForeignPeer{dir: dir, res: res})
+			jm.unmanageable = append(jm.unmanageable, javaForeignPeer{dir: dir.string(), res: res})
 		}
 	}
 
 	for _, p := range jm.data.varPeers {
-		if p.string() != jm.dir {
-			add(p.string(), false)
+		id := p.str()
+
+		if id == 0 {
+			id = internStr(p.string())
+		}
+
+		if id.string() != jm.dir {
+			add(id, false)
 		}
 	}
 
@@ -720,7 +728,7 @@ func (ctx *GenCtx) javaResolvePeers(jm *JavaModule) {
 	}
 
 	for _, p := range jm.macroPeers() {
-		add(p, false)
+		add(internStr(p), false)
 	}
 
 	if len(jm.data.implPeers) > 0 {

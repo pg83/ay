@@ -258,15 +258,29 @@ func selectResourceDescriptor(descriptor ResourceDescriptor, hostPlatform string
 }
 
 func sortedResourceGlobals(in []ResourceDecl) []ResourceDecl {
-	if len(in) < 2 {
+	if len(in) < 2 || resourceGlobalsSorted(in) {
 		return in
 	}
 
 	out := slices.Clone(in)
 
-	slices.SortFunc(out, func(a, b ResourceDecl) int { return strings.Compare(a.GlobalVar.string(), b.GlobalVar.string()) })
+	slices.SortFunc(out, resourceGlobalCompare)
 
 	return slices.Compact(out)
+}
+
+func resourceGlobalCompare(a, b ResourceDecl) int {
+	return strings.Compare(a.GlobalVar.string(), b.GlobalVar.string())
+}
+
+func resourceGlobalsSorted(in []ResourceDecl) bool {
+	for i := 1; i < len(in); i++ {
+		if in[i] == in[i-1] || resourceGlobalCompare(in[i-1], in[i]) > 0 {
+			return false
+		}
+	}
+
+	return true
 }
 
 func resolveResourceGlobalRef(s string, globals []ResourceDecl) string {

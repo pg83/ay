@@ -13,7 +13,10 @@ func (d *ModuleData) collectCPPStyle(stmt UnknownStmt, env Environment) {
 func (d *JavaData) collectCPPStyle(fs FS, dir string, stmt UnknownStmt, env Environment) {
 	check := cppStyleCheck(stmt, env)
 
-	check.Files = headerFiles(fs, dir, []ANY{str4.any()})
+	for _, file := range headerFiles(fs, dir, []ANY{str4.any()}) {
+		check.Files = append(check.Files, source(file))
+	}
+
 	d.styleChecks = append(d.styleChecks, check)
 }
 
@@ -56,7 +59,7 @@ func cppStyleCheck(stmt UnknownStmt, env Environment) StyleCheck {
 }
 
 func prepareCPPStyle(check *StyleCheck, project string) {
-	check.Files = sortedUnique(check.Files)
+	check.Files = sortedUniqueVFS(check.Files)
 
 	if len(check.Depends) != 0 && !customClangFormatAllowed(project) {
 		throwFmt("STYLE: custom clang-format is not allowed in %s", project)
@@ -100,16 +103,16 @@ func (e *EmitContext) collectCPPStyleInputs(inputs ...VFS) {
 
 		for _, input := range inputs {
 			if input != 0 && input.isSource() && cppLinterSource(input.relString()) {
-				check.Files = append(check.Files, input.relString())
+				check.Files = append(check.Files, input)
 			}
 		}
 	}
 }
 
-func (e *EmitContext) cppStyleInputFiles(file VFS) []string {
+func (e *EmitContext) cppStyleInputFiles(file VFS) []VFS {
 	seen := map[VFS]bool{}
 
-	var files []string
+	var files []VFS
 	var visit func(VFS)
 
 	visit = func(input VFS) {
@@ -121,7 +124,7 @@ func (e *EmitContext) cppStyleInputFiles(file VFS) []string {
 
 		if input.isSource() {
 			if cppLinterSource(input.relString()) {
-				files = append(files, input.relString())
+				files = append(files, input)
 			}
 
 			return
@@ -153,7 +156,7 @@ func (e *EmitContext) cppStyleSourceResolved(src ANY, input VFS) ANY {
 	}
 
 	var resolved VFS
-	var files []string
+	var files []VFS
 
 	for i := range e.d.styleChecks {
 		check := &e.d.styleChecks[i]
