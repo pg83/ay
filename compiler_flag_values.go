@@ -115,7 +115,7 @@ func compilerCommandFlags(args []ANY, env Environment) CompilerFlagValue {
 
 		words = append(append(make([]ANY, 0, len(values)+1), name.any()), values...)
 
-		expansionMemo.end(key, words...)
+		expansionMemo.endRetained(key, words...)
 	}
 
 	if parentUses != nil {

@@ -449,20 +449,6 @@ func (ctx *GenCtx) styleSuite(check StyleCheck, projectID STR, env []string, res
 
 	projectArg, nameArg, wrapperArg := projectID.source().any(), check.Name.any(), canonicalANY(check.Wrapper.any())
 
-	var configArgs, paramArgs []ANY
-
-	if check.Config != "" {
-		configArgs = append(configArgs, strConfig.any(), source(check.Config).any())
-	}
-
-	for _, config := range check.ExtraConfigs {
-		configArgs = append(configArgs, strConfig.any(), source(config).any())
-	}
-
-	for _, param := range check.ExtraParams {
-		paramArgs = append(paramArgs, strExtraParam.any(), testArg(param))
-	}
-
 	s.runCmd = func(work string, chunk TestChunk) []ANY {
 		args := []ANY{testToolHostPathArg, strRunCustomLint.any(), strSourceRoot2.any(), testSourceRootArg, strBuildRoot2.any(), testBuildRootArg, strProjectPath.any(), projectArg, strTracePath.any(), testArg(work + "/ytest.report.trace"), strOutPath.any(), testArg(work + "/testing_out_stuff"), strLintName.any(), nameArg, strWrapperScript.any(), wrapperArg}
 
@@ -476,13 +462,21 @@ func (ctx *GenCtx) styleSuite(check StyleCheck, projectID STR, env []string, res
 			args = append(args, strDepends.any(), arg)
 		}
 
-		args = append(args, configArgs...)
+		if check.Config != "" {
+			args = append(args, strConfig.any(), source(check.Config).any())
+		}
+
+		for _, config := range check.ExtraConfigs {
+			args = append(args, strConfig.any(), source(config).any())
+		}
 
 		for _, r := range sortedResourceGlobals(resources) {
 			args = append(args, strGlobalResource.any(), r.Token.any())
 		}
 
-		args = append(args, paramArgs...)
+		for _, param := range check.ExtraParams {
+			args = append(args, strExtraParam.any(), testArg(param))
+		}
 
 		for i := chunk.index; i < len(check.Files); i += max(chunk.split, 1) {
 			args = append(args, check.Files[i].any())

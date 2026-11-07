@@ -2,10 +2,7 @@ package main
 
 var expansionMemo = ExpansionMemo{heads: newIntMap[uint32](1 << 14)}
 
-const (
-	expansionMemoDepth = 8
-	expansionVolatile  = 1 << 31
-)
+const expansionMemoDepth = 8
 
 const (
 	expansionVariable = iota + 1
@@ -51,7 +48,7 @@ func (m *ExpansionMemo) find(key uint64, env Environment) ([]ANY, bool) {
 
 	head, seen := m.heads.cell(key)
 
-	if !seen || *head == expansionVolatile {
+	if !seen {
 		return nil, false
 	}
 
@@ -113,6 +110,14 @@ func (m *ExpansionMemo) cancel() {
 }
 
 func (m *ExpansionMemo) end(key uint64, words ...ANY) {
+	m.store(key, true, words)
+}
+
+func (m *ExpansionMemo) endRetained(key uint64, words ...ANY) {
+	m.store(key, false, words)
+}
+
+func (m *ExpansionMemo) store(key uint64, overwrite bool, words []ANY) {
 	if !m.tracing {
 		return
 	}
@@ -125,13 +130,23 @@ func (m *ExpansionMemo) end(key uint64, words ...ANY) {
 
 	head := m.heads.get(key)
 	depth := 0
+	reuse := uint32(0)
 
 	for i := *head; i != 0; i = m.entries[i-1].next {
 		depth++
+
+		if e := &m.entries[i-1]; int(e.nsteps) == len(m.trace) && int(e.nwords) == len(words) {
+			reuse = i
+		}
 	}
 
 	if depth >= expansionMemoDepth {
-		*head = expansionVolatile
+		if overwrite && reuse != 0 {
+			e := &m.entries[reuse-1]
+
+			copy(m.steps[e.steps:e.steps+e.nsteps], m.trace)
+			copy(m.words[e.words:e.words+e.nwords], words)
+		}
 
 		return
 	}
