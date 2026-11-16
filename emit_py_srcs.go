@@ -469,7 +469,7 @@ func (e *EmitContext) emitPyYapyc(ps PySrc, tool PyccTool) {
 	outputPath := e.pyYapycOf(ps)
 
 	if info := e.codegen.lookup(outputPath); info != nil {
-		if info.OwnerModule == instance.Path && info.OwnerSerial == e.frame.serial {
+		if info.OwnerModule == instance.Path && info.OwnerSerial == e.frame.serial && e.duplicatePySource(ps) {
 			ctx.onWarn(Warn{Kind: WarnDupSrc, Where: makeFileWhere(instance.Path.relString()), Error: ymakeVFS(outputPath) + " was already added in this project. Skip command: 0"})
 		}
 
@@ -1119,4 +1119,14 @@ func (e *EmitContext) resolvePythonDeclaration(src ANY, sourceRoot bool) Resolve
 	}
 
 	return e.resolvePythonSource(src.string())
+}
+
+func (e *EmitContext) duplicatePySource(ps PySrc) bool {
+	registered := e.pySrcsReg
+
+	if len(registered) > 0 {
+		registered = registered[:len(registered)-1]
+	}
+
+	return slices.ContainsFunc(registered, func(prev PySrc) bool { return prev.Path == ps.Path && prev.Kind == ps.Kind })
 }

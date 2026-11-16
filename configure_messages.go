@@ -432,7 +432,7 @@ func resourceDeclarations(stmt *DeclareResourceStmt, report func(string)) []*Dec
 					break
 				}
 
-				if _, err := strconv.ParseUint(args[n+3].string(), 10, 32); err != nil {
+				if !utilUint32(args[n+3].string()) {
 					report("[[alt1]]STRIP_PREFIX[[rst]] must be integral in [[alt1]]DECLARE_EXTERNAL_RESOURCE[[rst]]: " + vecDump(args))
 
 					break
@@ -490,7 +490,7 @@ func hostResourcesValid(macro string, args []ANY, report func(string)) bool {
 
 	for ; n+2 < len(args); n += 3 {
 		if n+4 < len(args) && args[n+3] == kwSTRIP_PREFIX.any() {
-			if _, err := strconv.ParseUint(args[n+4].string(), 10, 32); err != nil {
+			if !utilUint32(args[n+4].string()) {
 				report("[[alt1]]STRIP_PREFIX[[rst]] must be integral in [[alt1]]" + macro + "[[rst]]: " + vecDump(args))
 			}
 
@@ -1455,4 +1455,10 @@ func (ctx *GenCtx) dependsDirError(dir STR) string {
 	}
 
 	return ""
+}
+
+func utilUint32(v string) bool {
+	_, err := strconv.ParseUint(strings.TrimPrefix(v, "+"), 10, 32)
+
+	return err == nil && v != "+"
 }

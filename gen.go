@@ -2105,7 +2105,7 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 		incompatible := Warn{Kind: WarnModuleFailed, Message: fmt.Sprintf("PEERDIR from %s to %s is not allowed and skipped: module types are incompatible", instance.Path.relString(), p.string()), Where: where, Error: "[[alt1]]PEERDIR[[rst]] to [[imp]]$S/" + p.string() + "[[rst]] is not allowed and skipped: module types are incompatible"}
 
 		if isGoModuleType(peerResult.ModuleStmtName) && !isGoModuleType(d.unit.Type) {
-			if explicit {
+			if explicit && peerResult.ModuleStmtName != tokGoDll {
 				ctx.onWarn(incompatible)
 			}
 

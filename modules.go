@@ -626,7 +626,7 @@ func sourceInputVFS(fs FS, moduleDir VFS, path string) (VFS, bool) {
 				return source(filepath.ToSlash(filepath.Clean(modulePath + "/" + clean))), true
 			}
 
-			if modulePath == "." {
+			if modulePath == "." || modulePath == "" {
 				return source(clean), true
 			}
 
@@ -650,7 +650,7 @@ func sourceInputID(fs FS, moduleDir VFS, rel STR) (VFS, bool) {
 	}
 
 	if present, isDir := fs.existsID(moduleDir.rel(), rel); present && !isDir {
-		if modulePath == "." {
+		if modulePath == "." || modulePath == "" {
 			return rel.source(), true
 		}
 

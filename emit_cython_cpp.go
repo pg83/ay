@@ -202,7 +202,7 @@ func (e *EmitContext) planCythonCpp() []CythonStmtPlan {
 		var headerVFS []VFS
 
 		if stmt.Header {
-			base := instance.Path.relString() + "/" + relStem(stmt.Src) + cythonSuffix
+			base := dirPrefix(instance.Path) + relStem(stmt.Src) + cythonSuffix
 
 			headerVFS = append(headerVFS, build(base, ".h"))
 

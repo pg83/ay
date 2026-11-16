@@ -20,7 +20,7 @@ var rodataYasmConstArgs = []ANY{
 }
 
 func composeRodataOutputs(instance ModuleInstance, srcRel, objectSuffix string) (VFS, VFS) {
-	base := instance.Path.relString() + "/" + srcRel
+	base := dirPrefix(instance.Path) + srcRel
 
 	if strings.Contains(srcRel, "/") {
 		base = instance.Path.relString() + "/_/" + srcRel

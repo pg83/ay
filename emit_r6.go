@@ -18,7 +18,7 @@ type Ragel6BuildStmt struct {
 }
 
 func ragel6OutVFS(instance ModuleInstance, srcRel string) VFS {
-	dir := instance.Path.relString() + "/"
+	dir := dirPrefix(instance.Path)
 	base := srcRel
 
 	if i := strings.LastIndexByte(srcRel, '/'); i >= 0 {

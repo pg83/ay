@@ -185,10 +185,10 @@ func moduleNodeName(instance ModuleInstance, result *ModuleEmitResult, decl *Mod
 	case result.LDPath != nil:
 		return ymakeVFS(*result.LDPath)
 	case instance.Kind == KindLib:
-		return "$B/" + instance.Path.relString() + "/" + archiveNameWithPrefixOrName(instance.Platform, instance.Path.relString(), "lib", "")
+		return "$B/" + dirPrefix(instance.Path) + archiveNameWithPrefixOrName(instance.Platform, instance.Path.relString(), "lib", "")
 	}
 
-	return "$B/" + instance.Path.relString() + "/" + programBinaryName(instance, decl)
+	return "$B/" + dirPrefix(instance.Path) + programBinaryName(instance, decl)
 }
 
 func (ctx *GenCtx) plainModuleDir(dir VFS) bool {

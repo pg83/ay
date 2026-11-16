@@ -14,7 +14,7 @@ func (e *EmitContext) emitBIReserved(
 ) {
 	instance := e.instance
 	na := e.ctx.na
-	outPrefix := instance.Path.relString() + "/"
+	outPrefix := dirPrefix(instance.Path)
 	argsFileVFS := build(outPrefix, "__args")
 	outVFS := build(outPrefix, outputHeader)
 	env := envVarsVCS
@@ -70,7 +70,7 @@ func (e *EmitContext) emitBIReserved(
 
 func (e *EmitContext) emitBuildInfoStmt() {
 	ctx, instance, d := e.ctx, e.instance, e.d
-	outPrefix := instance.Path.relString() + "/"
+	outPrefix := dirPrefix(instance.Path)
 	biRef := ctx.emit.reserve()
 	createFor := d.createBuildInfoFor.string()
 	tc := d.tc

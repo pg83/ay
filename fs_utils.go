@@ -116,6 +116,10 @@ func buildJoinClean(dir, rel string) VFS {
 		return build(dir, "/", rel)
 	}
 
+	if dir == "" && rel != "" {
+		return buildClean(rel)
+	}
+
 	return build(filepath.ToSlash(filepath.Clean(dir + "/" + rel)))
 }
 
@@ -154,6 +158,10 @@ func buildClean(rel string) VFS {
 func sourceJoinClean(dir, rel string) VFS {
 	if dir != "" && rel != "" && pathIsClean(dir) && pathIsClean(rel) {
 		return source(dir, "/", rel)
+	}
+
+	if dir == "" && rel != "" {
+		return sourceClean(rel)
 	}
 
 	return source(filepath.ToSlash(filepath.Clean(dir + "/" + rel)))
@@ -339,4 +347,12 @@ func normalisePathSlow(p string) string {
 	}
 
 	return strings.Join(out, "/")
+}
+
+func dirPrefix(dir VFS) string {
+	if rel := dir.relString(); rel != "" {
+		return rel + "/"
+	}
+
+	return ""
 }
