@@ -2232,6 +2232,8 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 				switch v.Name {
 				case tokTsLibrary, tokTsPackage, tokTsTsc, tokTsVite, tokTsNext, tokTsRspack:
 					env.setString(envTsModName, v.Name.string())
+				case tokTsTestFor:
+					env.setString(envAllowRelForPath, "no")
 				}
 			}
 

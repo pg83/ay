@@ -580,6 +580,12 @@ func (e *EmitContext) notsPrepare() notsPreparation {
 
 	base, globals, nodejs := e.notsBaseArgs(pj)
 
+	if pj["usePrebuilder"] == true {
+		if msg := e.notsPrebuilderError(dir, pj); msg != "" {
+			ctx.onWarn(Warn{Kind: WarnMisconfiguration, Where: makeFileWhere(dir), Error: msg})
+		}
+	}
+
 	var resourceNames []STR
 
 	for _, decl := range globals {

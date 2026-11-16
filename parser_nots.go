@@ -27,7 +27,9 @@ type NotsPackage struct {
 }
 
 type NotsLockfile struct {
-	Packages []NotsPackage
+	Packages      []NotsPackage
+	RequiresBuild []string
+	NoHasAddons   []string
 }
 
 type ParsedJSON struct {
@@ -272,6 +274,7 @@ func (pm *IncludeParserManager) notsSelectVersion(tool, constraint string) (stri
 
 type notsLockEntry struct {
 	name, typ, tarball, integrity string
+	requiresBuild, hasAddons      bool
 }
 
 func (pm *IncludeParserManager) notsLockfile(rel string) *NotsLockfile {
@@ -299,6 +302,14 @@ func (pm *IncludeParserManager) notsLockfile(rel string) *NotsLockfile {
 	for _, item := range entries {
 		name := item.name
 		res := struct{ Type, Tarball, Integrity string }{item.typ, item.tarball, item.integrity}
+
+		if item.requiresBuild {
+			result.RequiresBuild = append(result.RequiresBuild, name)
+
+			if !item.hasAddons {
+				result.NoHasAddons = append(result.NoHasAddons, name)
+			}
+		}
 
 		if res.Type == "directory" {
 			continue
@@ -395,11 +406,15 @@ func notsLockfileDecode(data []byte) (string, []notsLockEntry) {
 	entries := make([]notsLockEntry, 0, len(doc.Packages))
 
 	for _, item := range doc.Packages {
-		resolution := notsObject(notsObject(item.Value)["resolution"])
+		meta := notsObject(item.Value)
+		resolution := notsObject(meta["resolution"])
+		requiresBuild, _ := meta["requiresBuild"].(bool)
+		_, hasAddons := meta["hasAddons"]
 
 		entries = append(entries, notsLockEntry{
 			name: notsString(item.Key), typ: notsString(resolution["type"]),
 			tarball: notsString(resolution["tarball"]), integrity: notsString(resolution["integrity"]),
+			requiresBuild: requiresBuild, hasAddons: hasAddons,
 		})
 	}
 
@@ -451,10 +466,27 @@ func notsLockfileScan(data []byte) (string, []notsLockEntry, bool) {
 		}
 
 		if bytes.HasPrefix(line, []byte("    ")) {
-			if bytes.HasPrefix(line, []byte("    resolution:")) && len(entries) != 0 {
-				if !notsLockResolution(&entries[len(entries)-1], bytes.TrimSpace(line[len("    resolution:"):])) {
+			if len(entries) == 0 {
+				continue
+			}
+
+			entry := &entries[len(entries)-1]
+
+			switch {
+			case bytes.HasPrefix(line, []byte("    resolution:")):
+				if !notsLockResolution(entry, bytes.TrimSpace(line[len("    resolution:"):])) {
 					return "", nil, false
 				}
+			case bytes.HasPrefix(line, []byte("    requiresBuild:")):
+				value, ok := notsLockScalar(bytes.TrimSpace(line[len("    requiresBuild:"):]))
+
+				if !ok || value != "true" && value != "false" {
+					return "", nil, false
+				}
+
+				entry.requiresBuild = value == "true"
+			case bytes.HasPrefix(line, []byte("    hasAddons:")):
+				entry.hasAddons = true
 			}
 
 			continue
