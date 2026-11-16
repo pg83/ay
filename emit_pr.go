@@ -745,7 +745,8 @@ func (e *EmitContext) emitPR(spec RunProgramNodeSpec, id NodeRef) {
 		Env:  env, Inputs: inputs, Outputs: outputs,
 		KV:             kv,
 		ForeignDepRefs: toolRefs,
-		DepRefs:        inputNode.DepRefs}, input: InputSpec{roots: inputNode.input.roots, text: inputNode.input.text},
+		DepRefs:        inputNode.DepRefs,
+		regularChunks:  inputNode.regularChunks}, input: InputSpec{roots: inputNode.input.roots, text: inputNode.input.text},
 	}
 
 	if fixes := inputNode.inputFixes(); fixes != nil {

@@ -28,6 +28,10 @@ func (ctx *GenCtx) setModuleOutput(reg *CodegenRegistry, owner VFS, platform *Pl
 
 	info.ProducerRef = ref
 	ctx.emit.modules.add(uint32(ref))
+
+	if moduleType != 0 {
+		ctx.emit.moduleMain.add(uint32(ref))
+	}
 }
 
 func (ctx *GenCtx) publishModuleOutputs(instance ModuleInstance, result *ModuleEmitResult) {

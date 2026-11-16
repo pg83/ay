@@ -12,11 +12,12 @@ func (r NodeRef) strID() uint32 {
 }
 
 type Graph struct {
-	Graph     []*Node                 `json:"graph"`
-	Inputs    map[string]interface{}  `json:"inputs"`
-	Result    []NodeRef               `json:"result"`
-	fetchRefs *DenseMap[STR, NodeRef] `json:"-"`
-	makeFiles []MakeFileEntry
+	Graph      []*Node                 `json:"graph"`
+	Inputs     map[string]interface{}  `json:"inputs"`
+	Result     []NodeRef               `json:"result"`
+	fetchRefs  *DenseMap[STR, NodeRef] `json:"-"`
+	makeFiles  []MakeFileEntry
+	moduleMain BitSet
 }
 
 type StreamingEmitter struct {
@@ -36,6 +37,7 @@ type StreamingEmitter struct {
 	onNode                   func(*Node, InputChunks, *DenseMap[STR, NodeRef])
 	na                       *NodeArenas
 	fetchRefs                *DenseMap[STR, NodeRef]
+	moduleMain               BitSet
 }
 
 func newStreamingEmitter(onNode func(*Node, InputChunks, *DenseMap[STR, NodeRef])) *StreamingEmitter {
@@ -362,10 +364,11 @@ func graphFromEmitter(e *StreamingEmitter) *Graph {
 	}
 
 	return &Graph{
-		Inputs:    map[string]interface{}{},
-		Graph:     nodes,
-		Result:    dedupResultRefs(e.results),
-		fetchRefs: e.fetchRefs,
+		Inputs:     map[string]interface{}{},
+		Graph:      nodes,
+		Result:     dedupResultRefs(e.results),
+		fetchRefs:  e.fetchRefs,
+		moduleMain: e.moduleMain,
 	}
 }
 

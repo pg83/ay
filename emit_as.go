@@ -51,6 +51,8 @@ func (e *EmitContext) emitAS(srcVFS VFS, in ModuleCCInputs, hostP *Platform) (No
 		Resources: instance.Platform.UsesClangOnly}, input: InputSpec{root: in.IncludeView.self, existingSource: in.ExistingSource},
 	}
 
+	node.setRegularInputs(1)
+
 	return e.emitNode(node), outVFS, true
 }
 

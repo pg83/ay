@@ -1,5 +1,7 @@
 package main
 
+import "math"
+
 type ArgChunks [][]ANY
 
 func (c ArgChunks) flat() []ANY {
@@ -41,6 +43,7 @@ type Node struct {
 	ResourceGlobals []ResourceDecl `json:"-"`
 	Ref             NodeRef        `json:"-"`
 	Module          bool           `json:"-"`
+	regularChunks   uint16
 }
 
 func (n *Node) buildDeps(fetchRefs *DenseMap[STR, NodeRef]) func(func(NodeRef) bool) {
@@ -115,6 +118,27 @@ type NodeExtra struct {
 	SplitFile     ANY
 	SplitIndex    int
 	HasSplitIndex bool
+}
+
+func (n *Node) setRegularInputs(chunks int) {
+	if chunks >= math.MaxUint16 {
+		regularInputsOverflow(chunks)
+	}
+
+	n.regularChunks = uint16(chunks) + 1
+}
+
+//go:noinline
+func regularInputsOverflow(chunks int) {
+	throwFmt("a node with %d input chunks exceeds the regular input boundary", chunks)
+}
+
+func (n *Node) regularInputs() InputChunks {
+	if n.regularChunks == 0 {
+		return n.Inputs
+	}
+
+	return n.Inputs[:n.regularChunks-1]
 }
 
 func (n *Node) extra() *NodeExtra {

@@ -290,6 +290,6 @@ func init() {
 	}
 }
 
-func writeGraph(g *Graph, dropSrcInputs bool) {
-	writeGraphCompact(os.Stdout, g, dropSrcInputs)
+func writeGraph(g *Graph, regularInputs bool) {
+	writeGraphCompact(os.Stdout, g, regularInputs)
 }

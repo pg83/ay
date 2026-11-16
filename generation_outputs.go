@@ -126,13 +126,13 @@ func (e MakeFileEntry) MarshalJSON() ([]byte, error) {
 	return json.Marshal(map[string]string{"OWNERS": e.Owners, "PATH": e.Path})
 }
 
-func writeGenerationOutputs(o GenerationOutputs, g *Graph, dropSrcInputs bool, errs *ConfigureErrors, makeFiles []MakeFileEntry) {
+func writeGenerationOutputs(o GenerationOutputs, g *Graph, regularInputs bool, errs *ConfigureErrors, makeFiles []MakeFileEntry) {
 	if len(g.Graph) == 0 {
 		makeFiles = nil
 	}
 
 	writeOutputFile(o.graph, func(w io.Writer) {
-		writeGraphCompact(w, g, dropSrcInputs)
+		writeGraphCompact(w, g, regularInputs)
 	})
 
 	writeOutputFile(o.context, func(w io.Writer) {

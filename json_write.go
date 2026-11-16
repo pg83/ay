@@ -203,9 +203,19 @@ func (c *jsonWriteCache) remember(key jsonSliceKey, serialized []byte) {
 	c.spans[key] = uint64(last)<<(2*jsonCachePageBits) | uint64(off)<<jsonCachePageBits | uint64(len(serialized))
 }
 
-func writeGraphCompact(w io.Writer, g *Graph, dropSrcInputs bool) {
+func writeGraphCompact(w io.Writer, g *Graph, regularInputs bool) {
 	buf := make([]byte, 0, 1<<20)
 	cache := newJSONWriteCache()
+
+	var moduleOuts BitSet
+
+	if regularInputs {
+		for _, node := range g.Graph {
+			if g.moduleMain.has(uint32(node.Ref)) {
+				moduleOuts.add(uint32(node.Outputs[0]))
+			}
+		}
+	}
 
 	buf = append(buf, `{"graph":[`...)
 
@@ -217,7 +227,7 @@ func writeGraphCompact(w io.Writer, g *Graph, dropSrcInputs bool) {
 		}
 
 		first = false
-		buf = appendNode(buf, node, node.Inputs, g.fetchRefs, dropSrcInputs, cache)
+		buf = appendNode(buf, node, g.fetchRefs, regularInputs, &moduleOuts, cache)
 
 		if len(buf) >= 1<<20 {
 			throw2(w.Write(buf))
@@ -232,7 +242,7 @@ func writeGraphCompact(w io.Writer, g *Graph, dropSrcInputs bool) {
 	throw2(w.Write(buf))
 }
 
-func appendNode(buf []byte, n *Node, inputs InputChunks, fetchRefs *DenseMap[STR, NodeRef], dropSrcInputs bool, cache *jsonWriteCache) []byte {
+func appendNode(buf []byte, n *Node, fetchRefs *DenseMap[STR, NodeRef], regularInputs bool, moduleOuts *BitSet, cache *jsonWriteCache) []byte {
 	buf = append(buf, '{')
 
 	if n.disableCache() || n.KV.DisableCache {
@@ -254,10 +264,10 @@ func appendNode(buf []byte, n *Node, inputs InputChunks, fetchRefs *DenseMap[STR
 
 	buf = append(buf, `,"inputs":`...)
 
-	if dropSrcInputs {
-		buf = appendBuildOnlyVFSChunks(buf, inputs)
+	if regularInputs {
+		buf = appendRegularVFSChunks(buf, n.regularInputs(), moduleOuts)
 	} else {
-		buf = appendVFSChunks(buf, inputs)
+		buf = appendVFSChunks(buf, n.Inputs)
 	}
 
 	if len(n.inputNames()) > 0 {
@@ -392,16 +402,14 @@ func appendVFSChunks(buf []byte, chunks [][]VFS) []byte {
 	return appendArrayEnd(buf)
 }
 
-func appendBuildOnlyVFSChunks(buf []byte, chunks [][]VFS) []byte {
+func appendRegularVFSChunks(buf []byte, chunks [][]VFS, moduleOuts *BitSet) []byte {
 	buf = append(buf, '[')
 
 	for _, ch := range chunks {
 		for _, v := range ch {
-			if v.isSource() {
-				continue
+			if !moduleOuts.has(uint32(v)) {
+				buf = appendVFSComma(buf, v)
 			}
-
-			buf = appendVFSComma(buf, v)
 		}
 	}
 

@@ -361,6 +361,10 @@ func resolveCodegenInputRefs(node *Node, inputs InputChunks, reg *CodegenRegistr
 }
 
 func (e *EmitContext) includeNodeInputs(node *NodeSpec) {
+	if node.regularChunks == 0 {
+		node.setRegularInputs(len(node.Inputs))
+	}
+
 	if node.input.root != 0 {
 		e.checkDeclaredInputs(node)
 

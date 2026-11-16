@@ -367,6 +367,8 @@ func (e *EmitContext) composeCCNodeAt(srcVFS, outVFS VFS, in ModuleCCInputs, hos
 		inputChunks = append(inputChunks, wrapccPyChunk)
 	}
 
+	regular := len(inputChunks)
+
 	inputChunks = append(inputChunks, includeBuckets...)
 
 	if includeSelf != 0 && len(in.IncludeInputs) > 0 {
@@ -398,6 +400,8 @@ func (e *EmitContext) composeCCNodeAt(srcVFS, outVFS VFS, in ModuleCCInputs, hos
 		KV:        kv,
 		Resources: resources}, input: InputSpec{root: in.IncludeView.self, existingSource: in.ExistingSource},
 	}
+
+	node.setRegularInputs(regular)
 
 	e.emitReservedNode(node, reserved)
 
