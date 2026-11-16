@@ -23,6 +23,8 @@ func dropsMacro(d *ModuleData, modulePath string, name STR, onWarn func(Warn)) b
 
 	if !ignored && restricted {
 		onWarn(Warn{Kind: WarnMisconfiguration, Message: fmt.Sprintf("%s: %s is not allowed for %s modules", modulePath, name.string(), d.moduleStmt.Name.string())})
+
+		d.restrictedMacros = append(d.restrictedMacros, name)
 	}
 
 	return ignored || restricted

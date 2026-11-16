@@ -234,3 +234,21 @@ func bytesString(b []byte) string {
 
 	return unsafe.String(&b[0], len(b))
 }
+
+func utilIsTrue(v string) bool {
+	switch strings.ToLower(v) {
+	case "true", "t", "yes", "y", "on", "1", "da":
+		return true
+	}
+
+	return false
+}
+
+func utilIsFalse(v string) bool {
+	switch strings.ToLower(v) {
+	case "false", "f", "no", "n", "off", "0", "net":
+		return true
+	}
+
+	return false
+}

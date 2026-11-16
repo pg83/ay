@@ -382,6 +382,7 @@ type ModuleData struct {
 	tc                      ModuleToolchain
 	scanCtx                 *ScanContext
 	cc                      ModuleCompileEnv
+	restrictedMacros        []STR
 }
 
 type DeclaredToken struct {
@@ -1963,7 +1964,7 @@ func (ctx *GenCtx) varMacroStmts(key ENV, value STR, modulePath STR) []Stmt {
 
 func allowedOutsideModule(s Stmt) bool {
 	switch v := s.(type) {
-	case *IncludeStmt, *MissingIncludeStmt, *IfStmt, *SetStmt, *DefaultVarStmt, *ModuleStmt, *EndStmt:
+	case *IncludeStmt, *MissingIncludeStmt, *ConfigureErrorStmt, *IfStmt, *SetStmt, *DefaultVarStmt, *ModuleStmt, *EndStmt:
 		return true
 	case *UnknownStmt:
 		switch v.Name {
@@ -2161,6 +2162,10 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 			})
 		case *MissingIncludeStmt:
 			onWarn(Warn{Kind: WarnMisconfiguration, Message: modulePath + ": INCLUDE file " + v.Path + " not found", Where: makeFileWhere(modulePath), Error: missingIncludeError(v)})
+		case *ConfigureErrorStmt:
+			row, col := ctx.statementEnd(modulePath, v.Line, v.Name)
+
+			onWarn(Warn{Kind: WarnMisconfiguration, Message: modulePath + ": " + v.Error, Where: makeFileWhere(modulePath), Error: v.Error, Row: row, Column: col})
 		case *ModuleStmt:
 			v = d.moduleContentDeclaration(v)
 
@@ -3424,6 +3429,10 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 		return true
 	}
 
+	if v.Name == tokData {
+		dataStatementErrors(fs, modulePath, v, onWarn)
+	}
+
 	if applyTestMacro(v, d, env) {
 		return true
 	}
@@ -3484,6 +3493,14 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 
 		if msg != "" {
 			report(msg)
+		}
+
+		if v.Raw == strCheckSrcdir {
+			for _, msg := range checkSrcdirErrors(v.Args) {
+				report(msg)
+			}
+
+			return true
 		}
 
 		if v.Raw == strCompoundNodeBuilder {
@@ -4070,6 +4087,12 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 		stmt.DeclSeq = d.nextDeclSeq()
 		d.listProtos = append(d.listProtos, stmt)
 	case tokOnlyTags, tokIncludeTags, tokExcludeTags:
+		if !d.multimoduleTagsAllowed(env) {
+			row, col := fsStatementEnd(fs, modulePath, v.Line, v.Name.string())
+
+			onWarn(Warn{Kind: WarnMisconfiguration, Message: modulePath + ": " + v.Name.string() + " allowed only in multimodule", Where: makeFileWhere(modulePath), Error: "Macro: " + v.Name.string() + " allowed only in multimodule", Row: row, Column: col})
+		}
+
 		if d.multimodule != 0 {
 			applyMultimoduleVariantTags(v, d)
 		}
@@ -4284,22 +4307,38 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 	case tokUseSAPlugins:
 		applySAPlugins(v.Args, d, env)
 	case tokNoBuildIf, tokBuildOnlyIf:
-		strict, args := true, v.Args
+		strict, fatal, args := true, false, v.Args
 
 		if len(args) > 0 {
 			switch args[0] {
 			case kwWARNING.any():
 				strict = false
 				args = args[1:]
-			case kwSTRICT.any(), kwFATAL_ERROR.any():
+			case kwFATAL_ERROR.any():
+				fatal = true
+				args = args[1:]
+			case kwSTRICT.any():
 				args = args[1:]
 			}
 		}
 
 		enabled := false
+		reason := ""
 
 		for _, arg := range args {
-			enabled = enabled || arg.str() != 0 && env.bool(internEnvSTR(arg.str()))
+			if arg.str() != 0 && env.bool(internEnvSTR(arg.str())) {
+				enabled, reason = true, "[[alt1]]"+arg.string()+"[[rst]]"
+
+				break
+			}
+		}
+
+		if v.Name == tokBuildOnlyIf {
+			reason = "it is built only if one of [[alt1]](" + joinAnys(args, ", ") + ")[[rst]]"
+		}
+
+		if enabled != (v.Name == tokBuildOnlyIf) && fatal {
+			onWarn(Warn{Kind: WarnMisconfiguration, Where: makeFileWhere(modulePath), Error: v.Name.string() + ": [[imp]]$S/" + modulePath + "[[rst]] [[warn]]WILL NOT[[rst]] be built with its RECURSEs, because " + reason + " is true"})
 		}
 
 		if strict && enabled == (v.Name == tokNoBuildIf) {
@@ -6770,4 +6809,15 @@ func (d *ModuleData) protoNamespaceString() string {
 	}
 
 	return d.protoNamespace.string()
+}
+
+func (d *ModuleData) multimoduleTagsAllowed(env Environment) bool {
+	switch {
+	case d.multimodule != 0, d.confModule != nil && d.confModule.owner != 0:
+		return true
+	case d.moduleStmt == nil:
+		return false
+	}
+
+	return d.moduleStmt.Name == tokProtoLibrary || env.bool(envGO_PROTO) || multimoduleShapes[multimoduleOwner(d.moduleStmt)] != nil
 }

@@ -697,18 +697,42 @@ func (ctx *GenCtx) scanModuleConfiguration(instance ModuleInstance) (*ModuleStmt
 	var children []VFS
 	var subscribers []STR
 
+	failedModule := false
+
 	var scan func(stmts []Stmt)
 
 	scan = func(stmts []Stmt) {
 		for _, st := range stmts {
+			if failedModule && module == nil && !allowedOutsideModule(st) {
+				name := stmtMacroName(st)
+				row, col := ctx.statementEnd(dir, stmtLine(st), name)
+
+				ctx.onWarn(Warn{Kind: WarnSyntax, Message: fmt.Sprintf("%s: unexpected command %s outside of a module", dir, name), Where: makeFileWhere(dir), Error: "unexpected command [[alt1]]" + name + "[[rst]] outside of a module", Row: row, Column: col})
+
+				continue
+			}
+
 			switch v := st.(type) {
 			case *IncludeStmt:
 				ctx.withIncludedStmts(v, env, scan)
-			case *MissingIncludeStmt:
+			case *MissingIncludeStmt, *ConfigureErrorStmt:
 				if module == nil {
 					apply(st)
 				}
 			case *ModuleStmt:
+				if (v.Name == tokUnittestFor || v.Name == tokJtestFor) && len(v.Args) == 0 {
+					name := v.Name.string()
+					row, col := ctx.statementEnd(dir, v.Line, name)
+
+					for _, msg := range [...]string{"[[alt1]]" + name + "[[rst]] without arguments is invalid.. Skip [[alt1]]" + name + "[[rst]] macro.", "module cannot be constructed from [[alt1]]" + name + "[[rst]] statement"} {
+						ctx.onWarn(Warn{Kind: WarnMisconfiguration, Where: makeFileWhere(dir), Error: msg, Row: row, Column: col})
+					}
+
+					failedModule = true
+
+					continue
+				}
+
 				applyModule()
 
 				v = d.moduleContentDeclaration(v)
@@ -1685,6 +1709,7 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 	if d.discarded {
 		result := &ModuleEmitResult{}
 
+		ctx.generatedModules--
 		ctx.memoPut(instance, result)
 
 		return result
@@ -1996,7 +2021,17 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 
 	defer func() { frame.resolved = resolved[:0] }()
 
+	for _, name := range d.restrictedMacros {
+		ctx.onWarn(Warn{Kind: WarnMisconfiguration, Where: makeFileWhere(instance.Path.relString()), Error: name.string() + " for " + moduleNodeName(instance, &ModuleEmitResult{}, d.moduleStmt) + " is not allowed for " + d.moduleStmt.Name.string() + " modules!"})
+	}
+
 	for i, p := range allPeers {
+		if rel := p.string(); peerKinds[i] == peerKindUserPeer && (rel == "." || strings.HasPrefix(rel, "./") || strings.HasPrefix(rel, "..")) {
+			ctx.onWarn(Warn{Kind: WarnMisconfiguration, Where: makeFileWhere(instance.Path.relString()), Error: "Relative path [[imp]]" + rel + "[[rst]] is not allowed in [[alt1]]PEERDIR[[rst]]"})
+
+			continue
+		}
+
 		if !p.cleanPath() {
 			p = internStr(filepath.Clean(p.string()))
 		}

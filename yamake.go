@@ -347,6 +347,12 @@ type MissingIncludeStmt struct {
 	Line int
 }
 
+type ConfigureErrorStmt struct {
+	Name  string
+	Error string
+	Line  int
+}
+
 type UnknownStmt struct {
 	Name        TOK
 	Raw         STR
@@ -1377,13 +1383,33 @@ func (p *Parser) applyIncludeOnce(nameTok Token) {
 	args := p.parseMacroArgs(nameTok)
 	enabled := true
 
-	if len(args) > 1 {
-		p.lex.throwParse(nameTok.line, nameTok.col, "INCLUDE_ONCE expects 0 or 1 arguments, got %d", len(args))
+	report := func(msg string) {
+		p.stmtScratch = append(p.stmtScratch, &ConfigureErrorStmt{Name: "INCLUDE_ONCE", Error: "[[alt1]]INCLUDE_ONCE[[rst]] " + msg, Line: nameTok.line})
 	}
 
-	if len(args) == 1 && args[0] == strNo.any() {
-		enabled = false
+	if len(args) > 1 {
+		report("shall have 1 argument at most")
 	}
+
+	if len(args) > 0 {
+		if value := args[0].string(); !utilIsTrue(value) {
+			if enabled = !utilIsFalse(value); enabled {
+				report("unexpected value [[imp]]" + value + "[[rst]] expected boolean constant")
+			}
+		}
+	}
+
+	state := int8(2)
+
+	if enabled {
+		state = 1
+	}
+
+	if p.includeOnce != 0 && p.includeOnce != state {
+		report("attempt to alter behavior that was previously set explicitly")
+	}
+
+	p.includeOnce = state
 
 	if !enabled {
 		return
@@ -1494,6 +1520,7 @@ type Parser struct {
 	condTokBuf   []Token
 	argScratch   []ANY
 	stmtScratch  []Stmt
+	includeOnce  int8
 }
 
 func stmtKindOf(name STR) uint8 {
@@ -2928,4 +2955,7 @@ func (*AllResourceFilesStmt) stmtMarker() {
 }
 
 func (*MissingIncludeStmt) stmtMarker() {
+}
+
+func (*ConfigureErrorStmt) stmtMarker() {
 }

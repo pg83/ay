@@ -1312,3 +1312,84 @@ func clangWarningsErrors(args []ANY) []string {
 
 	return errs
 }
+
+func fsStatementEnd(fs FS, dir string, line int, name string) (int, int) {
+	return statementEnd(concatChunks(fs.read(joinRel(dir, "ya.make"))), line, name)
+}
+
+func dataStatementErrors(fs FS, modulePath string, v UnknownStmt, onWarn func(Warn)) {
+	report := func(msg string) {
+		row, col := fsStatementEnd(fs, modulePath, v.Line, "DATA")
+
+		onWarn(Warn{Kind: WarnMisconfiguration, Where: makeFileWhere(modulePath), Error: msg, Row: row, Column: col})
+	}
+
+	const (
+		autoNo = iota
+		autoMaybe
+		autoSeen
+	)
+
+	auto := autoNo
+
+	missingConfig := func(arg string) {
+		if auto == autoSeen {
+			report("[[alt1]]AUTOUPDATED[[rst]] in [[alt1]]DATA[[rst]] section should be followed by configuration name, found: " + arg)
+		}
+	}
+
+	for _, arg := range anyStrs(v.Args) {
+		switch {
+		case strings.HasPrefix(arg, "sbr://"):
+			missingConfig(arg)
+
+			auto = autoMaybe
+		case strings.HasPrefix(arg, "ext:"):
+			file := strings.TrimPrefix(arg, "ext:")
+
+			if present, _ := fs.exists(dirKey(modulePath), file); !present {
+				if external, _ := fs.exists(dirKey(modulePath), file+".external"); !external {
+					report("Neither actual data nor .external file exists for [[imp]]" + file + "[[rst]] inside [[alt1]]DATA[[rst]] section.")
+				}
+			}
+
+			missingConfig(arg)
+
+			auto = autoMaybe
+		case strings.HasPrefix(arg, "arcadia/"):
+			missingConfig(arg)
+
+			auto = autoNo
+		case arg == "AUTOUPDATED":
+			missingConfig(arg)
+
+			if auto == autoMaybe {
+				auto = autoSeen
+			} else {
+				report("[[alt1]]AUTOUPDATED[[rst]] in [[alt1]]DATA[[rst]] section should have path with [[imp]]sbr://[[rst]] before it, ignored")
+			}
+		case auto == autoSeen:
+			auto = autoNo
+		default:
+			report("Path [[imp]]" + arg + "[[rst]] in [[alt1]]DATA[[rst]] section should start with one of the following prefixes: [[imp]]arcadia/, sbr://, ext:[[rst]]")
+
+			auto = autoNo
+		}
+	}
+
+	missingConfig("<none>")
+}
+
+func checkSrcdirErrors(args []ANY) []string {
+	var errs []string
+
+	for _, arg := range args {
+		if v := arg.vfs(); v != 0 && !v.isSource() {
+			errs = append(errs, "Only source directories are allowed in [[alt1]]CHECK_SRCDIR[[rst]]: "+ymakeVFS(v))
+		} else if rel := arg.string(); v == 0 && (rel == "." || strings.HasPrefix(rel, "./") || strings.HasPrefix(rel, "..")) {
+			errs = append(errs, "Relative path [[imp]]"+rel+"[[rst]] is not allowed in [[alt1]]CHECK_SRCDIR[[rst]]")
+		}
+	}
+
+	return errs
+}
