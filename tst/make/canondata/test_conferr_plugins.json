@@ -1,0 +1,156 @@
+{
+  "PluginConfigureErrorsTest.test_failed_assertion": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "e2e assertion failed",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null
+    }
+  },
+  "PluginConfigureErrorsTest.test_large_file_placeholder_with_an_unknown_storage": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "skip unknown statement: FROM_E2E vector of size 4\n  0: FILE\n  1: 123456789\n  2: OUT_NOAUTO\n  3: value.bin",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null
+    }
+  },
+  "PluginConfigureErrorsTest.test_large_file_placeholder_without_a_storage": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "LARGE_FILES: error processing placeholder file \"value.bin.external.\": 'storage'",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null
+    }
+  },
+  "PluginConfigureErrorsTest.test_large_file_without_data_or_placeholder": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "LARGE_FILES: neither actual data nor placeholder is found for \"missing.bin\"",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null
+    }
+  },
+  "PluginConfigureErrorsTest.test_mask_in_declare_in_dirs_srcdir": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "[[imp]]DECLARE_IN_DIRS[[rst]]: '*' in [[imp]]SRCDIR[[rst]] argument is prohibited. Seen [[unimp]]data*[[rst]]",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null
+    }
+  },
+  "PluginConfigureErrorsTest.test_parent_directory_in_declare_in_dirs": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "[[imp]]DECLARE_IN_DIRS[[rst]]: '..' in [[imp]]DIRS[[rst]] argument is prohibited. Seen [[unimp]]../data[[rst]]",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null
+    }
+  },
+  "PluginConfigureErrorsTest.test_recursive_mask_in_declare_in_dirs": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "[[imp]]DECLARE_IN_DIRS[[rst]]: '**' in files mask is prohibited. Seen [[unimp]]**/*.txt[[rst]]",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null
+    }
+  },
+  "PluginConfigureErrorsTest.test_restricted_path_with_a_message": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "Path '[[imp]]$S/__ay_e2e__[[rst]]' is restricted - [[bad]]e2e libraries live in contrib[[rst]]. Valid path prefixes are: [[unimp]]contrib/, devtools/[[rst]]",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null
+    }
+  },
+  "PluginConfigureErrorsTest.test_restricted_path_without_a_message": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "Path '[[imp]]$S/__ay_e2e__[[rst]]' is restricted - [[bad]]forbidden[[rst]]. Valid path prefixes are: [[unimp]]contrib/[[rst]]",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null
+    }
+  },
+  "PluginConfigureErrorsTest.test_unsupported_no_lint_value": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "Unsupported value for NO_LINT macro: e2e",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null
+    }
+  },
+  "PluginConfigureErrorsTest.test_wildcard_in_all_resource_files": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "Wildcards in [[imp]]ALL_RESOURCE_FILES[[rst]] are not allowed",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null
+    }
+  }
+}
