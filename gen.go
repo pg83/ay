@@ -776,6 +776,12 @@ func (ctx *GenCtx) scanModuleConfiguration(instance ModuleInstance) (*ModuleStmt
 					apply(st)
 				}
 
+				if (v.Name == tokRecurse || v.Name == tokRecurseForTests) && module != nil && !d.moduleEnded {
+					ctx.onWarn(Warn{Kind: WarnMisconfiguration, Where: makeFileWhere(dir), Error: "[[alt1]]" + v.Raw.string() + "[[rst]] inside module " + moduleNodeName(instance, &ModuleEmitResult{}, module) + "; ymake skip this."})
+
+					continue
+				}
+
 				if v.Name == tokRecurse || v.Name == tokRecurseRootRelative || v.Name == tokRecurseForTests {
 					expanded := *v
 
@@ -2000,6 +2006,12 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 			if result := ctx.javaPeerResult(&parent, p, slices.Contains(d.explicitPeers, p.any())); result != nil {
 				resolved = append(resolved, ResolvedPeer{path: p, result: result, kind: kind})
 			}
+
+			continue
+		}
+
+		if peerVFS == instance.Path {
+			ctx.onWarn(Warn{Kind: WarnMisconfiguration, Where: makeFileWhere(instance.Path.relString()), Error: moduleNodeName(instance, &ModuleEmitResult{}, d.moduleStmt) + " has PEERDIR to its own dir"})
 
 			continue
 		}

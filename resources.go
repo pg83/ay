@@ -209,13 +209,7 @@ func resolveResourceDecls(fs FS, host *Platform, modulePath string, stmt *Declar
 			var stripPrefix uint64
 
 			if i+4 < len(stmt.Args) && stmt.Args[i+3] == kwSTRIP_PREFIX.any() {
-				var err error
-				stripPrefix, err = strconv.ParseUint(strings.TrimPrefix(stmt.Args[i+4].string(), "+"), 10, 32)
-
-				if err != nil {
-					throwFmt("gen: %s: STRIP_PREFIX must be integral in DECLARE_EXTERNAL_HOST_RESOURCES_BUNDLE args %v", modulePath, stmt.Args)
-				}
-
+				stripPrefix, _ = strconv.ParseUint(stmt.Args[i+4].string(), 10, 32)
 				i += 2
 			}
 

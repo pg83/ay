@@ -198,6 +198,7 @@ var tokName = [...]STR{
 	tokDeclareExternalHostResourcesBundle: kwDECLARE_EXTERNAL_HOST_RESOURCES_BUNDLE,
 	tokDeclareExternalHostResourcesBundleByJson: kwDECLARE_EXTERNAL_HOST_RESOURCES_BUNDLE_BY_JSON,
 	tokDeclareExternalResourceByJson:            kwDECLARE_EXTERNAL_RESOURCE_BY_JSON,
+	tokDeclareExternalHostResourcesPack:         strDeclareExternalHostResourcesPack,
 	tokDefault:                                  kwDEFAULT,
 	tokDefineVariable:                           internStr("DEFINE_VARIABLE"),
 	tokDisable:                                  strDisable,
@@ -609,6 +610,7 @@ const (
 	tokDeclareExternalHostResourcesBundle
 	tokDeclareExternalHostResourcesBundleByJson
 	tokDeclareExternalResourceByJson
+	tokDeclareExternalHostResourcesPack
 	tokDefault
 	tokDefineVariable
 	tokDisable

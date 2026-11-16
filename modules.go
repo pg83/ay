@@ -2617,6 +2617,7 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 
 			d.joinSrcs = append(d.joinSrcs, &expanded)
 		case *AddInclStmt:
+			ctx.missingAddInclDirs(v, env, modulePath, onWarn)
 
 			d.addInclGlobal = append(d.addInclGlobal, addInclDirs(v.GlobalPaths, env)...)
 			d.addInclOneLevel = append(d.addInclOneLevel, addInclDirs(v.OneLevelPaths, env)...)
@@ -2659,6 +2660,13 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 
 			for _, dirTok := range expandStmtTokens(v.Dirs, env) {
 				dir := dirTok.string()
+
+				if rel := strings.TrimPrefix(dir, "./"); rel == "." || rel == ".." || strings.HasPrefix(rel, "../") {
+					onWarn(Warn{Kind: WarnMisconfiguration, Where: makeFileWhere(modulePath), Error: "Relative path [[imp]]" + dir + "[[rst]] is not allowed in [[alt1]]SRCDIR[[rst]]"})
+
+					continue
+				}
+
 				rooted, ok := moduleRootedVFS(modulePath, dir)
 
 				if !ok {
@@ -2878,7 +2886,19 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 				break
 			}
 
-			d.resourceDeclStmts = append(d.resourceDeclStmts, &expanded)
+			decls := resourceDeclarations(&expanded, func(message string) {
+				onWarn(Warn{Kind: WarnMisconfiguration, Where: makeFileWhere(modulePath), Error: message})
+			})
+
+			if len(decls) == 0 {
+				break
+			}
+
+			for _, decl := range decls {
+				d.resourceDeclStmts = append(d.resourceDeclStmts, decl)
+			}
+
+			expanded = *decls[len(decls)-1]
 
 			if d.moduleStmt != nil && (d.moduleStmt.Name == tokResourcesLibrary || d.moduleStmt.Name == tokPrebuiltProgram) {
 				for _, decl := range resolveResourceDecls(fs, ctx.host, modulePath, &expanded) {
@@ -2905,6 +2925,14 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 		case *UnknownStmt:
 			if d.skipModuleContentStmt(v.Name) {
 				continue
+			}
+
+			if v.Name == tokDataFiles {
+				for _, arg := range v.Args {
+					if path := strings.TrimPrefix(arg.string(), "${ARCADIA_ROOT}/"); strings.HasPrefix(path, "${ARCADIA_BUILD_ROOT}") {
+						onWarn(Warn{Kind: WarnMisconfiguration, Where: makeFileWhere(modulePath), Error: "Build path [[imp]]" + path + "[[rst]] inside [[alt1]]_DATA_FILES[[rst]] is prohibited. Only source paths accepted."})
+					}
+				}
 			}
 
 			if v.Internal {

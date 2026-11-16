@@ -15,6 +15,8 @@ var (
 	pluginMacroDef       = regexp.MustCompile(`(?m)^def on([a-z0-9_]+)\(`)
 )
 
+const addInclLanguageList = "asm (for .asm), c (for .cpp .cc .cxx .c .C .auxcpp .h .hh .hpp .cuh .H .hxx .xh .ipp .ixx ..inl ..vert ..frag ..tesc ..tese ..geom ..comp .cu .S .s .sfdl .m .mm .l .lex .lpp .y .ypp .gperf .asp .f .go), cython (for .pyx .pxd .pxi), flatc (for .fbs .fbs64), idl (for .idl), nlg (for .nlg), other (for .fml .fml2 .fml3 .pln .info .a .lua .sh .bin .py .pyi .pysrc .ts .js .tsx .jsx), proto (for .gzt .gztproto .proto .ev .cfgproto), ragel (for .rl .rh .rli .rl6 .rl5), ros (for .msg .srv .rostopic), sc (for .sc), swig (for .swg), xs (for .xs), xsyn (for .xsyn), ydl (for .ydl)"
+
 func vecDump(args []ANY) string {
 	var b strings.Builder
 
@@ -196,4 +198,180 @@ func stmtLine(s Stmt) int {
 	}
 
 	return 0
+}
+
+type addInclDiag struct {
+	errors []string
+	dirs   []ANY
+}
+
+func diagnoseAddIncl(args []ANY) *addInclDiag {
+	var d addInclDiag
+	var dirs []ANY
+
+	lang, scoped, expectLang := "", false, false
+
+	for _, arg := range args {
+		switch s := arg.string(); {
+		case s == "FOR":
+			if lang != "" {
+				d.errors = append(d.errors, "Two different languages specified for [[alt1]]ADDINCL[[rst]]: previous was \""+lang+"\"")
+			}
+
+			expectLang = true
+		case expectLang:
+			lang, expectLang = s, false
+
+			if !strings.Contains(addInclLanguageList, s+" (for ") {
+				lang = ""
+				d.errors = append(d.errors, "Bad language argument in [[alt1]]ADDINCL[[rst]]: \""+s+"\". Possible languages: "+addInclLanguageList)
+			}
+		case s == "GLOBAL" || s == "ONE_LEVEL":
+			scoped = true
+		case s == "LOCAL":
+		default:
+			dirs = append(dirs, arg)
+			lang, scoped = "", false
+		}
+	}
+
+	if scoped || expectLang || lang != "" {
+		d.errors = append(d.errors, "Tail arguments in [[alt1]]ADDINCL[[rst]] without a dir to apply will be ignored")
+	}
+
+	if d.errors == nil {
+		return nil
+	}
+
+	d.dirs = dirs
+
+	return &d
+}
+
+func (ctx *GenCtx) missingAddInclDirs(v *AddInclStmt, env Environment, modulePath string, onWarn func(Warn)) {
+	report := func(paths []ANY) {
+		for _, dir := range expandConfigVFSPaths(paths, env) {
+			if dir.isSource() && dir != srcRootDirVFS {
+				if present, isDir := ctx.fs.existsID(srcRootRel, dir.rel()); !present || !isDir {
+					onWarn(Warn{Kind: WarnMisconfiguration, Where: makeFileWhere(modulePath), Error: "[[alt1]]ADDINCL[[rst]] to non existent source directory " + ymakeVFS(dir)})
+				}
+			}
+		}
+	}
+
+	if v.diag != nil {
+		for _, message := range v.diag.errors {
+			onWarn(Warn{Kind: WarnMisconfiguration, Where: makeFileWhere(modulePath), Error: message})
+		}
+
+		report(v.diag.dirs)
+
+		return
+	}
+
+	for _, paths := range [...][]ANY{v.AllPaths, v.ProtoAllPaths, v.CythonPaths, v.AsmPaths, v.FlatcPaths, v.SwigPaths, v.ScPaths} {
+		report(paths)
+	}
+}
+
+func resourceDeclarations(stmt *DeclareResourceStmt, report func(string)) []*DeclareResourceStmt {
+	args := stmt.Args
+
+	switch stmt.Macro {
+	case tokDeclareExternalResource:
+		if len(args) == 0 {
+			report("Missed arguments in [[alt1]]DECLARE_EXTERNAL_RESOURCE[[rst]]")
+
+			return nil
+		}
+
+		var pairs []ANY
+
+		for n := 0; n < len(args); n += 2 {
+			if n+1 >= len(args) {
+				report("Incorrect number or arguments in [[alt1]]DECLARE_EXTERNAL_RESOURCE[[rst]]: " + vecDump(args))
+
+				break
+			}
+
+			if n+2 < len(args) && args[n+2] == kwSTRIP_PREFIX.any() {
+				if n+3 >= len(args) {
+					report("Missed argument after [[alt1]]STRIP_PREFIX[[rst]] in [[alt1]]DECLARE_EXTERNAL_RESOURCE[[rst]]: " + vecDump(args))
+
+					break
+				}
+
+				if _, err := strconv.ParseUint(args[n+3].string(), 10, 32); err != nil {
+					report("[[alt1]]STRIP_PREFIX[[rst]] must be integral in [[alt1]]DECLARE_EXTERNAL_RESOURCE[[rst]]: " + vecDump(args))
+
+					break
+				}
+
+				pairs = append(pairs, args[n], args[n+1])
+				n += 2
+
+				continue
+			}
+
+			pairs = append(pairs, args[n], args[n+1])
+		}
+
+		if pairs == nil {
+			return nil
+		}
+
+		return []*DeclareResourceStmt{{Macro: stmt.Macro, Args: pairs, Line: stmt.Line}}
+	case tokDeclareExternalHostResourcesBundle:
+		if !hostResourcesValid("DECLARE_EXTERNAL_HOST_RESOURCES_BUNDLE", args, report) {
+			return nil
+		}
+	case tokDeclareExternalHostResourcesPack:
+		if len(args) == 0 || args[0] != kwRESOURCE_NAME.any() {
+			report("Incorrect arguments in DECLARE_EXTERNAL_HOST_RESOURCES_PACK: " + vecDump(args))
+
+			return nil
+		}
+
+		var out []*DeclareResourceStmt
+
+		group := 1
+
+		for i := 1; i <= len(args); i++ {
+			if i < len(args) && args[i] != kwRESOURCE_NAME.any() {
+				continue
+			}
+
+			if hostResourcesValid("DECLARE_EXTERNAL_HOST_RESOURCES_PACK", args[group:i], report) {
+				out = append(out, &DeclareResourceStmt{Macro: tokDeclareExternalHostResourcesBundle, Args: args[group:i], Line: stmt.Line})
+			}
+
+			group = i + 1
+		}
+
+		return out
+	}
+
+	return []*DeclareResourceStmt{stmt}
+}
+
+func hostResourcesValid(macro string, args []ANY, report func(string)) bool {
+	n := 1
+
+	for ; n+2 < len(args); n += 3 {
+		if n+4 < len(args) && args[n+3] == kwSTRIP_PREFIX.any() {
+			if _, err := strconv.ParseUint(args[n+4].string(), 10, 32); err != nil {
+				report("[[alt1]]STRIP_PREFIX[[rst]] must be integral in [[alt1]]" + macro + "[[rst]]: " + vecDump(args))
+			}
+
+			n += 2
+		}
+	}
+
+	if n != len(args) {
+		report("Incorrect number or arguments in [[alt1]]" + macro + "[[rst]]: " + vecDump(args))
+
+		return false
+	}
+
+	return true
 }

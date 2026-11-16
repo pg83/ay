@@ -172,6 +172,7 @@ var (
 	kwRESOURCE                                                                               = internStr("RESOURCE")
 	kwRESOURCES_LIBRARY                                                                      = internStr("RESOURCES_LIBRARY")
 	kwRESOURCE_FILES                                                                         = internStr("RESOURCE_FILES")
+	kwRESOURCE_NAME                                                                          = internStr("RESOURCE_NAME")
 	kwRUN_ANTLR                                                                              = internStr("RUN_ANTLR")
 	kwRUN_ANTLR4                                                                             = internStr("RUN_ANTLR4")
 	kwRUN_ANTLR4_CPP                                                                         = internStr("RUN_ANTLR4_CPP")
