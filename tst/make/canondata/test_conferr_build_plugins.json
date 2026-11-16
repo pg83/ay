@@ -1,0 +1,156 @@
+{
+  "BuildPluginConfigureErrorsTest.test_ai_reference_to_a_missing_path": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "AI_REFERENCE: __ay_e2e__/missing does not exist in Arcadia",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null
+    }
+  },
+  "BuildPluginConfigureErrorsTest.test_clang_warnings_disabling_a_warning": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "Warning tag [[alt1]]-Wno-e2e[[rst]] is not allowed in call to macro [[alt1]]CLANG_WARNINGS[[rst]]",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null
+    }
+  },
+  "BuildPluginConfigureErrorsTest.test_clang_warnings_with_a_non_warning_flag": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "Warning tag [[alt1]]-O2[[rst]] is not allowed in call to macro [[alt1]]CLANG_WARNINGS[[rst]]",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null
+    }
+  },
+  "BuildPluginConfigureErrorsTest.test_cmake_target_name_from_path_outside_of_the_root": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "[[imp]]CMAKE_EXPORTED_TARGET_NAME_FROM_PATH[[rst]]: module '[[imp]]__ay_e2e__[[rst]]' is not strictly inside '[[unimp]]e2e[[rst]]'",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null
+    }
+  },
+  "BuildPluginConfigureErrorsTest.test_cmake_target_name_from_path_without_a_root": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "[[imp]]CMAKE_EXPORTED_TARGET_NAME_FROM_PATH[[rst]] expects exactly one argument: a project root path",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null
+    }
+  },
+  "BuildPluginConfigureErrorsTest.test_contrib_credits_without_license_texts": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "License texts not found. See https://st.yandex-team.ru/DTCC-324",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null
+    }
+  },
+  "BuildPluginConfigureErrorsTest.test_ios_assets_outside_of_the_root": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "value.png is not subpath of assets",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null
+    }
+  },
+  "BuildPluginConfigureErrorsTest.test_ios_assets_without_a_root": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "Please specify ROOT directory for assets",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null
+    }
+  },
+  "BuildPluginConfigureErrorsTest.test_linker_script_with_an_invalid_extension": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "Invalid linker script extension: value.txt",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null
+    }
+  },
+  "BuildPluginConfigureErrorsTest.test_python_udf_with_an_invalid_name": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "Invalid python UDF module name",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null
+    }
+  },
+  "BuildPluginConfigureErrorsTest.test_python_udf_with_libra_modules_in_opensource": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "Libra modules are not supported in opensource python UDFs",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null
+    }
+  }
+}
