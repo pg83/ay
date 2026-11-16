@@ -1556,3 +1556,25 @@ func (c *NotsModule) libraryConfigureErrors(ctx *GenCtx, modulePath string, env 
 		report("Directories from " + tsCyan + "TS_BUILD_OUTPUTS()" + tsReset + " are expected to be listed in " + tsCyan + "package.json#files" + tsReset + ".\nFollowing directories are missing in " + tsCyan + "package.json#files" + tsReset + ": " + tsRed + strings.Join(missing, ", ") + tsReset)
 	}
 }
+
+func dropAbsoluteSources(sources []ANY, modulePath string, onWarn func(Warn)) []ANY {
+	for i, src := range sources {
+		if src.vfs() != 0 || !strings.HasPrefix(src.string(), "/") {
+			continue
+		}
+
+		kept := slices.Clone(sources[:i])
+
+		for _, rest := range sources[i:] {
+			if rest.vfs() == 0 && strings.HasPrefix(rest.string(), "/") {
+				onWarn(Warn{Kind: WarnMisconfiguration, Where: makeFileWhere(modulePath), Error: "source file name is outside the build tree: " + rest.string()})
+			} else {
+				kept = append(kept, rest)
+			}
+		}
+
+		return kept
+	}
+
+	return sources
+}

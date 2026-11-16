@@ -2201,6 +2201,10 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 
 			applyCppTestModule(v, d, env)
 
+			if name := v.Args; len(name) > 0 && name[0].vfs() == 0 && !strings.HasSuffix(v.Name.string(), "_FOR") && strings.Contains(name[0].string(), "/") {
+				onWarn(Warn{Kind: WarnMisconfiguration, Where: makeFileWhere(modulePath), Error: "Invalid module name '" + name[0].string() + "'. Symbol '/' is not allowed"})
+			}
+
 			if isNotsModule(v.Name) || v.Name == tokProtoLibrary && (language == LangTS || language == LangTSPrepare) {
 				d.nots = newNotsModule(v.Name, language, env)
 				d.nots.AutoProto = v.Name == tokProtoLibrary && !fs.isFilePathClean(modulePath+"/package.json")
@@ -2457,7 +2461,7 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 			routeAllToGlobal := d.moduleStmt != nil && isYqlUdfStaticModule(d.moduleStmt.Name)
 			goSrcs := isGoModuleType(d.unit.Type)
 			globalNext := false
-			srcToks := v.Sources
+			srcToks := dropAbsoluteSources(v.Sources, modulePath, onWarn)
 
 			if !d.interpreting {
 				srcToks = expandTokens(srcToks, env, false, tokenExpandStatement)

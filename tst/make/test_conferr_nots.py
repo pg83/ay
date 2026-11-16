@@ -65,3 +65,20 @@ class NotsConfigureErrorsTest(MakeTest):
     def test_test_config_in_test_for(self):
         self.module_tests(f"TS_TEST_FOR({self.project_name}/lib)", "TS_TEST(jest)", "TS_TEST_CONFIG(jest.config.js)")
         self.assertConfigureLikeYa()
+
+    def test_test_srcs_in_test_for(self):
+        self.module_tests(f"TS_TEST_FOR({self.project_name}/lib)", "TS_TEST(jest)", "TS_TEST_SRCS(src)")
+        self.assertConfigureLikeYa()
+
+    def test_typecheck_in_a_library(self):
+        self.library("TS_BUILD_SCRIPT(nots:build)", "TS_BUILD_OUTPUTS(dist)", "TS_TYPECHECK()")
+        self.assertConfigureLikeYa()
+
+    def test_after_build_script_in_a_library(self):
+        self.library("TS_BUILD_SCRIPT(nots:build)", "TS_BUILD_OUTPUTS(dist)", "RUN_JAVASCRIPT_AFTER_BUILD(after.js)")
+        self.write("after.js", "console.log(42);\n")
+        self.assertConfigureLikeYa()
+
+    def test_config_in_a_library(self):
+        self.library("TS_BUILD_SCRIPT(nots:build)", "TS_BUILD_OUTPUTS(dist)", "TS_CONFIG(tsconfig.json)")
+        self.assertConfigureLikeYa()

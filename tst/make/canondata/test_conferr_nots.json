@@ -1,9 +1,37 @@
 {
+  "NotsConfigureErrorsTest.test_after_build_script_in_a_library": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "\u001b[0;36mTS_LIBRARY\u001b[0;49m does not support \u001b[0;36mRUN_JAVASCRIPT_AFTER_BUILD\u001b[0;49m\nUse \u001b[0;36mTS_BUILD_SCRIPT\u001b[0;49m with a package.json script name or an inline command",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null
+    }
+  },
   "NotsConfigureErrorsTest.test_build_env_without_a_value": {
     "configure_errors": {
       "__ay_e2e__": [
         [
           "Env var 'MODE' is provided in a list, but var value is not provided",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null
+    }
+  },
+  "NotsConfigureErrorsTest.test_config_in_a_library": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "\u001b[0;36mTS_LIBRARY\u001b[0;49m does not support \u001b[0;36mTS_CONFIG\u001b[0;49m macro\nSet proper config path in build script in \u001b[0;36mpackage.json\u001b[0;49m",
           0,
           0
         ]
@@ -129,6 +157,36 @@
       "$S/__ay_e2e__": null,
       "$S/__ay_e2e__/lib": null,
       "$S/__ay_e2e__/tests": null
+    }
+  },
+  "NotsConfigureErrorsTest.test_test_srcs_in_test_for": {
+    "configure_errors": {
+      "__ay_e2e__/tests": [
+        [
+          "\u001b[0;36mTS_TEST_FOR\u001b[0;49m does not require \u001b[0;36mTS_TEST_SRCS\u001b[0;49m macro.\nRemove \u001b[0;36mTS_TEST_SRCS()\u001b[0;49m from ya.make",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null,
+      "$S/__ay_e2e__/lib": null,
+      "$S/__ay_e2e__/tests": null
+    }
+  },
+  "NotsConfigureErrorsTest.test_typecheck_in_a_library": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "\u001b[0;36mTS_LIBRARY\u001b[0;49m does not support \u001b[0;36mTS_TYPECHECK\u001b[0;49m macro.\nUse \u001b[0;36mTS_LINT\u001b[0;49m instead\nhttps://docs.yandex-team.ru/frontend-in-arcadia/references/macros#ts-lint",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null
     }
   },
   "NotsConfigureErrorsTest.test_unit_tests_in_a_library": {
