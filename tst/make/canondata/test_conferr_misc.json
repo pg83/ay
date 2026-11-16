@@ -1,0 +1,173 @@
+{
+  "ContribVersionConfigureErrorsTest.test_contrib_library_without_a_version": {
+    "configure_errors": {
+      "contrib/__ay_e2e__": [
+        [
+          "Explicit VERSION must be specified for modules inside contrib directory",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/contrib/__ay_e2e__": null
+    }
+  },
+  "MiscConfigureErrorsTest.test_autoinclude_without_linters_make_inc": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "linters.make.inc must be present at [[imp]]$S/__ay_e2e__[[rst]] when the path is specified in any of build/conf/autoincludes.json, __ay_e2e__/autoincludes.json, build/internal/conf/autoincludes.json",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null
+    }
+  },
+  "MiscConfigureErrorsTest.test_biome_with_a_missing_config": {
+    "configure_errors": {
+      "__ay_e2e__/lib": [
+        [
+          "\u001b[0;36mTS_LIBRARY\u001b[0;49m does not support \u001b[0;36mTS_BIOME\u001b[0;49m macro.\nUse \u001b[0;36mTS_LINT\u001b[0;49m instead\nhttps://docs.yandex-team.ru/frontend-in-arcadia/references/macros#ts-lint",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null,
+      "$S/__ay_e2e__/lib": null
+    }
+  },
+  "MiscConfigureErrorsTest.test_depends_on_a_directory_without_modules": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "[[alt1]]DEPENDS[[rst]] to directory without module: $S/__ay_e2e__/sub",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null
+    }
+  },
+  "MiscConfigureErrorsTest.test_depends_on_a_multimodule_without_final_targets": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "[[alt1]]DEPENDS[[rst]] on a multimodule without final targets is not allowed: $S/__ay_e2e__/proto",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null,
+      "$S/__ay_e2e__/proto": null
+    }
+  },
+  "MiscConfigureErrorsTest.test_dll_with_exports_in_the_header": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "EXPORTS keyword in module header is deprecated and will be ignored. Use EXPORTS_SCRIPT macro instead.",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null
+    }
+  },
+  "MiscConfigureErrorsTest.test_go_resource_key_without_a_value": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "key \"E2E\" must contain = sign",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null
+    }
+  },
+  "MiscConfigureErrorsTest.test_jtest_for_without_arguments": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "[[alt1]]JTEST_FOR[[rst]] without arguments is invalid.. Skip [[alt1]]JTEST_FOR[[rst]] macro.",
+          1,
+          11
+        ],
+        [
+          "module cannot be constructed from [[alt1]]JTEST_FOR[[rst]] statement",
+          1,
+          11
+        ],
+        [
+          "unexpected command [[alt1]]END[[rst]] outside of a module",
+          3,
+          5
+        ],
+        [
+          "unexpected command [[alt1]]JDK_VERSION[[rst]] outside of a module",
+          2,
+          15
+        ]
+      ]
+    },
+    "make_files": {}
+  },
+  "MiscConfigureErrorsTest.test_peerdir_to_a_multimodule_excluding_the_tag": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "[[alt1]]PEERDIR[[rst]] from module tagged [[alt1]]GO[[rst]] to [[imp]]$S/__ay_e2e__/proto[[rst]] is prohibited by incompatible tags and skipped",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null,
+      "$S/__ay_e2e__/proto": null
+    }
+  },
+  "MiscConfigureErrorsTest.test_srcs_with_a_directory": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "try to process by extension in SRCS a directory: $S/__ay_e2e__/sub. Won't be processed!",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null
+    }
+  },
+  "MiscConfigureErrorsTest.test_stylelint_with_a_missing_config": {
+    "configure_errors": {
+      "__ay_e2e__/lib": [
+        [
+          "\u001b[0;36mTS_LIBRARY\u001b[0;49m does not support \u001b[0;36mTS_STYLELINT\u001b[0;49m macro.\nUse \u001b[0;36mTS_LINT\u001b[0;49m instead\nhttps://docs.yandex-team.ru/frontend-in-arcadia/references/macros#ts-lint",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null,
+      "$S/__ay_e2e__/lib": null
+    }
+  }
+}
