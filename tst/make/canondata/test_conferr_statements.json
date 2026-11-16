@@ -1,0 +1,235 @@
+{
+  "StatementConfigureErrorsTest.test_check_srcdir_with_a_build_directory": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "Only source directories are allowed in [[alt1]]CHECK_SRCDIR[[rst]]: $B/__ay_e2e__",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null
+    }
+  },
+  "StatementConfigureErrorsTest.test_data_autoupdated_without_a_configuration": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "[[alt1]]AUTOUPDATED[[rst]] in [[alt1]]DATA[[rst]] section should be followed by configuration name, found: arcadia/__ay_e2e__/test.cpp",
+          3,
+          61
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null
+    }
+  },
+  "StatementConfigureErrorsTest.test_data_autoupdated_without_a_resource": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "[[alt1]]AUTOUPDATED[[rst]] in [[alt1]]DATA[[rst]] section should have path with [[imp]]sbr://[[rst]] before it, ignored",
+          3,
+          17
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null
+    }
+  },
+  "StatementConfigureErrorsTest.test_data_with_a_missing_external_file": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "Neither actual data nor .external file exists for [[imp]]missing.bin[[rst]] inside [[alt1]]DATA[[rst]] section.",
+          3,
+          21
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null
+    }
+  },
+  "StatementConfigureErrorsTest.test_data_without_a_prefix": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "Path [[imp]]test.cpp[[rst]] in [[alt1]]DATA[[rst]] section should start with one of the following prefixes: [[imp]]arcadia/, sbr://, ext:[[rst]]",
+          3,
+          14
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null
+    }
+  },
+  "StatementConfigureErrorsTest.test_fatal_build_only_if": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "BUILD_ONLY_IF: [[imp]]$S/__ay_e2e__[[rst]] [[warn]]WILL NOT[[rst]] be built with its RECURSEs, because it is built only if one of [[alt1]](E2E_FLAG)[[rst]] is true",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {}
+  },
+  "StatementConfigureErrorsTest.test_fatal_no_build_if": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "NO_BUILD_IF: [[imp]]$S/__ay_e2e__[[rst]] [[warn]]WILL NOT[[rst]] be built with its RECURSEs, because [[alt1]]E2E_FLAG[[rst]] is true",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {}
+  },
+  "StatementConfigureErrorsTest.test_host_resources_bundle_with_a_non_integral_strip_prefix": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "[[alt1]]STRIP_PREFIX[[rst]] must be integral in [[alt1]]DECLARE_EXTERNAL_HOST_RESOURCES_BUNDLE[[rst]]: vector of size 6\n  0: E2E\n  1: sbr:123456789\n  2: FOR\n  3: LINUX\n  4: STRIP_PREFIX\n  5: e2e",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null
+    }
+  },
+  "StatementConfigureErrorsTest.test_host_resources_bundle_with_an_incomplete_triple": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "Incorrect number or arguments in [[alt1]]DECLARE_EXTERNAL_HOST_RESOURCES_BUNDLE[[rst]]: vector of size 3\n  0: E2E\n  1: sbr:123456789\n  2: FOR",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null
+    }
+  },
+  "StatementConfigureErrorsTest.test_include_once_altered": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "[[alt1]]INCLUDE_ONCE[[rst]] attempt to alter behavior that was previously set explicitly",
+          3,
+          16
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null
+    }
+  },
+  "StatementConfigureErrorsTest.test_include_once_with_a_non_boolean_value": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "[[alt1]]INCLUDE_ONCE[[rst]] unexpected value [[imp]]e2e[[rst]] expected boolean constant",
+          2,
+          17
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null
+    }
+  },
+  "StatementConfigureErrorsTest.test_include_once_with_two_arguments": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "[[alt1]]INCLUDE_ONCE[[rst]] shall have 1 argument at most",
+          2,
+          20
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null
+    }
+  },
+  "StatementConfigureErrorsTest.test_induced_deps_of_a_missing_file": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "INDUCED_DEPS for $B/__ay_e2e__/lib__ay_e2e__.a is not allowed for LIBRARY modules!",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null
+    }
+  },
+  "StatementConfigureErrorsTest.test_only_tags_outside_of_a_multimodule": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "Macro: ONLY_TAGS allowed only in multimodule",
+          2,
+          20
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null
+    }
+  },
+  "StatementConfigureErrorsTest.test_peerdir_with_a_relative_path": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "Relative path [[imp]]../e2e[[rst]] is not allowed in [[alt1]]PEERDIR[[rst]]",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null
+    }
+  },
+  "StatementConfigureErrorsTest.test_unittest_for_without_arguments": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "[[alt1]]UNITTEST_FOR[[rst]] without arguments is invalid.. Skip [[alt1]]UNITTEST_FOR[[rst]] macro.",
+          1,
+          14
+        ],
+        [
+          "module cannot be constructed from [[alt1]]UNITTEST_FOR[[rst]] statement",
+          1,
+          14
+        ],
+        [
+          "unexpected command [[alt1]]END[[rst]] outside of a module",
+          3,
+          5
+        ],
+        [
+          "unexpected command [[alt1]]SRCS[[rst]] outside of a module",
+          2,
+          14
+        ]
+      ]
+    },
+    "make_files": {}
+  }
+}
