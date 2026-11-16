@@ -22,6 +22,8 @@ func (d *ModuleData) withGoTestForStmts(ctx *GenCtx, dir string, stmt *UnknownSt
 		throwFmt("GO_TEST_FOR: the current directory (%s) can not be used as an argument", dir)
 	}
 
+	d.goTestFor = forDirID
+
 	contentOnly, contentDone := d.readModuleContentOnly, d.readModuleContentDone
 
 	d.readModuleContentOnly, d.readModuleContentDone = true, false

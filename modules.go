@@ -383,6 +383,11 @@ type ModuleData struct {
 	scanCtx                 *ScanContext
 	cc                      ModuleCompileEnv
 	restrictedMacros        []STR
+	license                 STR
+	features                STR
+	provides                []ANY
+	transitive              *transitiveInfo
+	goTestFor               STR
 }
 
 type DeclaredToken struct {
@@ -1497,6 +1502,10 @@ func endModule(ctx *GenCtx, modulePath string, kind ModuleKind, language Languag
 	d.unit.HashTag = env.str(envMODULE_TAG)
 	d.pyNamespacePython2 = env.is(envPYTHON2, strYes)
 	d.moduleEnded = true
+
+	if platform != ctx.host {
+		d.transitive = ctx.captureTransitive(modulePath, env, d)
+	}
 }
 
 func (d *ModuleData) processModuleEnd(fs FS, modulePath string, line int, onWarn func(Warn)) bool {
@@ -3923,6 +3932,9 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 	case tokLicense:
 
 		d.hasLicense = true
+		d.license = licenseExpression(expandStmtTokens(v.Args, env))
+	case tokProvides:
+		d.provides = append(d.provides, expandStmtTokens(v.Args, env)...)
 	case tokToolchain:
 
 		if len(v.Args) == 1 {

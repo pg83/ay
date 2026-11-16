@@ -16,7 +16,7 @@ func (e *EmitContext) genPeerModule(instance ModuleInstance) *ModuleEmitResult {
 func (e *EmitContext) recordPeerModule(result *ModuleEmitResult) {
 	e.ctx.consumeModuleWarnings(result)
 
-	if e.ctx.peerTests {
+	if e.ctx.peerTests || e.instance.Platform != e.ctx.host {
 		e.frame.testPeers = append(e.frame.testPeers, result)
 	}
 }

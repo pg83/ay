@@ -52,7 +52,6 @@ var acknowledgedMacros = map[string]struct{}{
 	"INCLUDE_TAGS":                    {},
 	"ONLY_TAGS":                       {},
 	"EXCLUDE_TAGS":                    {},
-	"CHECK_DEPENDENT_DIRS":            {},
 
 	"FROM_SANDBOX":      {},
 	"JAVA_PROTO_PLUGIN": {},
@@ -159,6 +158,13 @@ type ModuleEmitResult struct {
 	testProject                     VFS
 	testPeers                       []*ModuleEmitResult
 	variantOrder                    int
+	license                         STR
+	features                        STR
+	checkProvides                   bool
+	transitiveState                 uint8
+	tools                           []*ModuleEmitResult
+	transitive                      *transitiveInfo
+	provided                        *providedSummary
 }
 
 func protoResultWholeArchiveCmdPaths(res *ProtoSrcsResult) []VFS {
@@ -262,6 +268,9 @@ type GenCtx struct {
 	addInclDirExists    map[VFS]bool
 	generatedModules    int
 	noModuleRefs        map[VFS]bool
+	licenses            *licenseConf
+	startModules        []*ModuleEmitResult
+	peerLists           *BumpAllocator[*ModuleEmitResult]
 }
 
 type moduleMemoEntry struct {
@@ -341,6 +350,8 @@ func runGenIntoWithResources(fs FS, parsers *IncludeParserManager, targets []str
 		ctx.collectConfiguredSubmoduleTests(target.Path)
 	}
 
+	ctx.checkTransitiveRequirements()
+
 	ctx.configureDependencies()
 
 	suites := ctx.prepareDiscoveredModuleTests(discovered)
@@ -403,6 +414,7 @@ func newGenCtx(fs FS, parsers *IncludeParserManager, hostP, targetP *Platform, e
 		argSlices:   newSliceCache[ANY](1 << 8),
 		declSlices:  newSliceCache[ResourceDecl](1 << 3),
 		results:     newBumpAllocator[ModuleEmitResult](),
+		peerLists:   newBumpAllocator[*ModuleEmitResult](),
 		dirSlices:   newSliceCache[IncludeDirective](1 << 6),
 		descSlices:  newSliceCache[DescProtoPeer](1 << 3),
 		tcMemo:      map[ToolchainKey]ModuleToolchain{},
@@ -607,7 +619,10 @@ func (ctx *GenCtx) genTarget(targets DiscoveredTargets, rootDemand ModuleDemand)
 			ctx.emit.result(ref)
 		}
 
-		ctx.collectConfiguredSubmoduleTests(target.Path, append(ctx.genMultimoduleTargets(target, root.ModuleVariants, rootDemand), root)...)
+		variants := ctx.genMultimoduleTargets(target, root.ModuleVariants, rootDemand)
+
+		ctx.startModules = append(append(ctx.startModules, root), variants...)
+		ctx.collectConfiguredSubmoduleTests(target.Path, append(variants, root)...)
 	}
 
 	ctx.markExportRoot(start)
@@ -627,7 +642,10 @@ func (ctx *GenCtx) genTarget(targets DiscoveredTargets, rootDemand ModuleDemand)
 			ctx.emit.result(ref)
 		}
 
-		ctx.collectConfiguredSubmoduleTests(target.Path, append(ctx.genMultimoduleTargets(target, sub.ModuleVariants, rootDemand), sub)...)
+		variants := ctx.genMultimoduleTargets(target, sub.ModuleVariants, rootDemand)
+
+		ctx.startModules = append(append(ctx.startModules, sub), variants...)
+		ctx.collectConfiguredSubmoduleTests(target.Path, append(variants, sub)...)
 	}
 }
 
@@ -914,6 +932,7 @@ func (ctx *GenCtx) genStartTarget(dir VFS) {
 
 		variants := ctx.genMultimoduleTargets(DiscoveredModule{Path: dir, Declaration: &ModuleStmt{Name: name}}, root.ModuleVariants, demandSelf)
 
+		ctx.startModules = append(append(ctx.startModules, root), variants...)
 		ctx.collectConfiguredSubmoduleTests(dir, append(variants, root)...)
 	}
 }
@@ -1691,8 +1710,9 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 	defer func() {
 		if result != nil {
 			result.testProject = instance.Path
-			result.testPeers = append(result.testPeers, frame.testPeers...)
+			result.testPeers = ctx.appendPeerList(result.testPeers, frame.testPeers)
 			result.variantOrder = variantOrder
+			result.recordTransitive(ctx, &frame.d, frame.tools, instance.Platform)
 		}
 	}()
 
@@ -3236,6 +3256,7 @@ func filterBuildRootSelfPaths(instancePath STR, peer, own []VFS) []VFS {
 func (ctx *GenCtx) toolResult(modulePath ARG) *ModuleEmitResult {
 	if res, ok := ctx.tools.get(modulePath); ok {
 		ctx.consumeModuleWarnings(res)
+		ctx.recordTool(res)
 
 		return res
 	}
@@ -3257,6 +3278,7 @@ func (ctx *GenCtx) toolResult(modulePath ARG) *ModuleEmitResult {
 	}
 
 	ctx.consumeModuleWarnings(res)
+	ctx.recordTool(res)
 
 	if res.LDRef != NodeRef(0) {
 		res.ToolPath = modulePath
@@ -3390,6 +3412,7 @@ type ModuleFrame struct {
 	peerCXXFlagsGlobal   []ANY
 	peerCOnlyFlagsGlobal []ANY
 	peerLinkCmdPaths     []VFS
+	tools                []*ModuleEmitResult
 }
 
 func (ctx *GenCtx) pushFrame() *ModuleFrame {
@@ -3408,6 +3431,8 @@ func (ctx *GenCtx) pushFrame() *ModuleFrame {
 	ctx.frameSerial++
 	f.serial = ctx.frameSerial
 	f.testPeers = f.testPeers[:0]
+	f.tools = f.tools[:0]
+	f.d.license, f.d.features, f.d.transitive = 0, 0, nil
 
 	return f
 }

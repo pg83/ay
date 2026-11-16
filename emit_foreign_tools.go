@@ -24,6 +24,7 @@ func (e *EmitContext) foreignToolResult(path ARG) *ModuleEmitResult {
 
 	if result := ctx.memoGet(instance); result != nil && result.ForeignTool != nil {
 		ctx.consumeModuleWarnings(result)
+		ctx.recordTool(result)
 
 		return result
 	}
@@ -41,6 +42,8 @@ func (e *EmitContext) foreignToolResult(path ARG) *ModuleEmitResult {
 	ctx.moduleByRef.put(result.LDRef, result)
 
 	result.ForeignTool = &ForeignTool{path: path}
+
+	ctx.recordTool(result)
 
 	return result
 }

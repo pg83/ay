@@ -947,28 +947,29 @@ type ConfVariant struct {
 }
 
 type confModule struct {
-	index     int
-	parent    STR
-	variable  ENV
-	calls     []string
-	body      []ConfMacroCall
-	dirs      []ConfMacroCall
-	owner     STR
-	sub       STR
-	selfPeers []STR
-	stmts     []ConfMacroCall
-	stmtsDone bool
-	aliases   map[STR]STR
-	own       *confMacroLimits
-	limits    *confMacroLimits
-	renames   map[STR]STR
-	verdicts  map[STR]confMacroVerdict
-	order     int
-	steps     []confInitStep
-	outputs   []ENV
-	originals []ENV
-	read      []bool
-	planned   bool
+	index         int
+	parent        STR
+	variable      ENV
+	calls         []string
+	body          []ConfMacroCall
+	dirs          []ConfMacroCall
+	owner         STR
+	sub           STR
+	selfPeers     []STR
+	stmts         []ConfMacroCall
+	stmtsDone     bool
+	aliases       map[STR]STR
+	own           *confMacroLimits
+	limits        *confMacroLimits
+	renames       map[STR]STR
+	verdicts      map[STR]confMacroVerdict
+	order         int
+	steps         []confInitStep
+	outputs       []ENV
+	originals     []ENV
+	read          []bool
+	planned       bool
+	checkProvides int8
 }
 
 type confInitStep struct {
@@ -3460,4 +3461,20 @@ func (c *Conf) forbiddenMacros(owner STR) map[STR]STR {
 	}
 
 	return nil
+}
+
+func (c *Conf) checksProvides(module *confModule) bool {
+	if module.checkProvides == 0 {
+		module.checkProvides = 1
+
+		for base := module; base != nil; base = c.tables.module(base.parent, "") {
+			if slices.ContainsFunc(base.body, func(call ConfMacroCall) bool { return call.name == strCheckProvides }) {
+				module.checkProvides = 2
+
+				break
+			}
+		}
+	}
+
+	return module.checkProvides == 2
 }
