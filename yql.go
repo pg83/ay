@@ -286,7 +286,7 @@ func registerYqlPythonUdf(fs FS, modulePath string, stmt UnknownStmt, d *ModuleD
 	}
 
 	if name != "Python3" && name != "Python2" && name != "ArcPython2" && !strings.HasPrefix(name, "SystemPython") && !strings.Contains(name, "CustomPython") {
-		throwFmt("Invalid python UDF module name")
+		onWarn(Warn{Kind: WarnMisconfiguration, Where: makeFileWhere(modulePath), Error: "Invalid python UDF module name"})
 	}
 
 	if resource == "" {
@@ -296,7 +296,9 @@ func registerYqlPythonUdf(fs FS, modulePath string, stmt UnknownStmt, d *ModuleD
 	addLibra := libra == "yes"
 
 	if addLibra && !env.is(envOPENSOURCE, strEmpty) {
-		throwFmt("Libra modules are not supported in opensource python UDFs")
+		onWarn(Warn{Kind: WarnMisconfiguration, Where: makeFileWhere(modulePath), Error: "Libra modules are not supported in opensource python UDFs"})
+
+		addLibra = false
 	}
 
 	d.macroCalls = append(d.macroCalls, UnknownStmt{Name: tokYqlAbiVersion, Raw: tokYqlAbiVersion.str(), Args: internAnys([]string{"2", "45", "0"})})

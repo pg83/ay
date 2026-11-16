@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"path"
+	"path/filepath"
 	"reflect"
 	"regexp"
 	"slices"
@@ -1221,4 +1222,93 @@ func sandboxImportExists(fs FS, modulePath string, arg ANY) bool {
 	present, _ := fs.exists(srcRootRel, p)
 
 	return present
+}
+
+func cmakeTargetNameFromPathError(modulePath string, args []string) string {
+	if len(args) != 1 {
+		return "[[imp]]CMAKE_EXPORTED_TARGET_NAME_FROM_PATH[[rst]] expects exactly one argument: a project root path"
+	}
+
+	if root := strings.Trim(args[0], "/"); root == "" || !strings.HasPrefix(modulePath, root+"/") {
+		return "[[imp]]CMAKE_EXPORTED_TARGET_NAME_FROM_PATH[[rst]]: module '[[imp]]" + modulePath + "[[rst]]' is not strictly inside '[[unimp]]" + args[0] + "[[rst]]'"
+	}
+
+	return ""
+}
+
+func iosAssetsErrors(args []string) []string {
+	var root string
+
+	var contents []string
+
+	key := ""
+
+	for _, arg := range args {
+		switch {
+		case arg == "ROOT" || arg == "CONTENTS" || arg == "FLAGS":
+			key = arg
+		case key == "ROOT":
+			root = arg
+		case key == "CONTENTS":
+			contents = append(contents, arg)
+		}
+	}
+
+	var errs []string
+
+	if root == "" && len(contents) > 0 {
+		errs = append(errs, "Please specify ROOT directory for assets")
+	}
+
+	for _, content := range contents {
+		if rel, err := filepath.Rel(path.Clean(root), path.Clean(content)); err == nil && strings.HasPrefix(rel, "..") {
+			errs = append(errs, content+" is not subpath of "+root)
+		}
+	}
+
+	return errs
+}
+
+func contribCreditsMissing(modulePath string, args []string, env Environment) bool {
+	var excepts []string
+
+	if i := slices.Index(args, "EXCEPT"); i >= 0 {
+		args, excepts = args[:i], args[i+1:]
+	}
+
+	if env.string(envCreditsTextsFile) != "" || env.string(envNoCreditsTextsFile) != "" {
+		return false
+	}
+
+	for _, arg := range args {
+		if strings.HasPrefix(modulePath, arg) && !slices.ContainsFunc(excepts, func(ex string) bool { return strings.HasPrefix(modulePath, ex) }) {
+			return true
+		}
+	}
+
+	return false
+}
+
+func aiReferenceMissing(fs FS, args []string) []string {
+	var missing []string
+
+	for _, arg := range args {
+		if present, _ := fs.exists(srcRootRel, path.Clean(arg)); strings.HasPrefix(arg, "/") || !present {
+			missing = append(missing, arg)
+		}
+	}
+
+	return missing
+}
+
+func clangWarningsErrors(args []ANY) []string {
+	var errs []string
+
+	for _, arg := range args {
+		if item := arg.string(); strings.HasPrefix(item, "-Wno-") || !strings.HasPrefix(item, "-W") {
+			errs = append(errs, "Warning tag [[alt1]]"+item+"[[rst]] is not allowed in call to macro [[alt1]]CLANG_WARNINGS[[rst]]")
+		}
+	}
+
+	return errs
 }

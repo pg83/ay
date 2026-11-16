@@ -3466,6 +3466,20 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 			}
 		case strC35GrpcLinterTestsData:
 			msg = grpcLinterDataError(pluginArgLiterals(v.Args))
+		case strCmakeExportedTargetNameFromPath:
+			msg = cmakeTargetNameFromPathError(modulePath, pluginArgLiterals(v.Args))
+		case strIosAssets:
+			for _, err := range iosAssetsErrors(pluginArgLiterals(v.Args)) {
+				report(err)
+			}
+		case strCheckContribCredits:
+			if contribCreditsMissing(modulePath, pluginArgLiterals(v.Args), env) {
+				msg = "License texts not found. See https://st.yandex-team.ru/DTCC-324"
+			}
+		case strAiReference:
+			for _, missing := range aiReferenceMissing(fs, pluginArgLiterals(v.Args)) {
+				report("AI_REFERENCE: " + missing + " does not exist in Arcadia")
+			}
 		}
 
 		if msg != "" {
@@ -3941,7 +3955,13 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 	case tokRegisterYqlPythonUdf:
 		registerYqlPythonUdf(fs, modulePath, v, d, env, onWarn)
 	case tokClangWarnings:
-		d.clangWarnings = append(d.clangWarnings, expandStmtTokens(v.Args, env)...)
+		args := expandStmtTokens(v.Args, env)
+
+		for _, msg := range clangWarningsErrors(args) {
+			onWarn(Warn{Kind: WarnMisconfiguration, Where: makeFileWhere(modulePath), Error: msg})
+		}
+
+		d.clangWarnings = append(d.clangWarnings, args...)
 	case tokFbsNamespace:
 		if len(v.Args) == 0 {
 			throwFmt("FBS_NAMESPACE expects a namespace and optional path")
@@ -4215,7 +4235,17 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 
 		d.exportsScript = ptr(v.Args[0])
 	case tokLinkerScript:
-		for _, arg := range expandStmtTokens(v.Args, env) {
+		args := expandStmtTokens(v.Args, env)
+
+		if i := slices.IndexFunc(args, func(arg ANY) bool {
+			return !strings.HasSuffix(arg.string(), ".ld") && !strings.HasSuffix(arg.string(), ".ld.in")
+		}); i >= 0 {
+			onWarn(Warn{Kind: WarnMisconfiguration, Where: makeFileWhere(modulePath), Error: "Invalid linker script extension: " + args[i].string()})
+
+			break
+		}
+
+		for _, arg := range args {
 			if !strings.HasSuffix(arg.string(), ".ld") {
 				throwFmt("%s: LINKER_SCRIPT %s: only .ld scripts are modelled", modulePath, arg.string())
 			}
