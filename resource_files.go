@@ -417,19 +417,30 @@ func globSegMatch(pat, name string) bool {
 	return px == len(pat)
 }
 
-func yaToolsConfResourceFiles(fs FS, confDir string) [][]string {
+func yaToolsConfResourceFiles(fs FS, confDir string, report func(string)) [][]string {
 	confDir = strings.TrimRight(confDir, "/")
 
+	confAbs := fs.root() + "/" + confDir
+
+	if present, isDir := fs.exists(srcRootRel, confDir); !present || !isDir {
+		report(`Directory "` + confAbs + `" not found`)
+
+		return nil
+	}
+
 	confFile := confDir + "/" + yaConfJSONName
+	confAbsFile := confAbs + "/" + yaConfJSONName
 
 	if !fs.isFile(srcRootRel, confFile) {
-		throwFmt("YA_TOOLS_CONF: file %s not found", confFile)
+		report(`File "` + confAbsFile + `" not found`)
+
+		return nil
 	}
 
 	calls := [][]string{{"STRIP", confDir + "/", confFile}}
 	formulas := map[string]bool{}
 
-	addFormula := func(formula any) {
+	addFormula := func(formula any, referencedFrom string) {
 		f, ok := formula.(string)
 
 		if !ok {
@@ -437,17 +448,21 @@ func yaToolsConfResourceFiles(fs FS, confDir string) [][]string {
 		}
 
 		if !strings.HasPrefix(f, "build/") && !strings.HasPrefix(f, confDir+"/") {
-			throwFmt("YA_TOOLS_CONF: formula %s must be in build/ or %s/", f, confDir)
+			report(`File "` + f + `" (referenced from ` + referencedFrom + `) must be located in "build" or "` + confDir + `" file tree`)
+
+			return
 		}
 
-		if !fs.isFile(srcRootRel, f) {
-			throwFmt("YA_TOOLS_CONF: formula %s not found", f)
+		if present, _ := fs.exists(srcRootRel, f); !present {
+			report(`File "` + fs.root() + "/" + f + `" (referenced from ` + referencedFrom + `) is not found`)
+
+			return
 		}
 
 		formulas[f] = true
 	}
 
-	addBottles := func(conf map[string]any) {
+	addBottles := func(conf map[string]any, configFile string) {
 		bottles, ok := conf["bottles"].(map[string]any)
 
 		if !ok {
@@ -467,7 +482,7 @@ func yaToolsConfResourceFiles(fs FS, confDir string) [][]string {
 				throwFmt("YA_TOOLS_CONF: bottle %s has no formula", name)
 			}
 
-			addFormula(formula)
+			addFormula(formula, `bottle "`+name+`" in "`+configFile+`"`)
 		}
 	}
 
@@ -481,10 +496,10 @@ func yaToolsConfResourceFiles(fs FS, confDir string) [][]string {
 			name = resource
 		}
 
-		addFormula(fmt.Sprintf(yaToolsFormulaTmpl, name))
+		addFormula(fmt.Sprintf(yaToolsFormulaTmpl, name), `simple tool "`+name+`" in "`+confAbsFile+`"`)
 	}
 
-	addBottles(conf)
+	addBottles(conf, confAbsFile)
 
 	var resourceFiles []string
 
@@ -504,17 +519,18 @@ func yaToolsConfResourceFiles(fs FS, confDir string) [][]string {
 		}
 
 		definition, _ := tool["definition"].(map[string]any)
+		referencedFrom := `tool config "` + fs.root() + "/" + rel + `"`
 
 		if formula, ok := definition["formula"]; ok {
-			addFormula(formula)
+			addFormula(formula, referencedFrom)
 		} else {
-			addFormula(fmt.Sprintf(yaToolsFormulaTmpl, strings.TrimSuffix(strings.TrimPrefix(rel, toolsDir), yaToolSuffix)))
+			addFormula(fmt.Sprintf(yaToolsFormulaTmpl, strings.TrimSuffix(strings.TrimPrefix(rel, toolsDir), yaToolSuffix)), referencedFrom)
 		}
 	}
 
 	for _, rel := range ymakeGlob(fs, confDir+"/tools/toolchains/*"+yaToolchainSuffix) {
 		resourceFiles = append(resourceFiles, rel)
-		addBottles(readJSONObject(fs, rel))
+		addBottles(readJSONObject(fs, rel), fs.root()+"/"+rel)
 	}
 
 	if len(resourceFiles) > 0 {

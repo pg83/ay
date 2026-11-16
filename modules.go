@@ -3661,7 +3661,11 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 			throwFmt("%s: YA_TOOLS_CONF expects one directory, got %d arguments", modulePath, len(v.Args))
 		}
 
-		for _, args := range yaToolsConfResourceFiles(fs, expandStmtTokenAny(v.Args[0], env).string()) {
+		report := func(msg string) {
+			onWarn(Warn{Kind: WarnMisconfiguration, Where: makeFileWhere(modulePath), Error: msg})
+		}
+
+		for _, args := range yaToolsConfResourceFiles(fs, expandStmtTokenAny(v.Args[0], env).string(), report) {
 			applyResourceFiles(fs, modulePath, args, v.Line, d)
 		}
 	case tokSetResourceUriFromJson:
