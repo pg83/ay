@@ -1,0 +1,147 @@
+{
+  "GobuildConfigureErrorsTest.test_cgo_export_at_the_end_of_srcs": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "Unmatched CGO_EXPORT keyword in SRCS() macro",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null
+    }
+  },
+  "GobuildConfigureErrorsTest.test_cgo_export_before_a_go_file": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "Unmatched CGO_EXPORT keyword in SRCS() macro",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null
+    }
+  },
+  "GobuildConfigureErrorsTest.test_cgo_srcs_with_cgo_disabled": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "trying to build with CGO (CGO_SRCS is non-empty) when CGO is disabled",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null
+    }
+  },
+  "GobuildConfigureErrorsTest.test_disabling_gofmt": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "Disabling gofmt is prohibited, please contact devtools",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null
+    }
+  },
+  "GobuildConfigureErrorsTest.test_go_test_file_in_srcs": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "file value_test.go must be listed in GO_TEST_SRCS() or GO_XTEST_SRCS() macros",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null
+    }
+  },
+  "GobuildConfigureErrorsTest.test_inline_resource_without_a_value": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "key \"e2e_key\" must contain = sign",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null
+    }
+  },
+  "GobuildConfigureErrorsTest.test_non_go_file_in_cgo_srcs": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "cannot find source file: native.cgo2.c.o",
+          0,
+          0
+        ],
+        [
+          "file native.c should not be listed in CGO_SRCS() macros",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null
+    }
+  },
+  "GobuildConfigureErrorsTest.test_non_test_file_in_go_test_srcs": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "file helper.go should not be listed in GO_TEST_SRCS() or GO_XTEST_SRCS() macros",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null
+    }
+  },
+  "GobuildConfigureErrorsTest.test_resource_with_an_empty_key": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "file key must be non empty",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null
+    }
+  },
+  "GobuildConfigureErrorsTest.test_resource_without_a_key": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "last file data.txt is missing resource key",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null
+    }
+  }
+}
