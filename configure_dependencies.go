@@ -117,6 +117,12 @@ func (ctx *GenCtx) configureDependencies() {
 			continue
 		}
 
+		if ctx.blacklist != nil {
+			if rule := ctx.blacklist.match(dependency.to.string()); rule != "" {
+				ctx.reportBlacklisted(dependency.from.relString(), dependency.to.sourceClean(), rule, "DEPENDS")
+			}
+		}
+
 		configure(dependency.to.sourceClean())
 
 		if ctx.peerTests || ctx.rootPaths[dependency.from] {

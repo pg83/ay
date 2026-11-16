@@ -436,6 +436,7 @@ var (
 	envYqlUdfExport                           = internEnv("YQL_UDF_EXPORT")
 	envYqlUdfStaticPeerdirTag                 = internEnv("YQL_UDF_STATIC_PEERDIR_TAG")
 	envYtRecordPeerdir                        = internEnv("YT_RECORD_PEERDIR")
+	env_BLACKLISTS                            = internEnv("_BLACKLISTS")
 	env_GO_IMPORT_PATH                        = internEnv("_GO_IMPORT_PATH")
 	env_USE_AIO                               = internEnv("_USE_AIO")
 	env_USE_ICONV                             = internEnv("_USE_ICONV")

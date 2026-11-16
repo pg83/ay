@@ -165,6 +165,8 @@ type ModuleEmitResult struct {
 	tools                           []*ModuleEmitResult
 	transitive                      *transitiveInfo
 	provided                        *providedSummary
+	reachEpoch                      uint32
+	blacklistRule                   STR
 }
 
 func protoResultWholeArchiveCmdPaths(res *ProtoSrcsResult) []VFS {
@@ -271,6 +273,7 @@ type GenCtx struct {
 	licenses            *licenseConf
 	startModules        []*ModuleEmitResult
 	peerLists           *BumpAllocator[*ModuleEmitResult]
+	blacklist           *Blacklist
 }
 
 type moduleMemoEntry struct {
@@ -461,6 +464,7 @@ func newGenCtx(fs FS, parsers *IncludeParserManager, hostP, targetP *Platform, e
 
 	ctx.licenses = ctx.loadLicenseConf(targetP.ifEnv)
 	ctx.autoincludeIdx = loadAutoincludeIndex(fs, targetP.ifEnv, onWarn)
+	ctx.blacklist = ctx.loadBlacklist(targetP.ifEnv)
 
 	targetSysincl := newSysinclCtx(loadSysInclSet(parsers, targetP, onWarn))
 	targetScanner := newIncludeScannerWith(parsers, targetSysincl, ctx.onWarn, ctx.buckets)
@@ -484,8 +488,12 @@ func newGenCtx(fs FS, parsers *IncludeParserManager, hostP, targetP *Platform, e
 
 	hostReg.moduleOutputDeps = ctx.moduleOutputIncludedDeps
 	hostScanner.moduleByRef = &ctx.moduleByRef
-
 	ctx.scannerTarget = targetScanner
+
+	if ctx.blacklist != nil {
+		targetScanner.blacklisted = ctx.blacklistFile
+	}
+
 	ctx.scannerHost = hostScanner
 	ctx.vcsRef = emitVCSNode(ctx.emit, ctx.host)
 
@@ -493,10 +501,11 @@ func newGenCtx(fs FS, parsers *IncludeParserManager, hostP, targetP *Platform, e
 }
 
 type DirEvaluation struct {
-	declaration *ModuleStmt
-	recurses    []VFS
-	owned       ownerChain
-	subscribers []STR
+	declaration  *ModuleStmt
+	recurses     []VFS
+	owned        ownerChain
+	subscribers  []STR
+	recurseKinds []TOK
 }
 
 type dirEvaluationKey struct {
@@ -519,8 +528,8 @@ func (ctx *GenCtx) evaluateDirVFS(dir VFS, platform *Platform) *DirEvaluation {
 
 	instance.Platform = platform
 
-	declaration, recurses, subscribers := ctx.scanModuleConfiguration(instance)
-	evaluation := &DirEvaluation{declaration: declaration, recurses: recurses, subscribers: subscribers}
+	declaration, recurses, recurseKinds, subscribers := ctx.scanModuleConfiguration(instance)
+	evaluation := &DirEvaluation{declaration: declaration, recurses: recurses, subscribers: subscribers, recurseKinds: recurseKinds}
 
 	if ctx.dirs == nil {
 		ctx.dirs = map[dirEvaluationKey]*DirEvaluation{}
@@ -688,7 +697,7 @@ func (ctx *GenCtx) ownedBy(owner VFS, platform *Platform) ownerChain {
 	return ownerChain{}
 }
 
-func (ctx *GenCtx) scanModuleConfiguration(instance ModuleInstance) (*ModuleStmt, []VFS, []STR) {
+func (ctx *GenCtx) scanModuleConfiguration(instance ModuleInstance) (*ModuleStmt, []VFS, []TOK, []STR) {
 	dir := instance.Path.relString()
 	platform := instance.Platform
 	env := buildIfEnvInto(&ctx.ifEnvScratch, instance)
@@ -697,6 +706,8 @@ func (ctx *GenCtx) scanModuleConfiguration(instance ModuleInstance) (*ModuleStmt
 	d.reset()
 
 	d.pathID = instance.Path.rel()
+
+	var kinds []TOK
 
 	var pending *ModuleStmt
 
@@ -842,6 +853,10 @@ func (ctx *GenCtx) scanModuleConfiguration(instance ModuleInstance) (*ModuleStmt
 
 					expanded.Args = expandStmtTokens(v.Args, env)
 					children = appendConfigurationRecurses(children, dir, expanded, platform)
+
+					for len(kinds) < len(children) {
+						kinds = append(kinds, v.Name)
+					}
 				}
 			}
 		}
@@ -850,12 +865,12 @@ func (ctx *GenCtx) scanModuleConfiguration(instance ModuleInstance) (*ModuleStmt
 	scan(moduleStmts(ctx, dir))
 
 	if d.discarded {
-		children = nil
+		children, kinds = nil, nil
 	}
 
 	ctx.recordConfiguration(instance, children, nil)
 
-	return module, children, subscribers
+	return module, children, kinds, subscribers
 }
 
 func (ctx *GenCtx) makeFiles() []MakeFileEntry {
@@ -1119,6 +1134,14 @@ func discoverRecursedTargets(ctx *GenCtx, targetDir VFS) DiscoveredTargets {
 
 		if ctx.testMode {
 			recurses[dir] = children
+		}
+
+		if ctx.blacklist != nil {
+			for i, child := range children {
+				if rule := ctx.blacklist.match(child.relString()); rule != "" && ctx.fs.isFileID(child.rel(), strYaMake) {
+					ctx.reportBlacklisted(dir.relString(), child, rule, blacklistRecurseMacro(evaluation.recurseKinds[i]))
+				}
+			}
 		}
 
 		if at == 0 {
@@ -2145,6 +2168,8 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 		e.recordPeerModule(peerResult)
 		resolved = append(resolved, ResolvedPeer{path: p, result: peerResult, kind: kind})
 	}
+
+	ctx.checkModuleBlacklist(instance, d, resolved)
 
 	ownResourceGlobals := e.resourceDeclarations()
 
@@ -3373,6 +3398,7 @@ func (ctx *GenCtx) targetPICScanner() *IncludeScanner {
 		s.codegen = newCodegenRegistry(ctx.na)
 		s.codegen.moduleOutputDeps = ctx.moduleOutputIncludedDeps
 		s.moduleByRef = &ctx.moduleByRef
+		s.blacklisted = ctx.scannerTarget.blacklisted
 
 		ctx.scannerTargetPIC = s
 	}

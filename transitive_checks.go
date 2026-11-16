@@ -24,6 +24,8 @@ const (
 	transitiveChecked uint8 = 1 << iota
 	transitiveLicenseLoaded
 	transitiveFeaturesLoaded
+	transitiveReach
+	transitiveNeeded
 )
 
 type constraintType uint8
@@ -54,14 +56,19 @@ func (r licenseRestriction) allows(dynamic bool, licenses []licenseProps) bool {
 }
 
 type dirConstraint struct {
-	prefix string
-	glob   *regexp.Regexp
-	scope  uint8
+	prefix  string
+	glob    *regexp.Regexp
+	literal string
+	scope   uint8
 }
 
 func (c dirConstraint) matches(dir string, scope uint8) bool {
 	if c.scope&scope == 0 {
 		return false
+	}
+
+	if c.literal != "" {
+		return dir == c.literal
 	}
 
 	if c.glob != nil {
@@ -706,7 +713,12 @@ func dependentDirConstraints(kind constraintType, restrictions string, errs *[]s
 
 		if glob {
 			glob = false
-			item.glob = globConstraint(arg)
+
+			if strings.ContainsAny(arg, "*?") {
+				item.glob = globConstraint(arg)
+			} else {
+				item.literal = strings.Join(strings.FieldsFunc(arg, func(r rune) bool { return r == '/' }), "/")
+			}
 		}
 
 		dest.items = append(dest.items, item)
@@ -836,6 +848,7 @@ func licenseNames(license STR, licenses *licenseConf) string {
 type transitiveChecker struct {
 	ctx      *GenCtx
 	licenses *licenseConf
+	epoch    uint32
 }
 
 func passesPeers(r *ModuleEmitResult) bool {
@@ -867,26 +880,25 @@ func (tc *transitiveChecker) reportAll(dir string, msgs []string) {
 	}
 }
 
-func closure(r *ModuleEmitResult) []*ModuleEmitResult {
-	seen := map[*ModuleEmitResult]bool{}
-
+func (tc *transitiveChecker) closure(r *ModuleEmitResult) []*ModuleEmitResult {
 	var out []*ModuleEmitResult
 	var walk func(*ModuleEmitResult)
 
+	tc.epoch++
+
 	walk = func(m *ModuleEmitResult) {
 		for _, p := range m.testPeers {
-			if seen[p] {
+			if p.reachEpoch == tc.epoch {
 				continue
 			}
+
+			p.reachEpoch = tc.epoch
 
 			if passesPeers(p) {
 				walk(p)
 			}
 
-			if !seen[p] {
-				seen[p] = true
-				out = append(out, p)
-			}
+			out = append(out, p)
 		}
 	}
 
@@ -1043,13 +1055,13 @@ func (tc *transitiveChecker) check(m *ModuleEmitResult) {
 
 	if !requirements {
 		if m.checkProvides && m.provided != nil && m.provided.conflict {
-			tc.checkProvides(m, closure(m))
+			tc.checkProvides(m, tc.closure(m))
 		}
 
 		return
 	}
 
-	peers := closure(m)
+	peers := tc.closure(m)
 
 	if info.licenseConstraint {
 		for _, p := range peers {
@@ -1132,7 +1144,7 @@ func (tc *transitiveChecker) checkDependentDirs(m *ModuleEmitResult, peers []*Mo
 			tc.report(dir, "forbids direct or indirect dependency to tool [[imp]]"+tool.transitiveName()+"[[rst]] via [[alt1]]CHECK_DEPENDENT_DIRS[[rst]]"+dependencyPath(m, tool, true, false))
 		}
 
-		for _, p := range closure(tool) {
+		for _, p := range tc.closure(tool) {
 			if seen[p] {
 				continue
 			}
@@ -1188,21 +1200,43 @@ func (tc *transitiveChecker) checkGoTest(m *ModuleEmitResult) {
 		return
 	}
 
-	tested := m.transitive.goTestFor
+	tested := source(m.transitive.goTestFor)
 
 	isTarget := func(p *ModuleEmitResult) bool {
-		return p.transitiveDir() == tested && isGoModuleType(p.ModuleStmtName) && p != m
+		return p.testProject == tested && p != m && isGoModuleType(p.ModuleStmtName)
+	}
+
+	var target *ModuleEmitResult
+	var reach func(*ModuleEmitResult) bool
+
+	tc.epoch++
+
+	reach = func(x *ModuleEmitResult) bool {
+		if x.reachEpoch == tc.epoch {
+			return x.transitiveState&transitiveReach != 0
+		}
+
+		x.reachEpoch = tc.epoch
+		x.transitiveState &^= transitiveReach
+
+		for _, q := range x.testPeers {
+			if isTarget(q) || passesPeers(q) && reach(q) {
+				if isTarget(q) {
+					target = q
+				}
+
+				x.transitiveState |= transitiveReach
+
+				return true
+			}
+		}
+
+		return false
 	}
 
 	for _, peer := range m.testPeers {
-		if isTarget(peer) {
-			continue
-		}
-
-		for _, p := range closure(peer) {
-			if isTarget(p) {
-				tc.report(m.transitiveDir(), "go test issue: transitive dependencies on modules under test are prohibited in Arcadia due to scalability issues\nSee https://github.com/golang/go/issues/29258 and st/YMAKE-102 for more details\n"+dependencyPath(peer, p, false, false))
-			}
+		if !isTarget(peer) && reach(peer) {
+			tc.report(m.transitiveDir(), "go test issue: transitive dependencies on modules under test are prohibited in Arcadia due to scalability issues\nSee https://github.com/golang/go/issues/29258 and st/YMAKE-102 for more details\n"+dependencyPath(peer, target, false, false))
 		}
 	}
 }
@@ -1214,7 +1248,7 @@ func (ctx *GenCtx) checkTransitiveRequirements() {
 
 	walk = func(m *ModuleEmitResult) {
 		for _, p := range m.testPeers {
-			if p.transitiveState&transitiveChecked != 0 {
+			if p.transitiveState&(transitiveChecked|transitiveNeeded) != transitiveNeeded {
 				continue
 			}
 
@@ -1307,9 +1341,18 @@ func mergeProvided(a, b *providedSummary) *providedSummary {
 
 func (r *ModuleEmitResult) recordTransitive(ctx *GenCtx, d *ModuleData, tools []*ModuleEmitResult, platform *Platform) {
 	r.license, r.features, r.transitive = d.license, d.features, d.transitive
+
+	if ctx.blacklist != nil {
+		if rule := ctx.blacklist.match(r.testProject.relString()); rule != "" {
+			r.blacklistRule = internStr(rule)
+		}
+	}
+
 	r.tools = ctx.appendPeerList(r.tools, tools)
 	r.checkProvides = d.confModule != nil && platform.conf.checksProvides(d.confModule)
 	r.provided = ownProvided(r)
+
+	needed := false
 
 	for _, p := range r.testPeers {
 		if passesPeers(p) {
@@ -1317,6 +1360,12 @@ func (r *ModuleEmitResult) recordTransitive(ctx *GenCtx, d *ModuleData, tools []
 		} else {
 			r.provided = mergeProvided(r.provided, ownProvided(p))
 		}
+
+		needed = needed || p.transitiveState&transitiveNeeded != 0
+	}
+
+	if r.transitive != nil || r.checkProvides && r.provided != nil && r.provided.conflict || passesPeers(r) && needed {
+		r.transitiveState |= transitiveNeeded
 	}
 }
 

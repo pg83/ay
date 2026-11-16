@@ -83,6 +83,7 @@ type IncludeScanner struct {
 	onWarn         func(Warn)
 	codegen        *CodegenRegistry
 	moduleByRef    *DenseMap[NodeRef, *ModuleEmitResult]
+	blacklisted    func(VFS)
 }
 
 type searchTierHotEntry struct {
@@ -156,6 +157,10 @@ func (s *IncludeScanner) putChildren(v VFS, children []VFS, diagnostics []Includ
 	}
 
 	s.codegen.files.put1(v, entry)
+
+	if s.blacklisted != nil {
+		s.blacklisted(v)
+	}
 
 	return entry
 }
@@ -692,6 +697,10 @@ func (sc *ScanCtx) resolvedChildren(abs VFS) ScannedChildren {
 		}
 
 		s.codegen.files.put1(abs, entry)
+
+		if s.blacklisted != nil {
+			s.blacklisted(abs)
+		}
 
 		return entry
 	}

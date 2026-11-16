@@ -30,6 +30,21 @@ class BlacklistConfigureErrorsTest(MakeTest):
         self.banned_library()
         self.assertConfigureLikeYa()
 
+    def test_recurse_into_a_blacklisted_directory_without_ya_make(self):
+        self.blacklist(f"{PROJECT}/banned")
+        self.library()
+        self.write("ya.make", (self.project / "ya.make").read_text() + "RECURSE(banned)\n")
+        self.write("banned/readme.txt", "banned\n")
+        self.assertConfigureLikeYa()
+
+    def test_recurse_into_a_blacklisted_directory_of_allowed_ones(self):
+        self.blacklist(f"{PROJECT}/banned", f"!{PROJECT}/banned/allowed")
+        self.library()
+        self.write("ya.make", (self.project / "ya.make").read_text() + "RECURSE(banned)\n")
+        self.write("banned/ya.make", "RECURSE(allowed)\n")
+        self.banned_library("banned/allowed")
+        self.assertConfigureLikeYa()
+
     def test_recurse_for_tests_into_a_blacklisted_directory(self):
         self.blacklist(f"{PROJECT}/banned")
         self.library()

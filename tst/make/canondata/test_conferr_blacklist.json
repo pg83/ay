@@ -151,6 +151,36 @@
       "$S/__ay_e2e__/banned": null
     }
   },
+  "BlacklistConfigureErrorsTest.test_recurse_into_a_blacklisted_directory_of_allowed_ones": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "Path [[imp]]$S/__ay_e2e__/banned[[rst]] inside [[alt1]]RECURSE/RECURSE_ROOT_RELATIVE[[rst]] is from prohibited directory [[alt1]]__ay_e2e__/banned[[rst]]",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null,
+      "$S/__ay_e2e__/banned": null,
+      "$S/__ay_e2e__/banned/allowed": null
+    }
+  },
+  "BlacklistConfigureErrorsTest.test_recurse_into_a_blacklisted_directory_without_ya_make": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "[[alt1]]RECURSE[[rst]] to directory without ya.make: $S/__ay_e2e__/banned",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null
+    }
+  },
   "BlacklistConfigureErrorsTest.test_source_from_a_blacklisted_directory": {
     "configure_errors": {
       "__ay_e2e__": [
