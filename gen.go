@@ -72,6 +72,8 @@ var acknowledgedTokSet = func() BitSet {
 	return b
 }()
 
+var makeFilesReported bool
+
 const (
 	variantDemandShift   = 5
 	variantDemandMask    = uint16(0x7) << variantDemandShift
@@ -86,6 +88,7 @@ type ModuleEmitResult struct {
 	excluded                        bool
 	dynamicLink                     bool
 	ToolRequired                    bool
+	missingMakefile                 bool
 	ToolPath                        ARG
 	ForeignTool                     *ForeignTool
 	deferredWarnings                *moduleWarnings
@@ -175,7 +178,7 @@ type GenCtx struct {
 	emit                *StreamingEmitter
 	onWarn              func(Warn)
 	warningSink         *moduleWarnings
-	where               string
+	whereModule         VFS
 	keepGoing           bool
 	na                  *NodeArenas
 	inclArgValues       [2]Vec[STR]
@@ -346,7 +349,11 @@ func runGenIntoWithResources(fs FS, parsers *IncludeParserManager, targets []str
 		})
 	}
 
-	return ctx.makeFiles()
+	if makeFilesReported {
+		return ctx.makeFiles()
+	}
+
+	return nil
 }
 
 func newGenCtx(fs FS, parsers *IncludeParserManager, hostP, targetP *Platform, emitter *StreamingEmitter, onWarn func(Warn), tests *TestOpts, keepGoing bool) *GenCtx {
@@ -411,8 +418,8 @@ func newGenCtx(fs FS, parsers *IncludeParserManager, hostP, targetP *Platform, e
 	ctx.inclArgs = InclArgMemo{m: &ctx.inclArgValues}
 	ctx.buckets = newBucketCache()
 	ctx.onWarn = func(w Warn) {
-		if w.Kind == WarnMissingInclude && w.Error == "" && w.includer != 0 && ctx.where != "" {
-			w.Where, w.Error = ctx.where, unresolvedIncludeError(w)
+		if w.Kind == WarnMissingInclude && w.Error == "" && w.includer != 0 && ctx.whereModule != 0 {
+			w.Where, w.Error = makeFileWhere(ctx.whereModule.relString()), unresolvedIncludeError(w)
 		}
 
 		if ctx.warningSink != nil {
@@ -1018,7 +1025,7 @@ type DiscoveredTargets struct {
 
 func discoverRecursedTargets(ctx *GenCtx, targetDir VFS) DiscoveredTargets {
 	seen := map[VFS]bool{targetDir: true}
-	queue := []VFS{targetDir}
+	queue, parents := []VFS{targetDir}, []VFS{0}
 
 	var recurses map[VFS][]VFS
 
@@ -1032,6 +1039,8 @@ func discoverRecursedTargets(ctx *GenCtx, targetDir VFS) DiscoveredTargets {
 		dir := queue[at]
 
 		if at != 0 && !ctx.fs.isFileID(dir.rel(), strYaMake) {
+			ctx.onWarn(Warn{Kind: WarnMisconfiguration, Where: makeFileWhere(parents[at].relString()), Error: "[[alt1]]RECURSE[[rst]] to " + ctx.missingDirectory(dir.rel()) + "$S/" + dir.relString()})
+
 			continue
 		}
 
@@ -1049,20 +1058,9 @@ func discoverRecursedTargets(ctx *GenCtx, targetDir VFS) DiscoveredTargets {
 		}
 
 		for _, child := range children {
-			if !ctx.fs.isFileID(child.rel(), strYaMake) {
-				present, isDir := ctx.fs.existsID(srcRootRel, child.rel())
-				what := "missing directory: "
-
-				if present && isDir {
-					what = "directory without ya.make: "
-				}
-
-				ctx.onWarn(Warn{Kind: WarnMisconfiguration, Where: makeFileWhere(dir.relString()), Error: "[[alt1]]RECURSE[[rst]] to " + what + "$S/" + child.relString()})
-			}
-
 			if !seen[child] {
 				seen[child] = true
-				queue = append(queue, child)
+				queue, parents = append(queue, child), append(parents, dir)
 			}
 		}
 	}
@@ -1433,11 +1431,11 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 		return existing
 	}
 
-	where := ctx.where
+	where := ctx.whereModule
 
-	ctx.where = makeFileWhere(instance.Path.relString())
+	ctx.whereModule = instance.Path
 
-	defer func() { ctx.where = where }()
+	defer func() { ctx.whereModule = where }()
 
 	identity := instance
 
@@ -1919,19 +1917,6 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 			continue
 		}
 
-		if !ctx.fs.isFileID(p, strYaMake) {
-			present, isDir := ctx.fs.existsID(srcRootRel, p)
-			what := "missing directory: "
-
-			if present && isDir {
-				what = "directory without ya.make: "
-			}
-
-			ctx.onWarn(Warn{Kind: WarnModuleFailed, Where: makeFileWhere(instance.Path.relString()), Error: "[[alt1]]PEERDIR[[rst]] to " + what + "[[imp]]$S/" + p.string() + "[[rst]]"})
-
-			continue
-		}
-
 		peerInstance := e.derivePeerInstanceVFS(peerVFS)
 
 		if kind != peerKindUserPeer {
@@ -1943,6 +1928,12 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 		peerResult := genModule(ctx, peerInstance)
 
 		if peerResult == nil {
+			continue
+		}
+
+		if peerResult.missingMakefile {
+			ctx.onWarn(Warn{Kind: WarnModuleFailed, Where: makeFileWhere(instance.Path.relString()), Error: "[[alt1]]PEERDIR[[rst]] to " + ctx.missingDirectory(p) + "[[imp]]$S/" + p.string() + "[[rst]]"})
+
 			continue
 		}
 

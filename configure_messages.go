@@ -75,3 +75,11 @@ func treePluginMacro(fs FS, name STR) bool {
 
 	return treePluginMacros[name.string()]
 }
+
+func (ctx *GenCtx) missingDirectory(dir STR) string {
+	if present, isDir := ctx.fs.existsID(srcRootRel, dir); present && isDir {
+		return "directory without ya.make: "
+	}
+
+	return "missing directory: "
+}

@@ -62,7 +62,7 @@ func genRequestedPeer(ctx *GenCtx, request ModuleInstance) *ModuleEmitResult {
 		}
 
 		warning := Warn{Kind: WarnModuleFailed, Message: fmt.Sprintf("%s: %s", request.Path.relString(), exc.Error())}
-		result := &ModuleEmitResult{}
+		result := &ModuleEmitResult{missingMakefile: !ctx.fs.isFileID(request.Path.rel(), strYaMake)}
 
 		if request.Demand == demandNone || ctx.emit.deferPublication > 0 {
 			result.deferredWarnings = &moduleWarnings{own: []Warn{warning}}

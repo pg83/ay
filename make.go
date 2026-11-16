@@ -157,6 +157,8 @@ func cmdMake(g GlobalFlags, args []string) int {
 
 	errs := newConfigureErrors()
 
+	makeFilesReported = mf.outputs.context != ""
+
 	onWarn := warnHandler(mf.keepGoing, mf.verbose, errs, func(line string) {
 		errs.addLog(line)
 
