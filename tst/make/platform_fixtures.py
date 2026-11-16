@@ -9,6 +9,7 @@ def add_linux_clang_target(test, architecture):
     path, name, chain, platform = selected
     files = toolchains.cxx_files(test)
     for file, config in files.items():
-        config["toolchains"] = {key: value for key, value in config["toolchains"].items() if not toolchains.is_cxx(value) or key == name}
-    files[path]["toolchains"][name]["platforms"] = [platform, dict(platform, target={"os": "LINUX", "arch": architecture})]
+        key = toolchains.section(file)
+        config[key] = {chain: value for chain, value in config[key].items() if not toolchains.is_cxx(value) or chain == name}
+    files[path][toolchains.section(path)][name]["platforms"] = [platform, dict(platform, target={"os": "LINUX", "arch": architecture})]
     toolchains.write(test, files)

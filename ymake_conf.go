@@ -330,9 +330,13 @@ func newToolchain(fs FS, cfg *YaConfToolchains, key string, descr, tool, host, t
 	var formula any
 
 	if bottle != "" {
-		if b, ok := cfg.bottle(bottle); ok {
-			formula = b["formula"]
+		b, ok := cfg.bottle(bottle)
+
+		if !ok {
+			throwFmt("ymake conf: tool chain %s uses bottle %s that is not described", key, bottle)
 		}
+
+		formula = b["formula"]
 	}
 
 	info := map[string]any{
@@ -628,6 +632,10 @@ func parseYmakeConf(out []byte) map[string]string {
 		if depth == 0 {
 			if trimmed == "" || trimmed[0] == '#' || trimmed[0] == '@' {
 				continue
+			}
+
+			if strings.HasPrefix(trimmed, "=") || strings.HasPrefix(trimmed, "+=") {
+				throwFmt("ymake conf: %s printed an assignment without a name: %q", ymakeConfScript, trimmed)
 			}
 
 			if name, value, appendOp, ok := confAssignment(line); ok {

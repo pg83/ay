@@ -55,7 +55,8 @@ print("}")
         self.assertNotEqual(self.make().returncode, 0)
 
     def test_toolchain_configuration_sections_require_objects(self):
-        for field, value in (("toolchains", []), ("toolchains", "wrong"), ("bottles", []), ("bottles", True), (None, [])):
+        chains = toolchains.section(self.default_file)
+        for field, value in ((chains, []), (chains, "wrong"), ("bottles", []), ("bottles", True), (None, [])):
             with self.subTest(field=field, value=value):
                 config = self.cxx_copy()[self.default_file]
                 if field is None:

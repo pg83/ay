@@ -1,21 +1,32 @@
 """Toolchain descriptions of the fixture tree.
 
-Trunk describes toolchains in build/tools/toolchains/*.toolchain.json, one
-file per toolchain family with its own bottles; build/ya.conf.json keeps an
-empty legacy section, and ya reads only the files.
+The gate revision keeps the C++ toolchains in the toolchain section of
+build/ya.conf.json, next to their bottles; other toolchains, and in trunk
+all of them, live in build/tools/toolchains/*.toolchain.json, one file per
+family with its own bottles and a toolchains section.
 """
 
 import json
 
 DIRECTORY = "build/tools/toolchains"
 SUFFIX = ".toolchain.json"
+CONF = "build/ya.conf.json"
+
+
+def section(path):
+    """The key of the toolchain map in the description at path."""
+    return "toolchain" if path == CONF else "toolchains"
 
 
 def toolchain_files(test):
-    """{tree-relative path: parsed file} of every toolchain file."""
+    """{tree-relative path: parsed description} of every toolchain description."""
     root = test.root / DIRECTORY
-    return {f"{DIRECTORY}/{entry.name}": json.loads(entry.read_text())
-            for entry in sorted(root.iterdir()) if entry.name.endswith(SUFFIX)}
+    files = {f"{DIRECTORY}/{entry.name}": json.loads(entry.read_text())
+             for entry in sorted(root.iterdir()) if entry.name.endswith(SUFFIX)} if root.is_dir() else {}
+    conf = json.loads((test.root / CONF).read_text())
+    if conf.get("toolchain"):
+        files[CONF] = conf
+    return files
 
 
 def is_cxx(chain):
@@ -25,7 +36,7 @@ def is_cxx(chain):
 def cxx_files(test):
     """The toolchain files that describe a C++ toolchain."""
     files = {path: config for path, config in toolchain_files(test).items()
-             if any(is_cxx(chain) for chain in config.get("toolchains", {}).values())}
+             if any(is_cxx(chain) for chain in config.get(section(path), {}).values())}
     test.assertTrue(files, "fixture tree has no C++ toolchains to modify")
     return files
 
@@ -33,7 +44,7 @@ def cxx_files(test):
 def cxx_entries(files):
     """(path, name, toolchain) of every C++ toolchain in files."""
     return [(path, name, chain) for path, config in files.items()
-            for name, chain in config["toolchains"].items() if is_cxx(chain)]
+            for name, chain in config[section(path)].items() if is_cxx(chain)]
 
 
 def default_linux_clang(test):
@@ -51,7 +62,7 @@ def alias_windows_targets(test, **target):
     """Make every Windows-targeted toolchain also accept os WINDOWS."""
     files = {}
     for path, config in toolchain_files(test).items():
-        for chain in config.get("toolchains", {}).values():
+        for chain in config.get(section(path), {}).values():
             for platform in list(chain.get("platforms", [])):
                 if platform.get("target", {}).get("os") == "WIN":
                     chain["platforms"].append(dict(platform, target=dict(platform["target"], os="WINDOWS", **target)))

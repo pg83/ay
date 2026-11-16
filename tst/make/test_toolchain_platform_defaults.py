@@ -8,9 +8,10 @@ class ToolchainPlatformDefaultsTest(MakeTest):
         self.assertIsNotNone(selected, "fixture tree needs a default Linux C++ toolchain")
         path, name, _, platform = selected
         files = toolchains.cxx_files(self)
-        for config in files.values():
-            config["toolchains"] = {key: value for key, value in config["toolchains"].items() if not toolchains.is_cxx(value) or key == name}
-        chain = files[path]["toolchains"][name]
+        for file, config in files.items():
+            key = toolchains.section(file)
+            config[key] = {chain: value for chain, value in config[key].items() if not toolchains.is_cxx(value) or chain == name}
+        chain = files[path][toolchains.section(path)][name]
         chain["platforms"] = [dict(platform)]
         del chain["platforms"][0]["target"]
         toolchains.write(self, files)
