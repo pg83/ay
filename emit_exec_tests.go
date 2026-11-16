@@ -1,8 +1,10 @@
 package main
 
 func (e *EmitContext) genExecTest() *ModuleEmitResult {
-	if e.d.test.commands == "" {
-		throwFmt("EXECTEST must have at least one RUN macro")
+	noRun := e.d.test.commands == ""
+
+	if noRun {
+		e.ctx.onWarn(Warn{Kind: WarnMisconfiguration, Where: makeFileWhere(e.instance.Path.relString()), Error: "EXECTEST must have at least one RUN macro"})
 	}
 
 	var closures [][]ResourceDecl
@@ -24,7 +26,7 @@ func (e *EmitContext) genExecTest() *ModuleEmitResult {
 	ref := e.emitLazyModuleNode(node, nil, out)
 	result := e.scriptModuleResult(ref, out, nil, globals)
 
-	if e.ctx.testMode {
+	if e.ctx.testMode && !noRun {
 		result.TestSuites = e.testRunSuites(out, ref, globals)
 	}
 

@@ -899,6 +899,7 @@ var (
 	strTestClangCC                                                                           = internStr("$(CLANG)/bin/clang")
 	strTestClangCXX                                                                          = internStr("$(CLANG)/bin/clang++")
 	strTestClangSymbolizer                                                                   = internStr("$(CLANG)/bin/llvm-symbolizer")
+	strTestData                                                                              = internStr("TEST_DATA")
 	strTestEnvValue                                                                          = internStr("TEST_ENV_VALUE")
 	strTestFileFilter                                                                        = internStr("--test-file-filter")
 	strTestGorace                                                                            = internStr("halt_on_error=1")

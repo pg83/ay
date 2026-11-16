@@ -44,8 +44,10 @@ func (e *EmitContext) testRunSuites(binary VFS, ref NodeRef, globals []ResourceD
 	project := e.instance.Path.relString()
 	name := testType
 
-	if message := testSizeError(meta.size); message != "" {
-		e.ctx.onWarn(Warn{Kind: WarnMisconfiguration, Where: makeFileWhere(project), Error: message})
+	if errs := validateTest(meta); len(errs) > 0 {
+		for _, message := range errs {
+			e.ctx.onWarn(Warn{Kind: WarnMisconfiguration, Where: makeFileWhere(project), Error: message})
+		}
 
 		return nil
 	}

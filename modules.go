@@ -3440,6 +3440,12 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 			return true
 		}
 
+		if v.Raw == strTestData {
+			onWarn(Warn{Kind: WarnMisconfiguration, Where: makeFileWhere(modulePath), Error: "TEST_DATA is removed in favour of DATA"})
+
+			return true
+		}
+
 		return false
 	}
 

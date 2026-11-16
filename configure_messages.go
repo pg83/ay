@@ -14,6 +14,7 @@ var (
 	treePluginMacrosOnce sync.Once
 	treePluginMacros     map[string]bool
 	pluginMacroDef       = regexp.MustCompile(`(?m)^def on([a-z0-9_]+)\(`)
+	testSizeTimeouts     = map[string]int{"small": 60, "medium": 600, "large": 3600}
 )
 
 var addInclLanguages = func() []ANY {
@@ -62,13 +63,94 @@ func unresolvedIncludeError(w Warn) string {
 	return "could not resolve include file: [[imp]]" + w.target.string() + "[[rst]] included from here: [[imp]]" + ymakeVFS(w.includer) + "[[rst]]"
 }
 
-func testSizeError(size string) string {
-	switch size {
-	case "", "small", "medium", "large":
-		return ""
+func validateTest(meta TestMeta) []string {
+	var errs []string
+
+	size := meta.size
+
+	if size == "" {
+		size = "small"
 	}
 
-	return "Unknown test size: [[imp]]" + strings.ToUpper(size) + "[[rst]], choose from [[imp]]SMALL, MEDIUM, LARGE[[rst]]"
+	tags := func(tag string) bool { return slices.Contains(meta.tags, tag) }
+	requirements := map[string]bool{}
+
+	for _, req := range meta.requirements {
+		name, _, ok := strings.Cut(req, ":")
+
+		switch {
+		case req == "kvm":
+			requirements[req] = true
+		case ok:
+			requirements[name] = true
+		default:
+			errs = append(errs, "Invalid requirement syntax [[imp]]"+req+"[[rst]]: expect <requirement>:<value>")
+		}
+	}
+
+	for _, tag := range meta.tags {
+		if prefix, _, ok := strings.Cut(tag, ":"); ok && prefix != "sb" && prefix != "ya" && prefix != "ynmt_benchmark" && prefix != "bert_models" && prefix != "zeliboba_map" {
+			errs = append(errs, "Only [[imp]]sb:[[rst]] and [[imp]]ya:[[rst]] prefixes are allowed in system tags: "+tag)
+		}
+	}
+
+	fat, inAutocheck := tags("ya:fat"), !tags("ya:not_autocheck") && !tags("ya:manual")
+
+	switch {
+	case fat && size != "large":
+		errs = append(errs, "Only LARGE test may have ya:fat tag")
+	case !fat && tags("ya:privileged"):
+		errs = append(errs, "ya:privileged can be used with LARGE tests only")
+	}
+
+	if !fat && inAutocheck && size == "large" {
+		errs = append(errs, "LARGE test must have ya:fat tag")
+	}
+
+	if requirements["container"] && requirements["porto_layers"] {
+		errs = append(errs, "Only one of 'container', 'porto_layers' can be set, not both")
+	}
+
+	if tags("ya:privileged") && !requirements["container"] && !requirements["porto_layers"] {
+		errs = append(errs, "Only tests with 'container' or 'porto_layers' requirement can have 'ya:privileged' tag")
+	}
+
+	if limit, known := testSizeTimeouts[size]; !known {
+		errs = append(errs, "Unknown test size: [[imp]]"+strings.ToUpper(size)+"[[rst]], choose from [[imp]]SMALL, MEDIUM, LARGE[[rst]]")
+	} else if timeout := meta.timeout; timeout < 0 {
+		errs = append(errs, "Error when parsing test timeout: [[bad]]Timeout must be > 0[[rst]]")
+	} else if timeout > limit && inAutocheck {
+		suggested := ""
+
+		for _, candidate := range [...]string{"small", "medium", "large"} {
+			if timeout <= testSizeTimeouts[candidate] {
+				suggested = ", suggested size: [[imp]]" + strings.ToUpper(candidate) + "[[rst]]"
+
+				break
+			}
+		}
+
+		errs = append(errs, "Max allowed timeout for test size [[imp]]"+strings.ToUpper(size)+"[[rst]] is [[imp]]"+strconv.Itoa(limit)+" sec[[rst]]"+suggested)
+	}
+
+	if meta.splitFactor != 0 {
+		if meta.forkMode == "" {
+			errs = append(errs, "SPLIT_FACTOR must be use with FORK_TESTS() or FORK_SUBTESTS() macro")
+		}
+
+		switch {
+		case meta.splitFactor < 0:
+			errs = append(errs, "Incorrect SPLIT_FACTOR value: must be > 0")
+		case meta.splitFactor > 1000:
+			errs = append(errs, "Incorrect SPLIT_FACTOR value: the maximum allowed value is 1000")
+		}
+	}
+
+	if !fat && tags("ya:noretries") && !tags("ya:yt") {
+		errs = append(errs, "Only LARGE tests can have 'ya:noretries' tag")
+	}
+
+	return errs
 }
 
 func treePluginMacro(fs FS, name STR) bool {

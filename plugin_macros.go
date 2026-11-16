@@ -67,7 +67,7 @@ var pluginMacroNames = map[STR]bool{
 	internStr("SET_CPP_COVERAGE_FLAGS"):                     true,
 	strSplitCodegen:                                         true,
 	internStr("SUPPRESSIONS"):                               true,
-	internStr("TEST_DATA"):                                  true,
+	strTestData:                                             true,
 	internStr("TEST_SRCS"):                                  true,
 	internStr("TOOLCHAIN"):                                  true,
 	internStr("USRV_GEN_GRPC_CLIENT_V2"):                    true,

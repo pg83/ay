@@ -260,6 +260,7 @@ type GenCtx struct {
 	plainCycles         int
 	excluded            map[VFS]bool
 	addInclDirExists    map[VFS]bool
+	generatedModules    int
 }
 
 type moduleMemoEntry struct {
@@ -1153,7 +1154,7 @@ func genDumpGraphWithResources(fs FS, parsers *IncludeParserManager, targets []s
 
 	var makeFiles []MakeFileEntry
 
-	if makeFilesReported {
+	if makeFilesReported && ctx.generatedModules > 0 {
 		makeFiles = ctx.makeFiles()
 	}
 
@@ -1521,6 +1522,8 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 	if instance.Platform == ctx.target && ctx.excluded[instance.Path] {
 		return &ModuleEmitResult{}
 	}
+
+	ctx.generatedModules++
 
 	identity := instance
 

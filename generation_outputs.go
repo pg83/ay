@@ -127,10 +127,6 @@ func (e MakeFileEntry) MarshalJSON() ([]byte, error) {
 }
 
 func writeGenerationOutputs(o GenerationOutputs, g *Graph, regularInputs bool, errs *ConfigureErrors, makeFiles []MakeFileEntry) {
-	if len(g.Graph) == 0 {
-		makeFiles = nil
-	}
-
 	writeOutputFile(o.graph, func(w io.Writer) {
 		writeGraphCompact(w, g, regularInputs)
 	})
