@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path"
@@ -727,7 +728,7 @@ func (ctx *GenCtx) scanModuleConfiguration(instance ModuleInstance) (*ModuleStmt
 			case *EndStmt:
 				if pending != nil && !d.moduleEnded {
 					d.moduleEnded = true
-				} else if d.processModuleEnd(dir, v.Line, ctx.onWarn) {
+				} else if d.processModuleEnd(ctx.fs, dir, v.Line, ctx.onWarn) {
 					d.moduleEnded = true
 				}
 			case *SetStmt, *DefaultVarStmt:
@@ -1054,7 +1055,7 @@ func discoverRecursedTargets(ctx *GenCtx, targetDir VFS) DiscoveredTargets {
 		dir := queue[at]
 
 		if at != 0 && !ctx.fs.isFileID(dir.rel(), strYaMake) {
-			ctx.onWarn(Warn{Kind: WarnMisconfiguration, Where: makeFileWhere(parents[at].relString()), Error: "[[alt1]]RECURSE[[rst]] to " + ctx.missingDirectory(dir.rel()) + "$S/" + dir.relString()})
+			ctx.onWarn(ctx.recurseError(parents[at], dir))
 
 			continue
 		}
@@ -1252,7 +1253,29 @@ func (ctx *GenCtx) parseFileCached(id STR) []Stmt {
 }
 
 func moduleStmts(ctx *GenCtx, dir string) []Stmt {
-	return ctx.parseFileCached(internJoined(dir, "ya.make"))
+	key := parsedFileKey(internJoined(dir, "ya.make"))
+
+	if mf, ok := ctx.parsedFiles[key]; ok {
+		return mf.Stmts
+	}
+
+	mf, err := parseFileClean(ctx.fs, key, ctx.includeMemos)
+
+	if err != nil {
+		var pe *ParseError
+
+		if !errors.As(err, &pe) || !pe.Lexer && pe.IncludeLoop == nil {
+			throw(err)
+		}
+
+		ctx.onWarn(Warn{Kind: WarnMisconfiguration, Message: err.Error(), Where: makeFileWhere(dir), Error: makefileParseError(ctx.fs, pe)})
+
+		mf = &MakeFile{Path: pe.File}
+	}
+
+	ctx.parsedFiles[key] = mf
+
+	return mf.Stmts
 }
 
 func (ctx *GenCtx) autoincludeStmts(dir string) []Stmt {
@@ -1731,10 +1754,6 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 			}
 		}
 	}()
-
-	if d.conflictMod != nil {
-		throwFmt("gen: %s declares multiple modules (%s and %s); only one is allowed", instance.Path.relString(), d.moduleStmt.Name, d.conflictMod.Name)
-	}
 
 	if d.moduleStmt == nil {
 		throwFmt("gen: %s has no module declaration (PROGRAM/LIBRARY)", instance.Path.relString())

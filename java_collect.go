@@ -271,7 +271,7 @@ func collectJavaStmts(ctx *GenCtx, jm *JavaModule, d *JavaData, stmts []Stmt, en
 		case *IncludeStmt:
 			ctx.withIncludedStmts(v, env, func(included []Stmt) { collectJavaStmts(ctx, jm, d, included, env) })
 		case *MissingIncludeStmt:
-			throwFmt("%s:%d: INCLUDE file %s not found", jm.dir, v.Line, v.Path)
+			ctx.onWarn(Warn{Kind: WarnMisconfiguration, Message: jm.dir + ": INCLUDE file " + v.Path + " not found", Where: makeFileWhere(jm.dir), Error: missingIncludeError(v)})
 		case *ModuleStmt:
 			owner := multimoduleOwner(v)
 			platform := jm.instance.Platform

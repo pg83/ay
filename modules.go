@@ -368,7 +368,6 @@ type ModuleData struct {
 	pyRegister              []PyRegistration
 	ragel6Flags             []ANY
 	ragel6Builds            []Ragel6BuildStmt
-	conflictMod             *ModuleStmt
 	resourceDeclStmts       []*DeclareResourceStmt
 	primaryOutput           string
 	inducedDeps             ParsedIncludeSet
@@ -1494,7 +1493,7 @@ func endModule(ctx *GenCtx, modulePath string, kind ModuleKind, language Languag
 	d.moduleEnded = true
 }
 
-func (d *ModuleData) processModuleEnd(modulePath string, line int, onWarn func(Warn)) bool {
+func (d *ModuleData) processModuleEnd(fs FS, modulePath string, line int, onWarn func(Warn)) bool {
 	if d.moduleStmt != nil && !d.moduleEnded && !(d.readModuleContentOnly && d.readModuleContentDone) {
 		if d.readModuleContentOnly {
 			d.readModuleContentDone = true
@@ -1505,7 +1504,16 @@ func (d *ModuleData) processModuleEnd(modulePath string, line int, onWarn func(W
 		return true
 	}
 
-	onWarn(Warn{Kind: WarnMisconfiguration, Message: fmt.Sprintf("%s:%d: unexpected command END outside of a module", modulePath, line)})
+	if d.discarded {
+		return false
+	}
+
+	row, col := statementEnd(concatChunks(fs.read(joinRel(modulePath, "ya.make"))), line, "END")
+
+	onWarn(Warn{
+		Kind: WarnMisconfiguration, Message: fmt.Sprintf("%s:%d: unexpected command END outside of a module", modulePath, line),
+		Where: makeFileWhere(modulePath), Error: "unexpected command [[alt1]]END[[rst]] outside of a module", Row: row, Column: col,
+	})
 
 	return false
 }
@@ -2130,7 +2138,13 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 		}
 
 		if d.moduleStmt == nil && !d.moduleOpening && !allowedOutsideModule(s) {
-			onWarn(Warn{Kind: WarnSyntax, Message: fmt.Sprintf("%s: unexpected command %s outside of a module", modulePath, stmtMacroName(s))})
+			name := stmtMacroName(s)
+			row, col := ctx.statementEnd(modulePath, stmtLine(s), name)
+
+			onWarn(Warn{
+				Kind: WarnSyntax, Message: fmt.Sprintf("%s: unexpected command %s outside of a module", modulePath, name),
+				Where: makeFileWhere(modulePath), Error: "unexpected command [[alt1]]" + name + "[[rst]] outside of a module", Row: row, Column: col,
+			})
 
 			continue
 		}
@@ -2146,14 +2160,22 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 				collectStmts(ctx, modulePath, kind, language, included, env, d, onWarn, platform)
 			})
 		case *MissingIncludeStmt:
-			throwFmt("%s:%d: INCLUDE file %s not found", modulePath, v.Line, v.Path)
+			onWarn(Warn{Kind: WarnMisconfiguration, Message: modulePath + ": INCLUDE file " + v.Path + " not found", Where: makeFileWhere(modulePath), Error: missingIncludeError(v)})
 		case *ModuleStmt:
 			v = d.moduleContentDeclaration(v)
 
 			if d.moduleStmt != nil {
-				d.conflictMod = v
+				name := v.Name.string()
+				row, col := ctx.statementEnd(modulePath, v.Line, name)
+				message := "module [[alt1]]" + name + "[[rst]] inside module " + d.moduleStmt.Name.string() + ". Maybe you need to place " + name + " after END()?. Skip [[alt1]]" + name + "[[rst]] macro."
 
-				return
+				if d.moduleEnded {
+					message = "unexpected command [[alt1]]" + name + "[[rst]]. Only one module per ya make list is permitted."
+				}
+
+				onWarn(Warn{Kind: WarnMisconfiguration, Where: makeFileWhere(modulePath), Error: message, Row: row, Column: col})
+
+				continue
 			}
 
 			d.moduleOpening = true
@@ -2580,7 +2602,7 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 				d.ragel6Flags = internAnys(strings.Fields(valueID.string()))
 			}
 		case *EndStmt:
-			if !d.processModuleEnd(modulePath, v.Line, onWarn) {
+			if !d.processModuleEnd(fs, modulePath, v.Line, onWarn) {
 				continue
 			}
 
@@ -2886,7 +2908,12 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 			}
 
 			if v.Internal {
-				onWarn(Warn{Kind: WarnUnknownMacro, Message: fmt.Sprintf("%s: internal command %s is not allowed to appear in ya.make (line %d); skipped", modulePath, v.Raw.string(), v.Line)})
+				row, col := ctx.statementEnd(modulePath, v.Line, v.Raw.string())
+
+				onWarn(Warn{
+					Kind: WarnUnknownMacro, Message: fmt.Sprintf("%s: internal command %s is not allowed to appear in ya.make (line %d); skipped", modulePath, v.Raw.string(), v.Line),
+					Where: makeFileWhere(modulePath), Error: "internal command [[alt1]]" + v.Raw.string() + "[[rst]] is not allowed to appear in ya.make", Row: row, Column: col,
+				})
 
 				continue
 			}

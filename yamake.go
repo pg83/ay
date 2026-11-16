@@ -342,6 +342,7 @@ func (*IncludeStmt) stmtMarker() {
 }
 
 type MissingIncludeStmt struct {
+	File string
 	Path string
 	Line int
 }
@@ -592,10 +593,12 @@ type CondNode struct {
 }
 
 type ParseError struct {
-	File    string
-	Line    int
-	Col     int
-	Message string
+	File        string
+	Line        int
+	Col         int
+	Message     string
+	Lexer       bool
+	IncludeLoop []string
 }
 
 func (e *ParseError) error() string {
@@ -693,6 +696,10 @@ func (l *Lexer) throwParse(line, col int, format string, args ...any) {
 	}
 
 	newException(pe).throw()
+}
+
+func (l *Lexer) throwLexer(line, col int, format string, args ...any) {
+	newException(&ParseError{File: l.name, Line: line, Col: col, Message: fmt.Sprintf(format, args...), Lexer: true}).throw()
 }
 
 func (l *Lexer) advance() byte {
@@ -839,7 +846,7 @@ func (l *Lexer) readToken() Token {
 	default:
 
 		l.advance()
-		l.throwParse(startLine, startCol, "unexpected character %q", b)
+		l.throwLexer(startLine, startCol, "unexpected character %q", b)
 
 		return Token{}
 	}
@@ -869,7 +876,7 @@ slow:
 
 	for {
 		if l.pos >= len(l.src) {
-			l.throwParse(startLine, startCol, "unterminated string")
+			l.throwLexer(startLine, startCol, "unterminated string")
 		}
 
 		b := l.src[l.pos]
@@ -898,7 +905,7 @@ func (l *Lexer) appendQuotedSegment(buf []byte, quote byte, startLine, startCol 
 
 	for {
 		if l.pos >= len(l.src) {
-			l.throwParse(startLine, startCol, "unterminated string")
+			l.throwLexer(startLine, startCol, "unterminated string")
 		}
 
 		b := l.src[l.pos]
@@ -1282,7 +1289,7 @@ func (p *Parser) parseStmts(term StmtTerminator) (stmts []Stmt, endTok Token) {
 		}
 
 		if tok.kind != tokIdent && !(tok.kind == tokWord && isIdentShapedName(tok.string())) {
-			p.lex.throwParse(tok.line, tok.col, "expected macro name, got %s", describeToken(tok))
+			p.lex.throwLexer(tok.line, tok.col, "expected macro name, got %s", describeToken(tok))
 		}
 
 		if term == termIfBody && (tok.id == kwELSE || tok.id == kwELSEIF || tok.id == kwENDIF) {
@@ -1397,7 +1404,7 @@ func (p *Parser) parseMacroArgsLexical(nameTok Token, lexical *[]ANY) []ANY {
 	lp := p.lex.next()
 
 	if lp.kind != tokLParen {
-		p.lex.throwParse(lp.line, lp.col, "expected '(' after macro name %q, got %s", nameTok.string(), describeToken(lp))
+		p.lex.throwLexer(lp.line, lp.col, "expected '(' after macro name %q, got %s", nameTok.string(), describeToken(lp))
 	}
 
 	p.lex.inArgs = true
@@ -1424,7 +1431,7 @@ func (p *Parser) parseMacroArgsLexical(nameTok Token, lexical *[]ANY) []ANY {
 
 			return astArgs.list(scratch...)
 		case tokEOF:
-			p.lex.throwParse(nameTok.line, nameTok.col, "unterminated macro call %q (missing ')')", nameTok.string())
+			p.lex.throwLexer(nameTok.line, nameTok.col, "unterminated macro call %q (missing ')')", nameTok.string())
 		case tokIdent, tokWord, tokString, tokInt:
 			value := tok.id
 
@@ -1448,7 +1455,7 @@ func (p *Parser) parseMacroArgsLexical(nameTok Token, lexical *[]ANY) []ANY {
 				*lexical = append(*lexical, value.any())
 			}
 		case tokLParen:
-			p.lex.throwParse(tok.line, tok.col, "unexpected '(' inside macro call %q", nameTok.string())
+			p.lex.throwLexer(tok.line, tok.col, "unexpected '(' inside macro call %q", nameTok.string())
 		}
 	}
 }
@@ -2761,7 +2768,8 @@ func (p *Parser) expandOneInclude(nameTok Token, rel string) {
 			}
 
 			chainStr += " -> " + target
-			p.lex.throwParse(nameTok.line, nameTok.col, "INCLUDE cycle: %s", chainStr)
+
+			newException(&ParseError{File: p.name, Line: nameTok.line, Col: nameTok.col, Message: "INCLUDE cycle: " + chainStr, IncludeLoop: append(slices.Clone(chain), target)}).throw()
 		}
 	}
 
@@ -2774,7 +2782,7 @@ func (p *Parser) expandOneInclude(nameTok Token, rel string) {
 	}
 
 	if present, _ := p.fs.exists(srcRootRel, target); !present {
-		p.stmtScratch = append(p.stmtScratch, &MissingIncludeStmt{Path: target, Line: nameTok.line})
+		p.stmtScratch = append(p.stmtScratch, &MissingIncludeStmt{File: p.name, Path: target, Line: nameTok.line})
 
 		return
 	}
