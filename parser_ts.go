@@ -70,6 +70,7 @@ func (TSIncludeDirectiveParser) parse(_ string, data [][]byte, a *BumpAllocator[
 			}
 
 			end, qs, qe, call, decl := 0, 0, 0, tsNoImport, tsNoImport
+			resume := min(tsFailPos(s, i, word)+1, len(s))
 
 			if word != "export" {
 				end, qs, qe, call = tsImportCallMatch(b, i)
@@ -94,6 +95,8 @@ func (TSIncludeDirectiveParser) parse(_ string, data [][]byte, a *BumpAllocator[
 					ignore = false
 				}
 
+				i = resume
+
 				continue
 			}
 
@@ -104,7 +107,7 @@ func (TSIncludeDirectiveParser) parse(_ string, data [][]byte, a *BumpAllocator[
 			}
 
 			ignore = false
-			i = end
+			i = max(end, resume)
 		default:
 			i++
 		}

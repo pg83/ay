@@ -88,6 +88,14 @@ func pluginArgLiteral(arg ANY) string {
 }
 
 func unresolvedIncludeError(w Warn) string {
+	if w.ts {
+		if message, ok := strings.CutPrefix(w.target.string(), tsParseErrorPrefix); ok {
+			return "Failed to parse import in " + ymakeVFS(w.includer) + ": " + message
+		}
+
+		return "Failed to resolve import in " + ymakeVFS(w.includer) + ": " + w.target.string()
+	}
+
 	return "could not resolve include file: [[imp]]" + w.target.string() + "[[rst]] included from here: [[imp]]" + ymakeVFS(w.includer) + "[[rst]]"
 }
 

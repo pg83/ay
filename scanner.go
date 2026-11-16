@@ -99,17 +99,12 @@ type IncludeDiagnostic struct {
 }
 
 func (d IncludeDiagnostic) warn() Warn {
-	if d.Directive.kind == includeTypeScript {
-		if message, ok := strings.CutPrefix(d.Directive.target.string(), tsParseErrorPrefix); ok {
-			return Warn{Kind: WarnMisconfiguration, Message: "Failed to parse import in " + d.Includer.string() + ": " + message}
-		}
-	}
-
 	return Warn{
 		Kind:     WarnMissingInclude,
 		includer: d.Includer,
 		target:   d.Directive.target,
 		quoted:   d.Directive.kind == includeQuoted || d.Directive.kind == includeMacro,
+		ts:       d.Directive.kind == includeTypeScript,
 	}
 }
 

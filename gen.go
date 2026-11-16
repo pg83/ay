@@ -7,7 +7,9 @@ import (
 	"path"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
+	"syscall"
 )
 
 var acknowledgedMacros = map[string]struct{}{
@@ -463,6 +465,12 @@ func newGenCtx(fs FS, parsers *IncludeParserManager, hostP, targetP *Platform, e
 		} else {
 			onWarn(w)
 		}
+	}
+
+	fs.(*OsFS).onReadError = func(rel string, errno syscall.Errno) {
+		text := errno.Error()
+
+		onWarn(Warn{Kind: WarnMisconfiguration, Where: "At top level", Error: "Cannot read source file $S/" + rel + ": " + strings.ToUpper(text[:1]) + text[1:] + " (" + strconv.Itoa(int(errno)) + ")"})
 	}
 
 	ctx.licenses = ctx.loadLicenseConf(targetP.ifEnv)

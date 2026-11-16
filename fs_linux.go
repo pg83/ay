@@ -69,6 +69,13 @@ func (fs *OsFS) readFileRel(rel string) [][]byte {
 
 	fd, errno := fs.openatRel(dirFD, openRel, syscall.O_RDONLY|syscall.O_CLOEXEC)
 
+	if errno != 0 && errno != syscall.ENOENT && fs.onReadError != nil {
+		fs.onReadError(rel, errno)
+		fs.readResult[0] = nil
+
+		return fs.readResult[:1]
+	}
+
 	if errno != 0 {
 		throwFmt("open %s: %v", rel, errno)
 	}

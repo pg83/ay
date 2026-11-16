@@ -3724,14 +3724,23 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 			applyResourceFiles(fs, modulePath, args, v.Line, d)
 		}
 	case tokSetResourceUriFromJson:
+		name := "SET_RESOURCE_URI_FROM_JSON"
 
 		if len(v.Args) != 2 {
-			throwFmt("gen: %s: SET_RESOURCE_URI_FROM_JSON expects 2 args (var json), got %d", modulePath, len(v.Args))
+			onWarn(statementSyntaxError(fs, modulePath, v.Line, name, "macro "+name+": "+strconv.Itoa(len(v.Args))+" args, must be 2"))
+
+			break
 		}
 
-		bundle := readResourceBundleJSON(fs, moduleSourceRel(modulePath, v.Args[1].string()))
+		rel := moduleSourceRel(modulePath, v.Args[1].string())
 
-		if uri, ok := resolveResourceURIFromBundle(bundle, env); ok {
+		if msg := resourceJSONError(fs, rel); msg != "" {
+			onWarn(resourceCommandError(fs, modulePath, v.Line, name, "", msg))
+
+			break
+		}
+
+		if uri, ok := resolveResourceURIFromBundle(readResourceBundleJSON(fs, rel), env); ok {
 			env.setString(internEnvSTR(v.Args[0].textSTR()), uri)
 		}
 	case tokUseCxx, tokUseUtil:

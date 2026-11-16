@@ -161,8 +161,12 @@ func isaPlatformKey(isa ISA) string {
 }
 
 func declareExternalResourceByJSON(fs FS, modulePath string, stmt *DeclareResourceStmt, env Environment, onWarn func(Warn)) bool {
+	name := "DECLARE_EXTERNAL_RESOURCE_BY_JSON"
+
 	if len(stmt.Args) < 2 || len(stmt.Args) > 3 {
-		throwFmt("macro DECLARE_EXTERNAL_RESOURCE_BY_JSON: %d args, must be 2..3", len(stmt.Args))
+		onWarn(statementSyntaxError(fs, modulePath, stmt.Line, name, "macro "+name+": "+strconv.Itoa(len(stmt.Args))+" args, must be 2..3"))
+
+		return false
 	}
 
 	friendly := stmt.Args[0]
@@ -171,12 +175,18 @@ func declareExternalResourceByJSON(fs FS, modulePath string, stmt *DeclareResour
 		friendly = stmt.Args[2]
 	}
 
-	uri, ok := resolveResourceURIFromBundle(readResourceBundleJSON(fs, moduleSourceRel(modulePath, stmt.Args[1].string())), env)
+	rel := moduleSourceRel(modulePath, stmt.Args[1].string())
+
+	if msg := resourceJSONError(fs, rel); msg != "" {
+		onWarn(resourceCommandError(fs, modulePath, stmt.Line, name, friendly.string(), msg))
+
+		return false
+	}
+
+	uri, ok := resolveResourceURIFromBundle(readResourceBundleJSON(fs, rel), env)
 
 	if !ok {
-		message := "Command [[alt1]]DECLARE_EXTERNAL_RESOURCE_BY_JSON[[rst]] for [[alt2]]" + friendly.string() + "[[rst]] failed with error: Unsupported platform"
-
-		onWarn(Warn{Kind: WarnMisconfiguration, Where: makeFileWhere(modulePath), Error: message, Row: stmt.Line})
+		onWarn(resourceCommandError(fs, modulePath, stmt.Line, name, friendly.string(), "Unsupported platform"))
 
 		return false
 	}
@@ -914,4 +924,38 @@ func resourceGlobalTokenValue(args []ANY, globals []ResourceDecl) CompilerFlagVa
 	}
 
 	return CompilerFlagValue{Args: args}
+}
+
+func resourceJSONError(fs FS, rel string) string {
+	head := "Unable to load jsonFile [[imp]]" + fs.root() + "/" + rel + "[[rst]]: "
+
+	if !fs.isFilePathClean(rel) {
+		return head + "Doesn't exist or is not a file"
+	}
+
+	if _, err := readConfJSON(concatChunks(fs.readPath(internStr(rel)))); err != "" {
+		return head + "Cannot parse json: " + err
+	}
+
+	return ""
+}
+
+func resourceCommandError(fs FS, modulePath string, line int, name, forVar, msg string) Warn {
+	row, col := statementEnd(concatChunks(fs.read(joinRel(modulePath, "ya.make"))), line, name)
+	text := "Command [[alt1]]" + name + "[[rst]] "
+
+	if forVar != "" {
+		text += "for [[alt2]]" + forVar + "[[rst]] "
+	}
+
+	return Warn{Kind: WarnMisconfiguration, Where: makeFileWhere(modulePath), Error: text + "failed with error: " + msg, Row: row, Column: col}
+}
+
+func statementSyntaxError(fs FS, modulePath string, line int, name, what string) Warn {
+	file := joinRel(modulePath, "ya.make")
+	src := concatChunks(fs.read(file))
+	row, col := statementEnd(src, line, name)
+	where := file + ":" + strconv.Itoa(row) + ":" + strconv.Itoa(col)
+
+	return Warn{Kind: WarnMisconfiguration, Where: makeFileWhere(modulePath), Error: "Syntax error in " + where + ": " + what + "\n" + lexerContext(src, sourceOffset(src, row, col), 80)}
 }

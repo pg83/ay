@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync/atomic"
+	"syscall"
 )
 
 var (
@@ -82,6 +83,8 @@ type OsFS struct {
 	walkBuf        []byte
 
 	fsBackend
+
+	onReadError func(rel string, err syscall.Errno)
 }
 
 func newFS(srcRoot string) FS {

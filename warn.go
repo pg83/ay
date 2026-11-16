@@ -75,6 +75,7 @@ type Warn struct {
 	Error  string
 	Row    int
 	Column int
+	ts     bool
 }
 
 func makeFileWhere(dir string) string {
