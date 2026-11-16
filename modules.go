@@ -5781,8 +5781,13 @@ func expandConfigVFSPaths(paths []ANY, env Environment) []VFS {
 	out := make([]VFS, 0, len(expanded))
 
 	for _, path := range expanded {
-		if path == strB.any() {
+		switch path {
+		case strB.any():
 			out = append(out, bldRootDirVFS)
+
+			continue
+		case strS.any():
+			out = append(out, srcRootDirVFS)
 
 			continue
 		}
