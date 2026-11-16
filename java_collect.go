@@ -1,9 +1,11 @@
 package main
 
 import (
+	"cmp"
 	"fmt"
 	"path"
 	"slices"
+	"strconv"
 	"strings"
 )
 
@@ -144,6 +146,7 @@ func collectJavaData(ctx *GenCtx, jm *JavaModule, stmts []Stmt, env Environment)
 	peers, dm := len(d.peerStmts), len(d.dm)
 
 	javaModuleBody(ctx, jm, d, env)
+	javaDeferredChecks(ctx, jm, d, env)
 
 	slices.Reverse(d.peerStmts)
 	slices.Reverse(d.peerStmts[:len(d.peerStmts)-peers])
@@ -724,7 +727,7 @@ func applyJavaMacro(ctx *GenCtx, jm *JavaModule, d *JavaData, name STR, args []s
 			d.protocFlags = append(d.protocFlags, args[1:]...)
 		}
 	case kwJDK_VERSION, kwDEFAULT_JDK_VERSION:
-		checkJdkVersion(arg0)
+		d.jdkChecks = append(d.jdkChecks, arg0)
 		javaSetJDK(d, env, arg0, javaArgSTR(ids, 0, arg0))
 		jm.instance.Platform.conf.set(env, envJdkRealVersion, nil)
 
@@ -779,8 +782,13 @@ func applyJavaMacro(ctx *GenCtx, jm *JavaModule, d *JavaData, name STR, args []s
 		d.recalcKotlincOpts(jm)
 	case kwENABLE_KOTLIN_ABI_JAR:
 		d.abiJar = true
+		d.abiJarRequested = true
 		d.recalcKotlincOpts(jm)
 	case kwJAVAC_FLAGS:
+		if slices.Contains(args, "-proc:full") || slices.Contains(args, "-proc:only") {
+			javaReport(ctx, jm, "Usage -proc:full and -proc:only is forbidden in JAVAC_FLAGS, please, use ANNOTATION_PROCESSOR or USE_ANNOTATION_PROCESSOR macroses")
+		}
+
 		d.javacOpts.appendStmtIDs(args, canonicalANYs(javaMacroIDs(args, ids)))
 	case kwENABLE_PREVIEW:
 		d.jvmArgs = append(d.jvmArgs, "--enable-preview")
@@ -935,10 +943,36 @@ func applyJavaMacro(ctx *GenCtx, jm *JavaModule, d *JavaData, name STR, args []s
 			return true
 		}
 
-		d.runJavaPrograms = append(d.runJavaPrograms, JavaRunProgram{args: javaMacroIDs(args, ids), raw: expanded})
+		program := JavaRunProgram{args: javaMacroIDs(args, ids), raw: expanded}
+
+		if msg := runJavaProgramClasspathError(jm.dir, program); msg != "" {
+			javaReport(ctx, jm, msg)
+		}
+
+		d.runJavaPrograms = append(d.runJavaPrograms, program)
 		d.commandPeers = append(d.commandPeers, jm.instance.Platform.conf.commandDirs(name.string(), env).peerdirs...)
 	case strGenerateScript:
+		_, errs := parseJavaGenerateScript(args)
+
+		for _, msg := range errs {
+			javaReport(ctx, jm, msg)
+		}
+
 		d.generateScripts = append(d.generateScripts, args)
+	case strAddClasspathClashCheck:
+		javaCheckJavaDeps(ctx, jm, d)
+	case strAddClasspathClashCheckIfUberjar:
+		if javaUberjarValue(ctx, jm, env) == "yes" {
+			javaCheckJavaDeps(ctx, jm, d)
+		}
+	case strAddClasspathClashCheckIfNotUberjar:
+		if javaUberjarValue(ctx, jm, env) != "yes" {
+			javaCheckJavaDeps(ctx, jm, d)
+		}
+	case strJavaResourceTarValidateExtractRoot:
+		if arg0 == "<required>" {
+			javaReport(ctx, jm, "Macro JAVA_RESOURCE_TAR requires to set EXTRACT_ROOT. Usage JAVA_RESOURCE_TAR(tar_path EXTRACT_ROOT root_dir)")
+		}
 	case kwWITH_JDK:
 		d.withJDK = true
 	case kwJAVA_EXTERNAL_DEPENDENCIES:
@@ -1644,4 +1678,66 @@ func replaceJavaRunProgramRefs(value string, fn func(string) string) string {
 	b.WriteString(value[from:])
 
 	return b.String()
+}
+
+func javaReport(ctx *GenCtx, jm *JavaModule, msg string) {
+	ctx.onWarn(Warn{Kind: WarnMisconfiguration, Where: makeFileWhere(jm.dir), Error: msg})
+}
+
+func javaCheckJavaDeps(ctx *GenCtx, jm *JavaModule, d *JavaData) {
+	if d.checkJavaDeps != "" && d.checkJavaDeps != "yes" && d.checkJavaDeps != "no" && d.checkJavaDeps != "strict" {
+		javaReport(ctx, jm, `CHECK_JAVA_DEPS: "yes", "no" or "strict" required`)
+	}
+}
+
+func javaUberjarValue(ctx *GenCtx, jm *JavaModule, env Environment) string {
+	value := strings.ToLower(env.string(envMakeUberjarValue))
+
+	if value != "" && value != "yes" && value != "no" {
+		javaReport(ctx, jm, `MAKE_UBERJAR: "yes" or "no" required`)
+	}
+
+	return value
+}
+
+func javaDeferredChecks(ctx *GenCtx, jm *JavaModule, d *JavaData, env Environment) {
+	for _, version := range d.jdkChecks {
+		if msg := jdkVersionError(version); msg != "" {
+			javaReport(ctx, jm, msg)
+		}
+
+		if n, err := strconv.Atoi(version); err == nil && n >= 19 && !d.withJDK && env.string(envMODULE_TAG) == "JAR_RUNNABLE" {
+			javaReport(ctx, jm, "Missing WITH_JDK() macro for JDK version >= 19. For more info see https://clubs.at.yandex-team.ru/arcadia/28543")
+		}
+	}
+
+	if !d.abiJarRequested {
+		return
+	}
+
+	if !d.withKotlin {
+		javaReport(ctx, jm, "ENABLE_KOTLIN_ABI_JAR requires WITH_KOTLIN")
+
+		return
+	}
+
+	version := env.string(envKotlinVersionInternal)
+
+	var parsed []int
+
+	for _, component := range strings.Split(version, ".") {
+		n, err := strconv.Atoi(component)
+
+		if err != nil {
+			javaReport(ctx, jm, "ENABLE_KOTLIN_ABI_JAR requires a numeric Kotlin version; found "+cmp.Or(version, "<empty>"))
+
+			return
+		}
+
+		parsed = append(parsed, n)
+	}
+
+	if slices.Compare(parsed, []int{2, 3, 10}) < 0 {
+		javaReport(ctx, jm, "ENABLE_KOTLIN_ABI_JAR requires Kotlin 2.3.10 or newer; found "+version)
+	}
 }

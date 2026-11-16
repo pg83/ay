@@ -1,6 +1,11 @@
 package main
 
-import "strings"
+import (
+	"slices"
+	"strings"
+)
+
+var jdkVersions = []string{"11", "17", "21", "22", "23", "24", "25", "26"}
 
 func jdkVersionMacroAssignment(v *UnknownStmt, env Environment) *SetStmt {
 	if v.Name != tokJdkVersion && v.Name != tokDefaultJdkVersion {
@@ -29,15 +34,17 @@ func jdkVersionMacroAssignment(v *UnknownStmt, env Environment) *SetStmt {
 
 	value = expandConfigMacroBody(value, env)
 
-	checkJdkVersion(value)
+	if msg := jdkVersionError(value); msg != "" {
+		throwFmt("%s", msg)
+	}
 
 	return newSetStmt("JDK_REAL_VERSION", envJdkRealVersion, value, v.Line)
 }
 
-func checkJdkVersion(value string) {
-	switch value {
-	case "11", "17", "21", "22", "23", "24", "25", "26":
-	default:
-		throwFmt("Invalid jdk version: %s", value)
+func jdkVersionError(value string) string {
+	if slices.Contains(jdkVersions, value) {
+		return ""
 	}
+
+	return "Invalid jdk version: " + value + ". ('" + strings.Join(jdkVersions, "', '") + "') are available"
 }

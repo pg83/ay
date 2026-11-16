@@ -29,7 +29,7 @@ func (jm *JavaModule) runnableOutputs() []VFS {
 		outs := []VFS{jm.target, build(jm.dir, "/", jm.name, ".run.cp.jar.cplst"), build(dir.relString(), "/", jm.name, ".jar"), build(jm.dir, "/", jm.name, ".tar")}
 
 		for _, s := range d.generateScripts {
-			for _, gs := range parseJavaGenerateScript(s) {
+			for _, gs := range javaGenerateScripts(s) {
 				outs = append(outs, javaOutDirVFS(jm, gs.out))
 			}
 		}
@@ -50,7 +50,7 @@ func (jm *JavaModule) runnableOutputs() []VFS {
 	outs = append(outs, build(jm.dir, "/", jm.name, ".run.cp.jar.cplst"), build(jm.dir, "/", jm.name, ".tar"))
 
 	for _, s := range d.generateScripts {
-		for _, gs := range parseJavaGenerateScript(s) {
+		for _, gs := range javaGenerateScripts(s) {
 			outs = append(outs, javaOutDirVFS(jm, gs.out))
 		}
 	}
@@ -62,13 +62,19 @@ func (jm *JavaModule) runnableOutputs() []VFS {
 	return dedupVFSKeepOrder(outs)
 }
 
+func javaGenerateScripts(args []string) []javaGenScript {
+	scripts, _ := parseJavaGenerateScript(args)
+
+	return scripts
+}
+
 type javaGenScript struct {
 	out      string
 	template string
 	props    []string
 }
 
-func parseJavaGenerateScript(args []string) []javaGenScript {
+func parseJavaGenerateScript(args []string) ([]javaGenScript, []string) {
 	kv := map[string][]string{}
 	key := ""
 
@@ -99,6 +105,12 @@ func parseJavaGenerateScript(args []string) []javaGenScript {
 		}
 	}
 
+	templates := kv["TEMPLATE"]
+
+	if len(kv["OUT"]) < len(templates) {
+		return nil, []string{"To many arguments for TEMPLATE parameter"}
+	}
+
 	var custom [][]string
 
 	for _, w := range ws {
@@ -111,15 +123,19 @@ func parseJavaGenerateScript(args []string) []javaGenScript {
 		custom[len(custom)-1] = append(custom[len(custom)-1], w)
 	}
 
-	var props []string
+	var props, errs []string
 
 	for _, p := range custom {
-		if len(p) > 1 {
+		switch {
+		case len(p) == 0:
+			errs = append(errs, "Empty CUSTOM_PROPERTY")
+		case len(p) == 1:
+			props = append(props, "-B")
+			errs = append(errs, "CUSTOM_PROPERTY \""+p[0]+"\" value is not specified")
+		default:
 			props = append(props, "-B", base64.StdEncoding.EncodeToString([]byte(p[0]+"="+strings.Join(p[1:], " "))))
 		}
 	}
-
-	templates := kv["TEMPLATE"]
 
 	var out []javaGenScript
 
@@ -127,7 +143,7 @@ func parseJavaGenerateScript(args []string) []javaGenScript {
 		out = append(out, javaGenScript{out: o, template: templates[min(i, len(templates)-1)], props: props})
 	}
 
-	return out
+	return out, errs
 }
 
 func (b *javaNodeBuilder) javaScriptgenScripts(jm *JavaModule, globals map[STR]VFS, closure javaClosureSeq, jdk string) {
@@ -139,7 +155,7 @@ func (b *javaNodeBuilder) javaScriptgenScripts(jm *JavaModule, globals map[STR]V
 	}
 
 	for _, s := range d.generateScripts {
-		for _, gs := range parseJavaGenerateScript(s) {
+		for _, gs := range javaGenerateScripts(s) {
 			out := javaOutDirVFS(jm, gs.out)
 			tmpl := b.ctx.javaArgVFS(jm, gs.template)
 
@@ -323,7 +339,7 @@ type javaRunProgram struct {
 	inDirs    []string
 	outDir    string
 	cwd       string
-	tool      string
+	classpath []string
 	tools     []string
 	hash      string
 	gentar    VFS
@@ -364,7 +380,7 @@ func parseJavaRunProgram(dir string, rp JavaRunProgram) javaRunProgram {
 		case kwTOOL.any():
 			r.tools = append(r.tools, arg.string())
 		case strClasspath2.any():
-			r.tool = arg.string()
+			r.classpath = append(r.classpath, arg.string())
 		case kwCWD.any():
 			r.cwd = arg.string()
 		case 0:
@@ -504,24 +520,32 @@ func (ctx *GenCtx) emitJavaRunProgram(dir string, platform *Platform, jdk string
 	run = append(run, strBuildRoot2.any(), strB.any(), b.resourcePath(globals, javaJDKResource(jdk), "/bin/java"),
 		strDfileEncodingUtf8.any(), strClasspath.any())
 
-	if tool := ctx.javaTool(r.tool); tool != nil {
-		cplst := build(tool.dir, "/", tool.name, ".run.cp.jar.cplst")
+	var classpath []string
 
-		run = append(run, internV("@", cplst.string()).any())
+	for _, dir := range r.classpath {
+		if tool := ctx.javaTool(dir); tool != nil {
+			cplst := build(tool.dir, "/", tool.name, ".run.cp.jar.cplst")
 
-		if dep := ctx.javaBuilder(tool).use(cplst); dep != 0 {
-			b.input(tool.target)
-			b.deps = append(b.deps, dep)
+			classpath = append(classpath, strings.TrimSuffix(cplst.string(), ".cplst"))
+
+			if dep := ctx.javaBuilder(tool).use(cplst); dep != 0 {
+				b.input(tool.target)
+				b.deps = append(b.deps, dep)
+			}
+		} else if ctx.hasJavaJarUnit(dir) {
+			tool := ctx.javaJarTool(dir)
+
+			classpath = append(classpath, tool.target.string())
+
+			if dep := ctx.javaBuilder(tool).use(tool.target); dep != 0 {
+				b.input(tool.target)
+				b.deps = append(b.deps, dep)
+			}
 		}
-	} else if r.tool != "" && ctx.hasJavaJarUnit(r.tool) {
-		tool := ctx.javaJarTool(r.tool)
+	}
 
-		run = append(run, internV("@", tool.target.string(), ".cplst").any())
-
-		if dep := ctx.javaBuilder(tool).use(tool.target); dep != 0 {
-			b.input(tool.target)
-			b.deps = append(b.deps, dep)
-		}
+	if len(classpath) > 0 {
+		run = append(run, internV("@", strings.Join(classpath, ""), ".cplst").any())
 	}
 
 	tools := resolveRunProgramAuxTools(ctx, r.tools)

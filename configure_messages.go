@@ -711,3 +711,11 @@ func goFmtSkipAllowed(modulePath string, allowed []string) bool {
 
 	return false
 }
+
+func runJavaProgramClasspathError(dir string, program JavaRunProgram) string {
+	if len(parseJavaRunProgram(dir, program).classpath) == 1 {
+		return ""
+	}
+
+	return "multiple CLASSPATH elements in RUN_JAVA_PROGRAM invocation no more supported. Use JAVA_RUNTIME_PEERDIR on the JAVA_PROGRAM module instead"
+}

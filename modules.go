@@ -2991,8 +2991,13 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 				}
 
 				ids := appendQuotedWords(nil, expandStmtToken(joinAnys(raw, " "), env), 1)
+				program := JavaRunProgram{args: ids, raw: expanded}
 
-				d.runJavaPrograms = append(d.runJavaPrograms, NativeJavaProgram{Call: JavaRunProgram{args: ids, raw: expanded}, DeclSeq: d.nextDeclSeq()})
+				if msg := runJavaProgramClasspathError(modulePath, program); msg != "" {
+					onWarn(Warn{Kind: WarnMisconfiguration, Where: makeFileWhere(modulePath), Error: msg})
+				}
+
+				d.runJavaPrograms = append(d.runJavaPrograms, NativeJavaProgram{Call: program, DeclSeq: d.nextDeclSeq()})
 				recordHandledMacro(v.Name, ids)
 
 				continue

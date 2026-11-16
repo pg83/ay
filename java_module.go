@@ -355,6 +355,8 @@ type JavaData struct {
 	moduleType             string
 	sbrUIDExt              string
 	env                    Environment
+	jdkChecks              []string
+	abiJarRequested        bool
 }
 
 type javaTestData struct {
