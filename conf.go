@@ -3435,3 +3435,29 @@ func (m *confCommandDirs) valid(env Environment) bool {
 
 	return true
 }
+
+func (c *Conf) forbiddenMacros(owner STR) map[STR]STR {
+	var forbids map[STR]STR
+
+	for _, sub := range [...]string{"BUILD", owner.string()} {
+		for module := c.tables.module(owner, sub); module != nil; module = c.tables.module(module.parent, "") {
+			for from, to := range module.aliases {
+				if strings.HasPrefix(to.string(), "_FORBID_") {
+					if forbids == nil {
+						forbids = map[STR]STR{}
+					}
+
+					if _, ok := forbids[from]; !ok {
+						forbids[from] = to
+					}
+				}
+			}
+		}
+
+		if forbids != nil {
+			return forbids
+		}
+	}
+
+	return nil
+}

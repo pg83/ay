@@ -964,6 +964,8 @@ var (
 	strTruncate                                                                              = internStr("--truncate")
 	strTruncateFiles                                                                         = internStr("--truncate-files")
 	strTruncateLogs                                                                          = internStr("--truncate-logs")
+	strTsConfError                                                                           = internStr("_TS_CONF_ERROR")
+	strTsLargeFiles                                                                          = internStr("_TS_LARGE_FILES")
 	strType                                                                                  = internStr("--type")
 	strUCudaArch                                                                             = internStr("-U__CUDA_ARCH__")
 	strUCudaArchList                                                                         = internStr("-U__CUDA_ARCH_LIST__")

@@ -1486,7 +1486,12 @@ func endModule(ctx *GenCtx, modulePath string, kind ModuleKind, language Languag
 	d.finishResourcePeerPolicy()
 
 	if d.nots != nil {
-		d.nots.finish(env)
+		report := func(msg string) {
+			onWarn(Warn{Kind: WarnMisconfiguration, Where: makeFileWhere(modulePath), Error: msg})
+		}
+
+		d.nots.finish(env, report)
+		d.nots.configureErrors(ctx, modulePath, d.moduleStmt, env, report)
 	}
 
 	d.unit.HashTag = env.str(envMODULE_TAG)
@@ -1589,6 +1594,10 @@ func (d *ModuleData) bindBody(ctx *GenCtx, modulePath string, kind ModuleKind, l
 	case *UnknownStmt:
 		if policyDrops(d, v.macroName()) {
 			return s
+		}
+
+		if alias := platform.conf.moduleAlias(d.confModule, v.Raw); alias != v.Raw && strings.HasPrefix(alias.string(), "_FORBID_") && platform.conf.alias(alias) != nil {
+			return d.flattenConfMacro(ctx, modulePath, kind, language, v, alias, expandStmtTokens(v.Args, env), env, onWarn, platform)
 		}
 
 		if handledMacroTokens[v.Name] {
@@ -2195,6 +2204,15 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 			if isNotsModule(v.Name) || v.Name == tokProtoLibrary && (language == LangTS || language == LangTSPrepare) {
 				d.nots = newNotsModule(v.Name, language, env)
 				d.nots.AutoProto = v.Name == tokProtoLibrary && !fs.isFilePathClean(modulePath+"/package.json")
+
+				if language != LangTSPrepare {
+					d.nots.Forbids = platform.conf.forbiddenMacros(v.Name.str())
+				}
+
+				switch v.Name {
+				case tokTsLibrary, tokTsPackage, tokTsTsc, tokTsVite, tokTsNext, tokTsRspack:
+					env.setString(envTsModName, v.Name.string())
+				}
 			}
 
 			if v.Name == tokProtoLibrary && language == LangTS {
@@ -3445,8 +3463,16 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 		return true
 	}
 
-	if d.nots != nil && applyNotsStmt(v, d.nots, env) {
-		return true
+	if d.nots != nil {
+		if forbid, ok := d.nots.Forbids[v.macroName()]; ok {
+			d.macroCalls = append(d.macroCalls, UnknownStmt{Name: tokInvalid, Raw: forbid, Args: v.Args, Line: v.Line})
+
+			return true
+		}
+
+		if applyNotsStmt(v, d.nots, env) {
+			return true
+		}
 	}
 
 	if d.docs != nil && d.docs.apply(v, modulePath, d) {
@@ -3475,6 +3501,12 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 		var msg string
 
 		switch v.Raw {
+		case strTsLargeFiles:
+			if len(v.Args) > 0 && v.Args[0].string() == "~~required~~" {
+				msg = "Macro TS_LARGE_FILES() requires to use DESTINATION parameter.\n   TS_LARGE_FILES(\n       DESTINATION some_dir\n       large/file1\n       large/file2\n   )\nDocs: https://docs.yandex-team.ru/frontend-in-arcadia/references/TS_PACKAGE#ts-large-files."
+			}
+		case strTsConfError:
+			msg = tsConfErrorMessage(pluginArgLiterals(v.Args))
 		case strMarketOfferConverters:
 			msg = offerConvertersError(pluginArgLiterals(v.Args))
 		case strRiskGenDataModel:

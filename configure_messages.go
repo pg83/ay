@@ -21,6 +21,7 @@ var (
 	protoModelKeywords   = []string{"FILE", "OUTPUT_INCLUDES", "PROTODESC", "PROTODESC_NAME"}
 	usrvProtoKeywords    = []string{"FILE", "FILES", "IMPORTS", "OPTS_FILE", "ORIGINS", "OUTPUT_INCLUDES", "PROTODESC", "PROTODESC_NAME"}
 	libraryModuleTypes   = map[TOK]bool{tokLibrary: true, tokPy3Library: true, tokGoLibrary: true, tokProtoLibrary: true}
+	tsColors             = strings.NewReplacer("{COLORS.red}", tsRed, "{COLORS.green}", tsGreen, "{COLORS.yellow}", tsYell, "{COLORS.cyan}", tsCyan, "{COLORS.reset}", tsReset)
 )
 
 var addInclLanguages = func() []ANY {
@@ -42,6 +43,11 @@ var pythonNoLintPaths = []string{
 const (
 	addInclLanguageList = "asm (for .asm), c (for .cpp .cc .cxx .c .C .auxcpp .h .hh .hpp .cuh .H .hxx .xh .ipp .ixx ..inl ..vert ..frag ..tesc ..tese ..geom ..comp .cu .S .s .sfdl .m .mm .l .lex .lpp .y .ypp .gperf .asp .f .go), cython (for .pyx .pxd .pxi), flatc (for .fbs .fbs64), idl (for .idl), nlg (for .nlg), other (for .fml .fml2 .fml3 .pln .info .a .lua .sh .bin .py .pyi .pysrc .ts .js .tsx .jsx), proto (for .gzt .gztproto .proto .ev .cfgproto), ragel (for .rl .rh .rli .rl6 .rl5), ros (for .msg .srv .rostopic), sc (for .sc), swig (for .swg), xs (for .xs), xsyn (for .xsyn), ydl (for .ydl)"
 	offersProtoRoot     = "api/proto/yandex/market/b2b/offers_catalog/"
+	tsRed               = "\x1b[0;31m"
+	tsGreen             = "\x1b[0;32m"
+	tsYell              = "\x1b[0;33m"
+	tsCyan              = "\x1b[0;36m"
+	tsReset             = "\x1b[0;49m"
 )
 
 func vecDump(args []ANY) string {
@@ -1461,4 +1467,92 @@ func utilUint32(v string) bool {
 	_, err := strconv.ParseUint(strings.TrimPrefix(v, "+"), 10, 32)
 
 	return err == nil && v != "+"
+}
+
+func tsConfErrorMessage(args []string) string {
+	return tsColors.Replace(strings.ReplaceAll(strings.Join(args, " "), "\\n", "\n"))
+}
+
+func (c *NotsModule) configureErrors(ctx *GenCtx, modulePath string, decl *ModuleStmt, env Environment, report func(string)) {
+	switch c.Kind {
+	case tokTsLibrary, tokTsPackage:
+		c.libraryConfigureErrors(ctx, modulePath, env, report)
+	case tokTsTestFor:
+		if len(c.Checks) == 0 && env.string(envCppAnalysisMode) != "yes" {
+			report(tsRed + "Missing test script" + tsReset + " \n" + tsCyan + "TS_TEST_FOR" + tsReset + " requires to use at least one " + tsCyan + "TS_TEST" + tsReset + " macro \nhttps://docs.yandex-team.ru/frontend-in-arcadia/references/TS_TEST_FOR")
+		}
+	}
+
+	if decl == nil || c.Kind != tokTsTestFor {
+		return
+	}
+
+	relative, target := false, ""
+
+	for _, arg := range decl.Args {
+		if arg == kwRELATIVE.any() {
+			relative = true
+		} else {
+			target = arg.string()
+		}
+	}
+
+	switch {
+	case target == "." || target == "./":
+		report("Tests should be for parent module but got path '" + target + "'")
+	case relative && env.string(envAllowRelForPath) == "no":
+		report("TS_TEST_FOR does not support RELATIVE path.\nUpdate your module to " + tsCyan + "TS_TEST_FOR(" + path.Clean(modulePath+"/"+target) + ")" + tsReset + "\nSee more details in https://st.yandex-team.ru/FBP-3073")
+	case !relative && strings.HasPrefix(target, "."):
+		report("You are using a relative path for a module. You have to add RELATIVE key, like (RELATIVE " + target + ")")
+	}
+}
+
+func (c *NotsModule) libraryConfigureErrors(ctx *GenCtx, modulePath string, env Environment, report func(string)) {
+	pkg := c.Kind == tokTsPackage
+
+	if c.BuildScript == "" && !pkg {
+		report("Module build script is required but not set.\nUse macro " + tsCyan + "TS_BUILD_SCRIPT(nots:build)" + tsReset + " to set it up.")
+
+		return
+	}
+
+	normalize := func(p string) string { return strings.Trim(strings.TrimPrefix(p, "./"), "/") }
+
+	var outputs []string
+
+	for _, output := range c.Outputs {
+		outputs = append(outputs, normalize(output))
+	}
+
+	if len(outputs) == 0 {
+		if !pkg {
+			report("Module outputs are required but not set.\nUse macro " + tsCyan + "TS_BUILD_OUTPUTS(build)" + tsReset + " to set it up.")
+		}
+
+		return
+	}
+
+	parsed := ctx.parsers.parsedJSONID(internStr(joinRel(modulePath, "package.json")))
+	pj, _ := parsed.Value.(map[string]any)
+	declared, _ := pj["files"].([]any)
+
+	var files, missing []string
+
+	for _, file := range declared {
+		if name, ok := file.(string); ok {
+			files = append(files, normalize(name))
+		}
+	}
+
+	for _, output := range outputs {
+		if !slices.ContainsFunc(files, func(file string) bool {
+			return file == output || strings.HasPrefix(file, output+"/") || strings.HasPrefix(output, file+"/")
+		}) {
+			missing = append(missing, output)
+		}
+	}
+
+	if len(missing) > 0 && env.string(envTsLegacyFacade) != "yes" {
+		report("Directories from " + tsCyan + "TS_BUILD_OUTPUTS()" + tsReset + " are expected to be listed in " + tsCyan + "package.json#files" + tsReset + ".\nFollowing directories are missing in " + tsCyan + "package.json#files" + tsReset + ": " + tsRed + strings.Join(missing, ", ") + tsReset)
+	}
 }

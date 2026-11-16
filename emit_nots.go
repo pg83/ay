@@ -49,6 +49,7 @@ type NotsModule struct {
 	BiomeConfig       string
 	TestData          []string
 	ConfigChanged     bool
+	Forbids           map[STR]STR
 }
 
 type NotsCheck struct {
@@ -299,17 +300,17 @@ func applyNotsStmt(v UnknownStmt, c *NotsModule, env Environment) bool {
 	return true
 }
 
-func (c *NotsModule) finish(env Environment) {
+func (c *NotsModule) finish(env Environment, report func(string)) {
 	if c.Kind == tokTsTsc {
 		c.setTSCCommand()
 	}
 
 	c.AfterBuildCommand = env.string(envTsAfterBuildCommand)
 	c.ProtoNonRecursive = env.bool(envTsProtoNonRecursive)
-	c.setupBuildEnv(env)
+	c.setupBuildEnv(env, report)
 }
 
-func (c *NotsModule) setupBuildEnv(env Environment) {
+func (c *NotsModule) setupBuildEnv(env Environment, report func(string)) {
 	listed := map[string]bool{}
 
 	if names, _ := env.lookupENV(envTsBuildEnv); names != "" && notsBuildEnvFor(env) {
@@ -317,7 +318,9 @@ func (c *NotsModule) setupBuildEnv(env Environment) {
 			value, ok := env.lookup("TS_ENV_" + name)
 
 			if !ok {
-				throwFmt("Env var '%s' is provided in a list, but var value is not provided", name)
+				report("Env var '" + name + "' is provided in a list, but var value is not provided")
+
+				continue
 			}
 
 			c.BuildEnv = append(c.BuildEnv, "--env", name+"="+value)

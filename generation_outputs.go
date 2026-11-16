@@ -51,6 +51,8 @@ func (c *ConfigureErrors) add(where string, e ConfigureError) {
 
 	dir := configureErrorDir(where)
 
+	e.Message = strings.TrimSpace(e.Message)
+
 	if c.byDir[dir] == nil {
 		c.byDir[dir] = map[ConfigureError]bool{}
 	}
