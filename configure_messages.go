@@ -1474,6 +1474,10 @@ func tsConfErrorMessage(args []string) string {
 }
 
 func (c *NotsModule) configureErrors(ctx *GenCtx, modulePath string, decl *ModuleStmt, env Environment, report func(string)) {
+	if c.OutputPrefixInvalid {
+		report("TS_OUTPUT_PREFIX accepts at most one path")
+	}
+
 	switch c.Kind {
 	case tokTsLibrary, tokTsPackage:
 		c.libraryConfigureErrors(ctx, modulePath, env, report)

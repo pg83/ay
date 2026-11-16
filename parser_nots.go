@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/base64"
 	"encoding/json"
+	"maps"
 	"net/url"
 	"path"
 	"slices"
@@ -212,45 +213,61 @@ func notsVersionParts(s string) []int {
 }
 
 func (pm *IncludeParserManager) notsVersion(tool, constraint string) string {
+	version, err := pm.notsSelectVersion(tool, constraint)
+
+	if err != "" {
+		throwFmt("nots: %s", err)
+	}
+
+	return version
+}
+
+func (pm *IncludeParserManager) notsSelectVersion(tool, constraint string) (string, string) {
 	resource := notsObject(pm.notsJSON(notsERMPath)[tool])
+	fallback := notsString(resource["default"])
+
+	if fallback == "" {
+		throwFmt("nots: no default version for %s in %s", tool, notsERMPath)
+	}
 
 	if constraint == "" {
-		version := notsString(resource["default"])
-
-		if version == "" {
-			throwFmt("nots: no default version for %s in %s", tool, notsERMPath)
-		}
-
-		return version
+		return fallback, ""
 	}
 
-	os, oe, vs, ve, ok := notsVersionRangeMatch(constraint)
-
-	if !ok {
-		throwFmt("nots: unsupported version range %q", constraint)
-	}
-
-	operator := constraint[os:oe]
-	want := notsVersionParts(constraint[vs:ve])
+	original := "There is no allowed version to satisfy this range: '" + constraint + "'"
 	selected := ""
 
-	for version := range notsObject(resource["versions"]) {
-		cmp := slices.Compare(notsVersionParts(version), want)
+	if os, oe, vs, ve, ok := notsVersionRangeMatch(constraint); !ok {
+		original = "Unsupported version range: '" + constraint + "'. Currently we only support ranges with stable versions and GE / EQ: '>= 1.2.3' / '= 1.2.3' / '1.2.3'"
+	} else {
+		operator := constraint[os:oe]
+		want := notsVersionParts(constraint[vs:ve])
 
-		if cmp != 0 && !(operator == ">=" && cmp > 0) {
-			continue
-		}
+		for version := range notsObject(resource["versions"]) {
+			cmp := slices.Compare(notsVersionParts(version), want)
 
-		if selected == "" || slices.Compare(notsVersionParts(version), notsVersionParts(selected)) < 0 {
-			selected = version
+			if cmp != 0 && !(operator == ">=" && cmp > 0) {
+				continue
+			}
+
+			if selected == "" || slices.Compare(notsVersionParts(version), notsVersionParts(selected)) < 0 {
+				selected = version
+			}
 		}
 	}
 
-	if selected == "" {
-		throwFmt("nots: no %s version satisfies %q", tool, constraint)
+	if selected != "" {
+		return selected, ""
 	}
 
-	return selected
+	versions := slices.Collect(maps.Keys(notsObject(resource["versions"])))
+
+	slices.SortFunc(versions, func(a, b string) int { return slices.Compare(notsVersionParts(a), notsVersionParts(b)) })
+
+	return fallback, "Requested " + tool + " version range '" + constraint + "' could not be satisfied. \n" +
+		"Please use a range that would include one of the following: " + strings.Join(versions, ", ") + ". \n" +
+		"For further details please visit the link: https://docs.yandex-team.ru/frontend-in-arcadia/_generated/toolchain \n" +
+		"Original error: " + original
 }
 
 type notsLockEntry struct {

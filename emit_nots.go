@@ -15,41 +15,42 @@ var (
 const notsBuilderDir = "devtools/frontend_build_platform/nots/builder"
 
 type NotsModule struct {
-	Checks            []NotsCheck
-	TestDirs          []string
-	TestConfig        string
-	DependsOnBuild    bool
-	Kind              TOK
-	Prepare           bool
-	AfterBuildCommand string
-	Hermetic          bool
-	LocalCLI          bool
-	Bundle            bool
-	ProductionBundle  bool
-	BuildScript       string
-	BuildCommand      string
-	Outputs           []string
-	BaseExcludes      []string
-	Excludes          []string
-	Configs           []string
-	VCSInfo           string
-	BuildEnv          []string
-	OutputPrefix      string
-	HasOutputPrefix   bool
-	ProtoOptions      []string
-	ProtoPeers        []ANY
-	ProtoPackage      string
-	ProtoDeps         string
-	AutoProto         bool
-	ProtoNonRecursive bool
-	ESLintConfig      string
-	Typecheck         bool
-	TypecheckConfig   string
-	StylelintConfig   string
-	BiomeConfig       string
-	TestData          []string
-	ConfigChanged     bool
-	Forbids           map[STR]STR
+	Checks              []NotsCheck
+	TestDirs            []string
+	TestConfig          string
+	DependsOnBuild      bool
+	Kind                TOK
+	Prepare             bool
+	AfterBuildCommand   string
+	Hermetic            bool
+	LocalCLI            bool
+	Bundle              bool
+	ProductionBundle    bool
+	BuildScript         string
+	BuildCommand        string
+	Outputs             []string
+	BaseExcludes        []string
+	Excludes            []string
+	Configs             []string
+	VCSInfo             string
+	BuildEnv            []string
+	OutputPrefix        string
+	HasOutputPrefix     bool
+	ProtoOptions        []string
+	ProtoPeers          []ANY
+	ProtoPackage        string
+	ProtoDeps           string
+	AutoProto           bool
+	ProtoNonRecursive   bool
+	ESLintConfig        string
+	Typecheck           bool
+	TypecheckConfig     string
+	StylelintConfig     string
+	BiomeConfig         string
+	TestData            []string
+	ConfigChanged       bool
+	Forbids             map[STR]STR
+	OutputPrefixInvalid bool
 }
 
 type NotsCheck struct {
@@ -291,6 +292,12 @@ func applyNotsStmt(v UnknownStmt, c *NotsModule, env Environment) bool {
 			c.VCSInfo = args[1]
 		}
 	case "TS_OUTPUT_PREFIX":
+		if len(args) > 1 {
+			c.OutputPrefixInvalid = true
+
+			break
+		}
+
 		c.HasOutputPrefix = true
 		c.OutputPrefix = strings.Join(args, " ")
 	default:
@@ -392,7 +399,12 @@ func (e *EmitContext) notsBaseArgs(pj map[string]any) ([]string, []ResourceDecl,
 
 func (e *EmitContext) notsBaseArgsFor(pj map[string]any, c *NotsModule) ([]string, []ResourceDecl, string) {
 	pm := e.ctx.parsers
-	version := pm.notsVersion("nodejs", notsString(notsObject(pj["engines"])["node"]))
+	version, err := pm.notsSelectVersion("nodejs", notsString(notsObject(pj["engines"])["node"]))
+
+	if err != "" {
+		e.ctx.onWarn(Warn{Kind: WarnMisconfiguration, Where: makeFileWhere(e.instance.Path.relString()), Error: err})
+	}
+
 	parts := notsVersionParts(version)
 
 	if parts[0] < 20 {

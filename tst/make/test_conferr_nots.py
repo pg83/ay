@@ -82,3 +82,17 @@ class NotsConfigureErrorsTest(MakeTest):
     def test_config_in_a_library(self):
         self.library("TS_BUILD_SCRIPT(nots:build)", "TS_BUILD_OUTPUTS(dist)", "TS_CONFIG(tsconfig.json)")
         self.assertConfigureLikeYa()
+
+    def ts_module_with_node(self, module, node, *statements):
+        self.ts_module(module, *statements)
+        pj = json.loads((self.project / "package.json").read_text())
+        pj["engines"]["node"] = node
+        self.write("package.json", json.dumps(pj))
+
+    def test_output_prefix_with_two_paths(self):
+        self.library("TS_BUILD_SCRIPT(nots:build)", "TS_BUILD_OUTPUTS(dist)", "TS_OUTPUT_PREFIX(one two)")
+        self.assertConfigureLikeYa()
+
+    def test_node_version_range_that_cannot_be_satisfied(self):
+        self.ts_module_with_node("TS_LIBRARY", "^99.0.0", "TS_BUILD_SCRIPT(nots:build)", "TS_BUILD_OUTPUTS(dist)")
+        self.assertConfigureLikeYa()
