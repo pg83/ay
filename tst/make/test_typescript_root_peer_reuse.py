@@ -1,12 +1,12 @@
 import json
 
-from tst.make.lib import MakeTest, PROJECT
+from tst.make.lib import MakeTest, PROJECT, nodejs_version
 
 
 class TypescriptRootPeerReuseTest(MakeTest):
     def package(self, directory, macros=""):
         self.write(f"{directory}/ya.make", f"TS_PACKAGE()\n{macros}\nEND()\n")
-        self.write(f"{directory}/package.json", json.dumps({"name": "@e2e/" + directory, "version": "1.0.0", "engines": {"node": "22.13.0"}}))
+        self.write(f"{directory}/package.json", json.dumps({"name": "@e2e/" + directory, "version": "1.0.0", "engines": {"node": nodejs_version()}}))
         self.write(f"{directory}/pnpm-lock.yaml", "lockfileVersion: '9.0'\nimporters:\n  .: {}\n")
         self.write(f"{directory}/src/value.ts", "export const answer = 42;\n")
 

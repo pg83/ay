@@ -1,13 +1,13 @@
 import json
 
-from tst.make.lib import MakeTest, PROJECT
+from tst.make.lib import MakeTest, PROJECT, nodejs_version
 
 
 class TypescriptImportsTest(MakeTest):
     def setUp(self):
         super().setUp()
         self.write("ya.make", "TS_PACKAGE()\nEND()\nRECURSE_FOR_TESTS(tests)\n")
-        self.write("package.json", json.dumps({"name": "@e2e/imports", "version": "1.0.0", "engines": {"node": "22.13.0"}}))
+        self.write("package.json", json.dumps({"name": "@e2e/imports", "version": "1.0.0", "engines": {"node": nodejs_version()}}))
         self.write("pnpm-lock.yaml", "lockfileVersion: '9.0'\nimporters:\n  .: {}\n")
         self.write("tsconfig.json", '{"compilerOptions":{"target":"ES2022"},"include":["src/**/*.ts"]}\n')
         self.write("vitest.config.ts", "export default {};\n")

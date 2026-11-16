@@ -5,7 +5,7 @@ import subprocess
 import tarfile
 
 from tst.backends import ay_only
-from tst.make.lib import MakeTest, PROJECT
+from tst.make.lib import MakeTest, PROJECT, nodejs_version
 
 
 class IndexedMakeTest(MakeTest):
@@ -51,7 +51,7 @@ class IndexedMakeTest(MakeTest):
 class IndexedGraphTest(IndexedMakeTest):
     def test_missing_frontend_resource_configuration_is_reported(self):
         self.write("ya.make", "TS_PACKAGE()\nEND()\n")
-        self.write("package.json", '{"name":"@e2e/missing-resources","version":"1.0.0","engines":{"node":"22.13.0"}}\n')
+        self.write("package.json", '{"name":"@e2e/missing-resources","version":"1.0.0","engines":{"node":"' + nodejs_version() + '"}}\n')
         self.write("pnpm-lock.yaml", "lockfileVersion: '9.0'\nimporters:\n  .: {}\n")
         # The indexed fixture contains build/ and this project; mirror its
         # missing frontend metadata in ya's private source overlay.

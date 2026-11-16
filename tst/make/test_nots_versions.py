@@ -1,7 +1,7 @@
 import base64
 import json
 
-from tst.make.lib import MakeTest, PROJECT
+from tst.make.lib import MakeTest, PROJECT, nodejs_version
 
 
 class NotsVersionsTest(MakeTest):
@@ -9,7 +9,7 @@ class NotsVersionsTest(MakeTest):
         self.package(node="18.20.8")
         resource_path = "devtools/frontend_build_platform/erm/erm-packages.json"
         resources = json.loads((self.root / resource_path).read_text())
-        resources["nodejs"]["versions"]["18.20.8"] = resources["nodejs"]["versions"]["22.13.0"]
+        resources["nodejs"]["versions"]["18.20.8"] = resources["nodejs"]["versions"][nodejs_version()]
         self.write_tree(resource_path, json.dumps(resources))
         result = self.make()
         self.assertNotEqual(result.returncode, 0)
@@ -27,7 +27,7 @@ class NotsVersionsTest(MakeTest):
 
     def test_missing_node_resource_does_not_prevent_graph_generation(self):
         self.package()
-        self.write_tree("build/platform/nodejs/22.13.0/ya.make", "RESOURCES_LIBRARY()\nNO_YMAKE_PYTHON3()\nEND()\n")
+        self.write_tree(f"build/platform/nodejs/{nodejs_version()}/ya.make", "RESOURCES_LIBRARY()\nNO_YMAKE_PYTHON3()\nEND()\n")
         self.node(self.graph(), "output.tar")
 
     def test_sibling_packages_share_the_registry_settings(self):
@@ -139,7 +139,8 @@ class NotsVersionsTest(MakeTest):
                 self.assertIn(canonical, json.dumps(self.graph()))
 
     def test_node_engine_whitespace_immediately_after_operators_and_versions(self):
-        for constraint in ("=\t22.13.0\t", "=\f22.13.0", "=\r22.13.0\n"):
+        node = nodejs_version()
+        for constraint in (f"=\t{node}\t", f"=\f{node}", f"=\r{node}\n"):
             with self.subTest(constraint=constraint):
                 self.package(node=constraint)
                 self.node(self.graph(), "output.tar")
@@ -157,15 +158,17 @@ class NotsVersionsTest(MakeTest):
 
     def test_node_engine_whitespace_runs(self):
         whitespace = " \t\f\r\n"
-        for constraint in (whitespace + "22.13.0" + whitespace,
-                           whitespace + "=" + whitespace + "22.13.0" + whitespace,
-                           whitespace + ">=" + whitespace + "22.13.0" + whitespace):
+        node = nodejs_version()
+        for constraint in (whitespace + node + whitespace,
+                           whitespace + "=" + whitespace + node + whitespace,
+                           whitespace + ">=" + whitespace + node + whitespace):
             with self.subTest(constraint=constraint):
                 self.package(node=constraint)
                 self.node(self.graph(), "output.tar")
 
     def test_malformed_engine_prefixes_and_unavailable_patch_versions(self):
-        for constraint in (" \tbad", " \t", " 2", "2bad", " 22", "22x", "2.3.45", "22.13.100", " =\t\f\r\n"):
+        major, minor, _ = nodejs_version().split(".")
+        for constraint in (" \tbad", " \t", " 2", "2bad", " " + major, major + "x", "2.3.45", f"{major}.{minor}.100", " =\t\f\r\n"):
             with self.subTest(constraint=constraint):
                 self.package(node=constraint)
                 self.assertNotEqual(self.make().returncode, 0)
@@ -206,8 +209,9 @@ class NotsVersionsTest(MakeTest):
                 self.package({name: "1.2.3"})
                 self.assertNotEqual(self.make().returncode, 0)
 
-    def package(self, packages=None, node="22.13.0"):
+    def package(self, packages=None, node=None):
         packages = packages or {}
+        node = nodejs_version() if node is None else node
         self.write("ya.make", "TS_PACKAGE()\nWITH_NODE_MODULES()\nDISABLE_HERMETIC_NODE_MODULES()\nEND()\n")
         self.write("package.json", json.dumps({
             "name": "@e2e/versions", "version": "1.0.0", "engines": {"node": node},
@@ -226,13 +230,15 @@ class NotsVersionsTest(MakeTest):
         self.write("answer.js", "module.exports = 42;\n")
 
     def test_node_engine_exact_and_lower_bound(self):
-        for constraint in ("22.13.0", "=22.13.0", " = 22.13.0 ", ">=22.13.0", "\t>=\t22.13.0\r\n"):
+        node = nodejs_version()
+        for constraint in (node, f"={node}", f" = {node} ", f">={node}", f"\t>=\t{node}\r\n"):
             with self.subTest(constraint=constraint):
                 self.package(node=constraint)
                 self.node(self.graph(), "output.tar")
 
     def test_invalid_node_engine_ranges_are_configuration_errors(self):
-        for constraint in ("banana", "22.13", "22..0", "22.x.0", ">=", "= ", "22.13.0 extra", "9999.0.0"):
+        major, minor, _ = nodejs_version().split(".")
+        for constraint in ("banana", f"{major}.{minor}", f"{major}..0", f"{major}.x.0", ">=", "= ", f"{nodejs_version()} extra", "9999.0.0"):
             with self.subTest(constraint=constraint):
                 self.package(node=constraint)
                 self.assertNotEqual(self.make().returncode, 0)
@@ -282,8 +288,10 @@ class NotsVersionsTest(MakeTest):
             self.assertIn(name + "-" + version + ".tgz", serialized)
 
     def test_truncated_and_unsupported_node_engine_operators(self):
-        for constraint in (">", " >", ">= ", "=22.", "=22.13.", "22.", "22.13.", "22.13.x",
-                           "22.x.0", ">22.13.0", "<=22.13.0", "==22.13.0"):
+        node = nodejs_version()
+        major, minor, _ = node.split(".")
+        for constraint in (">", " >", ">= ", f"={major}.", f"={major}.{minor}.", f"{major}.", f"{major}.{minor}.", f"{major}.{minor}.x",
+                           f"{major}.x.0", f">{node}", f"<={node}", f"=={node}"):
             with self.subTest(constraint=constraint):
                 self.package(node=constraint)
                 self.assertNotEqual(self.make().returncode, 0)

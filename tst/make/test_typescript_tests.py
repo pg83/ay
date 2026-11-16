@@ -1,13 +1,13 @@
 import base64
 import json
 
-from tst.make.lib import MakeTest, PROJECT
+from tst.make.lib import MakeTest, PROJECT, nodejs_version
 
 
 class TypescriptTests(MakeTest):
     def package(self, macros=""):
         self.write("ya.make", f"TS_PACKAGE()\n{macros}\nEND()\nRECURSE_FOR_TESTS(tests)\n")
-        self.write("package.json", json.dumps({"name": "@e2e/answer", "version": "1.0.0", "engines": {"node": "22.13.0"}}))
+        self.write("package.json", json.dumps({"name": "@e2e/answer", "version": "1.0.0", "engines": {"node": nodejs_version()}}))
         self.write("pnpm-lock.yaml", "lockfileVersion: '9.0'\nimporters:\n  .: {}\n")
         self.write("tsconfig.json", json.dumps({"compilerOptions": {"target": "ES2022"}, "include": ["src/**/*.ts"]}))
         self.write("src/answer.ts", "export const answer = 42;\n")
@@ -74,7 +74,7 @@ class TypescriptTests(MakeTest):
         # TS checks set up their builder recipes in the module epilogue, after
         # the USE_RECIPE calls of ya.make; jest sets them up before.
         self.package("TS_LINT(lint)")
-        self.write("package.json", json.dumps({"name": "@e2e/answer", "version": "1.0.0", "engines": {"node": "22.13.0"}, "scripts": {"lint": "true", "test": "true"}}))
+        self.write("package.json", json.dumps({"name": "@e2e/answer", "version": "1.0.0", "engines": {"node": nodejs_version()}, "scripts": {"lint": "true", "test": "true"}}))
         self.write("jest.config.js", "module.exports = {};\n")
         self.write("src/answer.test.ts", 'import {answer} from "./answer";\ntest("answer", () => expect(answer).toBe(42));\n')
         self.write("recipe/ya.make", "PY3_PROGRAM(recipe)\nPY_SRCS(MAIN main.py)\nEND()\n")

@@ -1,6 +1,6 @@
 import json
 
-from tst.make.lib import MakeTest, PROJECT
+from tst.make.lib import MakeTest, PROJECT, nodejs_version
 
 
 class TypescriptSharedToolContextTest(MakeTest):
@@ -8,7 +8,7 @@ class TypescriptSharedToolContextTest(MakeTest):
         self.write("ya.make", f"LIBRARY(answer)\nRUN_PROGRAM({PROJECT}/first OUT first.cpp)\nRUN_PROGRAM({PROJECT}/second OUT second.cpp)\nEND()\n")
         for name, macros in (("first", ""), ("second", f"PEERDIR({PROJECT}/first)")):
             self.write(f"{name}/ya.make", f"TS_PACKAGE()\n{macros}\nEND()\n")
-            self.write(f"{name}/package.json", json.dumps({"name": "@e2e/" + name, "version": "1.0.0", "engines": {"node": "22.13.0"}}))
+            self.write(f"{name}/package.json", json.dumps({"name": "@e2e/" + name, "version": "1.0.0", "engines": {"node": nodejs_version()}}))
             self.write(f"{name}/pnpm-lock.yaml", "lockfileVersion: '9.0'\nimporters:\n  .: {}\n")
         graph = self.graph()
         for name in ("first", "second"):

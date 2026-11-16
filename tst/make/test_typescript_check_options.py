@@ -1,7 +1,7 @@
 import base64
 import json
 
-from tst.make.lib import MakeTest, PROJECT
+from tst.make.lib import MakeTest, PROJECT, nodejs_version
 
 
 class TypescriptCheckOptionsTest(MakeTest):
@@ -153,7 +153,7 @@ class TypescriptCheckOptionsTest(MakeTest):
 
     def package(self, module="TS_TSC", macros=""):
         self.write("ya.make", f"{module}()\nTS_BUILD_OUTPUTS(dist)\n{macros}\nEND()\n")
-        self.write("package.json", json.dumps({"name": "@e2e/check-options", "version": "1.0.0", "engines": {"node": "22.13.0"}, "files": ["src", "dist"], "scripts": {"nots:build": "tsc", "check:strict!": "true"}}))
+        self.write("package.json", json.dumps({"name": "@e2e/check-options", "version": "1.0.0", "engines": {"node": nodejs_version()}, "files": ["src", "dist"], "scripts": {"nots:build": "tsc", "check:strict!": "true"}}))
         self.write("pnpm-lock.yaml", "lockfileVersion: '9.0'\nimporters:\n  .: {}\n")
         self.write("tsconfig.json", json.dumps({"compilerOptions": {"rootDir": "src", "outDir": "dist"}, "include": ["src/**/*.ts"]}))
         self.write(".eslintrc.js", "module.exports = {};\n")

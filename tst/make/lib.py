@@ -1,3 +1,4 @@
+import functools
 import json
 import os
 from pathlib import Path
@@ -13,6 +14,13 @@ from tst.make import autocheck
 
 PROJECT = "__ay_e2e__"
 CANONDATA = Path(__file__).parent / "canondata"
+
+
+@functools.cache
+def nodejs_version():
+    """The tree's default Node.js; fixtures must not pin a version the tree may drop."""
+    erm = Path(os.environ["AY_E2E_ARCADIA"]) / "devtools/frontend_build_platform/erm/erm-packages.json"
+    return json.loads(erm.read_text())["nodejs"]["default"]
 
 
 class MakeTest(unittest.TestCase):

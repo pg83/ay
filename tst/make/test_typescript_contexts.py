@@ -1,6 +1,6 @@
 import json
 
-from tst.make.lib import MakeTest, PROJECT
+from tst.make.lib import MakeTest, PROJECT, nodejs_version
 
 
 class TypescriptContextsTest(MakeTest):
@@ -40,7 +40,7 @@ class TypescriptContextsTest(MakeTest):
 
     def test_proto_workspace(self):
         self.write("ya.make", f"PROTO_LIBRARY()\nINCLUDE_TAGS(TS_PROTO TS_PREPARE_DEPS)\nONLY_TAGS(TS_PROTO TS_PREPARE_DEPS)\nIF(TS_PROTO)\nTS_PROTO_NON_RECURSIVE()\nENDIF()\nPEERDIR({PROJECT}/peer)\nSRCS(answer.proto)\nEND()\n")
-        self.write("package.json", json.dumps({"name": "@e2e/answer", "version": "1.0.0", "engines": {"node": "22.13.0"}, "dependencies": {"@e2e/peer": "workspace:./peer"}}))
+        self.write("package.json", json.dumps({"name": "@e2e/answer", "version": "1.0.0", "engines": {"node": nodejs_version()}, "dependencies": {"@e2e/peer": "workspace:./peer"}}))
         self.write("pnpm-lock.yaml", "lockfileVersion: '9.0'\nimporters:\n  .:\n    dependencies:\n      '@e2e/peer':\n        specifier: workspace:./peer\n        version: link:peer\n")
         self.write("tsconfig.json", '{"compilerOptions":{"outDir":"dist"}}\n')
         self.write("answer.proto", f'syntax = "proto3";\npackage e2e;\nimport "{PROJECT}/peer/base.proto";\nmessage Answer {{ Base base = 1; }}\n')
@@ -50,13 +50,13 @@ class TypescriptContextsTest(MakeTest):
 
     def test_lockfile_v6(self):
         self.write("ya.make", "TS_PACKAGE()\nWITH_NODE_MODULES()\nDISABLE_HERMETIC_NODE_MODULES()\nEND()\n")
-        self.write("package.json", json.dumps({"name": "@e2e/answer", "version": "1.0.0", "engines": {"node": "22.13.0"}, "dependencies": {"typescript": "5.9.3"}}))
+        self.write("package.json", json.dumps({"name": "@e2e/answer", "version": "1.0.0", "engines": {"node": nodejs_version()}, "dependencies": {"typescript": "5.9.3"}}))
         self.write("pnpm-lock.yaml", "lockfileVersion: '6.0'\ndependencies:\n  typescript:\n    specifier: 5.9.3\n    version: 5.9.3\npackages:\n  /typescript@5.9.3:\n    resolution:\n      integrity: sha512-jl1vZzPDinLr9eUt3J/t7V6FgNEw9QjvBPdysz9KfQDD41fQrC2Y4vKQdiaUpFT4bXlb1RHhLpp8wtm6M5TgSw==\n")
         self.node(self.graph(), "output.tar")
 
     def test_test_depends_on_build(self):
         self.write("ya.make", "TS_TSC()\nNO_LINT()\nTS_BUILD_OUTPUTS(dist)\nEND()\nRECURSE_FOR_TESTS(tests)\n")
-        self.write("package.json", json.dumps({"name": "@e2e/answer", "version": "1.0.0", "engines": {"node": "22.13.0"}, "scripts": {"nots:build": "tsc"}}))
+        self.write("package.json", json.dumps({"name": "@e2e/answer", "version": "1.0.0", "engines": {"node": nodejs_version()}, "scripts": {"nots:build": "tsc"}}))
         self.write("pnpm-lock.yaml", "lockfileVersion: '9.0'\nimporters:\n  .: {}\n")
         self.write("tsconfig.json", '{"compilerOptions":{"rootDir":"src","outDir":"dist"},"include":["src/**/*.ts"]}\n')
         self.write("src/answer.ts", "export const answer = 42;\n")

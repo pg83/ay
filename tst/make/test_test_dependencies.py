@@ -1,6 +1,6 @@
 import json
 
-from tst.make.lib import MakeTest, PROJECT
+from tst.make.lib import MakeTest, PROJECT, nodejs_version
 
 
 class TestDependenciesTest(MakeTest):
@@ -104,7 +104,7 @@ class TestDependenciesTest(MakeTest):
         self.write("ya.make", f"PY3TEST()\nTEST_SRCS(test_answer.py)\nDEPENDS({PROJECT}/lib)\nEND()\n")
         self.write("test_answer.py", "def test_answer(): assert True\n")
         self.write("lib/ya.make", "TS_LIBRARY()\nTS_BUILD_SCRIPT(nots:build)\nTS_BUILD_OUTPUTS(dist)\nEND()\n")
-        self.write("lib/package.json", json.dumps({"name": "@e2e/answer", "version": "1.0.0", "engines": {"node": "22.13.0"}, "files": ["dist"], "scripts": {"nots:build": "tsc"}}))
+        self.write("lib/package.json", json.dumps({"name": "@e2e/answer", "version": "1.0.0", "engines": {"node": nodejs_version()}, "files": ["dist"], "scripts": {"nots:build": "tsc"}}))
         self.write("lib/pnpm-lock.yaml", "lockfileVersion: '9.0'\nsettings:\n  autoInstallPeers: true\n  excludeLinksFromLockfile: false\nimporters:\n  .: {}\n")
         self.write("lib/tsconfig.json", json.dumps({"compilerOptions": {"rootDir": "src", "outDir": "dist"}, "include": ["src/**/*.ts"]}))
         self.write("lib/src/answer.ts", "export const answer = 42;\n")

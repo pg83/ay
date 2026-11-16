@@ -1,12 +1,12 @@
 import json
 
-from tst.make.lib import MakeTest, PROJECT
+from tst.make.lib import MakeTest, PROJECT, nodejs_version
 
 
 class TypescriptTest(MakeTest):
     def package(self, module, macros="", flags=(), prepare_only=False):
         self.write("ya.make", f"{module}()\n{macros}\nEND()\n")
-        self.write("package.json", json.dumps({"name": "@e2e/answer", "version": "1.0.0", "engines": {"node": "22.13.0"}, "files": ["src", "dist"], "scripts": {"nots:build": "tsc"}}))
+        self.write("package.json", json.dumps({"name": "@e2e/answer", "version": "1.0.0", "engines": {"node": nodejs_version()}, "files": ["src", "dist"], "scripts": {"nots:build": "tsc"}}))
         self.write("pnpm-lock.yaml", "lockfileVersion: '9.0'\nsettings:\n  autoInstallPeers: true\n  excludeLinksFromLockfile: false\nimporters:\n  .: {}\n")
         self.write("tsconfig.json", json.dumps({"compilerOptions": {"rootDir": "src", "outDir": "dist", "target": "ES2022"}, "include": ["src/**/*.ts"]}))
         self.write(".eslintrc.js", "module.exports = {};\n")
@@ -117,7 +117,7 @@ snapshots:
         self.write("package.json", json.dumps(package))
         self.write("pnpm-lock.yaml", "lockfileVersion: '9.0'\nimporters:\n  .:\n    dependencies:\n      '@e2e/lib':\n        specifier: workspace:./lib\n        version: link:lib\n")
         self.write("lib/ya.make", "TS_PACKAGE()\nEND()\n")
-        self.write("lib/package.json", json.dumps({"name": "@e2e/lib", "version": "1.0.0", "engines": {"node": "22.13.0"}}))
+        self.write("lib/package.json", json.dumps({"name": "@e2e/lib", "version": "1.0.0", "engines": {"node": nodejs_version()}}))
         self.write("lib/pnpm-lock.yaml", "lockfileVersion: '9.0'\nimporters:\n  .: {}\n")
         graph = self.graph()
         self.node(graph, "lib/output.tar")
