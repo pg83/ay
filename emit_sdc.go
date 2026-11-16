@@ -198,7 +198,7 @@ func setupSdcUnionModule(stmt *ModuleStmt, language Language, env Environment, d
 	}
 }
 
-func applySdcInstall(module string, tokens []ANY, d *ModuleData, env Environment) {
+func applySdcInstall(module string, tokens []ANY, d *ModuleData, env Environment, onWarn func(Warn)) {
 	packageName := env.string(envSdcPackageName)
 
 	if packageName == "" {
@@ -213,12 +213,9 @@ func applySdcInstall(module string, tokens []ANY, d *ModuleData, env Environment
 	supernode := env.is(envSdcUseSupernode, strYes)
 	args := anyStrs(tokens)
 	kind := ""
+	report := func(msg string) { onWarn(Warn{Kind: WarnMisconfiguration, Where: makeFileWhere(module), Error: msg}) }
 
 	take := func() string {
-		if len(args) == 0 {
-			throwFmt("SDC_INSTALL: missing argument")
-		}
-
 		result := args[0]
 
 		args = args[1:]
@@ -236,13 +233,27 @@ func applySdcInstall(module string, tokens []ANY, d *ModuleData, env Environment
 		}
 
 		if kind == "" {
-			throwFmt("SDC_INSTALL: expected an installation kind, got %s", arg)
+			report("Unknown SDC_INSTALL kind: " + arg)
+
+			return
 		}
 
 		enabled := len(allowed) == 0 || slices.Contains(allowed, kind)
 
 		switch arg {
 		case "TARGET", "NODE":
+			if arg == "TARGET" && len(args) == 0 {
+				report("Expected target path after TARGET")
+
+				return
+			}
+
+			if arg == "NODE" && len(args) < 2 {
+				report("Expected node name and target path after NODE")
+
+				return
+			}
+
 			target := take()
 			name := path.Base(target)
 
@@ -250,6 +261,13 @@ func applySdcInstall(module string, tokens []ANY, d *ModuleData, env Environment
 				name, target = target, take()
 			} else if len(args) > 0 && args[0] == "AS" {
 				take()
+
+				if len(args) == 0 {
+					report("Expected target name after AS")
+
+					return
+				}
+
 				name = take()
 			}
 
@@ -267,6 +285,12 @@ func applySdcInstall(module string, tokens []ANY, d *ModuleData, env Environment
 				d.sdcInstallOutputs = append(d.sdcInstallOutputs, copyFileOutputVFS(module, out), copyFileOutputVFS(module, out+".sdcmeta"))
 			}
 		case "PROGRAM_STARTER":
+			if len(args) < 2 {
+				report("Expected target and starter names for PROGRAM_STARTER")
+
+				return
+			}
+
 			src, name := take(), take()
 
 			if enabled {

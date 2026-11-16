@@ -103,6 +103,7 @@ var (
 	envDefaultLinkerId                        = internEnv("_DEFAULT_LINKER_ID")
 	envDependencyManagementTagsExclude        = internEnv("DEPENDENCY_MANAGEMENT_TAGS_EXCLUDE")
 	envDescProto                              = internEnv("DESC_PROTO")
+	envDiagGenMode                            = internEnv("_DIAG_GEN_MODE")
 	envDisableFlake8                          = internEnv("DISABLE_FLAKE8")
 	envDisableFlake8Migrations                = internEnv("DISABLE_FLAKE8_MIGRATIONS")
 	envDllForDir                              = internEnv("DLL_FOR_DIR")

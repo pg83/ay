@@ -58,11 +58,13 @@ func setupSdcDiagsModule(stmt *ModuleStmt, language Language, env Environment, d
 	d.peerdirs = append(d.peerdirs, internAnys([]string{"contrib/libs/protobuf", "sdg/sdc/myriapoda/yamakes/diagnostics/utils"})...)
 }
 
-func applySdcDiagsSplitGenerator(fs FS, modulePath string, stmt UnknownStmt, env Environment, d *ModuleData) {
+func applySdcDiagsSplitGenerator(fs FS, modulePath string, stmt UnknownStmt, env Environment, d *ModuleData, onWarn func(Warn)) {
 	files := anyStrs(stmt.Args)
 
 	if len(files) == 0 {
-		throwFmt("SDC_DIAGS_SPLIT_GENERATOR_V4: diagnostics file path is required")
+		sdcDiagsPluginFailure(modulePath, stmt, onWarn)
+
+		return
 	}
 
 	for i, f := range files {
@@ -74,10 +76,24 @@ func applySdcDiagsSplitGenerator(fs FS, modulePath string, stmt UnknownStmt, env
 	manifests := map[string]bool{}
 
 	for _, f := range files {
-		if !strings.HasPrefix(f, sdcDiagDescriptionsRoot+"/") || !strings.HasSuffix(f, ".yaml") {
-			throwFmt("SDC_DIAGS_SPLIT_GENERATOR_V4: %s must be a .yaml inside %s", f, sdcDiagDescriptionsRoot)
+		if !strings.HasPrefix(f, sdcDiagDescriptionsRoot) || f == sdcDiagDescriptionsRoot {
+			sdcDiagsPluginFailure(modulePath, stmt, onWarn)
+
+			return
 		}
 
+		if !strings.HasSuffix(f, ".yaml") {
+			return
+		}
+	}
+
+	if mode := env.string(envDiagGenMode); mode != "" && mode != "go" && mode != "cpp" {
+		sdcDiagsPluginFailure(modulePath, stmt, onWarn)
+
+		return
+	}
+
+	for _, f := range files {
 		for dir := path.Dir(f); dir != sdcDiagDescriptionsRoot && strings.HasPrefix(dir, sdcDiagDescriptionsRoot); dir = path.Dir(dir) {
 			manifests[dir+"/_manifest_.yaml"] = true
 		}
@@ -150,9 +166,22 @@ func sdcDiagV3Output(rel string) string {
 	return base + rel + "/_group.h"
 }
 
-func applySdcDiagsSplitGeneratorV3(fs FS, modulePath string, stmt UnknownStmt, env Environment, d *ModuleData) {
+func sdcDiagsPluginFailure(modulePath string, stmt UnknownStmt, onWarn func(Warn)) {
+	name := stmt.Name.string()
+	args := make([]string, len(stmt.Args))
+
+	for i, arg := range stmt.Args {
+		args[i] = pluginArgLiteral(arg)
+	}
+
+	onWarn(Warn{Kind: WarnMisconfiguration, Where: makeFileWhere(modulePath), Error: name + "(" + strings.Join(args, " ") + ") was not processed properly: devtools/ymake/plugins/ymake_module.cpp:189: Invalid call: report_configure_error. Skip " + name})
+}
+
+func applySdcDiagsSplitGeneratorV3(fs FS, modulePath string, stmt UnknownStmt, env Environment, d *ModuleData, onWarn func(Warn)) {
 	if len(stmt.Args) != 1 {
-		throwFmt("SDC_DIAGS_SPLIT_GENERATOR_V3: exactly one diagnostics file or group path is required")
+		sdcDiagsPluginFailure(modulePath, stmt, onWarn)
+
+		return
 	}
 
 	file := stmt.Args[0].string()
@@ -166,7 +195,9 @@ func applySdcDiagsSplitGeneratorV3(fs FS, modulePath string, stmt UnknownStmt, e
 	}
 
 	if !strings.HasPrefix(file, sdcDiagDescriptionsRoot) || file == sdcDiagDescriptionsRoot {
-		throwFmt("SDC_DIAGS_SPLIT_GENERATOR_V3: %s must be inside %s", file, sdcDiagDescriptionsRoot)
+		sdcDiagsPluginFailure(modulePath, stmt, onWarn)
+
+		return
 	}
 
 	group := !strings.HasSuffix(file, ".yaml")

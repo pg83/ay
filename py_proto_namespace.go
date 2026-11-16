@@ -13,8 +13,12 @@ func applyInlinePySrcs(fs FS, modulePath string, args []ANY, d *ModuleData, env 
 }
 
 func collectProtoToNamespace(fs FS, modulePath string, stmt UnknownStmt, d *ModuleData, env Environment, onWarn func(Warn)) {
+	report := func(msg string) {
+		onWarn(Warn{Kind: WarnMisconfiguration, Where: makeFileWhere(modulePath), Error: msg})
+	}
+
 	if len(stmt.Args) == 0 {
-		throwFmt("Not allowed empty PROTO_TO_NAMESPACE")
+		report("Not allowed empty PROTO_TO_NAMESPACE")
 	}
 
 	generateInit := false
@@ -32,18 +36,17 @@ func collectProtoToNamespace(fs FS, modulePath string, stmt UnknownStmt, d *Modu
 		}
 
 		if strings.HasPrefix(value, "IN_") {
-			if value != "IN_MSG" && value != "IN_PROTO" {
-				throwFmt("Not allowed prefix %s in PROTO_TO_NAMESPACE", value)
-			}
+			switch {
+			case value != "IN_MSG" && value != "IN_PROTO":
+				report("Not allowed prefix " + value + " in PROTO_TO_NAMESPACE")
+			case prefix != "":
+				report("Not allowed multiple prefixes in PROTO_TO_NAMESPACE")
+			default:
+				prefix = strings.ToLower(strings.TrimPrefix(value, "IN_")) + "/"
 
-			if prefix != "" {
-				throwFmt("Not allowed multiple prefixes in PROTO_TO_NAMESPACE")
-			}
-
-			prefix = strings.ToLower(strings.TrimPrefix(value, "IN_")) + "/"
-
-			if i+1 == len(stmt.Args) {
-				throwFmt("Not allowed empty value after %s in PROTO_TO_NAMESPACE", value)
+				if i+1 == len(stmt.Args) {
+					report("Not allowed empty value after " + value + " in PROTO_TO_NAMESPACE")
+				}
 			}
 
 			continue

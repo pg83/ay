@@ -60,6 +60,19 @@ func ymakeVFS(v VFS) string {
 	}
 }
 
+func pluginArgLiteral(arg ANY) string {
+	v := arg.vfs()
+
+	switch {
+	case v == 0:
+		return arg.string()
+	case v.isSource():
+		return "${ARCADIA_ROOT}/" + v.relString()
+	default:
+		return "${ARCADIA_BUILD_ROOT}/" + v.relString()
+	}
+}
+
 func unresolvedIncludeError(w Warn) string {
 	return "could not resolve include file: [[imp]]" + w.target.string() + "[[rst]] included from here: [[imp]]" + ymakeVFS(w.includer) + "[[rst]]"
 }

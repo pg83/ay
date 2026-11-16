@@ -3504,9 +3504,9 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 	case tokAddCustomExplicitLinterCheck:
 		d.collectCustomStyle(modulePath, v.Args, env)
 	case tokSdcDiagsSplitGeneratorV3:
-		applySdcDiagsSplitGeneratorV3(fs, modulePath, v, env, d)
+		applySdcDiagsSplitGeneratorV3(fs, modulePath, v, env, d, onWarn)
 	case tokSdcDiagsSplitGeneratorV4:
-		applySdcDiagsSplitGenerator(fs, modulePath, v, env, d)
+		applySdcDiagsSplitGenerator(fs, modulePath, v, env, d, onWarn)
 	case tokNodeBuilder:
 		report := func(msg string) {
 			onWarn(Warn{Kind: WarnMisconfiguration, Where: makeFileWhere(modulePath), Error: msg})
@@ -3526,7 +3526,7 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 	case tokTaskletReg, tokTaskletRegExt:
 		applyTaskletRegistration(v, d, env)
 	case tokSdcInstall:
-		applySdcInstall(modulePath, v.Args, d, env)
+		applySdcInstall(modulePath, v.Args, d, env, onWarn)
 	case tokGenPchFile:
 		if len(v.Args) != 2 {
 			throwFmt("GEN_PCH_FILE expects an input header and output file")
