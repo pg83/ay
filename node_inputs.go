@@ -1,8 +1,8 @@
 package main
 
 import (
+	"path/filepath"
 	"slices"
-	"strings"
 )
 
 var (
@@ -101,11 +101,9 @@ func (inputs InputChunks) checkRoots() {
 }
 
 func (e *EmitContext) unresolvedSourceName(v VFS) string {
-	rel, dir := v.relString(), e.instance.Path.relString()
-
-	if name, ok := strings.CutPrefix(rel, dir+"/"); ok && dir != "" {
+	if name, err := filepath.Rel(e.instance.Path.relString(), v.relString()); err == nil {
 		return name
 	}
 
-	return "$S/" + rel
+	return "$S/" + v.relString()
 }

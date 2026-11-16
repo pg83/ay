@@ -33,21 +33,11 @@ func (s *pythonLintState) value() string {
 	return s.raw
 }
 
-func (d *ModuleData) collectPythonLintFiles(module string, group int) {
+func (d *ModuleData) collectPythonLintFiles(module string, group int, report func(string)) {
 	raw := d.pythonLint.value()
 
-	if raw == "none" {
-		allowed := []string{
-			"contrib/", "devtools/", "junk/", "taxi/uservices/", "travel/",
-			"market/report/lite/", "market/robotics/contrib/", "market/sre",
-			"passport/backend/oauth/", "sdg/sdc/contrib/", "sdg/sdc/third_party/",
-			"smart_devices/third_party/", "yt/yt/", "yt/python/", "yt/python_py2/",
-			"cml/comrade_agent/src/contrib/",
-		}
-
-		if !slices.ContainsFunc(allowed, func(prefix string) bool { return strings.HasPrefix(module, prefix) }) {
-			throwFmt("NO_LINT() is allowed only in %s", strings.Join(allowed, ", "))
-		}
+	if raw == "none" && !pythonNoLintAllowed(module) {
+		report("NO_LINT() is allowed only in " + strings.Join(pythonNoLintPaths, ", "))
 	}
 
 	if raw != "none" && raw != "none_internal" {

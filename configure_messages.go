@@ -26,6 +26,12 @@ var addInclLanguages = func() []ANY {
 	return out
 }()
 
+var pythonNoLintPaths = []string{
+	"contrib/", "devtools/", "junk/", "taxi/uservices/", "travel/", "market/report/lite/", "market/robotics/contrib/",
+	"market/sre", "passport/backend/oauth/", "sdg/sdc/contrib/", "sdg/sdc/third_party/", "smart_devices/third_party/",
+	"yt/yt/", "yt/python/", "yt/python_py2/", "cml/comrade_agent/src/contrib/",
+}
+
 const addInclLanguageList = "asm (for .asm), c (for .cpp .cc .cxx .c .C .auxcpp .h .hh .hpp .cuh .H .hxx .xh .ipp .ixx ..inl ..vert ..frag ..tesc ..tese ..geom ..comp .cu .S .s .sfdl .m .mm .l .lex .lpp .y .ypp .gperf .asp .f .go), cython (for .pyx .pxd .pxi), flatc (for .fbs .fbs64), idl (for .idl), nlg (for .nlg), other (for .fml .fml2 .fml3 .pln .info .a .lua .sh .bin .py .pyi .pysrc .ts .js .tsx .jsx), proto (for .gzt .gztproto .proto .ev .cfgproto), ragel (for .rl .rh .rli .rl6 .rl5), ros (for .msg .srv .rostopic), sc (for .sc), swig (for .swg), xs (for .xs), xsyn (for .xsyn), ydl (for .ydl)"
 
 func vecDump(args []ANY) string {
@@ -395,4 +401,70 @@ func hostResourcesValid(macro string, args []ANY, report func(string)) bool {
 	}
 
 	return true
+}
+
+func pythonNoLintAllowed(modulePath string) bool {
+	return slices.ContainsFunc(pythonNoLintPaths, func(prefix string) bool { return strings.HasPrefix(modulePath, prefix) })
+}
+
+func reportPythonVersion(modulePath, macro string, env Environment, onWarn func(Warn)) {
+	if version := env.string(envPythonVer); version == "" || version == "unset" {
+		onWarn(Warn{Kind: WarnMisconfiguration, Where: makeFileWhere(modulePath), Error: "[[alt1]]" + macro + "[[rst]]: Unknown Python version, select it using [[alt1]]USE_PYTHONx[[rst]] macro"})
+	}
+}
+
+func duplicates(values []string) []string {
+	seen, dups := map[string]bool{}, []string(nil)
+
+	for _, value := range values {
+		if seen[value] && !slices.Contains(dups, value) {
+			dups = append(dups, value)
+		}
+
+		seen[value] = true
+	}
+
+	slices.Sort(dups)
+
+	return dups
+}
+
+func pyRepr(s string) string {
+	quote := byte('\'')
+
+	if strings.IndexByte(s, '\'') >= 0 && strings.IndexByte(s, '"') < 0 {
+		quote = '"'
+	}
+
+	var b strings.Builder
+
+	b.WriteByte(quote)
+
+	for i := 0; i < len(s); i++ {
+		switch c := s[i]; {
+		case c == quote || c == '\\':
+			b.WriteByte('\\')
+			b.WriteByte(c)
+		case c == '\n':
+			b.WriteString(`\n`)
+		case c == '\t':
+			b.WriteString(`\t`)
+		default:
+			b.WriteByte(c)
+		}
+	}
+
+	b.WriteByte(quote)
+
+	return b.String()
+}
+
+func pySetRepr(values []string) string {
+	quoted := make([]string, len(values))
+
+	for i, value := range values {
+		quoted[i] = pyRepr(value)
+	}
+
+	return "{" + strings.Join(quoted, ", ") + "}"
 }

@@ -4265,7 +4265,9 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 
 		for _, a := range args {
 			if st := a.str(); st == kwNAMESPACE || st == kwTOP_LEVEL || st == strMainPy {
-				throwFmt("TEST_SRCS: %s is not allowed", a.string())
+				onWarn(Warn{Kind: WarnMisconfiguration, Where: makeFileWhere(modulePath), Error: "in TEST_SRCS: you cannot use " + a.string() + " here - it would broke testing machinery"})
+
+				break
 			}
 		}
 
@@ -4308,6 +4310,7 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 
 		applyUnknownStmt(fs, modulePath, UnknownStmt{Name: tokPySrcs, Args: allPySrcArgs(fs, modulePath, v)}, d, env, onWarn)
 	case tokPyMain:
+		reportPythonVersion(modulePath, "PY_MAIN", env, onWarn)
 
 		if len(v.Args) != 1 {
 			throwFmt("gen: PY_MAIN expects exactly 1 argument, got %d", len(v.Args))
@@ -4454,6 +4457,7 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 
 		d.cppProtoPlugins = append(d.cppProtoPlugins, plugin)
 	case tokPyRegister:
+		reportPythonVersion(modulePath, "PY_REGISTER", env, onWarn)
 
 		for _, nameTok := range v.Args {
 			appendPyRegisterID(d, nameTok.textSTR(), true)
@@ -4945,8 +4949,15 @@ func collectPySrcGroup(fs FS, modulePath string, v UnknownStmt, d *ModuleData, e
 	}
 
 	collectPythonSourceEntry(d, env, &d.peerdirs)
+	reportPythonVersion(modulePath, "PY_SRCS", env, onWarn)
 
 	v.Args = expandRootDeferredTokens(v.Args, env, tokenExpandPathArguments)
+
+	report := func(message string) {
+		onWarn(Warn{Kind: WarnMisconfiguration, Where: makeFileWhere(modulePath), Error: message})
+	}
+
+	var pyModules, pyiModules []string
 
 	topLevel := false
 	mainNext := false
@@ -5076,6 +5087,16 @@ func collectPySrcGroup(fs FS, modulePath string, v UnknownStmt, d *ModuleData, e
 		}
 
 		src, modNameOverride, explicitModule := strings.Cut(a.string(), "=")
+
+		if !explicitModule && strings.HasPrefix(literal, "../") {
+			report(`PY_SRCS item starts with "../": ` + pyRepr(literal))
+		}
+
+		if !explicitModule && strings.HasPrefix(literal, "/") {
+			report(`PY_SRCS item starts with "/": ` + pyRepr(literal))
+
+			continue
+		}
 
 		var srcID STR
 
@@ -5217,6 +5238,7 @@ func collectPySrcGroup(fs FS, modulePath string, v UnknownStmt, d *ModuleData, e
 
 			dest := "py/" + strings.ReplaceAll(modName, ".", "/") + ".pyi"
 
+			pyiModules = append(pyiModules, modName)
 			d.pyPyiResources = expandResourceFiles(d, d.pyPyiResources, []string{"DONT_COMPRESS", "DEST", dest, src})
 			mainNext = false
 
@@ -5224,11 +5246,17 @@ func collectPySrcGroup(fs FS, modulePath string, v UnknownStmt, d *ModuleData, e
 		}
 
 		if !extIsPy(src) && !extIsProto(src) && !extIsEv(src) {
-			throwFmt("in PY_SRCS: unrecognized arg %q", src)
+			report("in PY_SRCS: unrecognized arg " + pyRepr(src))
+
+			continue
 		}
 
 		if !d.usePython2 && scope.isMain(src) {
-			throwFmt("TOP_LEVEL __main__.py is not allowed in PY3_PROGRAM")
+			report("TOP_LEVEL __main__.py is not allowed in PY3_PROGRAM")
+		}
+
+		if extIsPy(src) {
+			pyModules = append(pyModules, scope.moduleName(modulePath, src))
 		}
 
 		if srcID == 0 {
@@ -5240,6 +5268,14 @@ func collectPySrcGroup(fs FS, modulePath string, v UnknownStmt, d *ModuleData, e
 		}
 
 		d.pyGroupScopes = append(d.pyGroupScopes, scope)
+	}
+
+	if dups := duplicates(pyModules); len(dups) > 0 {
+		report("Duplicate(s) is found in the PY_SRCS macro: " + pySetRepr(dups))
+	}
+
+	if dups := duplicates(pyiModules); len(dups) > 0 {
+		report("Duplicate(s) is found in the PY_SRCS macro: " + strings.Join(dups, ", "))
 	}
 
 	slices.SortStableFunc(pyxs, func(a, b pyxDeclaration) int { return cythonVariantBucket(a.stmt) - cythonVariantBucket(b.stmt) })
@@ -5268,7 +5304,7 @@ func collectPySrcGroup(fs FS, modulePath string, v UnknownStmt, d *ModuleData, e
 	d.pySrcGroups[group].PyiEnd = len(d.pyPyiResources)
 
 	if (lintPy || cythonizePy && len(d.cythonCpp) > cythonStmtStart) && d.unit.Tag != unitTagPy3Bin {
-		d.collectPythonLintFiles(modulePath, group)
+		d.collectPythonLintFiles(modulePath, group, report)
 
 		for _, stmt := range d.cythonCpp[cythonStmtStart:] {
 			stmt.Lint = d.pySrcGroups[group].Lint
