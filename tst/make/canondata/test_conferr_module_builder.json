@@ -1,0 +1,199 @@
+{
+  "ModuleBuilderConfigureErrorsTest.test_addincl_tail_arguments": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "Tail arguments in [[alt1]]ADDINCL[[rst]] without a dir to apply will be ignored",
+          0,
+          0
+        ],
+        [
+          "[[alt1]]ADDINCL[[rst]] to non existent source directory $S/__ay_e2e__/include",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null
+    }
+  },
+  "ModuleBuilderConfigureErrorsTest.test_addincl_to_a_missing_root_directory": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "[[alt1]]ADDINCL[[rst]] to non existent source directory $S/include",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null
+    }
+  },
+  "ModuleBuilderConfigureErrorsTest.test_addincl_with_an_unknown_language": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "Bad language argument in [[alt1]]ADDINCL[[rst]]: \"e2e_unknown\". Possible languages: asm (for .asm), c (for .cpp .cc .cxx .c .C .auxcpp .h .hh .hpp .cuh .H .hxx .xh .ipp .ixx ..inl ..vert ..frag ..tesc ..tese ..geom ..comp .cu .S .s .sfdl .m .mm .l .lex .lpp .y .ypp .gperf .asp .f .go), cython (for .pyx .pxd .pxi), flatc (for .fbs .fbs64), idl (for .idl), nlg (for .nlg), other (for .fml .fml2 .fml3 .pln .info .a .lua .sh .bin .py .pyi .pysrc .ts .js .tsx .jsx), proto (for .gzt .gztproto .proto .ev .cfgproto), ragel (for .rl .rh .rli .rl6 .rl5), ros (for .msg .srv .rostopic), sc (for .sc), swig (for .swg), xs (for .xs), xsyn (for .xsyn), ydl (for .ydl)",
+          0,
+          0
+        ],
+        [
+          "[[alt1]]ADDINCL[[rst]] to non existent source directory $S/__ay_e2e__/include",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null
+    }
+  },
+  "ModuleBuilderConfigureErrorsTest.test_addincl_with_two_languages": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "Two different languages specified for [[alt1]]ADDINCL[[rst]]: previous was \"proto\"",
+          0,
+          0
+        ],
+        [
+          "[[alt1]]ADDINCL[[rst]] to non existent source directory $S/__ay_e2e__/include",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null
+    }
+  },
+  "ModuleBuilderConfigureErrorsTest.test_build_path_in_data_files": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "Build path [[imp]]${ARCADIA_BUILD_ROOT}/__ay_e2e__/data.txt[[rst]] inside [[alt1]]_DATA_FILES[[rst]] is prohibited. Only source paths accepted.",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null
+    }
+  },
+  "ModuleBuilderConfigureErrorsTest.test_declare_external_resource_with_a_non_integral_strip_prefix": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "[[alt1]]STRIP_PREFIX[[rst]] must be integral in [[alt1]]DECLARE_EXTERNAL_RESOURCE[[rst]]: vector of size 4\n  0: E2E_RESOURCE\n  1: sbr:123456789\n  2: STRIP_PREFIX\n  3: many",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null
+    }
+  },
+  "ModuleBuilderConfigureErrorsTest.test_declare_external_resource_without_a_strip_prefix_value": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "Missed argument after [[alt1]]STRIP_PREFIX[[rst]] in [[alt1]]DECLARE_EXTERNAL_RESOURCE[[rst]]: vector of size 3\n  0: E2E_RESOURCE\n  1: sbr:123456789\n  2: STRIP_PREFIX",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null
+    }
+  },
+  "ModuleBuilderConfigureErrorsTest.test_declare_external_resource_without_a_uri": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "Incorrect number or arguments in [[alt1]]DECLARE_EXTERNAL_RESOURCE[[rst]]: vector of size 1\n  0: E2E_RESOURCE",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null
+    }
+  },
+  "ModuleBuilderConfigureErrorsTest.test_declare_external_resource_without_arguments": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "Missed arguments in [[alt1]]DECLARE_EXTERNAL_RESOURCE[[rst]]",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null
+    }
+  },
+  "ModuleBuilderConfigureErrorsTest.test_external_host_resources_pack_without_a_resource_name": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "Incorrect arguments in DECLARE_EXTERNAL_HOST_RESOURCES_PACK: vector of size 3\n  0: sbr:123456789\n  1: FOR\n  2: linux",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null
+    }
+  },
+  "ModuleBuilderConfigureErrorsTest.test_peerdir_to_its_own_directory": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "$B/__ay_e2e__/lib__ay_e2e__.a has PEERDIR to its own dir",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null
+    }
+  },
+  "ModuleBuilderConfigureErrorsTest.test_recurse_inside_a_module": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "[[alt1]]RECURSE[[rst]] inside module $B/__ay_e2e__/lib__ay_e2e__.a; ymake skip this.",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null
+    }
+  },
+  "ModuleBuilderConfigureErrorsTest.test_relative_srcdir": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "Relative path [[imp]]../sources[[rst]] is not allowed in [[alt1]]SRCDIR[[rst]]",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null
+    }
+  }
+}
