@@ -1,4 +1,32 @@
 {
+  "ConfFileConfigureErrorsTest.test_autoincludes_json_syntax_error": {
+    "configure_errors": {
+      "At top level": [
+        [
+          "Autoinclude config $(SOURCE_ROOT)/__ay_e2e__/autoincludes.json is invalid. Json syntax error: library/cpp/json/json_reader.cpp:427: Offset: 7, Code: 7, Error: Missing a comma or ']' after an array element.",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null
+    }
+  },
+  "ConfFileConfigureErrorsTest.test_autoincludes_root_that_is_not_an_array": {
+    "configure_errors": {
+      "At top level": [
+        [
+          "Autoinclude conf root section should be an array.",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null
+    }
+  },
   "ConfFileConfigureErrorsTest.test_license_json_syntax_error": {
     "configure_errors": {
       "At top level": [

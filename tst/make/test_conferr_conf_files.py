@@ -2,8 +2,8 @@ from tst.make.lib import MakeTest, PROJECT
 
 
 class ConfFileConfigureErrorsTest(MakeTest):
-    """Configure errors of build configuration files: sysincl lists (devtools/ymake/sysincl_conf.cpp) and
-    license properties (devtools/ymake/licenses_conf.cpp)."""
+    """Configure errors of build configuration files: sysincl lists (devtools/ymake/sysincl_conf.cpp), license
+    properties (devtools/ymake/licenses_conf.cpp) and autoinclude lists (devtools/ymake/autoincludes_conf.cpp)."""
 
     def library(self):
         self.write("ya.make", "LIBRARY()\nSRCS(value.cpp)\nEND()\n")
@@ -20,6 +20,20 @@ class ConfFileConfigureErrorsTest(MakeTest):
         self.write_tree("build/ymake.core.conf", core.read_text() + f"\nLICENSES+={PROJECT}/license.json\n")
         self.write("license.json", text)
         self.library()
+
+    def autoincludes(self, text):
+        core = self.root / "build/ymake.core.conf"
+        self.write_tree("build/ymake.core.conf", core.read_text() + f"\nAUTOINCLUDE_PATHS+={PROJECT}/autoincludes.json\n")
+        self.write("autoincludes.json", text)
+        self.library()
+
+    def test_autoincludes_root_that_is_not_an_array(self):
+        self.autoincludes('{"e2e": []}\n')
+        self.assertConfigureLikeYa()
+
+    def test_autoincludes_json_syntax_error(self):
+        self.autoincludes('["e2e"\n')
+        self.assertConfigureLikeYa()
 
     def test_sysincl_list_that_is_not_a_sequence(self):
         self.sysincl("e2e\n")
