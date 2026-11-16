@@ -436,7 +436,6 @@ func newGenCtx(fs FS, parsers *IncludeParserManager, hostP, targetP *Platform, e
 
 		sbomEnabled: fs.isFile(srcRootRel, sbomConfRel),
 
-		autoincludeIdx:     loadAutoincludeIndex(fs),
 		parsedFiles:        map[STR]*MakeFile{},
 		includeMemos:       newIncludeMemos(),
 		goImportDirs:       map[goImportKey]STR{},
@@ -461,6 +460,7 @@ func newGenCtx(fs FS, parsers *IncludeParserManager, hostP, targetP *Platform, e
 	}
 
 	ctx.licenses = ctx.loadLicenseConf(targetP.ifEnv)
+	ctx.autoincludeIdx = loadAutoincludeIndex(fs, targetP.ifEnv, onWarn)
 
 	targetSysincl := newSysinclCtx(loadSysInclSet(parsers, targetP, onWarn))
 	targetScanner := newIncludeScannerWith(parsers, targetSysincl, ctx.onWarn, ctx.buckets)

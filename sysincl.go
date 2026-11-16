@@ -71,7 +71,9 @@ func (pm *IncludeParserManager) sysinclRecords(rel string, onWarn func(Warn)) []
 	}
 
 	if !pm.fs.isFile(srcRootRel, rel) {
-		throwFmt("sysincl: %s: no such file", rel)
+		onWarn(Warn{Kind: WarnMisconfiguration, Where: "At top level", Error: confFileMissing("sysincl", pm.fs.root()+"/"+rel)})
+
+		return nil
 	}
 
 	records := parseSysInclYAML(rel, pm.fs.root()+"/"+rel, concatChunks(pm.fs.readPath(key)), onWarn)

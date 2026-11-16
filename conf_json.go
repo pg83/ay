@@ -501,3 +501,7 @@ func readConfJSON(data []byte) (*confJSON, string) {
 
 	return root, ""
 }
+
+func confFileMissing(kind, path string) string {
+	return "Error while reading " + kind + " config " + path + `: (Error 2: No such file or directory) util/system/file.cpp:936: can't open "` + path + `" with mode RdOnly|Seq (0x00000028)`
+}

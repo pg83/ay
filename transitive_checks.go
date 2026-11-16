@@ -192,6 +192,8 @@ func (ctx *GenCtx) loadLicenseConf(env Environment) *licenseConf {
 
 	for _, file := range strings.Fields(env.expand(env.string(envLICENSES))) {
 		if !ctx.fs.isFile(srcRootRel, file) {
+			report(confFileMissing("license", ctx.fs.root()+"/"+file))
+
 			continue
 		}
 

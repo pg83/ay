@@ -23,6 +23,7 @@ var (
 	envASAN_OPTIONS                           = internEnv("ASAN_OPTIONS")
 	envASAN_SYMBOLIZER_PATH                   = internEnv("ASAN_SYMBOLIZER_PATH")
 	envAUTOCHECK                              = internEnv("AUTOCHECK")
+	envAUTOINCLUDE_PATHS                      = internEnv("AUTOINCLUDE_PATHS")
 	envAVX2_CFLAGS                            = internEnv("AVX2_CFLAGS")
 	envAVX512_CFLAGS                          = internEnv("AVX512_CFLAGS")
 	envAVX_CFLAGS                             = internEnv("AVX_CFLAGS")

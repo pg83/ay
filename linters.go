@@ -1,11 +1,6 @@
 package main
 
-import "encoding/json"
-
-var autoincludePathsFiles = []string{
-	"build/conf/autoincludes.json",
-	"build/internal/conf/autoincludes.json",
-}
+import "strings"
 
 const lintersMakeIncName = "linters.make.inc"
 
@@ -14,24 +9,35 @@ type AutoincludeIndex struct {
 	linters []VFS
 }
 
-func loadAutoincludeIndex(fs FS) *AutoincludeIndex {
+func loadAutoincludeIndex(fs FS, env Environment, onWarn func(Warn)) *AutoincludeIndex {
 	var keys []string
 	var linters []VFS
 
-	for _, f := range autoincludePathsFiles {
+	report := func(msg string) {
+		onWarn(Warn{Kind: WarnMisconfiguration, Where: "At top level", Error: msg})
+	}
+
+	for _, f := range strings.Fields(env.expand(env.string(envAUTOINCLUDE_PATHS))) {
 		if !fs.isFile(srcRootRel, f) {
+			report(confFileMissing("autoinclude", fs.root()+"/"+f))
+
 			continue
 		}
 
-		var roots []string
+		root, err := readConfJSON(concatChunks(fs.read(f)))
 
-		if err := json.Unmarshal(concatChunks(fs.read(f)), &roots); err != nil {
-			throwFmt("autoinclude: parse %s: %v", f, err)
-		}
-
-		for _, r := range roots {
-			keys = append(keys, r+"/")
-			linters = append(linters, source(r, "/", lintersMakeIncName))
+		switch {
+		case err != "":
+			report("Autoinclude config " + fs.root() + "/" + f + " is invalid. Json syntax error: " + err)
+		case root.kind != confJSONArray:
+			report("Autoinclude conf root section should be an array.")
+		default:
+			for _, r := range root.items {
+				if r.kind == confJSONString {
+					keys = append(keys, r.str+"/")
+					linters = append(linters, source(r.str, "/", lintersMakeIncName))
+				}
+			}
 		}
 	}
 
