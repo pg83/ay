@@ -201,6 +201,68 @@
     },
     "make_files": {}
   },
+  "MiscConfigureErrorsTest.test_partitioned_recurse_of_a_missing_directory": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "[[alt1]]RECURSE[[rst]] to missing directory: $S/__ay_e2e__/missing",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {}
+  },
+  "MiscConfigureErrorsTest.test_partitioned_recurse_with_a_missing_balancing_config": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "Unable to load balancing config [[imp]]$S/balancing.json[[rst]] inside [[alt1]]PARTITIONED_RECURSE[[rst]]:  Path does not exist: $(SOURCE_ROOT)/balancing.json",
+          3,
+          60
+        ],
+        [
+          "file [[alt1]]$S/balancing.json[[rst]] specified in INCLUDE command (in $S/__ay_e2e__/ya.make) doesn't exist.",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null,
+      "$S/__ay_e2e__/one": null
+    }
+  },
+  "MiscConfigureErrorsTest.test_partitioned_recurse_with_an_invalid_balancing_config": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "Unable to load balancing config [[imp]]$S/__ay_e2e__/balancing.json[[rst]] inside [[alt1]]PARTITIONED_RECURSE[[rst]]:  Unable to read json tree from $(SOURCE_ROOT)/__ay_e2e__/balancing.json",
+          3,
+          71
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null,
+      "$S/__ay_e2e__/one": null
+    }
+  },
+  "MiscConfigureErrorsTest.test_partitioned_recurse_without_the_partition_count": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "Unable to load balancing config [[imp]]$S/__ay_e2e__/balancing.json[[rst]] inside [[alt1]]PARTITIONED_RECURSE[[rst]]:  partitions section of balancing config does not contain appropriate balancing for 2 partitions.",
+          3,
+          71
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null,
+      "$S/__ay_e2e__/one": null
+    }
+  },
   "MiscConfigureErrorsTest.test_peerdir_to_a_multimodule_excluding_the_tag": {
     "configure_errors": {
       "__ay_e2e__": [

@@ -148,6 +148,30 @@ class MiscConfigureErrorsTest(MakeTest):
         self.ts_imports("let stdout = '';\nlet stderr = '';\nconst kinds = ['import'];\nconst code = 'import(no-cycle)';\n")
         self.assertConfigureLikeYa()
 
+    def test_partitioned_recurse_of_a_missing_directory(self):
+        self.write("ya.make", "PARTITIONED_RECURSE(missing)\n")
+        self.assertConfigureLikeYa()
+
+    def partitioned(self, config, path=f"{PROJECT}/balancing.json"):
+        self.write("ya.make", f"SET(RECURSE_PARTITIONS_COUNT 2)\nSET(RECURSE_PARTITION_INDEX 0)\nPARTITIONED_RECURSE(one two BALANCING_CONFIG {path})\n")
+        for sub in ("one", "two"):
+            self.write(f"{sub}/ya.make", "LIBRARY()\nSRCS(value.cpp)\nEND()\n")
+            self.write(f"{sub}/value.cpp", "int value() { return 42; }\n")
+        if config is not None:
+            self.write("balancing.json", config)
+
+    def test_partitioned_recurse_with_a_missing_balancing_config(self):
+        self.partitioned(None, path="balancing.json")
+        self.assertConfigureLikeYa()
+
+    def test_partitioned_recurse_with_an_invalid_balancing_config(self):
+        self.partitioned("{broken\n")
+        self.assertConfigureLikeYa()
+
+    def test_partitioned_recurse_without_the_partition_count(self):
+        self.partitioned(json.dumps({"partitions": {"3": {"0": ["one"]}}}))
+        self.assertConfigureLikeYa()
+
     def ts_tests(self, *statements):
         self.write("lib/ya.make", "TS_LIBRARY()\nTS_BUILD_SCRIPT(nots:build)\nTS_BUILD_OUTPUTS(dist)\n" + "".join(s + "\n" for s in statements) + "END()\n")
         self.write("lib/package.json", json.dumps({"name": "@e2e/lib", "version": "1.0.0", "engines": {"node": nodejs_version()}, "files": ["src", "dist"], "scripts": {"nots:build": "tsc"}}))
