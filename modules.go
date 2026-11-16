@@ -3451,6 +3451,12 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 			return true
 		}
 
+		if v.Raw == strCompoundNodeBuilder {
+			compoundNodeBuilderValid(anyStrs(v.Args), env, func(msg string) {
+				onWarn(Warn{Kind: WarnMisconfiguration, Where: makeFileWhere(modulePath), Error: msg})
+			})
+		}
+
 		return false
 	}
 
@@ -3502,12 +3508,18 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 	case tokSdcDiagsSplitGeneratorV4:
 		applySdcDiagsSplitGenerator(fs, modulePath, v, env, d)
 	case tokNodeBuilder:
-		if d.multimodule != tokMlaunchComponent || !isGoModuleType(d.unit.Type) {
+		report := func(msg string) {
+			onWarn(Warn{Kind: WarnMisconfiguration, Where: makeFileWhere(modulePath), Error: msg})
+		}
+
+		switch {
+		case !nodeBuilderValid(anyStrs(v.Args), env, report):
+		case d.multimodule != tokMlaunchComponent:
+			report("NODE_BUILDER is only supported in MLAUNCH_COMPONENT")
+		case !isGoModuleType(d.unit.Type):
 			handled = false
 
 			warnUnmodelledMacro(onWarn, modulePath, v.Name)
-		} else {
-			checkNodeBuilderOptions(v.Args)
 		}
 	case tokRosDir, tokRosPartial, tokRosSrcs, tokRosMsgCmd, tokRosZeroCopyMsgCmd, tokRosSrvCmd:
 		applyRosStmt(modulePath, v, env, d)

@@ -1,6 +1,15 @@
 package main
 
-import "strings"
+import (
+	"regexp"
+	"slices"
+	"strings"
+)
+
+var (
+	mlaunchQualifiedName = regexp.MustCompile(`^[A-Za-z_]\w*(::[A-Za-z_]\w*)*$`)
+	mlaunchName          = regexp.MustCompile(`^[A-Za-z_]\w*$`)
+)
 
 type MlaunchModule struct {
 	Generate   string
@@ -170,32 +179,101 @@ func applyMlaunchStmt(module string, stmt UnknownStmt, env Environment, d *Modul
 	}
 }
 
-func checkNodeBuilderOptions(args []ANY) {
-	if len(args)%2 != 1 {
-		throwFmt("NODE_BUILDER expects a builder symbol and keyword/value pairs")
+func mlaunchBuilderOptions(macro string, args []string, allowed []string, report func(string)) (string, map[string]string, bool) {
+	symbol := ""
+
+	if len(args) > 0 {
+		symbol, args = args[0], args[1:]
 	}
 
-	seen := map[string]bool{}
+	if len(args)%2 != 0 {
+		report(macro + " expects keyword/value pairs")
 
-	for i := 1; i < len(args); i += 2 {
-		key := args[i].string()
+		return "", nil, false
+	}
 
-		switch key {
-		case "NAME", "TARGET", "HEADER", "ROS_SPINNER_THREADS":
-		default:
-			throwFmt("Unknown NODE_BUILDER option: %s", key)
+	options := map[string]string{}
+
+	for i := 0; i < len(args); i += 2 {
+		key := args[i]
+
+		if _, seen := options[key]; seen || !slices.Contains(allowed, key) {
+			report("Unknown or repeated " + macro + " option: " + key)
+
+			return "", nil, false
 		}
 
-		if seen[key] {
-			throwFmt("Repeated NODE_BUILDER option: %s", key)
+		options[key] = args[i+1]
+	}
+
+	return symbol, options, true
+}
+
+func nodeBuilderValid(args []string, env Environment, report func(string)) bool {
+	symbol, options, ok := mlaunchBuilderOptions("NODE_BUILDER", args, []string{"NAME", "TARGET", "HEADER", "ROS_SPINNER_THREADS"}, report)
+
+	if !ok {
+		return false
+	}
+
+	var missing []string
+
+	for _, key := range [...]string{"HEADER", "NAME", "TARGET"} {
+		if _, ok := options[key]; !ok {
+			missing = append(missing, key)
 		}
-
-		seen[key] = true
 	}
 
-	if !seen["NAME"] || !seen["TARGET"] || !seen["HEADER"] {
-		throwFmt("NODE_BUILDER requires NAME, TARGET and HEADER")
+	spinner, ok := options["ROS_SPINNER_THREADS"]
+
+	if !ok {
+		spinner = "0"
 	}
+
+	switch {
+	case len(missing) > 0:
+		report("Missing NODE_BUILDER options: " + strings.Join(missing, ", "))
+	case env.string(envMlaunchNodeDeclared) == "yes":
+		report("MLAUNCH_COMPONENT supports one NODE_BUILDER; compose multiple leaf components instead")
+	case !mlaunchQualifiedName.MatchString(symbol):
+		report("NODE_BUILDER requires a qualified C++ function name")
+	case spinner == "" || strings.Trim(spinner, "0123456789") != "":
+		report("ROS_SPINNER_THREADS must be a non-negative integer")
+	case !mlaunchName.MatchString(options["NAME"]):
+		report("Invalid NODE_BUILDER NAME")
+	default:
+		env.setString(envMlaunchNodeDeclared, "yes")
+
+		return true
+	}
+
+	return false
+}
+
+func compoundNodeBuilderValid(args []string, env Environment, report func(string)) bool {
+	symbol, options, ok := mlaunchBuilderOptions("COMPOUND_NODE_BUILDER", args, []string{"TARGET", "HEADER", "NAME"}, report)
+
+	if !ok {
+		return false
+	}
+
+	keys := strings.Fields(env.string(envMlaunchCompoundKeys))
+	key := options["NAME"]
+
+	switch {
+	case len(options) != 3:
+		report("COMPOUND_NODE_BUILDER requires TARGET, HEADER and NAME")
+	case !mlaunchQualifiedName.MatchString(symbol):
+		report("COMPOUND_NODE_BUILDER requires a qualified C++ function name")
+	case !mlaunchName.MatchString(key) || slices.Contains(keys, key):
+		report("Invalid or repeated compound builder NAME: " + key)
+	default:
+		env.setString(envMlaunchCompoundKeys, strings.Join(append(keys, key), " "))
+
+		return true
+	}
+
+	return false
 }
 
 func ensureMlaunch(d *ModuleData) *MlaunchModule {

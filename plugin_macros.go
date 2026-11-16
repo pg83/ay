@@ -17,7 +17,7 @@ var pluginMacroNames = map[STR]bool{
 	internStr("CHECK_ALLOWED_PATH"):                         true,
 	internStr("CHECK_CONTRIB_CREDITS"):                      true,
 	internStr("CMAKE_EXPORTED_TARGET_NAME_FROM_PATH"):       true,
-	internStr("COMPOUND_NODE_BUILDER"):                      true,
+	strCompoundNodeBuilder:                                  true,
 	internStr("COPY"):                                       true,
 	internStr("CPP_ENUMS_SERIALIZATION"):                    true,
 	internStr("CREATE_INIT_PY_STRUCTURE"):                   true,

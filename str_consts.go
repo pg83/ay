@@ -385,6 +385,7 @@ var (
 	strCommonLinkSettings                                                                    = internStr("COMMON_LINK_SETTINGS")
 	strCompileFlags                                                                          = internStr("++compile-flags")
 	strCompilerOptions                                                                       = internStr("--compiler-options")
+	strCompoundNodeBuilder                                                                   = internStr("COMPOUND_NODE_BUILDER")
 	strCompressAll                                                                           = internStr("-compress-all")
 	strCompressionFilter                                                                     = internStr("--compression-filter")
 	strCompressionLevel                                                                      = internStr("--compression-level")

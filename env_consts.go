@@ -201,6 +201,8 @@ var (
 	envMUSL_LITE                              = internEnv("MUSL_LITE")
 	envMakeUberjarValue                       = internEnv("MAKE_UBERJAR_VALUE")
 	envMapsmobiBuildTarget                    = internEnv("MAPSMOBI_BUILD_TARGET")
+	envMlaunchCompoundKeys                    = internEnv("_MLAUNCH_COMPOUND_KEYS")
+	envMlaunchNodeDeclared                    = internEnv("_MLAUNCH_NODE_DECLARED")
 	envModuleCommonConfigsDir                 = internEnv("MODULE_COMMON_CONFIGS_DIR")
 	envModuleKind                             = internEnv("MODULE_KIND")
 	envModver                                 = internEnv("MODVER")
