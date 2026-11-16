@@ -1,0 +1,198 @@
+{
+  "SdcConfigureErrorsTest.test_diagnostics_path_outside_of_the_descriptions": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "SDC_DIAGS_SPLIT_GENERATOR_V3(value.yaml) was not processed properly: devtools/ymake/plugins/ymake_module.cpp:189: Invalid call: report_configure_error. Skip SDC_DIAGS_SPLIT_GENERATOR_V3",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null
+    }
+  },
+  "SdcConfigureErrorsTest.test_diagnostics_v3_with_several_paths": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "SDC_DIAGS_SPLIT_GENERATOR_V3(${ARCADIA_ROOT}/sdg/sdc/ros/monitorings/diag_updater/etc/Descriptions/E2E/first.yaml ${ARCADIA_ROOT}/sdg/sdc/ros/monitorings/diag_updater/etc/Descriptions/E2E/second.yaml) was not processed properly: devtools/ymake/plugins/ymake_module.cpp:189: Invalid call: report_configure_error. Skip SDC_DIAGS_SPLIT_GENERATOR_V3",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null
+    }
+  },
+  "SdcConfigureErrorsTest.test_diagnostics_v3_without_arguments": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "SDC_DIAGS_SPLIT_GENERATOR_V3() was not processed properly: devtools/ymake/plugins/ymake_module.cpp:189: Invalid call: report_configure_error. Skip SDC_DIAGS_SPLIT_GENERATOR_V3",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null
+    }
+  },
+  "SdcConfigureErrorsTest.test_diagnostics_v4_with_an_unsupported_mode": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "SDC_DIAGS_SPLIT_GENERATOR_V4(${ARCADIA_ROOT}/sdg/sdc/ros/monitorings/diag_updater/etc/Descriptions/E2E/value.yaml) was not processed properly: devtools/ymake/plugins/ymake_module.cpp:189: Invalid call: report_configure_error. Skip SDC_DIAGS_SPLIT_GENERATOR_V4",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null
+    }
+  },
+  "SdcConfigureErrorsTest.test_diagnostics_v4_without_arguments": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "SDC_DIAGS_SPLIT_GENERATOR_V4() was not processed properly: devtools/ymake/plugins/ymake_module.cpp:189: Invalid call: report_configure_error. Skip SDC_DIAGS_SPLIT_GENERATOR_V4",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null
+    }
+  },
+  "SdcConfigureErrorsTest.test_empty_proto_to_namespace": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "Not allowed empty PROTO_TO_NAMESPACE",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null
+    }
+  },
+  "SdcConfigureErrorsTest.test_proto_to_namespace_prefix_without_a_module": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "Not allowed empty value after IN_MSG in PROTO_TO_NAMESPACE",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null
+    }
+  },
+  "SdcConfigureErrorsTest.test_proto_to_namespace_with_an_unknown_prefix": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "Not allowed prefix IN_E2E in PROTO_TO_NAMESPACE",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null
+    }
+  },
+  "SdcConfigureErrorsTest.test_proto_to_namespace_with_two_prefixes": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "Not allowed multiple prefixes in PROTO_TO_NAMESPACE",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null
+    }
+  },
+  "SdcConfigureErrorsTest.test_sdc_install_node_without_a_target": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "Expected node name and target path after NODE",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null
+    }
+  },
+  "SdcConfigureErrorsTest.test_sdc_install_program_starter_without_a_name": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "Expected target and starter names for PROGRAM_STARTER",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null
+    }
+  },
+  "SdcConfigureErrorsTest.test_sdc_install_target_without_a_name_after_as": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "Expected target name after AS",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null
+    }
+  },
+  "SdcConfigureErrorsTest.test_sdc_install_target_without_a_path": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "Expected target path after TARGET",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null
+    }
+  },
+  "SdcConfigureErrorsTest.test_sdc_install_with_an_unknown_kind": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "Unknown SDC_INSTALL kind: E2E",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null
+    }
+  }
+}
