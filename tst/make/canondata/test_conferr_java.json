@@ -1,4 +1,18 @@
 {
+  "JavaConfigureErrorsTest.test_absolute_external_dependency": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "source file name is outside the build tree: /outside.jar",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null
+    }
+  },
   "JavaConfigureErrorsTest.test_invalid_check_java_deps": {
     "configure_errors": {
       "__ay_e2e__": [
@@ -139,6 +153,20 @@
       "$S/__ay_e2e__": null,
       "$S/__ay_e2e__/other": null,
       "$S/__ay_e2e__/tool": null
+    }
+  },
+  "JavaConfigureErrorsTest.test_relative_external_dependency": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "cannot find source file: ../outside.jar",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null
     }
   },
   "JavaConfigureErrorsTest.test_runnable_jar_on_a_new_jdk_without_with_jdk": {

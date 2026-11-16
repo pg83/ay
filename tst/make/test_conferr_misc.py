@@ -60,6 +60,26 @@ class MiscConfigureErrorsTest(MakeTest):
         self.write("value.go", "package value\n")
         self.assertConfigureLikeYa()
 
+    def test_disallowed_macro_in_linters_make_inc(self):
+        core = self.root / "build/ymake.core.conf"
+        self.write_tree("build/ymake.core.conf", core.read_text() + f"\nAUTOINCLUDE_PATHS+={PROJECT}/autoincludes.json\n")
+        self.write("autoincludes.json", json.dumps([PROJECT]))
+        self.write("linters.make.inc", "PEERDIR(util)\n")
+        self.library()
+        self.assertConfigureLikeYa()
+
+    def test_peerdir_with_a_trailing_slash(self):
+        self.library(f"PEERDIR({PROJECT}/sub/)")
+        self.write("sub/ya.make", "LIBRARY()\nSRCS(sub.cpp)\nEND()\n")
+        self.write("sub/sub.cpp", "int sub() { return 42; }\n")
+        self.assertConfigureLikeYa()
+
+    def test_default_module_license_that_is_invalid(self):
+        core = self.root / "build/ymake.core.conf"
+        self.write_tree("build/ymake.core.conf", core.read_text() + "\nDEFAULT_MODULE_LICENSE=MIT OR\n")
+        self.library()
+        self.assertConfigureLikeYa()
+
     def ts_tests(self, *statements):
         self.write("lib/ya.make", "TS_LIBRARY()\nTS_BUILD_SCRIPT(nots:build)\nTS_BUILD_OUTPUTS(dist)\n" + "".join(s + "\n" for s in statements) + "END()\n")
         self.write("lib/package.json", json.dumps({"name": "@e2e/lib", "version": "1.0.0", "engines": {"node": nodejs_version()}, "files": ["src", "dist"], "scripts": {"nots:build": "tsc"}}))

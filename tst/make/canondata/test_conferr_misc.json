@@ -42,6 +42,34 @@
       "$S/__ay_e2e__/lib": null
     }
   },
+  "MiscConfigureErrorsTest.test_default_module_license_that_is_invalid": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "Failed to evaluate default license: No right argument for OR operator",
+          0,
+          0
+        ]
+      ],
+      "build/platform/test_tool": [
+        [
+          "Failed to evaluate default license: No right argument for OR operator",
+          0,
+          0
+        ]
+      ],
+      "contrib/tools/ragel6": [
+        [
+          "Failed to evaluate default license: No right argument for OR operator",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null
+    }
+  },
   "MiscConfigureErrorsTest.test_depends_on_a_directory_without_modules": {
     "configure_errors": {
       "__ay_e2e__": [
@@ -69,6 +97,20 @@
     "make_files": {
       "$S/__ay_e2e__": null,
       "$S/__ay_e2e__/proto": null
+    }
+  },
+  "MiscConfigureErrorsTest.test_disallowed_macro_in_linters_make_inc": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "PEERDIR is not allowed in linters.make.inc!",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null
     }
   },
   "MiscConfigureErrorsTest.test_dll_with_exports_in_the_header": {
@@ -139,6 +181,21 @@
     "make_files": {
       "$S/__ay_e2e__": null,
       "$S/__ay_e2e__/proto": null
+    }
+  },
+  "MiscConfigureErrorsTest.test_peerdir_with_a_trailing_slash": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "__ay_e2e__/sub/ has trailing /",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null,
+      "$S/__ay_e2e__/sub": null
     }
   },
   "MiscConfigureErrorsTest.test_srcs_with_a_directory": {

@@ -80,3 +80,11 @@ class JavaConfigureErrorsTest(MakeTest):
     def test_kotlin_abi_jar_with_an_old_kotlin(self):
         self.java_library("WITH_KOTLIN()", "SET(_KOTLIN_VERSION 2.0.0)", "ENABLE_KOTLIN_ABI_JAR()")
         self.assertConfigureLikeYa()
+
+    def test_relative_external_dependency(self):
+        self.java_program("JAVA_EXTERNAL_DEPENDENCIES(../outside.jar)")
+        self.assertConfigureLikeYa()
+
+    def test_absolute_external_dependency(self):
+        self.java_program("JAVA_EXTERNAL_DEPENDENCIES(/outside.jar)")
+        self.assertConfigureLikeYa()
