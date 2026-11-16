@@ -502,6 +502,8 @@ func (ex *Executor) runNode(n *Node, srcMount, bldMount string) CommandResult {
 		}
 
 		if n.KV.P == pkSB {
+			ex.prefetchSandboxResource(args)
+
 			args = append([]string{throw2(os.Executable()), "fetch", "sandbox", "--source-root", ex.srcRoot}, args[2:]...)
 		} else {
 			args = applyCmdPrefixes(args, ex.cmdPrefixes)
@@ -958,4 +960,32 @@ func (ex *Executor) uidPath(uid UID) string {
 	s := uid.string()
 
 	return filepath.Join(ex.bldRoot, "uid", s[:1], s)
+}
+
+func (ex *Executor) prefetchSandboxResource(args []string) {
+	var file, id string
+
+	for i := 0; i+1 < len(args); i++ {
+		switch args[i] {
+		case "--resource-file":
+			file = args[i+1]
+		case "--resource-id":
+			id = args[i+1]
+		}
+	}
+
+	if _, err := os.Stat(file); !os.IsNotExist(err) {
+		return
+	}
+
+	dir := filepath.Dir(file)
+
+	throw(os.MkdirAll(dir, 0o755))
+
+	tmp := throw2(os.MkdirTemp(dir, ".fetch-*"))
+
+	defer os.RemoveAll(tmp)
+
+	downloadResourceArchive(ex.srcRoot, "sbr:"+id, filepath.Join(tmp, "resource"))
+	throw(os.Rename(filepath.Join(tmp, "resource"), file))
 }
