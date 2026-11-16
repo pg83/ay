@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"fmt"
 	"path"
 	"reflect"
 	"regexp"
@@ -16,6 +17,8 @@ var (
 	treePluginMacros     map[string]bool
 	pluginMacroDef       = regexp.MustCompile(`(?m)^def on([a-z0-9_]+)\(`)
 	testSizeTimeouts     = map[string]int{"small": 60, "medium": 600, "large": 3600}
+	protoModelKeywords   = []string{"FILE", "OUTPUT_INCLUDES", "PROTODESC", "PROTODESC_NAME"}
+	usrvProtoKeywords    = []string{"FILE", "FILES", "IMPORTS", "OPTS_FILE", "ORIGINS", "OUTPUT_INCLUDES", "PROTODESC", "PROTODESC_NAME"}
 )
 
 var addInclLanguages = func() []ANY {
@@ -34,7 +37,10 @@ var pythonNoLintPaths = []string{
 	"yt/yt/", "yt/python/", "yt/python_py2/", "cml/comrade_agent/src/contrib/",
 }
 
-const addInclLanguageList = "asm (for .asm), c (for .cpp .cc .cxx .c .C .auxcpp .h .hh .hpp .cuh .H .hxx .xh .ipp .ixx ..inl ..vert ..frag ..tesc ..tese ..geom ..comp .cu .S .s .sfdl .m .mm .l .lex .lpp .y .ypp .gperf .asp .f .go), cython (for .pyx .pxd .pxi), flatc (for .fbs .fbs64), idl (for .idl), nlg (for .nlg), other (for .fml .fml2 .fml3 .pln .info .a .lua .sh .bin .py .pyi .pysrc .ts .js .tsx .jsx), proto (for .gzt .gztproto .proto .ev .cfgproto), ragel (for .rl .rh .rli .rl6 .rl5), ros (for .msg .srv .rostopic), sc (for .sc), swig (for .swg), xs (for .xs), xsyn (for .xsyn), ydl (for .ydl)"
+const (
+	addInclLanguageList = "asm (for .asm), c (for .cpp .cc .cxx .c .C .auxcpp .h .hh .hpp .cuh .H .hxx .xh .ipp .ixx ..inl ..vert ..frag ..tesc ..tese ..geom ..comp .cu .S .s .sfdl .m .mm .l .lex .lpp .y .ypp .gperf .asp .f .go), cython (for .pyx .pxd .pxi), flatc (for .fbs .fbs64), idl (for .idl), nlg (for .nlg), other (for .fml .fml2 .fml3 .pln .info .a .lua .sh .bin .py .pyi .pysrc .ts .js .tsx .jsx), proto (for .gzt .gztproto .proto .ev .cfgproto), ragel (for .rl .rh .rli .rl6 .rl5), ros (for .msg .srv .rostopic), sc (for .sc), swig (for .swg), xs (for .xs), xsyn (for .xsyn), ydl (for .ydl)"
+	offersProtoRoot     = "api/proto/yandex/market/b2b/offers_catalog/"
+)
 
 func vecDump(args []ANY) string {
 	var b strings.Builder
@@ -731,4 +737,488 @@ func runJavaProgramClasspathError(dir string, program JavaRunProgram) string {
 	}
 
 	return "multiple CLASSPATH elements in RUN_JAVA_PROGRAM invocation no more supported. Use JAVA_RUNTIME_PEERDIR on the JAVA_PROGRAM module instead"
+}
+
+type pyJSONScanner struct {
+	s   []rune
+	msg string
+	pos int
+}
+
+func pyJSONDecodeError(data []byte) string {
+	p := &pyJSONScanner{s: []rune(string(data))}
+
+	if len(p.s) > 0 && p.s[0] == '\ufeff' {
+		return p.repr("Unexpected UTF-8 BOM (decode using utf-8-sig)", 0)
+	}
+
+	end, ok := p.value(p.ws(0))
+
+	switch {
+	case !ok:
+		return p.repr(p.msg, p.pos)
+	case p.ws(end) != len(p.s):
+		return p.repr("Extra data", p.ws(end))
+	}
+
+	return ""
+}
+
+func (p *pyJSONScanner) repr(msg string, pos int) string {
+	line, col := 1, pos+1
+
+	for i, r := range p.s[:pos] {
+		if r == '\n' {
+			line, col = line+1, pos-i
+		}
+	}
+
+	return "JSONDecodeError(" + pyRepr(fmt.Sprintf("%s: line %d column %d (char %d)", msg, line, col, pos)) + ")"
+}
+
+func (p *pyJSONScanner) fail(msg string, pos int) (int, bool) {
+	p.msg, p.pos = msg, pos
+
+	return 0, false
+}
+
+func (p *pyJSONScanner) ws(i int) int {
+	for i < len(p.s) && (p.s[i] == ' ' || p.s[i] == '\t' || p.s[i] == '\n' || p.s[i] == '\r') {
+		i++
+	}
+
+	return i
+}
+
+func (p *pyJSONScanner) at(i int, word string) bool {
+	return i+len(word) <= len(p.s) && string(p.s[i:i+len(word)]) == word
+}
+
+func (p *pyJSONScanner) value(i int) (int, bool) {
+	if i >= len(p.s) {
+		return p.fail("Expecting value", i)
+	}
+
+	switch c := p.s[i]; {
+	case c == '"':
+		return p.str(i + 1)
+	case c == '{':
+		return p.object(i + 1)
+	case c == '[':
+		return p.array(i + 1)
+	}
+
+	for _, word := range [...]string{"null", "true", "false", "NaN", "Infinity", "-Infinity"} {
+		if p.at(i, word) {
+			return i + len([]rune(word)), true
+		}
+	}
+
+	return p.number(i)
+}
+
+func (p *pyJSONScanner) digit(i int) bool {
+	return i < len(p.s) && p.s[i] >= '0' && p.s[i] <= '9'
+}
+
+func (p *pyJSONScanner) number(start int) (int, bool) {
+	i := start
+
+	if p.s[i] == '-' {
+		if i++; i >= len(p.s) {
+			return p.fail("Expecting value", start)
+		}
+	}
+
+	switch {
+	case p.s[i] >= '1' && p.s[i] <= '9':
+		for i++; p.digit(i); i++ {
+		}
+	case p.s[i] == '0':
+		i++
+	default:
+		return p.fail("Expecting value", start)
+	}
+
+	if i+1 < len(p.s) && p.s[i] == '.' && p.digit(i+1) {
+		for i += 2; p.digit(i); i++ {
+		}
+	}
+
+	if i+1 < len(p.s) && (p.s[i] == 'e' || p.s[i] == 'E') {
+		exp := i
+
+		if i++; i+1 < len(p.s) && (p.s[i] == '-' || p.s[i] == '+') {
+			i++
+		}
+
+		for ; p.digit(i); i++ {
+		}
+
+		if !p.digit(i - 1) {
+			i = exp
+		}
+	}
+
+	return i, true
+}
+
+func (p *pyJSONScanner) str(end int) (int, bool) {
+	begin := end - 1
+
+	for {
+		next := end
+
+		for ; next < len(p.s) && p.s[next] != '"' && p.s[next] != '\\'; next++ {
+			if p.s[next] <= 0x1f {
+				return p.fail("Invalid control character at", next)
+			}
+		}
+
+		if next == len(p.s) {
+			return p.fail("Unterminated string starting at", begin)
+		}
+
+		if p.s[next] == '"' {
+			return next + 1, true
+		}
+
+		if next++; next == len(p.s) {
+			return p.fail("Unterminated string starting at", begin)
+		}
+
+		if p.s[next] != 'u' {
+			if !strings.ContainsRune(`"\\/bfnrt`, p.s[next]) {
+				return p.fail("Invalid \\escape", next-1)
+			}
+
+			end = next + 1
+
+			continue
+		}
+
+		if next+5 >= len(p.s) {
+			return p.fail("Invalid \\uXXXX escape", next)
+		}
+
+		code, err := strconv.ParseUint(string(p.s[next+1:next+5]), 16, 32)
+
+		if err != nil || strings.ContainsAny(string(p.s[next+1:next+5]), "+-_xX") {
+			return p.fail("Invalid \\uXXXX escape", next)
+		}
+
+		end = next + 5
+
+		if code >= 0xd800 && code <= 0xdbff && end+6 < len(p.s) && p.s[end] == '\\' && p.s[end+1] == 'u' {
+			if _, err := strconv.ParseUint(string(p.s[end+2:end+6]), 16, 32); err != nil || strings.ContainsAny(string(p.s[end+2:end+6]), "+-_xX") {
+				return p.fail("Invalid \\uXXXX escape", end+1)
+			}
+
+			end += 6
+		}
+	}
+}
+
+func (p *pyJSONScanner) object(i int) (int, bool) {
+	if i = p.ws(i); i < len(p.s) && p.s[i] == '}' {
+		return i + 1, true
+	}
+
+	for {
+		if i >= len(p.s) || p.s[i] != '"' {
+			return p.fail("Expecting property name enclosed in double quotes", i)
+		}
+
+		end, ok := p.str(i + 1)
+
+		if !ok {
+			return 0, false
+		}
+
+		if i = p.ws(end); i >= len(p.s) || p.s[i] != ':' {
+			return p.fail("Expecting ':' delimiter", i)
+		}
+
+		if i, ok = p.value(p.ws(i + 1)); !ok {
+			return 0, false
+		}
+
+		if i = p.ws(i); i < len(p.s) && p.s[i] == '}' {
+			return i + 1, true
+		}
+
+		if i >= len(p.s) || p.s[i] != ',' {
+			return p.fail("Expecting ',' delimiter", i)
+		}
+
+		if comma := i; p.ws(i+1) < len(p.s) && p.s[p.ws(i+1)] == '}' {
+			return p.fail("Illegal trailing comma before end of object", comma)
+		}
+
+		i = p.ws(i + 1)
+	}
+}
+
+func (p *pyJSONScanner) array(i int) (int, bool) {
+	if i = p.ws(i); i < len(p.s) && p.s[i] == ']' {
+		return i + 1, true
+	}
+
+	for {
+		end, ok := p.value(i)
+
+		if !ok {
+			return 0, false
+		}
+
+		if i = p.ws(end); i < len(p.s) && p.s[i] == ']' {
+			return i + 1, true
+		}
+
+		if i >= len(p.s) || p.s[i] != ',' {
+			return p.fail("Expecting ',' delimiter", i)
+		}
+
+		if comma := i; p.ws(i+1) < len(p.s) && p.s[p.ws(i+1)] == ']' {
+			return p.fail("Illegal trailing comma before end of array", comma)
+		}
+
+		i = p.ws(i + 1)
+	}
+}
+
+func pyListRepr(items []string) string {
+	quoted := make([]string, len(items))
+
+	for i, item := range items {
+		quoted[i] = pyRepr(item)
+	}
+
+	return "[" + strings.Join(quoted, ", ") + "]"
+}
+
+func pluginArgLiterals(args []ANY) []string {
+	out := make([]string, len(args))
+
+	for i, arg := range args {
+		out[i] = pluginArgLiteral(arg)
+	}
+
+	return out
+}
+
+func protoModelParseError(args []string, namespace string, keywords []string) string {
+	usrv := len(keywords) == len(usrvProtoKeywords)
+	sep := ""
+
+	if namespace != "" {
+		sep = namespace + "/"
+	}
+
+	i := 0
+
+	next := func() (string, bool) {
+		if i == len(args) {
+			return "", false
+		}
+
+		i++
+
+		return args[i-1], true
+	}
+
+	keyword := func(arg string) bool { return slices.Contains(keywords, arg) }
+
+	value := func(name string) (string, string) {
+		if arg, ok := next(); ok && !keyword(arg) {
+			return arg, ""
+		}
+
+		return "", "Value for arg '" + name + "' is missing"
+	}
+
+	parsePath := func(arg string) string {
+		switch {
+		case strings.Contains(arg, "$"):
+			return "Path '" + arg + "' must not contain '$'"
+		case strings.HasPrefix(arg, "/"):
+			return "Path '" + arg + "' must not start with '/'"
+		}
+
+		return ""
+	}
+
+	parseProto := func(arg string) string {
+		if !strings.HasSuffix(arg, ".proto") {
+			return "Proto file '" + arg + "' must have ext '.proto'"
+		}
+
+		if msg := parsePath(arg); msg != "" {
+			return msg
+		}
+
+		if file := strings.TrimRight(arg, "/"); sep != "" && !strings.HasPrefix(file, sep) {
+			return "Invalid namespace '" + namespace + "' for file '" + file + "'"
+		}
+
+		return ""
+	}
+
+	untilKeyword := func(each func(string) string) (string, bool, string) {
+		for arg, ok := next(); ok; arg, ok = next() {
+			if keyword(arg) {
+				return arg, true, ""
+			}
+
+			if msg := each(arg); msg != "" {
+				return "", false, msg
+			}
+		}
+
+		return "", false, ""
+	}
+
+	skip := func(string) string { return "" }
+	protodesc := false
+
+	for arg, ok := next(); ok; arg, ok = next() {
+		for pending := true; pending; {
+			var msg string
+
+			pending = false
+
+			switch {
+			case arg == "PROTODESC" || arg == "PROTODESC_NAME":
+				if _, msg = value(arg); msg == "" && protodesc {
+					msg = "Args 'PROTODESC' and 'PROTODESC_NAME' are mutually exclusive"
+				}
+
+				protodesc = true
+			case arg == "FILE":
+				var file string
+
+				if file, msg = value(arg); msg == "" {
+					msg = parseProto(file)
+				}
+
+				for msg == "" {
+					var more bool
+
+					if arg, more = next(); !more {
+						break
+					}
+
+					for more && (arg == "OUTPUT_INCLUDES" || usrv && arg == "IMPORTS") {
+						arg, more, msg = untilKeyword(skip)
+					}
+
+					if more {
+						pending = true
+
+						break
+					}
+				}
+			case arg == "OUTPUT_INCLUDES" || usrv && arg == "IMPORTS":
+				msg = "Arg '" + arg + "' has to go after 'FILE'"
+			case usrv && arg == "OPTS_FILE":
+				var file string
+
+				if file, msg = value(arg); msg == "" {
+					msg = parsePath(file)
+				}
+			case usrv && arg == "ORIGINS":
+				arg, pending, msg = untilKeyword(parsePath)
+			case usrv && arg == "FILES":
+				arg, pending, msg = untilKeyword(func(file string) string { return parseProto(strings.TrimPrefix(file, "$S/")) })
+			default:
+				msg = "Arg '" + arg + "' is unknown, known args are " + pyListRepr(keywords)
+			}
+
+			if msg != "" {
+				return msg
+			}
+		}
+	}
+
+	if !protodesc {
+		return "Arg 'PROTODESC' is missing"
+	}
+
+	return ""
+}
+
+func pyDirname(p string) string {
+	head := p[:strings.LastIndexByte(p, '/')+1]
+
+	if head != strings.Repeat("/", len(head)) {
+		head = strings.TrimRight(head, "/")
+	}
+
+	return head
+}
+
+func offerConvertersError(args []string) string {
+	if len(args) == 0 || len(args)%3 != 0 {
+		return "Expected --view-config header message triples"
+	}
+
+	var dirs []string
+
+	for i := 0; i < len(args); i += 3 {
+		if header := args[i+1]; args[i] != "--view-config" || !strings.HasPrefix(header, offersProtoRoot) || !strings.HasSuffix(header, ".pb.h") {
+			return "Expected --view-config with an offers_catalog .pb.h header"
+		} else if dir := pyDirname(header); !slices.Contains(dirs, dir) {
+			dirs = append(dirs, dir)
+		}
+	}
+
+	names := map[string]string{}
+
+	for _, dir := range dirs {
+		name := strings.ReplaceAll(dir[min(len(offersProtoRoot), len(dir)):], "/", "_")
+
+		if prev, ok := names[name]; ok {
+			return "Converter package name collision '" + name + "': " + prev + " and " + dir
+		}
+
+		names[name] = dir
+	}
+
+	return ""
+}
+
+func grpcLinterDataError(args []string) string {
+	if len(args) != 2 {
+		return ""
+	}
+
+	for i, param := range [...]string{"root", "module"} {
+		if !strings.HasPrefix(args[i], "${ARCADIA_ROOT}/") {
+			return "Error at macro 'C35_GRPC_LINTER_TESTS_DATA': Param '" + param + "' (" + args[i] + ") should start with '${ARCADIA_ROOT}/'"
+		}
+	}
+
+	return ""
+}
+
+func sandboxImportExists(fs FS, modulePath string, arg ANY) bool {
+	if strings.HasPrefix(arg.string(), "/") {
+		return false
+	}
+
+	if v := arg.vfs(); v != 0 {
+		present, _ := fs.exists(srcRootRel, v.relString())
+
+		return v.isSource() && present
+	}
+
+	p := path.Clean(arg.string())
+
+	if present, _ := fs.exists(dirKey(modulePath), p); present {
+		return true
+	}
+
+	present, _ := fs.exists(srcRootRel, p)
+
+	return present
 }

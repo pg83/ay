@@ -60,6 +60,31 @@ func (d *ModuleData) collectUsrvFiles(args []ANY) {
 	d.peerdirs = append(d.peerdirs, strTaxiUservicesArcGenUnpackTarUsrvBuildLib.any())
 }
 
+func (e *EmitContext) usrvFileDeclared(file UsrvFile) bool {
+	if file.DepsFile == strNoDeps.any() {
+		return true
+	}
+
+	index, malformed := e.ctx.parsers.usrvDepsChecked(copyFileInputVFSOf(e.ctx.fs, e.instance.Path, file.DepsFile))
+
+	switch {
+	case malformed != "":
+		e.reportUsrvDeps("Malformed dependencies JSON `" + pluginArgLiteral(file.DepsFile) + "`: " + malformed)
+
+		return false
+	case index != nil && !index.has(file.File):
+		e.reportUsrvDeps("Dependencies for " + file.File + " not found in " + pluginArgLiteral(file.DepsFile))
+
+		return false
+	}
+
+	return true
+}
+
+func (e *EmitContext) reportUsrvDeps(msg string) {
+	e.ctx.onWarn(Warn{Kind: WarnMisconfiguration, Where: makeFileWhere(e.instance.Path.relString()), Error: msg})
+}
+
 func (e *EmitContext) emitUsrvFile(file UsrvFile) {
 	na := e.ctx.na
 	toolValue := resourceGlobalArgumentValue([]ANY{strUsrvUnpackTarResourceGlobalUnpackTar.any()}, e.peers.ResourceGlobals, &e.ctx.resourceEnv)

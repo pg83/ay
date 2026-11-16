@@ -29,7 +29,15 @@ type UserverProtoBatch struct {
 	files            []UserverProtoFile
 }
 
-func applyUserverProto(v UnknownStmt, d *ModuleData) {
+func applyUserverProto(modulePath string, v UnknownStmt, d *ModuleData, onWarn func(Warn)) {
+	if v.Name == tokUsrvGenProtoStructs {
+		if msg := protoModelParseError(pluginArgLiterals(v.Args), d.protoNamespaceString(), usrvProtoKeywords); msg != "" {
+			onWarn(Warn{Kind: WarnMisconfiguration, Where: makeFileWhere(modulePath), Error: "Error at macro 'USRV_GEN_PROTO_STRUCTS': " + msg})
+
+			return
+		}
+	}
+
 	batch := UserverProtoBatch{}
 
 	if d.protoNamespace != nil {

@@ -109,8 +109,48 @@ func setupRosModule(stmt *ModuleStmt, module string, language Language, env Envi
 	}
 }
 
-func applyRosStmt(module string, stmt UnknownStmt, env Environment, d *ModuleData) {
-	if d.ros == nil {
+type rosFile struct {
+	index int
+	zero  bool
+	msg   bool
+}
+
+func parseRosSrcs(args []string, zero bool, report func(string)) ([]rosFile, []string, bool) {
+	var files []rosFile
+
+	var partials []string
+
+	for i := 0; i < len(args); i++ {
+		switch file := args[i]; {
+		case file == "PARTIAL":
+			i++
+
+			if i >= len(args) {
+				report("Expected library name after PARTIAL")
+
+				return nil, nil, false
+			}
+
+			partials = append(partials, args[i])
+		case file == "ZERO_COPY":
+			zero = true
+		case strings.HasSuffix(file, ".msg"):
+			files = append(files, rosFile{index: i, zero: zero, msg: true})
+			zero = false
+		case !strings.HasSuffix(file, ".srv"):
+			report("Unsupported ROS file: " + file)
+		case zero:
+			report("ZERO_COPY for .srv file is not allowed")
+		default:
+			files = append(files, rosFile{index: i})
+		}
+	}
+
+	return files, partials, true
+}
+
+func applyRosStmt(module string, stmt UnknownStmt, env Environment, d *ModuleData, onWarn func(Warn)) {
+	if d.ros == nil && stmt.Name != tokRosSrcs {
 		return
 	}
 
@@ -141,53 +181,29 @@ func applyRosStmt(module string, stmt UnknownStmt, env Environment, d *ModuleDat
 
 		d.ros.Partial = args[0]
 	default:
-		var msgs, srvs, partials []string
+		files, partials, ok := parseRosSrcs(args, stmt.Name == tokRosZeroCopyMsgCmd, func(msg string) {
+			onWarn(Warn{Kind: WarnMisconfiguration, Where: makeFileWhere(module), Error: msg})
+		})
 
-		zero := stmt.Name == tokRosZeroCopyMsgCmd
+		if !ok || d.ros == nil {
+			return
+		}
 
-		for i := 0; i < len(args); i++ {
-			file := args[i]
+		var msgs, srvs []string
 
-			if file == "ZERO_COPY" {
-				zero = true
-
-				continue
-			}
-
-			if file == "PARTIAL" {
-				i++
-
-				if i >= len(args) {
-					throwFmt("Expected library name after PARTIAL")
-				}
-
-				partials = append(partials, args[i])
-
-				continue
-			}
-
-			if !strings.HasSuffix(file, ".msg") && !strings.HasSuffix(file, ".srv") {
-				throwFmt("unsupported ROS file: %s", file)
-			}
-
-			if zero && strings.HasSuffix(file, ".srv") {
-				throwFmt("ZERO_COPY for .srv file is not allowed")
-			}
-
-			isMsg := strings.HasSuffix(file, ".msg")
+		for _, f := range files {
+			file := args[f.index]
 			name := strings.TrimSuffix(path.Base(file), path.Ext(file))
 
-			if isMsg {
+			if f.msg {
 				msgs = append(msgs, name)
 			} else {
 				srvs = append(srvs, name)
 			}
 
-			if d.ros.Language == LangPy || (isMsg || d.ros.Language != LangRosBindings) && (isMsg || d.ros.Language != LangGo) {
-				d.srcs = append(d.srcs, SrcMeta{Source: stmt.Args[i].textSTR().any(), Prio: stmtPrioDefault, Seq: d.nextDeclSeq(), RosZeroCopy: zero})
+			if d.ros.Language == LangPy || (f.msg || d.ros.Language != LangRosBindings) && (f.msg || d.ros.Language != LangGo) {
+				d.srcs = append(d.srcs, SrcMeta{Source: stmt.Args[f.index].textSTR().any(), Prio: stmtPrioDefault, Seq: d.nextDeclSeq(), RosZeroCopy: f.zero})
 			}
-
-			zero = false
 		}
 
 		if stmt.Name == tokRosSrcs {

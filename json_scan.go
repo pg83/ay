@@ -154,6 +154,12 @@ func newUsrvDepsIndex(data []byte) *usrvDepsIndex {
 	}
 }
 
+func (x *usrvDepsIndex) has(file string) bool {
+	_, ok := x.spans[file]
+
+	return ok
+}
+
 func (x *usrvDepsIndex) deps(file string) ([]IncludeDirective, bool) {
 	span, ok := x.spans[file]
 

@@ -3451,6 +3451,27 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 			return true
 		}
 
+		report := func(msg string) {
+			onWarn(Warn{Kind: WarnMisconfiguration, Where: makeFileWhere(modulePath), Error: msg})
+		}
+
+		var msg string
+
+		switch v.Raw {
+		case strMarketOfferConverters:
+			msg = offerConvertersError(pluginArgLiterals(v.Args))
+		case strRiskGenDataModel:
+			if msg = protoModelParseError(pluginArgLiterals(v.Args), d.protoNamespaceString(), protoModelKeywords); msg != "" {
+				msg = "Error at macro 'RISK_GEN_DATA_MODEL': " + msg
+			}
+		case strC35GrpcLinterTestsData:
+			msg = grpcLinterDataError(pluginArgLiterals(v.Args))
+		}
+
+		if msg != "" {
+			report(msg)
+		}
+
 		if v.Raw == strCompoundNodeBuilder {
 			compoundNodeBuilderValid(anyStrs(v.Args), env, func(msg string) {
 				onWarn(Warn{Kind: WarnMisconfiguration, Where: makeFileWhere(modulePath), Error: msg})
@@ -3522,7 +3543,7 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 			warnUnmodelledMacro(onWarn, modulePath, v.Name)
 		}
 	case tokRosDir, tokRosPartial, tokRosSrcs, tokRosMsgCmd, tokRosZeroCopyMsgCmd, tokRosSrvCmd:
-		applyRosStmt(modulePath, v, env, d)
+		applyRosStmt(modulePath, v, env, d, onWarn)
 	case tokTaskletReg, tokTaskletRegExt:
 		applyTaskletRegistration(v, d, env)
 	case tokSdcInstall:
@@ -3808,7 +3829,7 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 		applyYtOrmProtoYson(modulePath, v.Args, d, env)
 	case tokUsrvGenProtoStructs, tokUsrvGenGrpcServiceV2, tokUsrvGenGrpcClientV2,
 		tokUsrvGenGrpcServiceV2Structs, tokUsrvGenGrpcClientV2Structs:
-		applyUserverProto(v, d)
+		applyUserverProto(modulePath, v, d, onWarn)
 	case tokGoGrpcGatewayV2OpenapiSrcs, tokGoGrpcGatewayV2Srcs, tokGoGrpcGatewaySrcs, tokGoGrpcGatewaySwagger:
 		applyGoGrpcGatewayStmt(v, d, env)
 	case tokGoMockgenFrom, tokGoMockgenContribFrom, tokGoMockgenTypes, tokGoMockgenExcludeIfaces, tokGoMockgenPackage,
@@ -4366,6 +4387,10 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 	case tokRegisterSandboxImport:
 
 		for _, arg := range v.Args {
+			if !sandboxImportExists(fs, modulePath, arg) {
+				onWarn(Warn{Kind: WarnMisconfiguration, Where: makeFileWhere(modulePath), Error: "REGISTER_SANDBOX_IMPORT: File or directory " + path.Clean(pluginArgLiteral(arg)) + " does not exist"})
+			}
+
 			registerSandboxImport(modulePath, arg.string(), d)
 		}
 	case tokPyConstructor:
@@ -6707,4 +6732,12 @@ func (v *SetVars) append(k STR, args []ANY) {
 	}
 
 	v.appends[k] = chain
+}
+
+func (d *ModuleData) protoNamespaceString() string {
+	if d.protoNamespace == nil {
+		return ""
+	}
+
+	return d.protoNamespace.string()
 }

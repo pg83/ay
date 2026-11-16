@@ -56,6 +56,28 @@ func (pm *IncludeParserManager) usrvDeps(rel string) *usrvDepsIndex {
 	return pm.usrvDepsID(internStr(rel))
 }
 
+func (pm *IncludeParserManager) usrvDepsChecked(v VFS) (*usrvDepsIndex, string) {
+	if index, ok := pm.cache.usrvDeps.get(v.rel()); ok {
+		return index, ""
+	}
+
+	if !pm.fs.isFileVFS(v) {
+		if pm.fs.isDir(srcRootRel, v.relString()) {
+			return nil, "IsADirectoryError(21, 'Is a directory')"
+		}
+
+		return nil, "FileNotFoundError(2, 'No such file or directory')"
+	}
+
+	var index *usrvDepsIndex
+
+	if try(func() { index = pm.usrvDepsID(v.rel()) }) == nil {
+		return index, ""
+	}
+
+	return nil, pyJSONDecodeError(concatChunks(pm.fs.readPath(v.rel())))
+}
+
 func (pm *IncludeParserManager) usrvDepsID(key STR) *usrvDepsIndex {
 	if v, ok := pm.cache.usrvDeps.get(key); ok {
 		return v

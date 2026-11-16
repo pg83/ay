@@ -125,6 +125,20 @@
       "$S/__ay_e2e__": null
     }
   },
+  "InternalPluginConfigureErrorsTest.test_sandbox_import_of_an_absolute_path": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "REGISTER_SANDBOX_IMPORT: File or directory /__ay_e2e__/value.py does not exist",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null
+    }
+  },
   "InternalPluginConfigureErrorsTest.test_usrv_files_with_malformed_dependencies": {
     "configure_errors": {
       "__ay_e2e__": [

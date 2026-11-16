@@ -52,6 +52,11 @@ class InternalPluginConfigureErrorsTest(MakeTest):
         self.library("REGISTER_SANDBOX_IMPORT(missing)")
         self.assertConfigureLikeYa()
 
+    def test_sandbox_import_of_an_absolute_path(self):
+        self.library(f"REGISTER_SANDBOX_IMPORT(/{self.project_name}/value.py)")
+        self.write("value.py", "VALUE = 42\n")
+        self.assertConfigureLikeYa()
+
     def test_risk_data_model_with_an_unknown_argument(self):
         self.library("RISK_GEN_DATA_MODEL(E2E)")
         self.assertConfigureLikeYa()
