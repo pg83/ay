@@ -438,6 +438,7 @@ var (
 	envYtRecordPeerdir                        = internEnv("YT_RECORD_PEERDIR")
 	env_BLACKLISTS                            = internEnv("_BLACKLISTS")
 	env_GO_IMPORT_PATH                        = internEnv("_GO_IMPORT_PATH")
+	env_ISOLATED_PROJECTS                     = internEnv("_ISOLATED_PROJECTS")
 	env_USE_AIO                               = internEnv("_USE_AIO")
 	env_USE_ICONV                             = internEnv("_USE_ICONV")
 	env_USE_IDN                               = internEnv("_USE_IDN")

@@ -1348,6 +1348,14 @@ func (r *ModuleEmitResult) recordTransitive(ctx *GenCtx, d *ModuleData, tools []
 		}
 	}
 
+	if ctx.isolated != nil {
+		r.inIsolated = ctx.isolated.contains(r.testProject.relString())
+
+		if platform != ctx.host {
+			ctx.checkModuleIsolation(r, d)
+		}
+	}
+
 	r.tools = ctx.appendPeerList(r.tools, tools)
 	r.checkProvides = d.confModule != nil && platform.conf.checksProvides(d.confModule)
 	r.provided = ownProvided(r)

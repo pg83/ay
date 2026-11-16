@@ -167,6 +167,7 @@ type ModuleEmitResult struct {
 	provided                        *providedSummary
 	reachEpoch                      uint32
 	blacklistRule                   STR
+	inIsolated                      bool
 }
 
 func protoResultWholeArchiveCmdPaths(res *ProtoSrcsResult) []VFS {
@@ -274,6 +275,7 @@ type GenCtx struct {
 	startModules        []*ModuleEmitResult
 	peerLists           *BumpAllocator[*ModuleEmitResult]
 	blacklist           *Blacklist
+	isolated            *IsolatedProjects
 }
 
 type moduleMemoEntry struct {
@@ -465,6 +467,7 @@ func newGenCtx(fs FS, parsers *IncludeParserManager, hostP, targetP *Platform, e
 	ctx.licenses = ctx.loadLicenseConf(targetP.ifEnv)
 	ctx.autoincludeIdx = loadAutoincludeIndex(fs, targetP.ifEnv, onWarn)
 	ctx.blacklist = ctx.loadBlacklist(targetP.ifEnv)
+	ctx.isolated = ctx.loadIsolatedProjects(targetP.ifEnv)
 
 	targetSysincl := newSysinclCtx(loadSysInclSet(parsers, targetP, onWarn))
 	targetScanner := newIncludeScannerWith(parsers, targetSysincl, ctx.onWarn, ctx.buckets)
@@ -490,8 +493,8 @@ func newGenCtx(fs FS, parsers *IncludeParserManager, hostP, targetP *Platform, e
 	hostScanner.moduleByRef = &ctx.moduleByRef
 	ctx.scannerTarget = targetScanner
 
-	if ctx.blacklist != nil {
-		targetScanner.blacklisted = ctx.blacklistFile
+	if ctx.blacklist != nil || ctx.isolated != nil {
+		targetScanner.scanned = ctx.scannedFile
 	}
 
 	ctx.scannerHost = hostScanner
@@ -3398,7 +3401,7 @@ func (ctx *GenCtx) targetPICScanner() *IncludeScanner {
 		s.codegen = newCodegenRegistry(ctx.na)
 		s.codegen.moduleOutputDeps = ctx.moduleOutputIncludedDeps
 		s.moduleByRef = &ctx.moduleByRef
-		s.blacklisted = ctx.scannerTarget.blacklisted
+		s.scanned = ctx.scannerTarget.scanned
 
 		ctx.scannerTargetPIC = s
 	}

@@ -221,6 +221,16 @@ func (ctx *GenCtx) checkModuleBlacklist(instance ModuleInstance, d *ModuleData, 
 	}
 }
 
+func (ctx *GenCtx) scannedFile(v VFS, children []VFS) {
+	if ctx.blacklist != nil {
+		ctx.blacklistFile(v)
+	}
+
+	if ctx.isolated != nil && len(children) != 0 {
+		ctx.isolatedIncludes(v, children)
+	}
+}
+
 func (ctx *GenCtx) blacklistFile(v VFS) {
 	b := ctx.blacklist
 
