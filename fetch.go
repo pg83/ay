@@ -226,6 +226,17 @@ func cmdFetchSandbox(_ GlobalFlags, args []string) int {
 		archivePath = filepath.Join(tmp, "resource")
 
 		downloadResourceArchive(sourceRoot, "sbr:"+id, archivePath)
+	} else if _, err := os.Stat(archivePath); os.IsNotExist(err) {
+		dir := filepath.Dir(archivePath)
+
+		throw(os.MkdirAll(dir, 0o755))
+
+		tmp := throw2(os.MkdirTemp(dir, ".fetch-*"))
+
+		defer os.RemoveAll(tmp)
+
+		downloadResourceArchive(sourceRoot, "sbr:"+id, filepath.Join(tmp, "resource"))
+		throw(os.Rename(filepath.Join(tmp, "resource"), archivePath))
 	}
 
 	placeSandboxResource(archivePath, copyToDir, untarTo, renames, outs, executable)

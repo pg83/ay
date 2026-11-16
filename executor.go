@@ -21,7 +21,11 @@ import (
 	"time"
 )
 
-const prepBatchMax = 128
+const (
+	prepBatchMax    = 128
+	resourceRootVar = "$(RESOURCE_ROOT)"
+	resourceRootDir = "resource_root"
+)
 
 type CmdPrefix struct {
 	suffix string
@@ -923,6 +927,10 @@ func mountANY(a ANY, srcRoot, bldRoot string) string {
 }
 
 func mountString(s, srcRoot, bldRoot string) string {
+	if strings.Contains(s, resourceRootVar) {
+		s = strings.ReplaceAll(s, resourceRootVar, bldRoot+"/"+resourceRootDir)
+	}
+
 	s = strings.ReplaceAll(s, "$(S)/", srcRoot+"/")
 	s = strings.ReplaceAll(s, "$(B)/", bldRoot+"/")
 	s = strings.ReplaceAll(s, "$(S)", srcRoot)
