@@ -125,6 +125,10 @@ func (e *EmitContext) emitRunProgram(stmt *RunProgramStmt) {
 		}
 	}
 
+	if e.skipDirectoryInput("RUN_PROGRAM", "", inSources) {
+		return
+	}
+
 	e.collectSCInputs(inVFSs[:len(inVFSs)-stmt.INNoParse])
 
 	outVFSByToken := make(map[ANY]VFS, len(stmt.OUTFiles)+len(stmt.OUTNoAutoFiles)+1)

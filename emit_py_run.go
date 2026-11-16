@@ -80,6 +80,10 @@ func (e *EmitContext) emitRunPython(stmt *RunPythonStmt, resourceUses []STR) []A
 		}
 	}
 
+	if e.skipDirectoryInput("RUN_PYTHON3", "", inSources) {
+		return nil
+	}
+
 	e.collectSCInputs(inVFSs[:len(inVFSs)-stmt.INNoParse])
 
 	outVFSByToken := make(map[ANY]VFS, len(stmt.OUTFiles)+len(stmt.OUTNoAutoFiles)+1)

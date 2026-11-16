@@ -26,6 +26,10 @@ type CopyEmitState struct {
 }
 
 func (e *EmitContext) emitCopyFileStmt(entry CopyFileEntry) {
+	if !entry.WithContext && e.skipDirectoryInput("COPY_FILE", "$L/TEXT/", []VFS{entry.Resolved.withGeneratedDirs(e.codegen, entry.Src, e.d.srcDirs)}) {
+		return
+	}
+
 	st, info := e.registerCopyFile(entry)
 	demanded := !e.producersOnly()
 
@@ -133,4 +137,24 @@ func (e *EmitContext) copyLoopSources(dst VFS) []VFS {
 	e.inputClosure(dst)
 
 	return e.codegen.mustInfo(dst).inputLoopSources()
+}
+
+func (e *EmitContext) skipDirectoryInput(macro, link string, inputs []VFS) bool {
+	for _, v := range inputs {
+		if !v.isSource() {
+			continue
+		}
+
+		if present, isDir := e.ctx.fs.existsID(srcRootRel, v.rel()); present && isDir {
+			dir := e.instance.Path.relString()
+			where := makeFileWhere(dir)
+
+			e.ctx.onWarn(Warn{Kind: WarnMisconfiguration, Where: where, Error: "$S/" + dir + ": skip processing macro " + macro + " due to unallowed input."})
+			e.ctx.onWarn(Warn{Kind: WarnMisconfiguration, Where: where, Error: "input dependency in " + macro + " " + link + ymakeVFS(v) + " points to a directory and cannot be processed. Please provide a file path instead."})
+
+			return true
+		}
+	}
+
+	return false
 }
