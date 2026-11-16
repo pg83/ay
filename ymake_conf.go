@@ -8,6 +8,7 @@ import (
 	"maps"
 	"os"
 	"os/exec"
+	"path"
 	"path/filepath"
 	"slices"
 	"sort"
@@ -21,15 +22,17 @@ var ymakeConfEnvKeys = []string{
 }
 
 const (
-	ymakeConfScript    = "build/ymake_conf.py"
-	yaConfJSON         = "build/ya.conf.json"
-	yaConfJSONOpenSrc  = "devtools/ya/opensource/ya.conf.json"
-	localYmakeConf     = "local.ymake"
-	toolchainCxxTool   = "c++"
-	toolchainArchDflt  = "x86_64"
-	toolchainNameDflt  = "default"
-	confBuildTypeDist  = "dist-"
-	confVerbosityQuiet = "no"
+	ymakeConfScript       = "build/ymake_conf.py"
+	yaConfJSON            = "build/ya.conf.json"
+	yaConfJSONOpenSrc     = "devtools/ya/opensource/ya.conf.json"
+	yaConfToolchainsDir   = "tools/toolchains"
+	yaConfToolchainSuffix = ".toolchain.json"
+	localYmakeConf        = "local.ymake"
+	toolchainCxxTool      = "c++"
+	toolchainArchDflt     = "x86_64"
+	toolchainNameDflt     = "default"
+	confBuildTypeDist     = "dist-"
+	confVerbosityQuiet    = "no"
 )
 
 type Toolchain struct {
@@ -112,7 +115,7 @@ func readYaConfToolchains(fs FS) *YaConfToolchains {
 		throwFmt("ymake conf: no tool chain description, neither %s nor %s", yaConfJSON, yaConfJSONOpenSrc)
 	}
 
-	data := concatChunks(fs.read(rel))
+	data := bytes.Clone(concatChunks(fs.read(rel)))
 	out := &YaConfToolchains{raw: map[string]json.RawMessage{}, entries: map[string]map[string]any{}}
 
 	ok := jsonObjectMembers(data, func(key string, raw []byte) {
@@ -141,7 +144,69 @@ func readYaConfToolchains(fs FS) *YaConfToolchains {
 		throwFmt("%s: not a JSON object", rel)
 	}
 
+	out.mergeToolchainFiles(fs, path.Join(path.Dir(rel), yaConfToolchainsDir))
+
 	return out
+}
+
+func (cfg *YaConfToolchains) mergeToolchainFiles(fs FS, dir string) {
+	var files []string
+
+	for _, packed := range fs.listdir(dirKey(dir)).names {
+		if name := STR(packed >> 1).string(); packed&1 == 0 && strings.HasSuffix(name, yaConfToolchainSuffix) {
+			files = append(files, name)
+		}
+	}
+
+	slices.Sort(files)
+
+	var order []string
+
+	chains, bottles := map[string]bool{}, map[string]bool{}
+
+	for _, file := range files {
+		rel := dir + "/" + file
+
+		ok := jsonObjectMembers(bytes.Clone(concatChunks(fs.read(rel))), func(key string, raw []byte) {
+			switch key {
+			case "toolchains":
+				if !jsonObjectMembers(raw, func(name string, entry []byte) {
+					if !chains[name] {
+						chains[name] = true
+						order = append(order, name)
+						cfg.raw[name] = entry
+					}
+				}) {
+					throwFmt("%s: toolchains section is not an object", rel)
+				}
+			case "bottles":
+				if cfg.bottles == nil {
+					cfg.bottles = map[string]json.RawMessage{}
+				}
+
+				if !jsonObjectMembers(raw, func(name string, bottle []byte) {
+					if !bottles[name] {
+						bottles[name] = true
+						cfg.bottles[name] = bottle
+					}
+				}) {
+					throwFmt("%s: bottles section is not an object", rel)
+				}
+			}
+		})
+
+		if !ok {
+			throwFmt("%s: not a JSON object", rel)
+		}
+	}
+
+	for _, name := range cfg.order {
+		if !chains[name] {
+			order = append(order, name)
+		}
+	}
+
+	cfg.order = order
 }
 
 func toolchainPlatform(name string, spec any, fallback map[string]any) map[string]any {
