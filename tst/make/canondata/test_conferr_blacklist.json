@@ -1,0 +1,196 @@
+{
+  "BlacklistConfigureErrorsTest.test_addincl_of_a_blacklisted_directory": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "Path [[imp]]$S/__ay_e2e__/banned[[rst]] inside [[alt1]]ADDINCL[[rst]] is from prohibited directory [[alt1]]__ay_e2e__/banned[[rst]]",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null
+    }
+  },
+  "BlacklistConfigureErrorsTest.test_conflicting_rules": {
+    "configure_errors": {
+      "At top level": [
+        [
+          "Conflicting blacklist rule for normalized path [[alt1]]__ay_e2e__/banned[[rst]]: [[imp]]build/rules/autocheck.blacklist:5207[[rst]] declares inverse rule [[alt1]]!__ay_e2e__/banned[[rst]]; earlier declaration at [[imp]]build/rules/autocheck.blacklist:5206[[rst]] is positive rule [[alt1]]__ay_e2e__/banned[[rst]]. The blacklist file will not be applied.",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null,
+      "$S/__ay_e2e__/banned": null
+    }
+  },
+  "BlacklistConfigureErrorsTest.test_data_from_a_blacklisted_directory": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "Path [[imp]]$S/__ay_e2e__/banned[[rst]] inside [[alt1]]DATA/DATA_FILES[[rst]] is from prohibited directory [[alt1]]__ay_e2e__/banned[[rst]]",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null
+    }
+  },
+  "BlacklistConfigureErrorsTest.test_depends_on_a_blacklisted_directory": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "Path [[imp]]$S/__ay_e2e__/banned[[rst]] inside [[alt1]]DEPENDS[[rst]] is from prohibited directory [[alt1]]__ay_e2e__/banned[[rst]]",
+          0,
+          0
+        ]
+      ],
+      "__ay_e2e__/banned": [
+        [
+          "Path [[imp]]$S/__ay_e2e__/banned/main.cpp[[rst]] is from prohibited directory [[alt1]]__ay_e2e__/banned[[rst]]",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null,
+      "$S/__ay_e2e__/banned": null
+    }
+  },
+  "BlacklistConfigureErrorsTest.test_include_from_a_blacklisted_directory": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "Path [[imp]]$S/__ay_e2e__/banned/banned.h[[rst]] is from prohibited directory [[alt1]]__ay_e2e__/banned[[rst]]",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null
+    }
+  },
+  "BlacklistConfigureErrorsTest.test_peerdir_to_a_blacklisted_directory": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "Path [[imp]]$S/__ay_e2e__/banned[[rst]] inside [[alt1]]PEERDIR[[rst]] is from prohibited directory [[alt1]]__ay_e2e__/banned[[rst]]",
+          0,
+          0
+        ]
+      ],
+      "__ay_e2e__/banned": [
+        [
+          "Path [[imp]]$S/__ay_e2e__/banned/banned.cpp[[rst]] is from prohibited directory [[alt1]]__ay_e2e__/banned[[rst]]",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null,
+      "$S/__ay_e2e__/banned": null
+    }
+  },
+  "BlacklistConfigureErrorsTest.test_peerdir_to_an_allowed_subdirectory": {
+    "configure_errors": {},
+    "make_files": {
+      "$S/__ay_e2e__": null,
+      "$S/__ay_e2e__/banned/allowed": null
+    }
+  },
+  "BlacklistConfigureErrorsTest.test_recurse_for_tests_into_a_blacklisted_directory": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "Path [[imp]]$S/__ay_e2e__/banned[[rst]] inside [[alt1]]RECURSE_FOR_TESTS[[rst]] is from prohibited directory [[alt1]]__ay_e2e__/banned[[rst]]",
+          0,
+          0
+        ]
+      ],
+      "__ay_e2e__/banned": [
+        [
+          "Path [[imp]]$S/__ay_e2e__/banned/banned.cpp[[rst]] is from prohibited directory [[alt1]]__ay_e2e__/banned[[rst]]",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null,
+      "$S/__ay_e2e__/banned": null
+    }
+  },
+  "BlacklistConfigureErrorsTest.test_recurse_into_a_blacklisted_directory": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "Path [[imp]]$S/__ay_e2e__/banned[[rst]] inside [[alt1]]RECURSE/RECURSE_ROOT_RELATIVE[[rst]] is from prohibited directory [[alt1]]__ay_e2e__/banned[[rst]]",
+          0,
+          0
+        ]
+      ],
+      "__ay_e2e__/banned": [
+        [
+          "Path [[imp]]$S/__ay_e2e__/banned/banned.cpp[[rst]] is from prohibited directory [[alt1]]__ay_e2e__/banned[[rst]]",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null,
+      "$S/__ay_e2e__/banned": null
+    }
+  },
+  "BlacklistConfigureErrorsTest.test_source_from_a_blacklisted_directory": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "Path [[imp]]$S/__ay_e2e__/banned/banned.cpp[[rst]] is from prohibited directory [[alt1]]__ay_e2e__/banned[[rst]]",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null
+    }
+  },
+  "BlacklistConfigureErrorsTest.test_srcdir_in_a_blacklisted_directory": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "Path [[imp]]$S/__ay_e2e__/banned[[rst]] inside [[alt1]]SRCDIR[[rst]] is from prohibited directory [[alt1]]__ay_e2e__/banned[[rst]]",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null
+    }
+  },
+  "BlacklistConfigureErrorsTest.test_target_in_a_blacklisted_directory": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "Path [[imp]]$S/__ay_e2e__/value.cpp[[rst]] is from prohibited directory [[alt1]]__ay_e2e__[[rst]]",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null
+    }
+  }
+}
