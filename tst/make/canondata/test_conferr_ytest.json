@@ -1,0 +1,175 @@
+{
+  "YtestConfigureErrorsTest.test_exectest_without_run": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "EXECTEST must have at least one RUN macro",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null
+    }
+  },
+  "YtestConfigureErrorsTest.test_fat_tag_on_a_small_test": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "Only LARGE test may have ya:fat tag",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null
+    }
+  },
+  "YtestConfigureErrorsTest.test_invalid_requirement_syntax": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "Invalid requirement syntax [[imp]]e2e[[rst]]: expect <requirement>:<value>",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null
+    }
+  },
+  "YtestConfigureErrorsTest.test_large_test_without_a_fat_tag": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "LARGE test must have ya:fat tag",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null
+    }
+  },
+  "YtestConfigureErrorsTest.test_negative_timeout": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "Error when parsing test timeout: [[bad]]Timeout must be > 0[[rst]]",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null
+    }
+  },
+  "YtestConfigureErrorsTest.test_noretries_tag_on_a_small_test": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "Only LARGE tests can have 'ya:noretries' tag",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null
+    }
+  },
+  "YtestConfigureErrorsTest.test_privileged_tag_on_a_small_test": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "Only tests with 'container' or 'porto_layers' requirement can have 'ya:privileged' tag",
+          0,
+          0
+        ],
+        [
+          "ya:privileged can be used with LARGE tests only",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null
+    }
+  },
+  "YtestConfigureErrorsTest.test_split_factor_above_the_limit": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "Incorrect SPLIT_FACTOR value: the maximum allowed value is 1000",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null
+    }
+  },
+  "YtestConfigureErrorsTest.test_split_factor_without_forking": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "SPLIT_FACTOR must be use with FORK_TESTS() or FORK_SUBTESTS() macro",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null
+    }
+  },
+  "YtestConfigureErrorsTest.test_system_tag_with_an_unknown_prefix": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "Only [[imp]]sb:[[rst]] and [[imp]]ya:[[rst]] prefixes are allowed in system tags: e2e:value",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null
+    }
+  },
+  "YtestConfigureErrorsTest.test_test_data_is_removed": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "TEST_DATA is removed in favour of DATA",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null
+    }
+  },
+  "YtestConfigureErrorsTest.test_timeout_above_the_size_limit": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "Max allowed timeout for test size [[imp]]SMALL[[rst]] is [[imp]]60 sec[[rst]], suggested size: [[imp]]MEDIUM[[rst]]",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null
+    }
+  }
+}
