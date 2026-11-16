@@ -347,6 +347,20 @@ func (c *licenseConf) fieldsOf(list STR) []string {
 	return fields
 }
 
+func (c *licenseConf) explicitPrefix(env Environment, prefixes, exceptions ENV, modulePath string) string {
+	for _, prefix := range c.fieldsOf(env.str(prefixes)) {
+		if pathIsPrefixOf(prefix, modulePath) {
+			if slices.ContainsFunc(c.fieldsOf(env.str(exceptions)), func(e string) bool { return pathIsPrefixOf(e, modulePath) }) {
+				return ""
+			}
+
+			return prefix
+		}
+	}
+
+	return ""
+}
+
 func (c *licenseConf) restrictionOf(env Environment, typesVar, listVar ENV, macro string, modulewise bool) *restrictionParse {
 	key := restrictionKey{env.str(typesVar), env.str(listVar), modulewise}
 

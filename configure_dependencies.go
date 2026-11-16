@@ -125,6 +125,10 @@ func (ctx *GenCtx) configureDependencies() {
 
 		configure(dependency.to.sourceClean())
 
+		if msg := ctx.dependsMultimoduleError(dependency.to); msg != "" {
+			ctx.onWarn(Warn{Kind: WarnMisconfiguration, Where: makeFileWhere(dependency.from.relString()), Error: msg})
+		}
+
 		if ctx.peerTests || ctx.rootPaths[dependency.from] {
 			ctx.testBuildDependencies(dependency.to)
 		}

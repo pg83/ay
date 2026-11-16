@@ -266,7 +266,7 @@ func collectJavaAutoinclude(ctx *GenCtx, jm *JavaModule, d *JavaData, env Enviro
 	}
 
 	d.autoincluded = true
-	collectJavaStmts(ctx, jm, d, ctx.autoincludeStmts(jm.dir), env)
+	collectJavaStmts(ctx, jm, d, ctx.autoincludeStmts(jm.dir, ctx.onWarn), env)
 }
 
 func collectJavaStmts(ctx *GenCtx, jm *JavaModule, d *JavaData, stmts []Stmt, env Environment) {

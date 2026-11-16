@@ -82,10 +82,6 @@ func genRequestedPeer(ctx *GenCtx, request ModuleInstance) *ModuleEmitResult {
 	peer, result := ctx.resolvePeerInstance(request, declaration)
 
 	if result == nil {
-		if request.Peer&peerExplicit != 0 {
-			ctx.onWarn(Warn{Kind: WarnModuleFailed, Message: fmt.Sprintf("PEERDIR from %s to %s is prohibited by incompatible tags and skipped", request.PeerFrom.relString(), request.Path.relString())})
-		}
-
 		ctx.memoPut(request, nil)
 
 		return nil

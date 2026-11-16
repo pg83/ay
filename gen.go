@@ -1358,12 +1358,20 @@ func moduleStmts(ctx *GenCtx, dir string) []Stmt {
 	return mf.Stmts
 }
 
-func (ctx *GenCtx) autoincludeStmts(dir string) []Stmt {
-	if inc, ok := ctx.autoincludeIdx.lintersMakeIncFor(dir); ok && ctx.fs.isFileVFS(inc) {
-		return ctx.parseFileCached(inc.rel())
+func (ctx *GenCtx) autoincludeStmts(dir string, onWarn func(Warn)) []Stmt {
+	inc, ok := ctx.autoincludeIdx.lintersMakeIncFor(dir)
+
+	if !ok {
+		return nil
 	}
 
-	return nil
+	if !ctx.fs.isFileVFS(inc) {
+		onWarn(Warn{Kind: WarnMisconfiguration, Where: makeFileWhere(dir), Error: lintersMakeIncName + " must be present at [[imp]]$S/" + dir + "[[rst]] when the path is specified in any of " + ctx.autoincludeIdx.paths})
+
+		return nil
+	}
+
+	return ctx.parseFileCached(inc.rel())
 }
 
 func applyImplicitPeerdirs(ctx *GenCtx, instance ModuleInstance, d *ModuleData) {
@@ -2131,6 +2139,10 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 		}
 
 		if peerResult == nil {
+			if explicit {
+				ctx.onWarn(Warn{Kind: WarnModuleFailed, Where: where, Error: "[[alt1]]PEERDIR[[rst]] from module tagged [[alt1]]" + env.string(envMODULE_TAG) + "[[rst]] to [[imp]]$S/" + p.string() + "[[rst]] is prohibited by incompatible tags and skipped"})
+			}
+
 			continue
 		}
 

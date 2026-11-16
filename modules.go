@@ -388,6 +388,7 @@ type ModuleData struct {
 	provides                []ANY
 	transitive              *transitiveInfo
 	goTestFor               STR
+	versionSet              bool
 }
 
 type DeclaredToken struct {
@@ -1480,7 +1481,7 @@ func collectModuleAutoinclude(ctx *GenCtx, modulePath string, kind ModuleKind, l
 	}
 
 	d.autoincluded = true
-	collectStmts(ctx, modulePath, kind, language, ctx.autoincludeStmts(modulePath), env, d, onWarn, platform)
+	collectStmts(ctx, modulePath, kind, language, ctx.autoincludeStmts(modulePath, onWarn), env, d, onWarn, platform)
 }
 
 func endModule(ctx *GenCtx, modulePath string, kind ModuleKind, language Language, env Environment, d *ModuleData, onWarn func(Warn), platform *Platform) {
@@ -1502,6 +1503,12 @@ func endModule(ctx *GenCtx, modulePath string, kind ModuleKind, language Languag
 	d.unit.HashTag = env.str(envMODULE_TAG)
 	d.pyNamespacePython2 = env.is(envPYTHON2, strYes)
 	d.moduleEnded = true
+
+	if !d.versionSet && !env.is(envSKIP_VERSION_REQUIREMENTS, strYes) {
+		if prefix := ctx.licenses.explicitPrefix(env, envEXPLICIT_VERSION_PREFIXES, envEXPLICIT_VERSION_EXCEPTIONS, modulePath); prefix != "" {
+			onWarn(Warn{Kind: WarnMisconfiguration, Where: makeFileWhere(modulePath), Error: "Explicit VERSION must be specified for modules inside " + prefix + " directory"})
+		}
+	}
 
 	if platform != ctx.host {
 		d.transitive = ctx.captureTransitive(modulePath, env, d, platform)
@@ -2365,12 +2372,12 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 			}
 
 			if isDllModuleType(v.Name) || v.Name == tokUdfBase || d.yqlUdfShared {
-				d.exportsScript = dllExportsArg(v)
+				if parseDllModuleArgs(v.Args).deprecatedExports {
+					onWarn(Warn{Kind: WarnMisconfiguration, Where: makeFileWhere(modulePath), Error: "EXPORTS keyword in module header is deprecated and will be ignored. Use EXPORTS_SCRIPT macro instead."})
+				}
 
-				if d.exportsScript == nil {
-					if exports, ok := env.lookupENV(envExportsFile); ok && exports != "" {
-						d.exportsScript = ptr(internStr(exports).any())
-					}
+				if exports, ok := env.lookupENV(envExportsFile); ok && exports != "" {
+					d.exportsScript = ptr(internStr(exports).any())
 				}
 			}
 
@@ -2506,6 +2513,12 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 				}
 
 				if strHasDollar(srcTok) && strings.Contains(srcTok.string(), "${") {
+					continue
+				}
+
+				if src := srcTok.string(); srcTok.vfs() == 0 && filepath.Ext(src) == "" && fs.isDir(srcRootRel, modulePath+"/"+src) {
+					onWarn(Warn{Kind: WarnMisconfiguration, Where: makeFileWhere(modulePath), Error: "try to process by extension in SRCS a directory: $S/" + path.Join(modulePath, src) + ". Won't be processed!"})
+
 					continue
 				}
 
@@ -3106,6 +3119,10 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 				}
 
 				d.recurses = appendConfigurationRecurses(d.recurses, modulePath, expanded, platform)
+
+				if expanded.Name == tokVersion && d.moduleStmt != nil && !d.moduleEnded {
+					d.versionSet = true
+				}
 
 				if expanded.Name == tokLargeFiles {
 					applyLargeFiles(fs, ctx.scannerForPlatform(platform).codegen, modulePath, expanded, d, onWarn)

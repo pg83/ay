@@ -1458,9 +1458,27 @@ func (ctx *GenCtx) dependsDirError(dir STR) string {
 		return "DEPENDS to non-directory $S/" + rel.string()
 	case !present || !ctx.fs.isFileID(rel, strYaMake):
 		return "[[alt1]]DEPENDS[[rst]] to " + ctx.missingDirectory(rel) + "$S/" + rel.string()
+	case ctx.evaluateDirVFS(dir.sourceClean(), ctx.target).declaration == nil:
+		return "[[alt1]]DEPENDS[[rst]] to directory without module: $S/" + rel.string()
 	}
 
 	return ""
+}
+
+func (ctx *GenCtx) dependsMultimoduleError(dir STR) string {
+	instances := ctx.testDependencyInstances(dir)
+
+	if len(instances) < 2 {
+		return ""
+	}
+
+	for _, instance := range instances {
+		if ctx.runtimeTestDependencyModule(TestBuildDependency{instance, genModule(ctx, instance)}).final {
+			return ""
+		}
+	}
+
+	return "[[alt1]]DEPENDS[[rst]] on a multimodule without final targets is not allowed: $S/" + dir.sourceClean().relString()
 }
 
 func utilUint32(v string) bool {

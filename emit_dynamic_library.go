@@ -4,7 +4,6 @@ type DllModuleArgs struct {
 	name              ANY
 	prefix            *ANY
 	version           string
-	exports           *ANY
 	hasName           bool
 	deprecatedExports bool
 }
@@ -26,8 +25,6 @@ func parseDllModuleArgs(args []ANY) DllModuleArgs {
 
 				if keyword == "PREFIX" {
 					out.prefix = &args[i]
-				} else {
-					out.exports = &args[i]
 				}
 			}
 		default:
@@ -94,8 +91,4 @@ func dllOutputName(instance ModuleInstance, stmt *ModuleStmt) string {
 
 func dllModuleVersion(stmt *ModuleStmt) string {
 	return parseDllModuleArgs(stmt.Args).version
-}
-
-func dllExportsArg(stmt *ModuleStmt) *ANY {
-	return parseDllModuleArgs(stmt.Args).exports
 }

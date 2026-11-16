@@ -7,6 +7,7 @@ const lintersMakeIncName = "linters.make.inc"
 type AutoincludeIndex struct {
 	darts   *Darts
 	linters []VFS
+	paths   string
 }
 
 func loadAutoincludeIndex(fs FS, env Environment, onWarn func(Warn)) *AutoincludeIndex {
@@ -17,7 +18,9 @@ func loadAutoincludeIndex(fs FS, env Environment, onWarn func(Warn)) *Autoinclud
 		onWarn(Warn{Kind: WarnMisconfiguration, Where: "At top level", Error: msg})
 	}
 
-	for _, f := range strings.Fields(env.expand(env.string(envAUTOINCLUDE_PATHS))) {
+	files := strings.Fields(env.expand(env.string(envAUTOINCLUDE_PATHS)))
+
+	for _, f := range files {
 		if !fs.isFile(srcRootRel, f) {
 			report(confFileMissing("autoinclude", fs.root()+"/"+f))
 
@@ -41,7 +44,7 @@ func loadAutoincludeIndex(fs FS, env Environment, onWarn func(Warn)) *Autoinclud
 		}
 	}
 
-	return &AutoincludeIndex{darts: newDarts(keys), linters: linters}
+	return &AutoincludeIndex{darts: newDarts(keys), linters: linters, paths: strings.Join(files, ", ")}
 }
 
 func (a *AutoincludeIndex) lintersMakeIncFor(moduleDir string) (VFS, bool) {
