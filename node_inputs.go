@@ -1,6 +1,9 @@
 package main
 
-import "slices"
+import (
+	"slices"
+	"strings"
+)
 
 var (
 	inputChunkScratches = newSliceScratchPool[[]VFS](8)
@@ -23,7 +26,10 @@ type NodeSpec struct {
 func (e *EmitContext) checkDeclaredInputs(node *NodeSpec) {
 	missing := func(v VFS) {
 		if v != node.input.existingSource && v.isSource() && !e.ctx.fs.isReadFile(v.rel()) && !e.ctx.fs.isFileVFS(v) && !slices.Contains(e.unknownSources, v) {
-			e.ctx.onWarn(Warn{Kind: WarnMissingSource, Message: "source file not found: " + v.string()})
+			e.ctx.onWarn(Warn{
+				Kind: WarnMissingSource, Message: "source file not found: " + v.string(),
+				Where: makeFileWhere(e.instance.Path.relString()), Error: "cannot find source file: " + e.unresolvedSourceName(v),
+			})
 		}
 	}
 
@@ -92,4 +98,14 @@ func (inputs InputChunks) checkRoots() {
 			}
 		}
 	}
+}
+
+func (e *EmitContext) unresolvedSourceName(v VFS) string {
+	rel, dir := v.relString(), e.instance.Path.relString()
+
+	if name, ok := strings.CutPrefix(rel, dir+"/"); ok && dir != "" {
+		return name
+	}
+
+	return "$S/" + rel
 }

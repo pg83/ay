@@ -16,6 +16,7 @@ type Graph struct {
 	Inputs    map[string]interface{}  `json:"inputs"`
 	Result    []NodeRef               `json:"result"`
 	fetchRefs *DenseMap[STR, NodeRef] `json:"-"`
+	makeFiles []MakeFileEntry
 }
 
 type StreamingEmitter struct {

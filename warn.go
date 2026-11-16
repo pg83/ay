@@ -1,6 +1,9 @@
 package main
 
-import "fmt"
+import (
+	"fmt"
+	"strings"
+)
 
 var warnKindStr = [...]string{
 	WarnSysIncl:           "sysincl",
@@ -67,9 +70,22 @@ type Warn struct {
 	includer VFS
 	target   ANY
 	quoted   bool
+
+	Where  string
+	Error  string
+	Row    int
+	Column int
+}
+
+func makeFileWhere(dir string) string {
+	return "$S/" + dir + "/ya.make"
 }
 
 func (w Warn) text() string {
+	if w.Message == "" && w.Error != "" {
+		return stripMarkup(w.Error)
+	}
+
 	if w.includer == 0 {
 		return w.Message
 	}
@@ -114,4 +130,29 @@ func (k WarnKind) string() string {
 
 func (k WarnKind) String() string {
 	return k.string()
+}
+
+func stripMarkup(s string) string {
+	var b strings.Builder
+
+	for {
+		i := strings.Index(s, "[[")
+
+		if i < 0 {
+			b.WriteString(s)
+
+			return b.String()
+		}
+
+		j := strings.Index(s[i:], "]]")
+
+		if j < 0 {
+			b.WriteString(s)
+
+			return b.String()
+		}
+
+		b.WriteString(s[:i])
+		s = s[i+j+2:]
+	}
 }

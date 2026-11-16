@@ -67,6 +67,8 @@ type MakeFlags struct {
 	dumpIgnoredMacros        bool
 	clear                    bool
 	cmdPrefixes              []CmdPrefix
+	outputs                  GenerationOutputs
+	warningModes             []string
 }
 
 func copyStatsFlags(dst, src map[string]string) {
@@ -103,11 +105,15 @@ func compilerFlagsFromConfig(primary, internal map[string]string, key, env strin
 	return joinCompilerFlagStrings(primary[key], internal[key], env)
 }
 
-func warnHandler(keepGoing, verbose bool, emit func(line string)) func(Warn) {
+func warnHandler(keepGoing, verbose bool, errs *ConfigureErrors, emit func(line string)) func(Warn) {
 	seen := map[string]bool{}
 
 	return func(w Warn) {
-		fatalable := w.Kind == WarnMissingSource || w.Kind == WarnMissingInclude || w.Kind == WarnUnsupportedSource ||
+		if w.Error != "" {
+			errs.add(w.Where, ConfigureError{Message: w.Error, Row: w.Row, Column: w.Column})
+		}
+
+		fatalable := w.Error != "" || w.Kind == WarnMissingSource || w.Kind == WarnMissingInclude || w.Kind == WarnUnsupportedSource ||
 			w.Kind == WarnUnknownMacro || w.Kind == WarnBadMacroArgs ||
 			w.Kind == WarnMissingProducer || w.Kind == WarnModuleFailed || w.Kind == WarnToolConf || w.Kind == WarnDupSrc ||
 			w.Kind == WarnMisconfiguration || w.Kind == WarnSyntax
@@ -149,11 +155,24 @@ func cmdMake(g GlobalFlags, args []string) int {
 
 	defer events.close()
 
-	onWarn := warnHandler(mf.keepGoing, mf.verbose, func(line string) {
+	errs := newConfigureErrors()
+
+	onWarn := warnHandler(mf.keepGoing, mf.verbose, errs, func(line string) {
+		errs.addLog(line)
+
 		events.post(func() {
 			fmt.Fprintln(os.Stderr, line)
 		})
 	})
+
+	if mf.outputs.context != "" {
+		g := genDumpGraphWithResources(fs, parsers, mf.targets, hostP, targetP, onWarn, tests, mf.keepGoing, demandSelf, mf.addModulesToResults, mf.stripPackagesFromResults)
+
+		events.sync()
+		writeGenerationOutputs(mf.outputs, g, !mf.sandboxing, errs, g.makeFiles)
+
+		return 0
+	}
 
 	if mf.threads == 0 {
 		if mf.dumpGraph {
@@ -356,11 +375,13 @@ func parseMakeFlags(args []string) *MakeFlags {
 	state := getopt.NewState(append([]string{"ay-make"}, args...))
 
 	config := getopt.Config{
-		Opts: getopt.OptStr("GrdktThxD:j:B:o:I:C:"),
+		Opts: getopt.OptStr("GrdktThx:D:j:B:o:I:C:"),
 		LongOpts: getopt.LongOptStr("musl,help,xbuild:,install:,output:,stat,build-dir:,source-root:,keep-going,dump-graph,release,debug,target-platform:,host-platform:,host-platform-flag:,host-build-type:,verbose,sandboxing,dump-ignored-macros,clear,cmd-prefix:,jobs:,ninja,define:," +
 			"target:,build:,target-platform-build-type:,target-platform-flag:,target-platform-tests,test-size:,test-tag:,test-traceback:," +
 			"dist,ignore-nodes-exit-code,warning-mode:,cache-tests,output-only-tests,cache-namespace:,report-skipped-suites,tests-retries:," +
-			"backup-test-results,add-modules-to-results,strip-packages-from-results,do-not-output-stderrs,no-src-links,add-changed-ok-configures,no-yt-store"),
+			"backup-test-results,add-modules-to-results,strip-packages-from-results,do-not-output-stderrs,no-src-links,add-changed-ok-configures,no-yt-store," +
+			"ignore-configure-errors:,no-content-uids,no-prefetch,skip-test-console-report,use-links-in-report,compress-ymake-output,no-compress-ymake-output," +
+			"profile:,stages:,save-context-to:,save-graph-to:,log-file:,evlog-file:,html-display:,evlog-node-stat,dist-priority:"),
 		Mode: getopt.ModeInOrder,
 		Func: getopt.FuncGetOptLong,
 	}
@@ -456,8 +477,27 @@ func parseMakeFlags(args []string) *MakeFlags {
 			mf.testRetries = throw2(strconv.Atoi(opt.OptArg))
 		case opt.Name == "test-traceback":
 			mf.testTraceback = opt.OptArg
-		case opt.Char == 'x', opt.Name == "ignore-nodes-exit-code",
-			opt.Name == "warning-mode", opt.Name == "output-only-tests",
+		case opt.Name == "warning-mode":
+			mf.warningModes = append(mf.warningModes, strings.Split(opt.OptArg, ";")...)
+		case opt.Name == "profile":
+			mf.outputs.profile = opt.OptArg
+		case opt.Name == "stages":
+			mf.outputs.stages = opt.OptArg
+		case opt.Name == "save-context-to":
+			mf.outputs.context = opt.OptArg
+		case opt.Name == "save-graph-to":
+			mf.outputs.graph = opt.OptArg
+		case opt.Name == "log-file":
+			mf.outputs.log = opt.OptArg
+		case opt.Name == "evlog-file":
+			mf.outputs.evlog = opt.OptArg
+		case opt.Name == "html-display":
+			mf.outputs.html = opt.OptArg
+		case opt.Char == 'x', opt.Name == "ignore-nodes-exit-code", opt.Name == "ignore-configure-errors",
+			opt.Name == "no-content-uids", opt.Name == "no-prefetch", opt.Name == "skip-test-console-report",
+			opt.Name == "use-links-in-report", opt.Name == "compress-ymake-output", opt.Name == "no-compress-ymake-output",
+			opt.Name == "evlog-node-stat", opt.Name == "dist-priority",
+			opt.Name == "output-only-tests",
 			opt.Name == "cache-namespace", opt.Name == "report-skipped-suites",
 			opt.Name == "backup-test-results", opt.Name == "do-not-output-stderrs",
 			opt.Name == "no-src-links", opt.Name == "add-changed-ok-configures", opt.Name == "no-yt-store":

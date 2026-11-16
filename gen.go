@@ -175,6 +175,7 @@ type GenCtx struct {
 	emit                *StreamingEmitter
 	onWarn              func(Warn)
 	warningSink         *moduleWarnings
+	where               string
 	keepGoing           bool
 	na                  *NodeArenas
 	inclArgValues       [2]Vec[STR]
@@ -279,7 +280,7 @@ func newModuleMemo() *moduleMemo {
 	return &moduleMemo{entries: newBumpAllocator[moduleMemoEntry]()}
 }
 
-func runGenIntoWithResources(fs FS, parsers *IncludeParserManager, targets []string, hostP, targetP *Platform, emitter *StreamingEmitter, onWarn func(Warn), tests *TestOpts, keepGoing bool, rootDemand ModuleDemand) {
+func runGenIntoWithResources(fs FS, parsers *IncludeParserManager, targets []string, hostP, targetP *Platform, emitter *StreamingEmitter, onWarn func(Warn), tests *TestOpts, keepGoing bool, rootDemand ModuleDemand) []MakeFileEntry {
 	ctx := newGenCtx(fs, parsers, hostP, targetP, emitter, onWarn, tests, keepGoing)
 	discovered := make([]DiscoveredTargets, len(targets))
 	all := make([]DiscoveredModule, 0, len(targets))
@@ -344,6 +345,8 @@ func runGenIntoWithResources(fs FS, parsers *IncludeParserManager, targets []str
 				ctx.buckets.h1Mismatches, ctx.buckets.overflowed),
 		})
 	}
+
+	return ctx.makeFiles()
 }
 
 func newGenCtx(fs FS, parsers *IncludeParserManager, hostP, targetP *Platform, emitter *StreamingEmitter, onWarn func(Warn), tests *TestOpts, keepGoing bool) *GenCtx {
@@ -408,6 +411,10 @@ func newGenCtx(fs FS, parsers *IncludeParserManager, hostP, targetP *Platform, e
 	ctx.inclArgs = InclArgMemo{m: &ctx.inclArgValues}
 	ctx.buckets = newBucketCache()
 	ctx.onWarn = func(w Warn) {
+		if w.Kind == WarnMissingInclude && w.Error == "" && w.includer != 0 && ctx.where != "" {
+			w.Where, w.Error = ctx.where, unresolvedIncludeError(w)
+		}
+
 		if ctx.warningSink != nil {
 			ctx.warningSink.own = append(ctx.warningSink.own, w)
 		} else {
@@ -449,6 +456,7 @@ type DirEvaluation struct {
 	declaration *ModuleStmt
 	recurses    []VFS
 	owned       ownerChain
+	subscribers []STR
 }
 
 type dirEvaluationKey struct {
@@ -471,8 +479,8 @@ func (ctx *GenCtx) evaluateDirVFS(dir VFS, platform *Platform) *DirEvaluation {
 
 	instance.Platform = platform
 
-	declaration, recurses := ctx.scanModuleConfiguration(instance)
-	evaluation := &DirEvaluation{declaration: declaration, recurses: recurses}
+	declaration, recurses, subscribers := ctx.scanModuleConfiguration(instance)
+	evaluation := &DirEvaluation{declaration: declaration, recurses: recurses, subscribers: subscribers}
 
 	if ctx.dirs == nil {
 		ctx.dirs = map[dirEvaluationKey]*DirEvaluation{}
@@ -634,7 +642,7 @@ func (ctx *GenCtx) ownedBy(owner VFS, platform *Platform) ownerChain {
 	return ownerChain{}
 }
 
-func (ctx *GenCtx) scanModuleConfiguration(instance ModuleInstance) (*ModuleStmt, []VFS) {
+func (ctx *GenCtx) scanModuleConfiguration(instance ModuleInstance) (*ModuleStmt, []VFS, []STR) {
 	dir := instance.Path.relString()
 	platform := instance.Platform
 	env := buildIfEnvInto(&ctx.ifEnvScratch, instance)
@@ -662,6 +670,7 @@ func (ctx *GenCtx) scanModuleConfiguration(instance ModuleInstance) (*ModuleStmt
 
 	var module *ModuleStmt
 	var children []VFS
+	var subscribers []STR
 
 	var scan func(stmts []Stmt)
 
@@ -710,6 +719,14 @@ func (ctx *GenCtx) scanModuleConfiguration(instance ModuleInstance) (*ModuleStmt
 					scan(v.Else)
 				}
 			case *UnknownStmt:
+				if v.Name == tokSubscriber {
+					for _, arg := range expandStmtTokens(v.Args, env) {
+						subscribers = append(subscribers, arg.str())
+					}
+
+					continue
+				}
+
 				if d.skipModuleContentStmt(v.Name) {
 					continue
 				}
@@ -762,7 +779,65 @@ func (ctx *GenCtx) scanModuleConfiguration(instance ModuleInstance) (*ModuleStmt
 
 	ctx.recordConfiguration(instance, children, nil)
 
-	return module, children
+	return module, children, subscribers
+}
+
+func (ctx *GenCtx) makeFiles() []MakeFileEntry {
+	withModule := map[VFS]bool{}
+
+	var below func(dir VFS, seen map[VFS]bool) bool
+
+	below = func(dir VFS, seen map[VFS]bool) bool {
+		if has, ok := withModule[dir]; ok {
+			return has
+		}
+
+		evaluation := ctx.dirs[dirEvaluationKey{dir, ctx.target}]
+
+		if evaluation == nil || seen[dir] {
+			return false
+		}
+
+		seen[dir] = true
+
+		has := evaluation.declaration != nil
+
+		for _, child := range evaluation.recurses {
+			has = below(child, seen) || has
+		}
+
+		withModule[dir] = has
+
+		return has
+	}
+
+	var out []MakeFileEntry
+
+	for key, evaluation := range ctx.dirs {
+		if key.platform != ctx.target || !below(key.path, map[VFS]bool{}) {
+			continue
+		}
+
+		path := "$S"
+
+		if rel := key.path.relString(); rel != "" {
+			path += "/" + rel
+		}
+
+		owners := make([]string, 0, len(evaluation.subscribers))
+
+		for _, s := range evaluation.subscribers {
+			owners = append(owners, s.string())
+		}
+
+		slices.Sort(owners)
+
+		out = append(out, MakeFileEntry{Path: path, Owners: strings.Join(slices.Compact(owners), " ")})
+	}
+
+	slices.SortFunc(out, func(a, b MakeFileEntry) int { return strings.Compare(a.Path, b.Path) })
+
+	return out
 }
 
 func (ctx *GenCtx) genStartTarget(dir VFS) {
@@ -974,6 +1049,17 @@ func discoverRecursedTargets(ctx *GenCtx, targetDir VFS) DiscoveredTargets {
 		}
 
 		for _, child := range children {
+			if !ctx.fs.isFileID(child.rel(), strYaMake) {
+				present, isDir := ctx.fs.existsID(srcRootRel, child.rel())
+				what := "missing directory: "
+
+				if present && isDir {
+					what = "directory without ya.make: "
+				}
+
+				ctx.onWarn(Warn{Kind: WarnMisconfiguration, Where: makeFileWhere(dir.relString()), Error: "[[alt1]]RECURSE[[rst]] to " + what + "$S/" + child.relString()})
+			}
+
 			if !seen[child] {
 				seen[child] = true
 				queue = append(queue, child)
@@ -1013,9 +1099,12 @@ func genDumpGraphWithResources(fs FS, parsers *IncludeParserManager, targets []s
 	emitter.stripPackagesFromResults = stripPackagesFromResults
 	emitter.keepGoing, emitter.onWarn = keepGoing, onWarn
 
-	runGenIntoWithResources(fs, parsers, targets, hostP, targetP, emitter, onWarn, tests, keepGoing, rootDemand)
+	makeFiles := runGenIntoWithResources(fs, parsers, targets, hostP, targetP, emitter, onWarn, tests, keepGoing, rootDemand)
+	g := finalize(emitter)
 
-	return finalize(emitter)
+	g.makeFiles = makeFiles
+
+	return g
 }
 
 func programBinaryName(instance ModuleInstance, moduleStmt *ModuleStmt) string {
@@ -1343,6 +1432,12 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 	if existing := ctx.memoGet(instance); existing != nil {
 		return existing
 	}
+
+	where := ctx.where
+
+	ctx.where = makeFileWhere(instance.Path.relString())
+
+	defer func() { ctx.where = where }()
 
 	identity := instance
 
@@ -1820,6 +1915,19 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 			if result := ctx.javaPeerResult(&parent, p, slices.Contains(d.explicitPeers, p.any())); result != nil {
 				resolved = append(resolved, ResolvedPeer{path: p, result: result, kind: kind})
 			}
+
+			continue
+		}
+
+		if !ctx.fs.isFileID(p, strYaMake) {
+			present, isDir := ctx.fs.existsID(srcRootRel, p)
+			what := "missing directory: "
+
+			if present && isDir {
+				what = "directory without ya.make: "
+			}
+
+			ctx.onWarn(Warn{Kind: WarnModuleFailed, Where: makeFileWhere(instance.Path.relString()), Error: "[[alt1]]PEERDIR[[rst]] to " + what + "[[imp]]$S/" + p.string() + "[[rst]]"})
 
 			continue
 		}

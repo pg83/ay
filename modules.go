@@ -868,7 +868,14 @@ func collectModuleInto(ctx *GenCtx, instance ModuleInstance, stmts []Stmt, env E
 	collectStmts(ctx, modulePath, kind, instance.Language, stmts, env, d, onWarn, instance.Platform)
 
 	if d.moduleStmt != nil && !d.discarded && !d.moduleEnded {
-		throwFmt("%s: module declaration has no END()", modulePath)
+		makeFile := makeFileWhere(modulePath)
+
+		onWarn(Warn{
+			Kind: WarnModuleFailed, Message: modulePath + ": module declaration has no END()", Where: makeFile,
+			Error: "Missing [[alt1]]END[[rst]] macro at the end of [[alt1]]" + d.moduleStmt.Name.string() + "[[rst]] in [[imp]]" + makeFile + "[[rst]]",
+		})
+
+		endModule(ctx, modulePath, kind, instance.Language, env, d, onWarn, instance.Platform)
 	}
 
 	d.finishResourcePeerPolicy()
@@ -1469,6 +1476,22 @@ func collectModuleAutoinclude(ctx *GenCtx, modulePath string, kind ModuleKind, l
 
 	d.autoincluded = true
 	collectStmts(ctx, modulePath, kind, language, ctx.autoincludeStmts(modulePath), env, d, onWarn, platform)
+}
+
+func endModule(ctx *GenCtx, modulePath string, kind ModuleKind, language Language, env Environment, d *ModuleData, onWarn func(Warn), platform *Platform) {
+	collectModuleAutoinclude(ctx, modulePath, kind, language, env, d, onWarn, platform)
+	yqlEpilogue(ctx, modulePath, kind, language, env, d, onWarn, platform)
+	interpretPending(ctx, modulePath, kind, language, env, d, onWarn, platform)
+	d.pythonLint.bind(env)
+	d.finishResourcePeerPolicy()
+
+	if d.nots != nil {
+		d.nots.finish(env)
+	}
+
+	d.unit.HashTag = env.str(envMODULE_TAG)
+	d.pyNamespacePython2 = env.is(envPYTHON2, strYes)
+	d.moduleEnded = true
 }
 
 func (d *ModuleData) processModuleEnd(modulePath string, line int, onWarn func(Warn)) bool {
@@ -2561,19 +2584,7 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 				continue
 			}
 
-			collectModuleAutoinclude(ctx, modulePath, kind, language, env, d, onWarn, platform)
-			yqlEpilogue(ctx, modulePath, kind, language, env, d, onWarn, platform)
-			interpretPending(ctx, modulePath, kind, language, env, d, onWarn, platform)
-			d.pythonLint.bind(env)
-			d.finishResourcePeerPolicy()
-
-			if d.nots != nil {
-				d.nots.finish(env)
-			}
-
-			d.unit.HashTag = env.str(envMODULE_TAG)
-			d.pyNamespacePython2 = env.is(envPYTHON2, strYes)
-			d.moduleEnded = true
+			endModule(ctx, modulePath, kind, language, env, d, onWarn, platform)
 
 		case *JoinSrcsStmt:
 			expanded := *v
@@ -2840,6 +2851,7 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 			expanded := *v
 
 			expanded.Args = expandStmtTokens(v.Args, env)
+
 			d.resourceDeclStmts = append(d.resourceDeclStmts, &expanded)
 
 			if d.moduleStmt != nil && (d.moduleStmt.Name == tokResourcesLibrary || d.moduleStmt.Name == tokPrebuiltProgram) {
@@ -3354,7 +3366,11 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 		}
 
 		if len(args) > 0 && args[0] == kwFATAL_ERROR.any() {
-			throwFmt("%s: %s", modulePath, joinAnys(args[1:], " "))
+			text := joinAnys(args[1:], " ")
+
+			onWarn(Warn{Kind: WarnModuleFailed, Message: modulePath + ": " + text, Where: makeFileWhere(modulePath), Error: text})
+
+			break
 		}
 
 		onWarn(Warn{Kind: WarnPlugin, Message: modulePath + ": " + joinAnys(args, " ")})

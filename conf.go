@@ -3133,7 +3133,13 @@ func expandConfMacro(ctx *GenCtx, modulePath string, kind ModuleKind, language L
 	case handled:
 		return
 	case v.Name == tokInvalid:
-		onWarn(Warn{Kind: WarnUnknownMacro, Message: fmt.Sprintf("%s: macro %q is not in the modelled set (line %d); skipped", modulePath, v.Raw.string(), v.Line)})
+		w := Warn{Kind: WarnUnknownMacro, Message: fmt.Sprintf("%s: macro %q is not in the modelled set (line %d); skipped", modulePath, v.Raw.string(), v.Line)}
+
+		if !treePluginMacro(ctx.fs, v.Raw) {
+			w.Where, w.Error = makeFileWhere(modulePath), "skip unknown statement: "+v.Raw.string()+" "+vecDump(v.Args)
+		}
+
+		onWarn(w)
 
 		return
 	default:

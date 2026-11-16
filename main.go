@@ -144,6 +144,7 @@ func parseGlobalFlags(argv []string) (g GlobalFlags, rest []string) {
 			throwFmt("unknown --probe=%q (want map|callsite)", v)
 		case k == "verbose" || k == "v":
 			g.Verbose = true
+		case k == "no-report":
 		default:
 			throwFmt("unknown global flag %q", a)
 		}
