@@ -1,0 +1,214 @@
+{
+  "JavaConfigureErrorsTest.test_invalid_check_java_deps": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "CHECK_JAVA_DEPS: \"yes\", \"no\" or \"strict\" required",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null
+    }
+  },
+  "JavaConfigureErrorsTest.test_invalid_make_uberjar_in_a_program": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "MAKE_UBERJAR: \"yes\" or \"no\" required",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null
+    }
+  },
+  "JavaConfigureErrorsTest.test_invalid_make_uberjar_in_an_annotation_processor": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "MAKE_UBERJAR: \"yes\" or \"no\" required",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null
+    }
+  },
+  "JavaConfigureErrorsTest.test_java_resource_tar_without_an_extract_root": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "Macro JAVA_RESOURCE_TAR requires to set EXTRACT_ROOT. Usage JAVA_RESOURCE_TAR(tar_path EXTRACT_ROOT root_dir)",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null
+    }
+  },
+  "JavaConfigureErrorsTest.test_javac_flags_with_full_processing": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "Usage -proc:full and -proc:only is forbidden in JAVAC_FLAGS, please, use ANNOTATION_PROCESSOR or USE_ANNOTATION_PROCESSOR macroses",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null
+    }
+  },
+  "JavaConfigureErrorsTest.test_javac_flags_with_processing_only": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "Usage -proc:full and -proc:only is forbidden in JAVAC_FLAGS, please, use ANNOTATION_PROCESSOR or USE_ANNOTATION_PROCESSOR macroses",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null
+    }
+  },
+  "JavaConfigureErrorsTest.test_kotlin_abi_jar_with_a_non_numeric_kotlin_version": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "ENABLE_KOTLIN_ABI_JAR requires a numeric Kotlin version; found e2e",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null
+    }
+  },
+  "JavaConfigureErrorsTest.test_kotlin_abi_jar_with_an_old_kotlin": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "ENABLE_KOTLIN_ABI_JAR requires Kotlin 2.3.10 or newer; found 2.0.0",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null
+    }
+  },
+  "JavaConfigureErrorsTest.test_kotlin_abi_jar_without_kotlin": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "ENABLE_KOTLIN_ABI_JAR requires WITH_KOTLIN",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null
+    }
+  },
+  "JavaConfigureErrorsTest.test_multiple_classpath_elements_in_run_java_program": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "multiple CLASSPATH elements in RUN_JAVA_PROGRAM invocation no more supported. Use JAVA_RUNTIME_PEERDIR on the JAVA_PROGRAM module instead",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null,
+      "$S/__ay_e2e__/other": null,
+      "$S/__ay_e2e__/tool": null
+    }
+  },
+  "JavaConfigureErrorsTest.test_runnable_jar_on_a_new_jdk_without_with_jdk": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "Missing WITH_JDK() macro for JDK version >= 19. For more info see https://clubs.at.yandex-team.ru/arcadia/28543",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null
+    }
+  },
+  "JavaConfigureErrorsTest.test_script_with_a_custom_property_without_a_value": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "CUSTOM_PROPERTY \"answer\" value is not specified",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null
+    }
+  },
+  "JavaConfigureErrorsTest.test_script_with_an_empty_custom_property": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "Empty CUSTOM_PROPERTY",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null
+    }
+  },
+  "JavaConfigureErrorsTest.test_script_with_more_templates_than_outputs": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "To many arguments for TEMPLATE parameter",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null
+    }
+  },
+  "JavaConfigureErrorsTest.test_unknown_jdk_version": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "Invalid jdk version: 12. ('11', '17', '21', '22', '23', '24', '25', '26') are available",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null
+    }
+  }
+}
