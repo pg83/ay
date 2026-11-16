@@ -2852,6 +2852,10 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 
 			expanded.Args = expandStmtTokens(v.Args, env)
 
+			if expanded.Macro == tokDeclareExternalResourceByJson && !declareExternalResourceByJSON(fs, modulePath, &expanded, env, onWarn) {
+				break
+			}
+
 			d.resourceDeclStmts = append(d.resourceDeclStmts, &expanded)
 
 			if d.moduleStmt != nil && (d.moduleStmt.Name == tokResourcesLibrary || d.moduleStmt.Name == tokPrebuiltProgram) {

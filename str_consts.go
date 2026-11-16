@@ -35,6 +35,7 @@ var (
 	kwDECLARE_EXTERNAL_HOST_RESOURCES_BUNDLE                                                 = internStr("DECLARE_EXTERNAL_HOST_RESOURCES_BUNDLE")
 	kwDECLARE_EXTERNAL_HOST_RESOURCES_BUNDLE_BY_JSON                                         = internStr("DECLARE_EXTERNAL_HOST_RESOURCES_BUNDLE_BY_JSON")
 	kwDECLARE_EXTERNAL_RESOURCE                                                              = internStr("DECLARE_EXTERNAL_RESOURCE")
+	kwDECLARE_EXTERNAL_RESOURCE_BY_JSON                                                      = internStr("DECLARE_EXTERNAL_RESOURCE_BY_JSON")
 	kwDEFAULT                                                                                = internStr("DEFAULT")
 	kwDEFAULT_JAVA_SRCS_LAYOUT                                                               = internStr("DEFAULT_JAVA_SRCS_LAYOUT")
 	kwDEFAULT_JDK_VERSION                                                                    = internStr("DEFAULT_JDK_VERSION")

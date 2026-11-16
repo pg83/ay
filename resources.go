@@ -160,6 +160,33 @@ func isaPlatformKey(isa ISA) string {
 	return string(isa)
 }
 
+func declareExternalResourceByJSON(fs FS, modulePath string, stmt *DeclareResourceStmt, env Environment, onWarn func(Warn)) bool {
+	if len(stmt.Args) < 2 || len(stmt.Args) > 3 {
+		throwFmt("macro DECLARE_EXTERNAL_RESOURCE_BY_JSON: %d args, must be 2..3", len(stmt.Args))
+	}
+
+	friendly := stmt.Args[0]
+
+	if len(stmt.Args) == 3 {
+		friendly = stmt.Args[2]
+	}
+
+	uri, ok := resolveResourceURIFromBundle(readResourceBundleJSON(fs, moduleSourceRel(modulePath, stmt.Args[1].string())), env)
+
+	if !ok {
+		message := "Command [[alt1]]DECLARE_EXTERNAL_RESOURCE_BY_JSON[[rst]] for [[alt2]]" + friendly.string() + "[[rst]] failed with error: Unsupported platform"
+
+		onWarn(Warn{Kind: WarnMisconfiguration, Where: makeFileWhere(modulePath), Error: message, Row: stmt.Line})
+
+		return false
+	}
+
+	stmt.Macro = tokDeclareExternalResource
+	stmt.Args = append([]ANY{stmt.Args[0]}, internAnys(strings.Fields(uri))...)
+
+	return true
+}
+
 func resolveResourceDecls(fs FS, host *Platform, modulePath string, stmt *DeclareResourceStmt) []ResourceDecl {
 	switch stmt.Macro {
 	case tokDeclareExternalResource:
