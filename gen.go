@@ -300,7 +300,7 @@ func runGenIntoWithResources(fs FS, parsers *IncludeParserManager, targets []str
 	all := make([]DiscoveredModule, 0, len(targets))
 
 	for i, t := range targets {
-		discovered[i] = discoverRecursedTargets(ctx, source(filepath.Clean(t)))
+		discovered[i] = discoverRecursedTargets(ctx, source(cleanDir(t)))
 
 		if discovered[i].Root.Declaration != nil {
 			all = append(all, discovered[i].Root)
@@ -317,7 +317,7 @@ func runGenIntoWithResources(fs FS, parsers *IncludeParserManager, targets []str
 	ctx.rootDemand = rootDemand
 
 	for _, t := range targets {
-		ctx.targetDirs[internStr(filepath.Clean(t))] = true
+		ctx.targetDirs[internStr(cleanDir(t))] = true
 	}
 
 	for _, target := range all {
@@ -361,6 +361,14 @@ func runGenIntoWithResources(fs FS, parsers *IncludeParserManager, targets []str
 	}
 
 	return ctx
+}
+
+func cleanDir(dir string) string {
+	if clean := filepath.Clean(dir); clean != "." {
+		return clean
+	}
+
+	return ""
 }
 
 func newGenCtx(fs FS, parsers *IncludeParserManager, hostP, targetP *Platform, emitter *StreamingEmitter, onWarn func(Warn), tests *TestOpts, keepGoing bool) *GenCtx {
@@ -479,7 +487,7 @@ type dirEvaluationKey struct {
 }
 
 func (ctx *GenCtx) evaluateDir(dir string, platform *Platform) *DirEvaluation {
-	return ctx.evaluateDirVFS(source(filepath.Clean(dir)), platform)
+	return ctx.evaluateDirVFS(source(cleanDir(dir)), platform)
 }
 
 func (ctx *GenCtx) evaluateDirVFS(dir VFS, platform *Platform) *DirEvaluation {
@@ -510,11 +518,11 @@ func dirSourceOf(dir STR) VFS {
 		return dir.source()
 	}
 
-	return source(filepath.Clean(dir.string()))
+	return source(cleanDir(dir.string()))
 }
 
 func (ctx *GenCtx) moduleName(dir string) TOK {
-	return ctx.moduleNameVFS(source(filepath.Clean(dir)))
+	return ctx.moduleNameVFS(source(cleanDir(dir)))
 }
 
 func (ctx *GenCtx) moduleNameVFS(dir VFS) TOK {
@@ -534,7 +542,7 @@ func (ctx *GenCtx) rootInstanceVFS(dir VFS, demand ModuleDemand) ModuleInstance 
 }
 
 func (ctx *GenCtx) rootInstanceForDeclaration(dir string, demand ModuleDemand, decl *ModuleStmt) ModuleInstance {
-	return ctx.rootInstanceForDeclarationVFS(source(filepath.Clean(dir)), demand, decl)
+	return ctx.rootInstanceForDeclarationVFS(source(cleanDir(dir)), demand, decl)
 }
 
 func (ctx *GenCtx) rootInstanceForDeclarationVFS(dir VFS, demand ModuleDemand, decl *ModuleStmt) ModuleInstance {
