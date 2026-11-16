@@ -27,6 +27,23 @@ class ConfFileConfigureErrorsTest(MakeTest):
         self.write("autoincludes.json", text)
         self.library()
 
+    def missing_conf_file(self, variable):
+        core = self.root / "build/ymake.core.conf"
+        self.write_tree("build/ymake.core.conf", core.read_text() + f"\n{variable}+={PROJECT}/missing.conf\n")
+        self.library()
+
+    def test_autoincludes_that_are_missing(self):
+        self.missing_conf_file("AUTOINCLUDE_PATHS")
+        self.assertConfigureLikeYa()
+
+    def test_licenses_that_are_missing(self):
+        self.missing_conf_file("LICENSES")
+        self.assertConfigureLikeYa()
+
+    def test_sysincl_that_is_missing(self):
+        self.missing_conf_file("SYSINCL")
+        self.assertConfigureLikeYa()
+
     def test_autoincludes_root_that_is_not_an_array(self):
         self.autoincludes('{"e2e": []}\n')
         self.assertConfigureLikeYa()
