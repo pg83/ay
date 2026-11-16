@@ -55,6 +55,34 @@
       "$S/__ay_e2e__": null
     }
   },
+  "NotsConfigureErrorsTest.test_grpc_proto_package_without_grpc_js": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "ya.make includes macro \u001b[0;36mGRPC()\u001b[0;49m but \u001b[0;31mpackage.json is missing @grpc/grpc-js\u001b[0;49m dependency.\nCall \u001b[0;32mya tool nots add @grpc/grpc-js\u001b[0;49m to fix the issue.\nDocs: https://docs.yandex-team.ru/frontend-in-arcadia/references/TS_PROTO#grpc_custom_package",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null
+    }
+  },
+  "NotsConfigureErrorsTest.test_grpc_proto_with_unsupported_output_services": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "ya.make includes macro \u001b[0;36mGRPC()\u001b[0;49m but \u001b[0;36mTS_PROTO_OPT()\u001b[0;49m has outputServices option with unsupported value(s): \u001b[0;31mbogus\u001b[0;49m.\nRemove outputServices from \u001b[0;36mTS_PROTO_OPT()\u001b[0;49m to use default \u001b[0;32mgrpc-js\u001b[0;49m.\nOr set one of supported values: \u001b[0;32mgrpc-js, generic-definitions, default, false, none\u001b[0;49m.\nDocs: https://docs.yandex-team.ru/frontend-in-arcadia/references/TS_PROTO#grpc",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null
+    }
+  },
   "NotsConfigureErrorsTest.test_large_files_without_a_destination": {
     "configure_errors": {
       "__ay_e2e__": [
@@ -139,6 +167,20 @@
       "$S/__ay_e2e__": null
     }
   },
+  "NotsConfigureErrorsTest.test_prebuilder_with_an_unchecked_native_package": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "Project is configured to use @yatool/prebuilder. \nSome packages are misconfigured.\nRun \u001b[0;32m`ya tool nots update-lockfile`\u001b[0;49m to fix pnpm-lock.yaml and package.json.\nValidation details: \nThese packages possibly have addons but are not checked yet:\n  - native@1.0.0",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null
+    }
+  },
   "NotsConfigureErrorsTest.test_test_config_in_test_for": {
     "configure_errors": {
       "__ay_e2e__/tests": [
@@ -160,6 +202,22 @@
       "__ay_e2e__/tests": [
         [
           "You are using a relative path for a module. You have to add RELATIVE key, like (RELATIVE ../lib)",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null,
+      "$S/__ay_e2e__/lib": null,
+      "$S/__ay_e2e__/tests": null
+    }
+  },
+  "NotsConfigureErrorsTest.test_test_for_with_relative": {
+    "configure_errors": {
+      "__ay_e2e__/tests": [
+        [
+          "TS_TEST_FOR does not support RELATIVE path.\nUpdate your module to \u001b[0;36mTS_TEST_FOR(__ay_e2e__/lib)\u001b[0;49m\nSee more details in https://st.yandex-team.ru/FBP-3073",
           0,
           0
         ]

@@ -96,3 +96,34 @@ class NotsConfigureErrorsTest(MakeTest):
     def test_node_version_range_that_cannot_be_satisfied(self):
         self.ts_module_with_node("TS_LIBRARY", "^99.0.0", "TS_BUILD_SCRIPT(nots:build)", "TS_BUILD_OUTPUTS(dist)")
         self.assertConfigureLikeYa()
+
+    def test_test_for_with_relative(self):
+        self.module_tests("TS_TEST_FOR(../lib RELATIVE)", "TS_TEST(jest)")
+        self.write("tests/answer.test.ts", "test('answer', () => {});\n")
+        self.assertConfigureLikeYa()
+
+    def proto(self, *statements):
+        self.write("ya.make", "PROTO_LIBRARY()\nONLY_TAGS(TS_PROTO TS_PREPARE_DEPS)\nTS_PROTO_PACKAGE_NAME(@e2e/answer)\nGRPC()\n" + "".join(s + "\n" for s in statements) + "SRCS(answer.proto)\nEND()\n")
+        self.write("answer.proto", 'syntax = "proto3"; package e2e; message Answer { int32 value = 1; }\n')
+
+    def test_grpc_proto_with_unsupported_output_services(self):
+        self.proto("TS_PROTO_OPT(outputServices=bogus)")
+        self.assertConfigureLikeYa()
+
+    def test_grpc_proto_package_without_grpc_js(self):
+        self.proto()
+        self.write("package.json", json.dumps({"name": "@e2e/answer", "version": "1.0.0", "engines": {"node": nodejs_version()}}))
+        self.write("pnpm-lock.yaml", "lockfileVersion: '9.0'\nsettings:\n  autoInstallPeers: true\n  excludeLinksFromLockfile: false\nimporters:\n  .: {}\n")
+        self.assertConfigureLikeYa()
+
+    def prebuilder_library(self, prebuilder):
+        self.library("TS_BUILD_SCRIPT(nots:build)", "TS_BUILD_OUTPUTS(dist)")
+        pj = json.loads((self.project / "package.json").read_text())
+        pj["usePrebuilder"] = True
+        pj["devDependencies"] = {"@yatool/prebuilder": prebuilder}
+        self.write("package.json", json.dumps(pj))
+        self.write("pnpm-lock.yaml", "lockfileVersion: '9.0'\nsettings:\n  autoInstallPeers: true\n  excludeLinksFromLockfile: false\nimporters:\n  .: {}\npackages:\n  native@1.0.0:\n    resolution: {integrity: sha512-AAAA}\n    requiresBuild: true\n")
+
+    def test_prebuilder_with_an_unchecked_native_package(self):
+        self.prebuilder_library("1.15.1")
+        self.assertConfigureLikeYa()
