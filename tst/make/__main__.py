@@ -15,10 +15,13 @@ def main():
     parser.add_argument("--parent-mount-namespace", help=argparse.SUPPRESS)
     parser.add_argument("--work-dir", type=Path, required=True)
     parser.add_argument("--result-file", type=Path, help="collect test status for the build gate; assertion failures do not fail collection")
+    parser.add_argument("--canonize", action="store_true", help="record ya's Autocheck configure output into tst/make/canondata")
     parser.add_argument("modules", nargs="*")
     args = parser.parse_args()
     if not args.arcadia:
         parser.error("make tests require -Darcadia=/path/to/arcadia")
+    if args.canonize and args.backend != "ya":
+        parser.error("--canonize records upstream output and requires --backend ya")
     arcadia = Path(args.arcadia).resolve()
     if not (arcadia / ".arcadia.root").exists() or not (arcadia / "build/ya.conf.json").is_file():
         parser.error(f"not an Arcadia tree: {arcadia}")
@@ -52,6 +55,8 @@ def main():
         AY_E2E_BINARY=str(binary),
         AY_E2E_WORK_DIR=str(args.work_dir.resolve()),
     )
+    if args.canonize:
+        os.environ["AY_E2E_CANONIZE"] = "1"
     modules = args.modules or [
         "tst.make." + path.stem for path in sorted(Path(__file__).parent.glob("test_*.py"))
     ]

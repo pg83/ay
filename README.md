@@ -51,6 +51,18 @@ Tests can override `project_name` with a path inside a subtree that has specific
 build policies. The ay fixture expands its parent directories privately before
 creating the test project.
 
+Autocheck configure checks (`assertConfigureLikeYa` in `tst/make/lib.py`) run
+graph generation the way an Autocheck graph-generation node does: the `ya make`
+command, environment and seven outputs of
+`devtools/autocheck/ggaas/builders/meta_graph2` (`tst/make/autocheck.py`). They
+check the node contract (exit code 0 despite configure errors, every output
+written, `.uc` streams decodable by `contexts_difference`) and compare what
+Autocheck consumes from the saved context: `configure_errors` and the fixture's
+`make_files`. The expected output is ya's own, recorded with
+`python3 -m tst.make --backend ya --canonize ...` into
+`tst/make/canondata/<module>.json`; `ya_e2e` checks ya against it and `ay_e2e`
+checks ay.
+
 With `-Dcoverage`, `ay_e2e` uses an instrumented binary and merges each test
 module's counters into `.build/coverage/make/cover.out` and `report.txt`.
 This local report measures coverage of the whole binary by the make tests

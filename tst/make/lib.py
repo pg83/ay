@@ -6,9 +6,13 @@ import signal
 import subprocess
 import tempfile
 import unittest
+from compression import zstd
+
+from tst.make import autocheck
 
 
 PROJECT = "__ay_e2e__"
+CANONDATA = Path(__file__).parent / "canondata"
 
 
 class MakeTest(unittest.TestCase):
@@ -94,13 +98,19 @@ class MakeTest(unittest.TestCase):
         if self.backend == "ya":
             cmd += ["--build-dir", str(self.work / "build"), "-xx", "--no-locked", "--no-prefetch", "--no-ymake-tool-servermode", "--no-ymake-pic-servermode", "--no-ymake-multiconfig"]
         cmd += [*flags, self.project_name]
-        extra = env or {}
+        result = self.run_process(cmd, self.root, {"YA_TC": "no", "YA_NO_RESPAWN": "yes", **(env or {})})
+        self.calls += 1
+        (self.work / f"graph-{self.calls}.json").write_text(result.stdout)
+        (self.work / f"graph-{self.calls}.stderr").write_text(result.stderr)
+        return result
+
+    def run_process(self, cmd, cwd, extra):
         env = os.environ.copy()
         for key in ("CC", "CXX", "CPP", "LD", "AR", "CFLAGS", "CXXFLAGS", "CPPFLAGS", "LDFLAGS"):
             env.pop(key, None)
-        env.update(YA_TC="no", YA_NO_RESPAWN="yes", PYTHONDONTWRITEBYTECODE="1", **extra)
+        env.update({"PYTHONDONTWRITEBYTECODE": "1", **extra})
         proc = subprocess.Popen(
-            cmd, cwd=self.root, env=env, start_new_session=True,
+            cmd, cwd=cwd, env=env, start_new_session=True,
             stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
         )
         try:
@@ -113,10 +123,64 @@ class MakeTest(unittest.TestCase):
                 os.killpg(proc.pid, signal.SIGKILL)
                 proc.communicate()
             raise
-        self.calls += 1
-        (self.work / f"graph-{self.calls}.json").write_text(stdout)
-        (self.work / f"graph-{self.calls}.stderr").write_text(stderr)
         return subprocess.CompletedProcess(cmd, proc.returncode, stdout, stderr)
+
+    def autocheck_configure(self, *targets):
+        """Generate the graph as an Autocheck graph-generation node does; return the configure output it consumes.
+
+        Checks the node contract on the way: exit code 0 despite configure
+        errors, every declared output written, ucompress streams decodable by
+        contexts_difference and ygdiff, JSON profiles readable by ya.
+        """
+        self.calls += 1
+        run = self.work / f"autocheck-{self.calls}"
+        build_dir, output_dir, tmp_dir = run / "build", run / "result", run / "tmp"
+        for directory in (build_dir, output_dir, tmp_dir):
+            directory.mkdir(parents=True)
+        cmd = autocheck.command(self.binary, list(targets) or [self.project_name], build_dir, output_dir, self.root)
+        if self.backend == "ya":
+            cmd.insert(cmd.index("make") + 1, "--no-locked")
+        # A graph-generation node is never started by a coding agent. ya would
+        # detect the agent running these tests, switch to its JSONL display and
+        # skip --html-display.
+        result = self.run_process(cmd, build_dir, {
+            "YA_TC": "no", "YA_AUTO_DETECT_AGENT": "0", **autocheck.ENVIRONMENT, "TMPDIR": str(tmp_dir),
+        })
+        (run / "stdout").write_text(result.stdout)
+        (run / "stderr").write_text(result.stderr)
+        self.assertEqual(result.returncode, 0, f"{cmd!r}\n{result.stderr[-4000:]}")
+        missing = [name for name in autocheck.OUTPUTS.values() if not (output_dir / name).is_file()]
+        self.assertEqual(missing, [], f"graph generation did not write its declared outputs\n{result.stderr[-4000:]}")
+        for name in ("context.profile.json", "context.stages.json"):
+            json.loads((output_dir / name).read_text())
+        autocheck.read_uc(output_dir / "generating.log.uc")
+        zstd.decompress((output_dir / "generating.evlog.zst").read_bytes())
+        graph = json.loads(autocheck.read_uc(output_dir / "graph.json.uc"))
+        self.assertIn("graph", graph)
+        context = json.loads(autocheck.read_uc(output_dir / "context.json.uc"))
+        replacements = [(str(self.work), "$(WORK)"), (os.path.realpath(self.root), "$(SOURCE_ROOT)"), (str(self.root), "$(SOURCE_ROOT)")]
+        return autocheck.configure_output(context, self.project_name, replacements)
+
+    def assertConfigureLikeYa(self, name="", targets=()):
+        """Compare the configure output Autocheck consumes with ya's canonical output for this check.
+
+        Canonical outputs live in tst/make/canondata/<module>.json, keyed by
+        class, test and name. Record them with
+        `python3 -m tst.make --backend ya --canonize ...`; every other run of
+        either backend compares against them.
+        """
+        output = self.autocheck_configure(*targets)
+        key = f"{type(self).__name__}.{self._testMethodName}" + (f"/{name}" if name else "")
+        path = CANONDATA / f"{type(self).__module__.rsplit('.', 1)[-1]}.json"
+        canon = json.loads(path.read_text()) if path.exists() else {}
+        if os.environ.get("AY_E2E_CANONIZE"):
+            canon[key] = output
+            path.parent.mkdir(exist_ok=True)
+            path.write_text(json.dumps(canon, indent=2, sort_keys=True, ensure_ascii=False) + "\n")
+            return
+        self.assertIn(key, canon, f"no canonical ya output for {key}; record it with --backend ya --canonize")
+        self.maxDiff = None
+        self.assertEqual(output, canon[key])
 
     def graph(self, *flags, env=None):
         result = self.make(*flags, env=env)

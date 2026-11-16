@@ -1,0 +1,154 @@
+{
+  "AutocheckConfigureErrorsTest.test_clean_library": {
+    "configure_errors": {},
+    "make_files": {
+      "$S/__ay_e2e__": null
+    }
+  },
+  "AutocheckConfigureErrorsTest.test_fatal_message": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "E2E_FATAL",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null
+    }
+  },
+  "AutocheckConfigureErrorsTest.test_missing_include": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "could not resolve include file: [[imp]]does_not_exist.h[[rst]] included from here: [[imp]]$S/__ay_e2e__/answer.cpp[[rst]]",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null
+    }
+  },
+  "AutocheckConfigureErrorsTest.test_missing_module_end": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "Missing [[alt1]]END[[rst]] macro at the end of [[alt1]]LIBRARY[[rst]] in [[imp]]$S/__ay_e2e__/ya.make[[rst]]",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null
+    }
+  },
+  "AutocheckConfigureErrorsTest.test_missing_peerdir": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "[[alt1]]PEERDIR[[rst]] to missing directory: [[imp]]$S/__missing_e2e_peer__[[rst]]",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null
+    }
+  },
+  "AutocheckConfigureErrorsTest.test_missing_source": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "cannot find source file: missing.cpp",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null
+    }
+  },
+  "AutocheckConfigureErrorsTest.test_peerdir_loop": {
+    "configure_errors": {
+      "At top level": [
+        [
+          "Loop 1 (size: 4, bad): $B/__ay_e2e__/b/lib__ay_e2e__-b.a --> $S/__ay_e2e__/b --> $B/__ay_e2e__/a/lib__ay_e2e__-a.a --> $S/__ay_e2e__/a",
+          0,
+          0
+        ],
+        [
+          "the module $B/__ay_e2e__/a/lib__ay_e2e__-a.a will not be built due to deprecated loop",
+          0,
+          0
+        ],
+        [
+          "the module $B/__ay_e2e__/b/lib__ay_e2e__-b.a will not be built due to deprecated loop",
+          0,
+          0
+        ]
+      ],
+      "__ay_e2e__/a": [
+        [
+          "Loop detected: $S/__ay_e2e__/a --> $B/__ay_e2e__/a/lib__ay_e2e__-a.a --> $S/__ay_e2e__/b --> $B/__ay_e2e__/b/lib__ay_e2e__-b.a",
+          0,
+          0
+        ]
+      ],
+      "__ay_e2e__/b": [
+        [
+          "Loop detected: $S/__ay_e2e__/a --> $B/__ay_e2e__/a/lib__ay_e2e__-a.a --> $S/__ay_e2e__/b --> $B/__ay_e2e__/b/lib__ay_e2e__-b.a",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {}
+  },
+  "AutocheckConfigureErrorsTest.test_recurse_to_missing_directory": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "[[alt1]]RECURSE[[rst]] to missing directory: $S/__ay_e2e__/missing_dir",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {}
+  },
+  "AutocheckConfigureErrorsTest.test_unknown_macro": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "skip unknown statement: UNKNOWN_E2E_MACRO vector of size 0",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null
+    }
+  },
+  "AutocheckConfigureErrorsTest.test_unknown_test_size": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "Unknown test size: [[imp]]HUGE[[rst]], choose from [[imp]]SMALL, MEDIUM, LARGE[[rst]]",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null
+    }
+  }
+}

@@ -400,7 +400,7 @@ for test_path in build.glob("$(S)/tst/**/test_*.py"):
     ))
 
 make_test_paths = sorted(build.glob("$(S)/tst/make/test_*.py"))
-make_test_inputs = sorted(build.glob("$(S)/tst/make/*.py")) + ["$(S)/tst/backends.py"]
+make_test_inputs = sorted(build.glob("$(S)/tst/make/*.py")) + sorted(build.glob("$(S)/tst/make/canondata/*.json")) + ["$(S)/tst/backends.py"]
 # An external, mutable Arcadia is not an input tracked by build's CAS. Give
 # only these test invocations fresh identities; never reuse a cached pass.
 make_test_run = uuid.uuid4().hex
