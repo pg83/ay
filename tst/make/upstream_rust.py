@@ -1,10 +1,19 @@
-"""Rust build support for the e2e Arcadia revision.
+"""Rust build support for trees that predate Rust modules.
 
-Arcadia d02375f8, the e2e revision, predates Rust modules. The files below
-are the Rust support of 3b36097f (the feature_rust_cryptography slice): module
-and macro definitions, their ymake plugin, the toolchain and the shared
-runtime, and the two ymake.core.conf lines that enable them.
+Arcadia d02375f8 predates Rust modules. The files below are trunk's Rust
+module and macro definitions (2026-11) and the Rust support of 3b36097f (the
+feature_rust_cryptography slice): the ymake plugin, the toolchain and the
+shared runtime, and the two ymake.core.conf lines that enable them. A tree
+with its own build/conf/rust.conf keeps it.
+
+Trunk's rust.conf restricts Rust modules to contrib/, build/rust/,
+build/tests/rust/ and a few listed directories, so the fixtures live in
+build/tests/rust/.
 """
+
+from tst.make.lib import PROJECT as _PROJECT
+
+PROJECT = "build/tests/rust/" + _PROJECT
 
 RUST_CONF = r'''# Rust libraries are compiled as whole crates. Each crate exports Rust
 # metadata and a separate native archive.
@@ -183,6 +192,8 @@ macro _RUST_EPILOGUE() {
 }
 
 module _RUST_BASE: _BARE_UNIT {
+    RESTRICT_PATH(contrib/ build/rust/ build/tests/rust/ taxi/tars/tars_search/rust quality/relev_tools/bert_models/lib/hf_tokenizer/rust MSG Rust modules are restricted to contrib/ and the listed exceptions)
+
     .CMD=$_RUST_COMMAND
     .EXTS=.a .lib .rlib .tar .sbom
     .NODE_TYPE=Bundle
@@ -263,6 +274,7 @@ module CRATE_PROC_MACRO: _RUST_BASE {
         MODULE_SUFFIX=.dylib
     }
     elsewhen ($HOST_OS_WINDOWS) {
+        MODULE_PREFIX=
         MODULE_SUFFIX=.dll
     }
 }
@@ -364,6 +376,8 @@ RUST_SCRIPT = "# Rust compile driver; graph tests reference only its path.\n"
 
 
 def install(test):
+    if (test.root / "build/conf/rust.conf").is_file():
+        return
     core = (test.root / "build/ymake.core.conf").read_text()
     for anchor, replacement in (
         # C++ modules link crates through PEERDIR.

@@ -4,6 +4,8 @@ from tst.make.platform_fixtures import add_linux_clang_target
 
 
 class RustUnsupportedTargetsTest(MakeTest):
+    project_name = upstream_rust.PROJECT
+
     def setUp(self):
         super().setUp()
         upstream_rust.install(self)

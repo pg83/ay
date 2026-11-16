@@ -94,6 +94,7 @@ func setupRustModule(name TOK, language Language, env Environment, d *ModuleData
 		if env.bool(envHostOsDarwin) {
 			env.setString(envMODULE_SUFFIX, ".dylib")
 		} else if env.bool(envHostOsWindows) {
+			env.setString(envMODULE_PREFIX, "")
 			env.setString(envMODULE_SUFFIX, ".dll")
 		}
 	}

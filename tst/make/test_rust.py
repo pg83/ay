@@ -1,14 +1,16 @@
 from tst.make import upstream_rust
-from tst.make.lib import MakeTest, PROJECT
+from tst.make.lib import MakeTest
 
 
 class RustTest(MakeTest):
+    project_name = upstream_rust.PROJECT
+
     def setUp(self):
         super().setUp()
         upstream_rust.install(self)
 
     def consumer(self, directory):
-        self.write("ya.make", f"PROGRAM()\nSRCS(main.cpp)\nPEERDIR({PROJECT}/{directory})\nEND()\n")
+        self.write("ya.make", f"PROGRAM()\nSRCS(main.cpp)\nPEERDIR({self.project_name}/{directory})\nEND()\n")
         self.write("main.cpp", "int main() { return 0; }\n")
 
     def crate(self, directory, name, macros="", module="CRATE"):
@@ -65,11 +67,11 @@ CRATE_ENV(SECOND=2)
         graph = self.graph("-r")
         node = self.node(graph, "pkg/libanswer.a")
         self.assertEqual(set(node["outputs"]), {
-            f"$(B)/{PROJECT}/pkg/libanswer{suffix}" for suffix in (".a", ".rlib", ".build.tar")})
+            f"$(B)/{self.project_name}/pkg/libanswer{suffix}" for suffix in (".a", ".rlib", ".build.tar")})
         for file in ("source.rs", "extra.rs", "alias.rs", "data.txt", "Cargo.toml"):
-            self.assertIn(f"$(S)/{PROJECT}/pkg/{file}", node["inputs"])
+            self.assertIn(f"$(S)/{self.project_name}/pkg/{file}", node["inputs"])
         for option, value in (("--version", "1.2.3"), ("--edition", "2024"),
-                              ("--manifest-dir", f"$(S)/{PROJECT}/pkg/.."),
+                              ("--manifest-dir", f"$(S)/{self.project_name}/pkg/.."),
                               ("--opt-level", "3"), ("--debuginfo", "0"),
                               ("--kind", "rlib"), ("--mode", "target")):
             self.assertEqual(self.section(node, option), [value])
@@ -82,15 +84,15 @@ CRATE_ENV(SECOND=2)
     def host_fixture(self):
         self.consumer("api")
         self.crate("common", "common")
-        self.crate("macros", "derive_answer", f"PEERDIR({PROJECT}/common)", "CRATE_PROC_MACRO")
-        self.crate("script", "build_answer", f"CRATE_BUILD_DEPS({PROJECT}/common)", "RUST_BUILD_SCRIPT")
+        self.crate("macros", "derive_answer", f"PEERDIR({self.project_name}/common)", "CRATE_PROC_MACRO")
+        self.crate("script", "build_answer", f"CRATE_BUILD_DEPS({self.project_name}/common)", "RUST_BUILD_SCRIPT")
         self.crate("tool", "helper", module="RUST_BUILD_SCRIPT")
         self.crate("api", "answer", f"""
-PEERDIR({PROJECT}/common)
-CRATE_DEPENDENCY_ALIAS(renamed {PROJECT}/common)
-CRATE_BUILD_SCRIPT({PROJECT}/script)
-CRATE_PROC_MACROS({PROJECT}/macros)
-CRATE_BUILD_TOOL(HELPER {PROJECT}/tool)
+PEERDIR({self.project_name}/common)
+CRATE_DEPENDENCY_ALIAS(renamed {self.project_name}/common)
+CRATE_BUILD_SCRIPT({self.project_name}/script)
+CRATE_PROC_MACROS({self.project_name}/macros)
+CRATE_BUILD_TOOL(HELPER {self.project_name}/tool)
 """)
 
     def test_host_tools_and_target_peers(self):
@@ -103,7 +105,7 @@ CRATE_BUILD_TOOL(HELPER {PROJECT}/tool)
         macro = self.node(graph, "macros/libderive_answer.so")
         tool = self.node(graph, "tool/helper")
         self.assertEqual(self.section(api, "--direct"), [common["outputs"][0]])
-        self.assertEqual(self.section(api, "--aliases"), [f"renamed={PROJECT}/common"])
+        self.assertEqual(self.section(api, "--aliases"), [f"renamed={self.project_name}/common"])
         self.assertEqual(self.section(api, "--proc-macros"), [macro["outputs"][0]])
         self.assertEqual(self.section(api, "--build-script-program"), [script["outputs"][0]])
         self.assertIn(f"HELPER={tool['outputs'][0]}", self.section(api, "--env"))
@@ -131,14 +133,14 @@ CRATE_BUILD_TOOL(HELPER {PROJECT}/tool)
         self.crate("leaf", "leaf", "CRATE_INPUTS(config.h.in data.txt)")
         self.write("leaf/config.h.in", "#define ANSWER @ANSWER@\n")
         self.write("leaf/data.txt", "42\n")
-        self.crate("middle", "middle", f"PEERDIR({PROJECT}/leaf)")
-        self.crate("top", "top", f"PEERDIR({PROJECT}/middle)")
+        self.crate("middle", "middle", f"PEERDIR({self.project_name}/leaf)")
+        self.crate("top", "top", f"PEERDIR({self.project_name}/middle)")
         graph = self.graph()
         middle = self.node(graph, "middle/libmiddle.a")
         top = self.node(graph, "top/libtop.a")
-        self.assertIn(f"$(S)/{PROJECT}/leaf/config.h.in", middle["inputs"])
-        self.assertNotIn(f"$(S)/{PROJECT}/leaf/config.h.in", top["inputs"])
-        self.assertNotIn(f"$(S)/{PROJECT}/leaf/data.txt", middle["inputs"])
+        self.assertIn(f"$(S)/{self.project_name}/leaf/config.h.in", middle["inputs"])
+        self.assertNotIn(f"$(S)/{self.project_name}/leaf/config.h.in", top["inputs"])
+        self.assertNotIn(f"$(S)/{self.project_name}/leaf/data.txt", middle["inputs"])
 
     def test_memory_sanitizer_runtime_peer(self):
         self.host_fixture()
@@ -150,17 +152,17 @@ CRATE_BUILD_TOOL(HELPER {PROJECT}/tool)
         self.assertFalse(any("/contrib/restricted/rust_msan/" in path for path in host["inputs"]))
 
     def test_native_link_and_shared_runtime(self):
-        self.write("ya.make", f"PROGRAM(answer)\nSRCS(main.cpp)\nPEERDIR({PROJECT}/first {PROJECT}/second)\nEND()\n")
+        self.write("ya.make", f"PROGRAM(answer)\nSRCS(main.cpp)\nPEERDIR({self.project_name}/first {self.project_name}/second)\nEND()\n")
         self.write("main.cpp", "int main() { return 0; }\n")
         self.write("native/ya.make", "LIBRARY(native)\nSRCS(native.cpp)\nEND()\n")
         self.write("native/native.cpp", "int answer() { return 42; }\n")
-        self.crate("first", "first", f"PEERDIR({PROJECT}/native)")
+        self.crate("first", "first", f"PEERDIR({self.project_name}/native)")
         self.crate("second", "second")
         graph = self.graph()
         link = self.node(graph, "answer")
         args = self.args(link)
         for output in ("first/libfirst.a", "second/libsecond.a", "native/libnative.a"):
-            self.assertIn(f"{PROJECT}/{output}", args)
+            self.assertIn(f"{self.project_name}/{output}", args)
         self.assertEqual(args.count("build/rust/staticlib/libarcadia_rust_runtime.a"), 1)
         self.assertFalse(any(arg.endswith((".rlib", ".build.tar")) for arg in args))
         native = self.node(graph, "native/libnative.a")

@@ -3,6 +3,8 @@ from tst.make.lib import MakeTest
 
 
 class RustBuildModesTest(MakeTest):
+    project_name = upstream_rust.PROJECT
+
     def setUp(self):
         super().setUp()
         upstream_rust.install(self)

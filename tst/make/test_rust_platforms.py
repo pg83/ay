@@ -3,6 +3,8 @@ from tst.make.lib import MakeTest
 
 
 class RustPlatformsTest(MakeTest):
+    project_name = upstream_rust.PROJECT
+
     def setUp(self):
         super().setUp()
         upstream_rust.install(self)
@@ -26,7 +28,7 @@ class RustPlatformsTest(MakeTest):
 
     def test_windows_crates_and_host_tools_use_windows_suffixes(self):
         for module, output in (("CRATE", "libanswer.lib"), ("RUST_BUILD_SCRIPT", "answer.exe"),
-                               ("CRATE_PROC_MACRO", "libanswer.dll")):
+                               ("CRATE_PROC_MACRO", "answer.dll")):
             with self.subTest(module=module):
                 self.write("ya.make", f"{module}(answer)\nEND()\n")
                 generated = self.node(self.graph("--target-platform=default-win-x86_64", "--host-platform=default-win-x86_64"), output)
@@ -39,7 +41,7 @@ class RustPlatformsTest(MakeTest):
         self.write("common/src/lib.rs", "pub fn number() -> u32 { 42 }\n")
         graph = self.graph("--target-platform=default-win-x86_64", "--host-platform=default-win-x86_64")
         dependency = self.node(graph, "common/libcommon-host.lib")
-        tool = self.node(graph, "libanswer.dll")
+        tool = self.node(graph, "answer.dll")
         self.assertIn(dependency["uid"], tool["deps"])
         args = [arg for command in dependency["cmds"] for arg in command["cmd_args"]]
         self.assertEqual(args[args.index("--mode") + 1], "host")
