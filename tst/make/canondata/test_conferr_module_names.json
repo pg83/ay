@@ -1,0 +1,30 @@
+{
+  "ModuleNameConfigureErrorsTest.test_module_name_with_a_slash": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "Invalid module name 'e2e/answer'. Symbol '/' is not allowed",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null
+    }
+  },
+  "ModuleNameConfigureErrorsTest.test_source_outside_of_the_build_tree": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "source file name is outside the build tree: /e2e/absolute.cpp",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null
+    }
+  }
+}
