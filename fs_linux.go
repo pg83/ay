@@ -191,6 +191,10 @@ func (fs *OsFS) readDirAll(rel string, buf *[]byte) (int, bool) {
 	}
 }
 
+func (fs *OsFS) dirHas(v DirView, name string) (present bool, isDir bool) {
+	return fs.dirHasInterned(v, name)
+}
+
 func (fs *OsFS) readDirViewRel(dir STR, rel string) DirView {
 	n, ok := fs.readDirAll(rel, &fs.direntBuf)
 

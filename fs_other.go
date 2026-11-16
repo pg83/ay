@@ -43,6 +43,10 @@ func (fs *OsFS) readFileRel(rel string) [][]byte {
 	return fs.readResult[:2]
 }
 
+func (fs *OsFS) dirHas(v DirView, name string) (present bool, isDir bool) {
+	return fs.dirHasInterned(v, name)
+}
+
 func (fs *OsFS) readDirViewRel(dir STR, rel string) DirView {
 	full := fs.rootSlash + rel
 

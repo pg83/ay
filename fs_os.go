@@ -154,7 +154,7 @@ func (c *recentSTRs) interned(name string) STR {
 	return id
 }
 
-func (fs *OsFS) dirHas(v DirView, name string) (present bool, isDir bool) {
+func (fs *OsFS) dirHasInterned(v DirView, name string) (present bool, isDir bool) {
 	id := internedRecent(name)
 
 	if id == 0 {

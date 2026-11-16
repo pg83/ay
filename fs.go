@@ -79,6 +79,7 @@ func dirKey(dir string) STR {
 
 type DirView struct {
 	dir   STR
+	node  int32
 	names []uint32
 }
 
