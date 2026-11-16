@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"path"
 	"reflect"
 	"regexp"
 	"slices"
@@ -604,4 +605,109 @@ func validateInDirs(modulePath, pattern, srcdir string, dirs []string, onWarn fu
 	}
 
 	return valid
+}
+
+func goResourceEntries(args []string, report func(string)) ([]ResourceEntry, bool) {
+	if len(args)%2 != 0 {
+		report("last file " + args[len(args)-1] + " is missing resource key")
+	}
+
+	entries := make([]ResourceEntry, 0, len(args)/2)
+
+	for i := 0; i+1 < len(args); i += 2 {
+		file, key := args[i], args[i+1]
+
+		switch {
+		case key == "":
+			report("file key must be non empty")
+
+			return nil, false
+		case file == "-" && !strings.Contains(key, "="):
+			report("key \"" + key + "\" must contain = sign")
+
+			return nil, false
+		}
+
+		entries = append(entries, ResourceEntry{Path: resourceWordPath(file), Key: resourceWordPath(key)})
+	}
+
+	return entries, true
+}
+
+func goProcessSrcsErrors(d *ModuleData, modulePath string, env Environment, report func(string)) {
+	export := false
+
+	var goFiles []string
+
+	for _, meta := range d.srcs {
+		if meta.Global || meta.Compile.Variant != 0 {
+			continue
+		}
+
+		file := meta.Source.string()
+
+		switch ext := path.Ext(file); ext {
+		case ".c", ".cc", ".cpp", ".cxx", ".C":
+			export = false
+		case ".ev", ".fbs", ".go", ".in", ".proto", ".s", ".syso", ".S":
+			if export {
+				report("Unmatched CGO_EXPORT keyword in SRCS() macro")
+			}
+
+			export = false
+
+			if ext == ".go" {
+				goFiles = append(goFiles, file)
+			}
+		default:
+			if file == "CGO_EXPORT" {
+				export = true
+			}
+		}
+	}
+
+	if export {
+		report("Unmatched CGO_EXPORT keyword in SRCS() macro")
+	}
+
+	for _, file := range goFiles {
+		if strings.HasSuffix(file, "_test.go") {
+			report("file " + file + " must be listed in GO_TEST_SRCS() or GO_XTEST_SRCS() macros")
+		}
+	}
+
+	for _, file := range slices.Concat(d.goTestSrcs, d.goXTestSrcs) {
+		if !strings.HasSuffix(file.string(), "_test.go") {
+			report("file " + file.string() + " should not be listed in GO_TEST_SRCS() or GO_XTEST_SRCS() macros")
+		}
+	}
+
+	if !stringIsTruthy(env.string(envGoFmtAddCheck)) && !goFmtSkipAllowed(modulePath, strings.Fields(env.string(envGoFmtAllowSkip))) {
+		report("Disabling gofmt is prohibited, please contact devtools")
+	}
+
+	if len(d.cgoSrcs) == 0 {
+		return
+	}
+
+	if !env.bool(envCGO_ENABLED) {
+		report("trying to build with CGO (CGO_SRCS is non-empty) when CGO is disabled")
+	}
+
+	for _, file := range d.cgoSrcs {
+		if name := file.string(); !strings.HasSuffix(name, ".go") {
+			report("cannot find source file: " + strings.TrimSuffix(name, path.Ext(name)) + ".cgo2.c.o")
+			report("file " + name + " should not be listed in CGO_SRCS() macros")
+		}
+	}
+}
+
+func goFmtSkipAllowed(modulePath string, allowed []string) bool {
+	for _, item := range allowed {
+		if modulePath == item || strings.HasPrefix(modulePath, strings.TrimSuffix(item, "/")+"/") {
+			return true
+		}
+	}
+
+	return false
 }

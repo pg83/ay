@@ -2846,19 +2846,19 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 
 			d.fromSandboxes = append(d.fromSandboxes, &expanded)
 		case *ResourceStmt:
-			pairs, dontParse, dontCompress := expandResourcePairs(v.Args, v.Line, env)
-
 			if isGoModuleType(d.unit.Type) {
-				entries := make([]ResourceEntry, len(pairs))
+				words, _, _ := resourceWordsAfterFlags(expandResourceWords(v.Args, env))
 
-				for i, pair := range pairs {
-					entries[i] = ResourceEntry{Path: pair.Path, Key: pair.Key}
+				if entries, ok := goResourceEntries(words, func(message string) {
+					onWarn(Warn{Kind: WarnMisconfiguration, Where: makeFileWhere(modulePath), Error: message})
+				}); ok {
+					applyGoResource(fs, modulePath, entries, d)
 				}
-
-				applyGoResource(fs, modulePath, entries, d)
 
 				break
 			}
+
+			pairs, dontParse, dontCompress := expandResourcePairs(v.Args, v.Line, env)
 
 			ensureResourcePeer(modulePath, d)
 

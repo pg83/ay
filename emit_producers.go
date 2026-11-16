@@ -347,11 +347,18 @@ func (e *EmitContext) producerPositions(cythonPlans []CythonStmtPlan) ([]Produce
 		n += 3
 	}
 
+	goModule := isGoModuleType(d.moduleStmt.Name)
+
+	if goModule {
+		goProcessSrcsErrors(d, module, Environment{s: &e.frame.ifEnv}, func(message string) {
+			e.ctx.onWarn(Warn{Kind: WarnMisconfiguration, Where: makeFileWhere(module), Error: message})
+		})
+	}
+
 	if n == 0 {
 		return nil, nil
 	}
 
-	goModule := isGoModuleType(d.moduleStmt.Name)
 	backing := e.prodBacking[:0]
 	positions := e.prodPos[:0]
 

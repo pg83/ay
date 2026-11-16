@@ -38,7 +38,7 @@ func expandRootDeferredTokens(args []ANY, env Environment, phase TokenExpansion)
 	return expanded
 }
 
-func expandResourcePairs(args []ANY, line int, env Environment) ([]ResourcePair, bool, bool) {
+func expandResourceWords(args []ANY, env Environment) []string {
 	var expanded []string
 
 	for _, arg := range args {
@@ -57,6 +57,10 @@ func expandResourcePairs(args []ANY, line int, env Environment) ([]ResourcePair,
 		}
 	}
 
+	return expanded
+}
+
+func resourceWordsAfterFlags(expanded []string) ([]string, bool, bool) {
 	dontParse, dontCompress := false, false
 
 	for _, arg := range expanded[:min(2, len(expanded))] {
@@ -74,7 +78,15 @@ func expandResourcePairs(args []ANY, line int, env Environment) ([]ResourcePair,
 		start++
 	}
 
-	rest := expanded[start:]
+	return expanded[start:], dontParse, dontCompress
+}
+
+func resourceWordPath(word string) string {
+	return strings.ReplaceAll(strings.ReplaceAll(word, "$(S)", "${ARCADIA_ROOT}"), "$(B)", "${ARCADIA_BUILD_ROOT}")
+}
+
+func expandResourcePairs(args []ANY, line int, env Environment) ([]ResourcePair, bool, bool) {
+	rest, dontParse, dontCompress := resourceWordsAfterFlags(expandResourceWords(args, env))
 
 	if len(rest)%2 != 0 {
 		throwFmt("RESOURCE at line %d: argument count after DONT_PARSE/DONT_COMPRESS strip must be even (got %d)", line, len(rest))
@@ -83,13 +95,7 @@ func expandResourcePairs(args []ANY, line int, env Environment) ([]ResourcePair,
 	pairs := make([]ResourcePair, 0, len(rest)/2)
 
 	for i := 0; i < len(rest); i += 2 {
-		path := strings.ReplaceAll(rest[i], "$(S)", "${ARCADIA_ROOT}")
-		key := strings.ReplaceAll(rest[i+1], "$(S)", "${ARCADIA_ROOT}")
-
-		pairs = append(pairs, ResourcePair{
-			Path: strings.ReplaceAll(path, "$(B)", "${ARCADIA_BUILD_ROOT}"),
-			Key:  strings.ReplaceAll(key, "$(B)", "${ARCADIA_BUILD_ROOT}"),
-		})
+		pairs = append(pairs, ResourcePair{Path: resourceWordPath(rest[i]), Key: resourceWordPath(rest[i+1])})
 	}
 
 	return pairs, dontParse, dontCompress
