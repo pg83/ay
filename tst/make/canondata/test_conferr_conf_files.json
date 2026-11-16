@@ -1,0 +1,254 @@
+{
+  "ConfFileConfigureErrorsTest.test_license_json_syntax_error": {
+    "configure_errors": {
+      "At top level": [
+        [
+          "License config $(SOURCE_ROOT)/__ay_e2e__/license.json is invalid. Json syntax error: library/cpp/json/json_reader.cpp:427: Offset: 9, Code: 3, Error: Invalid value.",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null
+    }
+  },
+  "ConfFileConfigureErrorsTest.test_license_linking_type_that_is_unknown": {
+    "configure_errors": {
+      "At top level": [
+        [
+          "Linking type e2e is not supported. Linking type should be static, dynamic or default.",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null
+    }
+  },
+  "ConfFileConfigureErrorsTest.test_license_list_that_is_not_an_array": {
+    "configure_errors": {
+      "At top level": [
+        [
+          "List of licenses by path E2E.defaultshould be an array.",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null
+    }
+  },
+  "ConfFileConfigureErrorsTest.test_license_name_that_is_not_a_string": {
+    "configure_errors": {
+      "At top level": [
+        [
+          "License type by path E2E.default should be a string.",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null
+    }
+  },
+  "ConfFileConfigureErrorsTest.test_license_property_that_is_not_a_map": {
+    "configure_errors": {
+      "At top level": [
+        [
+          "License property section with name E2E should be a map.",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null
+    }
+  },
+  "ConfFileConfigureErrorsTest.test_license_restricted_license_that_is_not_a_map": {
+    "configure_errors": {
+      "At top level": [
+        [
+          "Linking types section by path restricted.MITshould be a map.",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null
+    }
+  },
+  "ConfFileConfigureErrorsTest.test_license_restricted_linking_type_that_is_unknown": {
+    "configure_errors": {
+      "At top level": [
+        [
+          "Linking type e2e is not supported. Linking type should be static, dynamic or default.",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null
+    }
+  },
+  "ConfFileConfigureErrorsTest.test_license_restricted_properties_that_are_not_an_array": {
+    "configure_errors": {
+      "At top level": [
+        [
+          "List of properties by path restricted.MIT.staticshould be an array.",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null
+    }
+  },
+  "ConfFileConfigureErrorsTest.test_license_restricted_property_that_is_not_a_string": {
+    "configure_errors": {
+      "At top level": [
+        [
+          "Property type by path restricted.MIT.dynamic should be a string.",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null
+    }
+  },
+  "ConfFileConfigureErrorsTest.test_license_root_that_is_not_a_map": {
+    "configure_errors": {
+      "At top level": [
+        [
+          "License conf root section should be a map.",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null
+    }
+  },
+  "ConfFileConfigureErrorsTest.test_sysincl_case_sensitive_that_is_not_a_boolean": {
+    "configure_errors": {
+      "At top level": [
+        [
+          "Sysincl config $(SOURCE_ROOT)/__ay_e2e__/sysincl.yml is invalid. Yaml syntax error at line: 0 column: 16",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null
+    }
+  },
+  "ConfFileConfigureErrorsTest.test_sysincl_item_that_is_a_sequence": {
+    "configure_errors": {
+      "At top level": [
+        [
+          "Sysincl item at line: 0 column: 2 in $(SOURCE_ROOT)/__ay_e2e__/sysincl.yml is invalid.",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null
+    }
+  },
+  "ConfFileConfigureErrorsTest.test_sysincl_list_that_is_not_a_sequence": {
+    "configure_errors": {
+      "At top level": [
+        [
+          "Sysincl include list in $(SOURCE_ROOT)/__ay_e2e__/sysincl.yml is invalid. Must be yaml sequence.",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null
+    }
+  },
+  "ConfFileConfigureErrorsTest.test_sysincl_section_that_is_not_a_section": {
+    "configure_errors": {
+      "At top level": [
+        [
+          "Sysincl section at line: 2 column: 2 in $(SOURCE_ROOT)/__ay_e2e__/sysincl.yml is invalid.",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null
+    }
+  },
+  "ConfFileConfigureErrorsTest.test_sysincl_section_with_an_unsupported_key": {
+    "configure_errors": {
+      "At top level": [
+        [
+          "Sysincl include section with unsupported key 'e2e': line: 0 column: 0 in $(SOURCE_ROOT)/__ay_e2e__/sysincl.yml is invalid.",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null
+    }
+  },
+  "ConfFileConfigureErrorsTest.test_sysincl_source_filter_that_is_not_a_scalar": {
+    "configure_errors": {
+      "At top level": [
+        [
+          "Sysincl source_filter line: 1 column: 0 in $(SOURCE_ROOT)/__ay_e2e__/sysincl.yml is invalid. Must be regex as yaml scalar.",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null
+    }
+  },
+  "ConfFileConfigureErrorsTest.test_sysincl_target_that_is_not_a_scalar": {
+    "configure_errors": {
+      "At top level": [
+        [
+          "Sysincl list target for e2e_one.h in $(SOURCE_ROOT)/__ay_e2e__/sysincl.yml has invalid non-scalar target at line: 1 column: 4",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null
+    }
+  },
+  "ConfFileConfigureErrorsTest.test_sysincl_yaml_syntax_error": {
+    "configure_errors": {
+      "At top level": [
+        [
+          "Sysincl config $(SOURCE_ROOT)/__ay_e2e__/sysincl.yml is invalid. Yaml syntax error at line: 1 column: 0",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null
+    }
+  }
+}
