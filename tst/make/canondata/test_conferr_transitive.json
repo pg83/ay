@@ -1,0 +1,357 @@
+{
+  "TransitiveConfigureErrorsTest.test_dependent_dirs_allowing_only_another_directory": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "forbids direct or indirect PEERDIR dependency to module [[imp]]$B/__ay_e2e__/lib/lib__ay_e2e__-lib.a[[rst]] via [[alt1]]CHECK_DEPENDENT_DIRS[[rst]]",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null,
+      "$S/__ay_e2e__/lib": null
+    }
+  },
+  "TransitiveConfigureErrorsTest.test_dependent_dirs_denying_a_peer": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "forbids direct or indirect PEERDIR dependency to module [[imp]]$B/__ay_e2e__/lib/lib__ay_e2e__-lib.a[[rst]] via [[alt1]]CHECK_DEPENDENT_DIRS[[rst]]",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null,
+      "$S/__ay_e2e__/lib": null
+    }
+  },
+  "TransitiveConfigureErrorsTest.test_dependent_dirs_denying_a_peer_of_a_tool": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "forbids direct or indirect dependency to module [[imp]]$B/__ay_e2e__/lib/lib__ay_e2e__-lib.a[[rst]] via [[alt1]]CHECK_DEPENDENT_DIRS[[rst]]\n    $B/__ay_e2e__/__ay_e2e__ -> $B/__ay_e2e__/tool/tool\n    $B/__ay_e2e__/tool/tool -> $B/__ay_e2e__/lib/lib__ay_e2e__-lib.a",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null,
+      "$S/__ay_e2e__/lib": null,
+      "$S/__ay_e2e__/tool": null
+    }
+  },
+  "TransitiveConfigureErrorsTest.test_dependent_dirs_denying_a_tool": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "forbids direct or indirect dependency to tool [[imp]]$B/__ay_e2e__/tool/tool[[rst]] via [[alt1]]CHECK_DEPENDENT_DIRS[[rst]]\n    $B/__ay_e2e__/__ay_e2e__ -> $B/__ay_e2e__/tool/tool",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null,
+      "$S/__ay_e2e__/tool": null
+    }
+  },
+  "TransitiveConfigureErrorsTest.test_dependent_dirs_denying_a_transitive_peer": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "forbids direct or indirect PEERDIR dependency to module [[imp]]$B/__ay_e2e__/deep/lib__ay_e2e__-deep.a[[rst]] via [[alt1]]CHECK_DEPENDENT_DIRS[[rst]]\n    $B/__ay_e2e__/__ay_e2e__ -> $B/__ay_e2e__/lib/lib__ay_e2e__-lib.a\n    $B/__ay_e2e__/lib/lib__ay_e2e__-lib.a -> $B/__ay_e2e__/deep/lib__ay_e2e__-deep.a",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null,
+      "$S/__ay_e2e__/deep": null,
+      "$S/__ay_e2e__/lib": null
+    }
+  },
+  "TransitiveConfigureErrorsTest.test_dependent_dirs_with_an_exception_in_allow_only": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "[[alt1]]EXCEPT[[rst]] items are not allowed for [[alt1]]ALLOW_ONLY[[rst]] restrictions via [[alt1]]CHECK_DEPENDENT_DIRS[[rst]] macro",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null
+    }
+  },
+  "TransitiveConfigureErrorsTest.test_dependent_dirs_with_an_unknown_type": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "CHECK_DEPENDENT_DIRS macro requires first argument to be restriction type 'DENY' or 'ALLOW_ONLY'. Got 'E2E' instead",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null
+    }
+  },
+  "TransitiveConfigureErrorsTest.test_dependent_dirs_with_different_types": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "Multiple CHECK_DEPENDENT_DIRS macro with different restriction types applied to the same module",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null
+    }
+  },
+  "TransitiveConfigureErrorsTest.test_explicit_license_prefix_without_a_license": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "Explicit license must be specified for modules inside __ay_e2e__ directory",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null
+    }
+  },
+  "TransitiveConfigureErrorsTest.test_feature_version_conflicts_without_versions": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "Usage CHECK_FEATURE_VERSION_CONFLICTS without FEATURE_VERSION",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null
+    }
+  },
+  "TransitiveConfigureErrorsTest.test_feature_versions_conflicting_with_a_peer": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "Invalid feature e2e version 2 != 1 in peer __ay_e2e__/lib",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null,
+      "$S/__ay_e2e__/lib": null
+    }
+  },
+  "TransitiveConfigureErrorsTest.test_feature_versions_without_a_name": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "Invalid FEATURE_VERSIONS empty feature name declaration '=1' in module __ay_e2e__",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null
+    }
+  },
+  "TransitiveConfigureErrorsTest.test_go_test_depending_on_the_tested_module_through_a_peer": {
+    "configure_errors": {
+      "__ay_e2e__/ut": [
+        [
+          "go test issue: transitive dependencies on modules under test are prohibited in Arcadia due to scalability issues\nSee https://github.com/golang/go/issues/29258 and st/YMAKE-102 for more details\n\n    $B/__ay_e2e__/other/other.a -> $B/__ay_e2e__/__ay_e2e__.a",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null,
+      "$S/__ay_e2e__/other": null,
+      "$S/__ay_e2e__/ut": null
+    }
+  },
+  "TransitiveConfigureErrorsTest.test_license_restriction_denying_a_peer_license": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "Forbids direct or indirect PEERDIR dependency on code with any license used by module [[imp]]$B/__ay_e2e__/lib/lib__ay_e2e__-lib.a[[rst]] ([[alt2]]AGPL-3.0-only[[rst]]) via [[alt1]]LICENSE_RESTRICTION[[rst]] restrictions",
+          0,
+          0
+        ],
+        [
+          "Modules licensed with [[alt2]]AGPL-3.0-only[[rst]] are forbidden.",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null,
+      "$S/__ay_e2e__/lib": null
+    }
+  },
+  "TransitiveConfigureErrorsTest.test_license_restriction_with_an_unknown_property": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "adds restriction to unknown license property [[alt2]]E2E[[rst]] via [[alt1]]LICENSE_RESTRICTION[[rst]]",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null
+    }
+  },
+  "TransitiveConfigureErrorsTest.test_license_restriction_with_an_unknown_type": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "LICENSE_RESTRICTION macro requires first argument to be restriction type 'DENY' or 'ALLOW_ONLY'. Got 'E2E' instead",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null
+    }
+  },
+  "TransitiveConfigureErrorsTest.test_license_restriction_with_different_types": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "Multiple LICENSE_RESTRICTION macro with different restriction types applied to the same module",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null
+    }
+  },
+  "TransitiveConfigureErrorsTest.test_license_with_an_invalid_expression": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "Module LICENSE must be valid SPDX expression: No right argument for AND operator",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null
+    }
+  },
+  "TransitiveConfigureErrorsTest.test_license_with_an_unknown_name": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "Module LICENSE must be valid SPDX expression: No right argument for WITH operator",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null
+    }
+  },
+  "TransitiveConfigureErrorsTest.test_modulewise_license_restriction": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "Modules licensed with [[alt2]]AGPL-3.0-only[[rst]] are forbidden.",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null
+    }
+  },
+  "TransitiveConfigureErrorsTest.test_provides_by_the_module_and_its_peer": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "[[alt1]]PROVIDES[[rst]] feature 'e2e' and depends on module [[imp]]$B/__ay_e2e__/lib/lib__ay_e2e__-lib.a[[rst]] providing same feature:\n    $B/__ay_e2e__/__ay_e2e__ -> $B/__ay_e2e__/lib/lib__ay_e2e__-lib.a",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null,
+      "$S/__ay_e2e__/lib": null
+    }
+  },
+  "TransitiveConfigureErrorsTest.test_provides_by_two_peers": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "depends on two modules which [[alt1]]PROVIDES[[rst]] same feature 'e2e':\n[[imp]]$B/__ay_e2e__/two/lib__ay_e2e__-two.a[[rst]]\n    $B/__ay_e2e__/__ay_e2e__ -> $B/__ay_e2e__/two/lib__ay_e2e__-two.a\n[[imp]]$B/__ay_e2e__/one/lib__ay_e2e__-one.a[[rst]]\n    $B/__ay_e2e__/__ay_e2e__ -> $B/__ay_e2e__/one/lib__ay_e2e__-one.a",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null,
+      "$S/__ay_e2e__/one": null,
+      "$S/__ay_e2e__/two": null
+    }
+  },
+  "TransitiveConfigureErrorsTest.test_requires_a_directory_without_a_peerdir": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "missing indirect PEERDIR dependency to directory [[imp]]$S/__ay_e2e__/lib[[rst]] required by [[alt1]]REQUIRES[[rst]]",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null
+    }
+  },
+  "TransitiveConfigureErrorsTest.test_requires_a_missing_directory": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "[[alt1]]REQUIRES[[rst]] to non-directory [[imp]]$S/__ay_e2e__/missing[[rst]]",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null
+    }
+  }
+}
