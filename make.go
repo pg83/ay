@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -157,7 +158,7 @@ func cmdMake(g GlobalFlags, args []string) int {
 
 	errs := newConfigureErrors()
 
-	makeFilesReported = mf.outputs.context != ""
+	dirLoopsReported, makeFilesReported = slices.Contains(mf.warningModes, "dirloops"), mf.outputs.context != ""
 
 	onWarn := warnHandler(mf.keepGoing, mf.verbose, errs, func(line string) {
 		errs.addLog(line)
@@ -368,7 +369,7 @@ func genStream(fs FS, parsers *IncludeParserManager, targets []string, hostP, ta
 	emitter.stripPackagesFromResults = stripPackagesFromResults
 	emitter.keepGoing, emitter.onWarn = keepGoing, onWarn
 
-	runGenIntoWithResources(fs, parsers, targets, hostP, targetP, emitter, onWarn, tests, keepGoing, demandSelf)
+	runGenIntoWithResources(fs, parsers, targets, hostP, targetP, emitter, onWarn, tests, keepGoing, demandSelf, genPass{})
 
 	return emitter.finish()
 }

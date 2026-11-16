@@ -72,7 +72,7 @@ var acknowledgedTokSet = func() BitSet {
 	return b
 }()
 
-var makeFilesReported bool
+var dirLoopsReported, makeFilesReported bool
 
 const (
 	variantDemandShift   = 5
@@ -255,6 +255,9 @@ type GenCtx struct {
 	javaGlobKeys        []javaGlobKey
 	targetDirs          map[STR]bool
 	rootDemand          ModuleDemand
+	loops               *moduleLoops
+	plainCycles         int
+	excluded            map[VFS]bool
 }
 
 type moduleMemoEntry struct {
@@ -283,8 +286,16 @@ func newModuleMemo() *moduleMemo {
 	return &moduleMemo{entries: newBumpAllocator[moduleMemoEntry]()}
 }
 
-func runGenIntoWithResources(fs FS, parsers *IncludeParserManager, targets []string, hostP, targetP *Platform, emitter *StreamingEmitter, onWarn func(Warn), tests *TestOpts, keepGoing bool, rootDemand ModuleDemand) []MakeFileEntry {
+type genPass struct {
+	loops    *moduleLoops
+	excluded map[VFS]bool
+}
+
+func runGenIntoWithResources(fs FS, parsers *IncludeParserManager, targets []string, hostP, targetP *Platform, emitter *StreamingEmitter, onWarn func(Warn), tests *TestOpts, keepGoing bool, rootDemand ModuleDemand, pass genPass) *GenCtx {
 	ctx := newGenCtx(fs, parsers, hostP, targetP, emitter, onWarn, tests, keepGoing)
+
+	ctx.loops, ctx.excluded = pass.loops, pass.excluded
+
 	discovered := make([]DiscoveredTargets, len(targets))
 	all := make([]DiscoveredModule, 0, len(targets))
 
@@ -349,11 +360,7 @@ func runGenIntoWithResources(fs FS, parsers *IncludeParserManager, targets []str
 		})
 	}
 
-	if makeFilesReported {
-		return ctx.makeFiles()
-	}
-
-	return nil
+	return ctx
 }
 
 func newGenCtx(fs FS, parsers *IncludeParserManager, hostP, targetP *Platform, emitter *StreamingEmitter, onWarn func(Warn), tests *TestOpts, keepGoing bool) *GenCtx {
@@ -1091,13 +1098,49 @@ func discoverRecursedTargets(ctx *GenCtx, targetDir VFS) DiscoveredTargets {
 }
 
 func genDumpGraphWithResources(fs FS, parsers *IncludeParserManager, targets []string, hostP, targetP *Platform, onWarn func(Warn), tests *TestOpts, keepGoing bool, rootDemand ModuleDemand, addModulesToResults, stripPackagesFromResults bool) *Graph {
-	emitter := newStreamingEmitter(nil)
+	newEmitter := func() *StreamingEmitter {
+		emitter := newStreamingEmitter(nil)
 
-	emitter.addModulesToResults = addModulesToResults
-	emitter.stripPackagesFromResults = stripPackagesFromResults
-	emitter.keepGoing, emitter.onWarn = keepGoing, onWarn
+		emitter.addModulesToResults = addModulesToResults
+		emitter.stripPackagesFromResults = stripPackagesFromResults
+		emitter.keepGoing, emitter.onWarn = keepGoing, onWarn
 
-	makeFiles := runGenIntoWithResources(fs, parsers, targets, hostP, targetP, emitter, onWarn, tests, keepGoing, rootDemand)
+		return emitter
+	}
+
+	emitter := newEmitter()
+	ctx := runGenIntoWithResources(fs, parsers, targets, hostP, targetP, emitter, onWarn, tests, keepGoing, rootDemand, genPass{})
+
+	if ctx.plainCycles > 0 {
+		loops := &moduleLoops{}
+
+		emitter = newEmitter()
+		ctx = runGenIntoWithResources(fs, parsers, targets, hostP, targetP, emitter, onWarn, tests, keepGoing, rootDemand, genPass{loops: loops})
+
+		if bad := loops.badLoops(ctx.plainModuleDir); len(bad) > 0 {
+			removed := loops.removed(bad, ctx.plainModuleDir)
+
+			if dirLoopsReported {
+				loops.reportBadLoops(bad, removed, onWarn)
+			}
+
+			excluded := make(map[VFS]bool, len(removed))
+
+			for _, m := range removed {
+				excluded[m] = true
+			}
+
+			emitter = newEmitter()
+			ctx = runGenIntoWithResources(fs, parsers, targets, hostP, targetP, emitter, onWarn, tests, keepGoing, rootDemand, genPass{excluded: excluded})
+		}
+	}
+
+	var makeFiles []MakeFileEntry
+
+	if makeFilesReported {
+		makeFiles = ctx.makeFiles()
+	}
+
 	g := finalize(emitter)
 
 	g.makeFiles = makeFiles
@@ -1437,12 +1480,21 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 
 	defer func() { ctx.whereModule = where }()
 
+	if instance.Platform == ctx.target && ctx.excluded[instance.Path] {
+		return &ModuleEmitResult{}
+	}
+
 	identity := instance
 
 	identity.Demand = demandNone
 
 	if ctx.walking[identity] {
 		ctx.cyclesTolerated++
+
+		if instance.Platform == ctx.target && ctx.plainModuleDir(instance.Path) {
+			ctx.plainCycles++
+		}
+
 		fmt.Fprintf(os.Stderr, "gen: PEERDIR cycle tolerated at %s\n", instance.Path.relString())
 
 		return &ModuleEmitResult{}
@@ -1451,6 +1503,14 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 	ctx.walking[identity] = true
 
 	defer delete(ctx.walking, identity)
+
+	if ctx.loops != nil && instance.Platform == ctx.target {
+		defer func() {
+			if result != nil {
+				ctx.loops.finish(instance.Path, moduleNodeName(instance, result, ctx.dirs[dirEvaluationKey{instance.Path, instance.Platform}].declaration))
+			}
+		}()
+	}
 
 	if instance.Demand == demandNone {
 		ctx.emit.deferPublication++
@@ -1935,6 +1995,10 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 			ctx.onWarn(Warn{Kind: WarnModuleFailed, Where: makeFileWhere(instance.Path.relString()), Error: "[[alt1]]PEERDIR[[rst]] to " + ctx.missingDirectory(p) + "[[imp]]$S/" + p.string() + "[[rst]]"})
 
 			continue
+		}
+
+		if ctx.loops != nil && instance.Platform == ctx.target && peerInstance.Platform == ctx.target {
+			ctx.loops.edge(instance.Path, peerVFS)
 		}
 
 		if isGoModuleType(peerResult.ModuleStmtName) && !isGoModuleType(d.unit.Type) {
