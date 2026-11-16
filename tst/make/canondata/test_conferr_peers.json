@@ -1,0 +1,162 @@
+{
+  "PeerConfigureErrorsTest.test_depends_on_a_missing_directory": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "[[alt1]]DEPENDS[[rst]] to missing directory: $S/__ay_e2e__/missing",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null
+    }
+  },
+  "PeerConfigureErrorsTest.test_peerdir_from_cpp_to_go": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "[[alt1]]PEERDIR[[rst]] to [[imp]]$S/__ay_e2e__/lib[[rst]] is not allowed and skipped: module types are incompatible",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null,
+      "$S/__ay_e2e__/lib": null
+    }
+  },
+  "PeerConfigureErrorsTest.test_peerdir_to_a_directory_without_modules": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "No modules for [[alt1]]PEERDIR[[rst]] in [[imp]]$S/__ay_e2e__/sub[[rst]]",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null,
+      "$S/__ay_e2e__/sub": null
+    }
+  },
+  "PeerConfigureErrorsTest.test_peerdir_to_a_file": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "[[alt1]]PEERDIR[[rst]] to non-directory $S/__ay_e2e__/value.txt",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null
+    }
+  },
+  "PeerConfigureErrorsTest.test_peerdir_to_a_program": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "[[alt1]]PEERDIR[[rst]] to [[imp]]$S/__ay_e2e__/tool[[rst]] is not allowed and skipped: module types are incompatible",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null,
+      "$S/__ay_e2e__/tool": null
+    }
+  },
+  "PeerConfigureErrorsTest.test_peerdir_to_an_internal_directory": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "[[alt1]]PEERDIR[[rst]] from [[imp]]$S/__ay_e2e__[[rst]] to [[imp]]$S/__ay_e2e__/other/internal[[rst]] is prohibited and skipped since latter is `internal` and former is not its sibling.\nSee https://docs.yandex-team.ru/ya-make/manual/common/peerdir_rules#internal for details",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null,
+      "$S/__ay_e2e__/other/internal": null
+    }
+  },
+  "PeerConfigureErrorsTest.test_srcdir_to_a_missing_directory": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "[[alt1]]SRCDIR[[rst]] to non existent directory $S/__ay_e2e__/missing",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null
+    }
+  },
+  "PeerConfigureErrorsTest.test_tool_from_a_directory_without_modules": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "[[alt1]]TOOL[[rst]] not found: no modules in $S/__ay_e2e__/tool",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null,
+      "$S/__ay_e2e__/tool": null
+    }
+  },
+  "PeerConfigureErrorsTest.test_tool_from_a_directory_without_ya_make": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "Trying to use [[alt1]]TOOL[[rst]] from directory without ya.make: [[imp]]$S/__ay_e2e__/tool[[rst]]",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null
+    }
+  },
+  "PeerConfigureErrorsTest.test_tool_from_a_library": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "No suitable [[alt1]]TOOL[[rst]] module found in $S/__ay_e2e__/tool",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null,
+      "$S/__ay_e2e__/tool": null
+    }
+  },
+  "PeerConfigureErrorsTest.test_tool_from_a_missing_directory": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "Trying to use [[alt1]]TOOL[[rst]] from missing directory: [[imp]]$S/__ay_e2e__/missing[[rst]]",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null
+    }
+  }
+}
