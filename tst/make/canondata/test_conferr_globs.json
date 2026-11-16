@@ -1,0 +1,30 @@
+{
+  "GlobConfigureErrorsTest.test_glob_in_ya_make": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "internal command [[alt1]]_GLOB[[rst]] is not allowed to appear in ya.make",
+          2,
+          51
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null
+    }
+  },
+  "GlobConfigureErrorsTest.test_late_glob_in_ya_make": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "internal command [[alt1]]_LATE_GLOB[[rst]] is not allowed to appear in ya.make",
+          2,
+          57
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null
+    }
+  }
+}
