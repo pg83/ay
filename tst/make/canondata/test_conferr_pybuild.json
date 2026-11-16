@@ -1,0 +1,161 @@
+{
+  "PybuildConfigureErrorsTest.test_duplicate_py_srcs": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "Duplicate(s) is found in the PY_SRCS macro: {'__ay_e2e__.value'}",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null
+    }
+  },
+  "PybuildConfigureErrorsTest.test_duplicate_type_stubs": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "Duplicate(s) is found in the PY_SRCS macro: __ay_e2e__.value",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null
+    }
+  },
+  "PybuildConfigureErrorsTest.test_no_lint_outside_of_allowed_paths": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "NO_LINT() is allowed only in contrib/, devtools/, junk/, taxi/uservices/, travel/, market/report/lite/, market/robotics/contrib/, market/sre, passport/backend/oauth/, sdg/sdc/contrib/, sdg/sdc/third_party/, smart_devices/third_party/, yt/yt/, yt/python/, yt/python_py2/, cml/comrade_agent/src/contrib/",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null
+    }
+  },
+  "PybuildConfigureErrorsTest.test_py_main_without_a_python_version": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "[[alt1]]PY_MAIN[[rst]]: Unknown Python version, select it using [[alt1]]USE_PYTHONx[[rst]] macro",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null
+    }
+  },
+  "PybuildConfigureErrorsTest.test_py_register_without_a_python_version": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "[[alt1]]PY_REGISTER[[rst]]: Unknown Python version, select it using [[alt1]]USE_PYTHONx[[rst]] macro",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null
+    }
+  },
+  "PybuildConfigureErrorsTest.test_py_srcs_item_above_the_module": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "PY_SRCS item starts with \"../\": '../value.py'",
+          0,
+          0
+        ],
+        [
+          "cannot find source file: ../value.py",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null
+    }
+  },
+  "PybuildConfigureErrorsTest.test_py_srcs_item_from_the_root": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "PY_SRCS item starts with \"/\": '/value.py'",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null
+    }
+  },
+  "PybuildConfigureErrorsTest.test_py_srcs_without_a_python_version": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "[[alt1]]PY_SRCS[[rst]]: Unknown Python version, select it using [[alt1]]USE_PYTHONx[[rst]] macro",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null
+    }
+  },
+  "PybuildConfigureErrorsTest.test_test_srcs_with_a_top_level_namespace": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "in TEST_SRCS: you cannot use TOP_LEVEL here - it would broke testing machinery",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null
+    }
+  },
+  "PybuildConfigureErrorsTest.test_top_level_main_in_a_python3_program": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "TOP_LEVEL __main__.py is not allowed in PY3_PROGRAM",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null
+    }
+  },
+  "PybuildConfigureErrorsTest.test_unrecognized_py_srcs_argument": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "in PY_SRCS: unrecognized arg 'value.e2e'",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null
+    }
+  }
+}
