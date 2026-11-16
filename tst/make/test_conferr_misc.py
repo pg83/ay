@@ -101,6 +101,49 @@ class MiscConfigureErrorsTest(MakeTest):
         self.subdir()
         self.assertConfigureLikeYa()
 
+    def test_resource_uri_from_a_missing_json(self):
+        self.library("SET_RESOURCE_URI_FROM_JSON(E2E_URI missing.json)")
+        self.assertConfigureLikeYa()
+
+    def test_resource_uri_from_an_invalid_json(self):
+        self.library("SET_RESOURCE_URI_FROM_JSON(E2E_URI resource.json)")
+        self.write("resource.json", "{broken\n")
+        self.assertConfigureLikeYa()
+
+    def test_resource_uri_from_json_with_one_argument(self):
+        self.library("SET_RESOURCE_URI_FROM_JSON(E2E_URI)")
+        self.assertConfigureLikeYa()
+
+    def test_external_resource_by_json_without_the_platform(self):
+        self.library("DECLARE_EXTERNAL_RESOURCE_BY_JSON(E2E_RESOURCE resource.json)")
+        self.write("resource.json", json.dumps({"by_platform": {"win32-x86_64": {"uri": "sbr:1"}}}))
+        self.assertConfigureLikeYa()
+
+    def test_unreadable_source(self):
+        self.library()
+        self.write("value.cpp", '#include "value.h"\nint value() { return 42; }\n')
+        self.write("value.h", "#pragma once\n")
+        (self.project / "value.h").chmod(0)
+        self.addCleanup((self.project / "value.h").chmod, 0o644)
+        self.assertConfigureLikeYa()
+
+    def ts_imports(self, source):
+        self.write("ya.make", "TS_PACKAGE()\nEND()\nRECURSE_FOR_TESTS(tests)\n")
+        self.write("package.json", json.dumps({"name": "@e2e/imports", "version": "1.0.0", "engines": {"node": nodejs_version()}}))
+        self.write("pnpm-lock.yaml", "lockfileVersion: '9.0'\nimporters:\n  .: {}\n")
+        self.write("tsconfig.json", '{"compilerOptions":{"target":"ES2022"},"include":["src/**/*.ts"]}\n')
+        self.write("vitest.config.ts", "export default {};\n")
+        self.write("tests/ya.make", f"TS_TEST_VITEST_FOR({PROJECT})\nTS_TEST_SRCS(../src)\nTS_TEST_CONFIG(../vitest.config.ts)\nEND()\n")
+        self.write("src/answer.spec.ts", source)
+
+    def test_typescript_import_of_a_missing_module(self):
+        self.ts_imports('import "./absent";\n')
+        self.assertConfigureLikeYa()
+
+    def test_typescript_import_without_a_string(self):
+        self.ts_imports("import value from answer;\n")
+        self.assertConfigureLikeYa()
+
     def ts_tests(self, *statements):
         self.write("lib/ya.make", "TS_LIBRARY()\nTS_BUILD_SCRIPT(nots:build)\nTS_BUILD_OUTPUTS(dist)\n" + "".join(s + "\n" for s in statements) + "END()\n")
         self.write("lib/package.json", json.dumps({"name": "@e2e/lib", "version": "1.0.0", "engines": {"node": nodejs_version()}, "files": ["src", "dist"], "scripts": {"nots:build": "tsc"}}))

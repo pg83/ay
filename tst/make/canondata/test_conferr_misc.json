@@ -146,6 +146,20 @@
       "$S/__ay_e2e__": null
     }
   },
+  "MiscConfigureErrorsTest.test_external_resource_by_json_without_the_platform": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "Command [[alt1]]DECLARE_EXTERNAL_RESOURCE_BY_JSON[[rst]] for [[alt2]]E2E_RESOURCE[[rst]] failed with error: Unsupported platform",
+          3,
+          61
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null
+    }
+  },
   "MiscConfigureErrorsTest.test_go_resource_key_without_a_value": {
     "configure_errors": {
       "__ay_e2e__": [
@@ -217,6 +231,48 @@
       "$S/__ay_e2e__/sub": null
     }
   },
+  "MiscConfigureErrorsTest.test_resource_uri_from_a_missing_json": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "Command [[alt1]]SET_RESOURCE_URI_FROM_JSON[[rst]] failed with error: Unable to load jsonFile [[imp]]$(SOURCE_ROOT)/__ay_e2e__/missing.json[[rst]]: Doesn't exist or is not a file",
+          3,
+          48
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null
+    }
+  },
+  "MiscConfigureErrorsTest.test_resource_uri_from_an_invalid_json": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "Command [[alt1]]SET_RESOURCE_URI_FROM_JSON[[rst]] failed with error: Unable to load jsonFile [[imp]]$(SOURCE_ROOT)/__ay_e2e__/resource.json[[rst]]: Cannot parse json: library/cpp/json/json_reader.cpp:427: Offset: 1, Code: 4, Error: Missing a name for object member.",
+          3,
+          49
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null
+    }
+  },
+  "MiscConfigureErrorsTest.test_resource_uri_from_json_with_one_argument": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "Syntax error in __ay_e2e__/ya.make:3:35: macro SET_RESOURCE_URI_FROM_JSON: 1 args, must be 2\nLIBRARY()\nSRCS(value.cpp)\nSET_RESOURCE_URI_FROM_JSON(E2E_URI[ <- HERE ])\nEND()",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null
+    }
+  },
   "MiscConfigureErrorsTest.test_run_program_with_a_directory_input": {
     "configure_errors": {
       "__ay_e2e__": [
@@ -282,6 +338,50 @@
     "make_files": {
       "$S/__ay_e2e__": null,
       "$S/__ay_e2e__/lib": null
+    }
+  },
+  "MiscConfigureErrorsTest.test_typescript_import_of_a_missing_module": {
+    "configure_errors": {
+      "__ay_e2e__/tests": [
+        [
+          "Failed to resolve import in $S/__ay_e2e__/src/answer.spec.ts: ./absent",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null,
+      "$S/__ay_e2e__/tests": null
+    }
+  },
+  "MiscConfigureErrorsTest.test_typescript_import_without_a_string": {
+    "configure_errors": {
+      "__ay_e2e__/tests": [
+        [
+          "Failed to parse import in $S/__ay_e2e__/src/answer.spec.ts: Invalid module specifier: ...answer;...",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null,
+      "$S/__ay_e2e__/tests": null
+    }
+  },
+  "MiscConfigureErrorsTest.test_unreadable_source": {
+    "configure_errors": {
+      "At top level": [
+        [
+          "Cannot read source file $S/__ay_e2e__/value.h: Permission denied (13)",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null
     }
   }
 }
