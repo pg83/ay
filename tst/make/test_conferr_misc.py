@@ -80,6 +80,27 @@ class MiscConfigureErrorsTest(MakeTest):
         self.library()
         self.assertConfigureLikeYa()
 
+    def subdir(self):
+        self.write("sub/value.txt", "value\n")
+
+    def test_copy_file_of_a_directory(self):
+        self.library("COPY_FILE(sub sub.copy)")
+        self.subdir()
+        self.assertConfigureLikeYa()
+
+    def test_run_python_with_a_directory_input(self):
+        self.library("RUN_PYTHON3(gen.py IN sub OUT out.txt)")
+        self.write("gen.py", "print(42)\n")
+        self.subdir()
+        self.assertConfigureLikeYa()
+
+    def test_run_program_with_a_directory_input(self):
+        self.library(f"RUN_PROGRAM({PROJECT}/tool IN sub STDOUT out.txt)")
+        self.write("tool/ya.make", "PROGRAM()\nSRCS(main.cpp)\nEND()\n")
+        self.write("tool/main.cpp", "int main() { return 0; }\n")
+        self.subdir()
+        self.assertConfigureLikeYa()
+
     def ts_tests(self, *statements):
         self.write("lib/ya.make", "TS_LIBRARY()\nTS_BUILD_SCRIPT(nots:build)\nTS_BUILD_OUTPUTS(dist)\n" + "".join(s + "\n" for s in statements) + "END()\n")
         self.write("lib/package.json", json.dumps({"name": "@e2e/lib", "version": "1.0.0", "engines": {"node": nodejs_version()}, "files": ["src", "dist"], "scripts": {"nots:build": "tsc"}}))

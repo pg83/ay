@@ -42,6 +42,25 @@
       "$S/__ay_e2e__/lib": null
     }
   },
+  "MiscConfigureErrorsTest.test_copy_file_of_a_directory": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "$S/__ay_e2e__: skip processing macro COPY_FILE due to unallowed input.",
+          0,
+          0
+        ],
+        [
+          "input dependency in COPY_FILE $L/TEXT/$S/__ay_e2e__/sub points to a directory and cannot be processed. Please provide a file path instead.",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null
+    }
+  },
   "MiscConfigureErrorsTest.test_default_module_license_that_is_invalid": {
     "configure_errors": {
       "__ay_e2e__": [
@@ -196,6 +215,44 @@
     "make_files": {
       "$S/__ay_e2e__": null,
       "$S/__ay_e2e__/sub": null
+    }
+  },
+  "MiscConfigureErrorsTest.test_run_program_with_a_directory_input": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "$S/__ay_e2e__: skip processing macro RUN_PROGRAM due to unallowed input.",
+          0,
+          0
+        ],
+        [
+          "input dependency in RUN_PROGRAM $S/__ay_e2e__/sub points to a directory and cannot be processed. Please provide a file path instead.",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null
+    }
+  },
+  "MiscConfigureErrorsTest.test_run_python_with_a_directory_input": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "$S/__ay_e2e__: skip processing macro RUN_PYTHON3 due to unallowed input.",
+          0,
+          0
+        ],
+        [
+          "input dependency in RUN_PYTHON3 $S/__ay_e2e__/sub points to a directory and cannot be processed. Please provide a file path instead.",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null
     }
   },
   "MiscConfigureErrorsTest.test_srcs_with_a_directory": {
