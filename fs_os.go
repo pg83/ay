@@ -555,3 +555,7 @@ func (fs *OsFS) walk(rel string, visit func(rel string, isDir bool) bool) {
 
 	fs.walkQueue, fs.walkBuf = queue[:0], buf[:0]
 }
+
+func (fs *OsFS) root() string {
+	return fs.srcRoot
+}

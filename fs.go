@@ -3,6 +3,7 @@ package main
 import "github.com/zeebo/xxh3"
 
 type FS interface {
+	root() string
 	listdir(dir STR) DirView
 	dirHas(v DirView, name string) (present bool, isDir bool)
 

@@ -460,6 +460,8 @@ func newGenCtx(fs FS, parsers *IncludeParserManager, hostP, targetP *Platform, e
 		}
 	}
 
+	ctx.licenses = ctx.loadLicenseConf(targetP.ifEnv)
+
 	targetSysincl := newSysinclCtx(loadSysInclSet(parsers, targetP, onWarn))
 	targetScanner := newIncludeScannerWith(parsers, targetSysincl, ctx.onWarn, ctx.buckets)
 

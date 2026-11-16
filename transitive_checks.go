@@ -1,7 +1,6 @@
 package main
 
 import (
-	"encoding/json"
 	"fmt"
 	"regexp"
 	"slices"
@@ -156,44 +155,7 @@ func pathIsPrefixOf(prefix, path string) bool {
 	return strings.HasPrefix(path, prefix) && (len(path) == len(prefix) || path[len(prefix)] == '/')
 }
 
-func stripJSONComments(data []byte) []byte {
-	out := make([]byte, 0, len(data))
-	inString := false
-
-	for i := 0; i < len(data); i++ {
-		c := data[i]
-
-		switch {
-		case inString:
-			if c == '\\' && i+1 < len(data) {
-				out = append(out, c, data[i+1])
-				i++
-
-				continue
-			}
-
-			inString = c != '"'
-		case c == '"':
-			inString = true
-		case c == '/' && i+1 < len(data) && data[i+1] == '/':
-			for i < len(data) && data[i] != '\n' {
-				i++
-			}
-
-			c = '\n'
-		}
-
-		out = append(out, c)
-	}
-
-	return out
-}
-
-func (ctx *GenCtx) licenseConfFor(env Environment) *licenseConf {
-	if ctx.licenses != nil {
-		return ctx.licenses
-	}
-
+func (ctx *GenCtx) loadLicenseConf(env Environment) *licenseConf {
 	groups := map[string]*[2][]string{}
 
 	group := func(name string) *[2][]string {
@@ -204,47 +166,97 @@ func (ctx *GenCtx) licenseConfFor(env Environment) *licenseConf {
 		return groups[name]
 	}
 
-	for _, file := range strings.Fields(env.expand(env.string(envLICENSES))) {
-		var root map[string]map[string]json.RawMessage
+	report := func(msg string) {
+		ctx.onWarn(Warn{Kind: WarnMisconfiguration, Where: "At top level", Error: msg})
+	}
 
-		if json.Unmarshal(stripJSONComments(concatChunks(ctx.fs.read(file))), &root) != nil {
+	add := func(g *[2][]string, kind, license string) {
+		if kind != "dynamic" {
+			g[0] = append(g[0], license)
+		}
+
+		if kind != "static" {
+			g[1] = append(g[1], license)
+		}
+	}
+
+	linkingKind := func(kind string) bool {
+		if kind != "default" && kind != "static" && kind != "dynamic" {
+			report("Linking type " + kind + " is not supported. Linking type should be static, dynamic or default.")
+
+			return false
+		}
+
+		return true
+	}
+
+	for _, file := range strings.Fields(env.expand(env.string(envLICENSES))) {
+		if !ctx.fs.isFile(srcRootRel, file) {
 			continue
 		}
 
-		for prop, section := range root {
-			for key, raw := range section {
-				if prop != "restricted" {
-					var licenses []string
+		root, err := readConfJSON(concatChunks(ctx.fs.read(file)))
 
-					json.Unmarshal(raw, &licenses)
+		if err != "" {
+			report("License config " + ctx.fs.root() + "/" + file + " is invalid. Json syntax error: " + err)
 
-					g := group(prop)
+			continue
+		}
 
-					if key != "dynamic" {
-						g[0] = append(g[0], licenses...)
+		if root.kind != confJSONObject {
+			report("License conf root section should be a map.")
+
+			continue
+		}
+
+		for i, prop := range root.keys {
+			section := root.items[i]
+
+			if section.kind != confJSONObject {
+				report("License property section with name " + prop + " should be a map.")
+
+				continue
+			}
+
+			if prop != "restricted" {
+				g := group(prop)
+
+				for k, kind := range section.keys {
+					if list := section.items[k]; list.kind != confJSONArray {
+						report("List of licenses by path " + prop + "." + kind + "should be an array.")
+					} else if linkingKind(kind) {
+						for _, license := range list.items {
+							if license.kind != confJSONString {
+								report("License type by path " + prop + "." + kind + " should be a string.")
+							} else {
+								add(g, kind, license.str)
+							}
+						}
 					}
+				}
 
-					if key != "static" {
-						g[1] = append(g[1], licenses...)
-					}
+				continue
+			}
+
+			for j, license := range section.keys {
+				linking := section.items[j]
+
+				if linking.kind != confJSONObject {
+					report("Linking types section by path " + prop + "." + license + "should be a map.")
 
 					continue
 				}
 
-				var linking map[string][]string
-
-				json.Unmarshal(raw, &linking)
-
-				for kind, props := range linking {
-					for _, p := range props {
-						g := group(p)
-
-						if kind != "dynamic" {
-							g[0] = append(g[0], key)
-						}
-
-						if kind != "static" {
-							g[1] = append(g[1], key)
+				for k, kind := range linking.keys {
+					if props := linking.items[k]; props.kind != confJSONArray {
+						report("List of properties by path " + prop + "." + license + "." + kind + "should be an array.")
+					} else if linkingKind(kind) {
+						for _, p := range props.items {
+							if p.kind != confJSONString {
+								report("Property type by path " + prop + "." + license + "." + kind + " should be a string.")
+							} else {
+								add(group(p.str), kind, license)
+							}
 						}
 					}
 				}
@@ -288,8 +300,6 @@ func (ctx *GenCtx) licenseConfFor(env Environment) *licenseConf {
 			c.defaultProps = parse.props
 		}
 	}
-
-	ctx.licenses = c
 
 	return c
 }
@@ -733,7 +743,7 @@ func parseFeatureVersions(value, dir string) ([]featureVersion, []string) {
 }
 
 func (ctx *GenCtx) captureTransitive(modulePath string, env Environment, d *ModuleData) *transitiveInfo {
-	licenses := ctx.licenseConfFor(env)
+	licenses := ctx.licenses
 	own := licenses.defaultProps
 
 	var info transitiveInfo
@@ -1196,10 +1206,6 @@ func (tc *transitiveChecker) checkGoTest(m *ModuleEmitResult) {
 }
 
 func (ctx *GenCtx) checkTransitiveRequirements() {
-	if ctx.licenses == nil {
-		return
-	}
-
 	tc := &transitiveChecker{ctx: ctx, licenses: ctx.licenses}
 
 	var walk func(*ModuleEmitResult)

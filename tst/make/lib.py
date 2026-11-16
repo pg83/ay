@@ -166,7 +166,8 @@ class MakeTest(unittest.TestCase):
         graph = json.loads(autocheck.read_uc(output_dir / "graph.json.uc"))
         self.assertIn("graph", graph)
         context = json.loads(autocheck.read_uc(output_dir / "context.json.uc"))
-        replacements = [(str(self.work), "$(WORK)"), (os.path.realpath(self.root), "$(SOURCE_ROOT)"), (str(self.root), "$(SOURCE_ROOT)")]
+        # ay's source root is a symlink farm inside the work directory, so it is replaced first.
+        replacements = [(os.path.realpath(self.root), "$(SOURCE_ROOT)"), (str(self.root), "$(SOURCE_ROOT)"), (str(self.work), "$(WORK)")]
         return autocheck.configure_output(context, self.project_name, replacements)
 
     def assertConfigureLikeYa(self, name="", targets=()):

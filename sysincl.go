@@ -74,7 +74,7 @@ func (pm *IncludeParserManager) sysinclRecords(rel string, onWarn func(Warn)) []
 		throwFmt("sysincl: %s: no such file", rel)
 	}
 
-	records := parseSysInclYAML(rel, concatChunks(pm.fs.readPath(key)), onWarn)
+	records := parseSysInclYAML(rel, pm.fs.root()+"/"+rel, concatChunks(pm.fs.readPath(key)), onWarn)
 
 	pm.cache.sysinclYAMLs.put(key, records)
 

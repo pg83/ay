@@ -2,10 +2,19 @@ package main
 
 import (
 	"bytes"
-	"fmt"
 )
 
-func parseSysInclYAML(name string, data []byte, onWarn func(Warn)) []SysIncl {
+func parseSysInclYAML(name, path string, data []byte, onWarn func(Warn)) []SysIncl {
+	var records []SysIncl
+
+	if try(func() { records = parseSysInclSubset(name, data, onWarn) }) != nil {
+		return parseSysinclTree(name, path, data, onWarn)
+	}
+
+	return records
+}
+
+func parseSysInclSubset(name string, data []byte, onWarn func(Warn)) []SysIncl {
 	var (
 		out  []SysIncl
 		rec  SysIncl
@@ -54,19 +63,20 @@ func parseSysInclYAML(name string, data []byte, onWarn func(Warn)) []SysIncl {
 
 			rec.Filter = compileSourceFilter(name, lineNo, s, onWarn)
 		case "case_sensitive":
-			rec.CaseInsensitive = string(val) == "false"
+			sensitive, ok := yamlBool(string(val))
+
+			if !ok {
+				throwFmt("%s:%d: case_sensitive %q is not a boolean", name, lineNo, val)
+			}
+
+			rec.CaseInsensitive = !sensitive
 		case "includes":
 
 			if len(val) != 0 && string(val) != "[]" {
 				throwFmt("%s:%d: inline includes value is not part of the sysincl subset", name, lineNo)
 			}
 		default:
-			onWarn(Warn{
-				Kind:    WarnSysIncl,
-				Message: fmt.Sprintf("%s:%d: unrecognised record key %q — record disabled", name, lineNo, b[:colon]),
-			})
-
-			rec.Filter = &SourceFilter{unsupported: true}
+			throwFmt("%s:%d: unrecognised record key %q", name, lineNo, b[:colon])
 		}
 	}
 
