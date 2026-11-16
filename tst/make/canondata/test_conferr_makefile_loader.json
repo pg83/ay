@@ -1,0 +1,125 @@
+{
+  "MakefileLoaderConfigureErrorsTest.test_command_outside_of_a_module": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "unexpected command [[alt1]]SRCS[[rst]] outside of a module",
+          1,
+          16
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null
+    }
+  },
+  "MakefileLoaderConfigureErrorsTest.test_garbage_after_a_statement": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "devtools/ymake/lang/makefile_reader.cpp:88: lexer error at __ay_e2e__/ya.make:2:1: \nLIBRARY() garbage\n[ <- HERE ]END()",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {}
+  },
+  "MakefileLoaderConfigureErrorsTest.test_include_loop": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "include loop detected: $S/__ay_e2e__/ya.make\n -> $S/__ay_e2e__/first.inc\n -> $S/__ay_e2e__/second.inc\n -> $S/__ay_e2e__/first.inc",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {}
+  },
+  "MakefileLoaderConfigureErrorsTest.test_internal_command": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "internal command [[alt1]]_E2E_INTERNAL[[rst]] is not allowed to appear in ya.make",
+          2,
+          20
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null
+    }
+  },
+  "MakefileLoaderConfigureErrorsTest.test_missing_include": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "file [[alt1]]$S/__ay_e2e__/missing.inc[[rst]] specified in INCLUDE command (in $S/__ay_e2e__/ya.make) doesn't exist.",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null
+    }
+  },
+  "MakefileLoaderConfigureErrorsTest.test_module_inside_a_module": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "module [[alt1]]PROGRAM[[rst]] inside module LIBRARY. Maybe you need to place PROGRAM after END()?. Skip [[alt1]]PROGRAM[[rst]] macro.",
+          2,
+          9
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null
+    }
+  },
+  "MakefileLoaderConfigureErrorsTest.test_recurse_to_a_file": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "[[imp]]RECURSE[[rst]] to non-directory [[imp]]$S/__ay_e2e__/value.txt[[rst]]",
+          1,
+          18
+        ]
+      ]
+    },
+    "make_files": {}
+  },
+  "MakefileLoaderConfigureErrorsTest.test_second_module": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "unexpected command [[alt1]]END[[rst]] outside of a module",
+          4,
+          5
+        ],
+        [
+          "unexpected command [[alt1]]PROGRAM[[rst]]. Only one module per ya make list is permitted.",
+          3,
+          9
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null
+    }
+  },
+  "MakefileLoaderConfigureErrorsTest.test_unbalanced_parentheses": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "devtools/ymake/lang/makefile_reader.cpp:88: lexer error at __ay_e2e__/ya.make:2:4: \nLIBRARY(\nEND[ <- HERE ]()",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {}
+  }
+}
