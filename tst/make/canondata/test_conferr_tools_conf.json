@@ -1,0 +1,114 @@
+{
+  "ToolsConfConfigureErrorsTest.test_pyx_including_a_missing_file": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "could not resolve include file: [[imp]]missing.pxi[[rst]] included from here: [[imp]]$S/__ay_e2e__/value.pyx[[rst]]",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null
+    }
+  },
+  "ToolsConfConfigureErrorsTest.test_tools_conf_bottle_formula_outside_of_the_tree": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "File \"contrib/e2e/resources.json\" (referenced from bottle \"e2e\" in \"$(SOURCE_ROOT)/__ay_e2e__/conf/ya.conf.json\") must be located in \"build\" or \"__ay_e2e__/conf\" file tree",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null
+    }
+  },
+  "ToolsConfConfigureErrorsTest.test_tools_conf_bottle_formula_that_is_missing": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "File \"$(SOURCE_ROOT)/build/external_resources/e2e_missing/resources.json\" (referenced from bottle \"e2e\" in \"$(SOURCE_ROOT)/__ay_e2e__/conf/ya.conf.json\") is not found",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null
+    }
+  },
+  "ToolsConfConfigureErrorsTest.test_tools_conf_from_a_missing_directory": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "Directory \"$(SOURCE_ROOT)/__ay_e2e__/missing\" not found",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null
+    }
+  },
+  "ToolsConfConfigureErrorsTest.test_tools_conf_simple_tool_without_a_formula": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "File \"$(SOURCE_ROOT)/build/external_resources/e2e_missing/resources.json\" (referenced from simple tool \"e2e_missing\" in \"$(SOURCE_ROOT)/__ay_e2e__/conf/ya.conf.json\") is not found",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null
+    }
+  },
+  "ToolsConfConfigureErrorsTest.test_tools_conf_tool_config_formula_that_is_missing": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "File \"$(SOURCE_ROOT)/build/external_resources/e2e_missing/resources.json\" (referenced from tool config \"$(SOURCE_ROOT)/__ay_e2e__/conf/tools/tools/e2e.tool.json\") is not found",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null
+    }
+  },
+  "ToolsConfConfigureErrorsTest.test_tools_conf_toolchain_bottle_outside_of_the_tree": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "File \"contrib/e2e/resources.json\" (referenced from bottle \"e2e\" in \"$(SOURCE_ROOT)/__ay_e2e__/conf/tools/toolchains/e2e.toolchain.json\") must be located in \"build\" or \"__ay_e2e__/conf\" file tree",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null
+    }
+  },
+  "ToolsConfConfigureErrorsTest.test_tools_conf_without_ya_conf_json": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "File \"$(SOURCE_ROOT)/__ay_e2e__/conf/ya.conf.json\" not found",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null
+    }
+  }
+}
