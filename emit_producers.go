@@ -75,7 +75,7 @@ func (e *EmitContext) submitOutput(output VFS) bool {
 	info := e.codegen.lookup(output)
 
 	if claimed && owner == submittedProducer || info != nil && info.OwnerModule == e.instance.Path && info.OwnerSerial == e.frame.serial {
-		e.ctx.onWarn(Warn{Kind: WarnDupSrc, Message: fmt.Sprintf("%s: %s was already added in this project. Skip command", e.instance.Path.relString(), output.string())})
+		e.ctx.onWarn(Warn{Kind: WarnDupSrc, Message: fmt.Sprintf("%s: %s was already added in this project. Skip command", e.instance.Path.relString(), output.string()), Where: makeFileWhere(e.instance.Path.relString()), Error: ymakeVFS(output) + " was already added in this project. Skip command: 0"})
 
 		return false
 	}

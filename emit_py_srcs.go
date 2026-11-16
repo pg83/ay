@@ -468,7 +468,11 @@ func (e *EmitContext) emitPyYapyc(ps PySrc, tool PyccTool) {
 	env := envVarsVCSPyHash
 	outputPath := e.pyYapycOf(ps)
 
-	if e.codegen.lookup(outputPath) != nil {
+	if info := e.codegen.lookup(outputPath); info != nil {
+		if info.OwnerModule == instance.Path && info.OwnerSerial == e.frame.serial {
+			ctx.onWarn(Warn{Kind: WarnDupSrc, Where: makeFileWhere(instance.Path.relString()), Error: ymakeVFS(outputPath) + " was already added in this project. Skip command: 0"})
+		}
+
 		return
 	}
 

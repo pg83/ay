@@ -3,6 +3,11 @@
     "configure_errors": {
       "__ay_e2e__": [
         [
+          "$B/__ay_e2e__/value.py.yapyc3 was already added in this project. Skip command: 0",
+          0,
+          0
+        ],
+        [
           "Duplicate(s) is found in the PY_SRCS macro: {'__ay_e2e__.value'}",
           0,
           0

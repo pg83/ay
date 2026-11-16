@@ -54,7 +54,7 @@ func vecDump(args []ANY) string {
 		b.WriteString("\n  ")
 		b.WriteString(strconv.Itoa(i))
 		b.WriteString(": ")
-		b.WriteString(arg.string())
+		b.WriteString(pluginArgLiteral(arg))
 	}
 
 	return b.String()
@@ -1379,20 +1379,6 @@ func dataStatementErrors(fs FS, modulePath string, v UnknownStmt, onWarn func(Wa
 	}
 
 	missingConfig("<none>")
-}
-
-func checkSrcdirErrors(args []ANY) []string {
-	var errs []string
-
-	for _, arg := range args {
-		if v := arg.vfs(); v != 0 && !v.isSource() {
-			errs = append(errs, "Only source directories are allowed in [[alt1]]CHECK_SRCDIR[[rst]]: "+ymakeVFS(v))
-		} else if rel := arg.string(); v == 0 && (rel == "." || strings.HasPrefix(rel, "./") || strings.HasPrefix(rel, "..")) {
-			errs = append(errs, "Relative path [[imp]]"+rel+"[[rst]] is not allowed in [[alt1]]CHECK_SRCDIR[[rst]]")
-		}
-	}
-
-	return errs
 }
 
 func internalPeerDenied(from, to string, goPeer bool, env Environment) bool {

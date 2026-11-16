@@ -3,7 +3,7 @@
     "configure_errors": {
       "__ay_e2e__": [
         [
-          "Only source directories are allowed in [[alt1]]CHECK_SRCDIR[[rst]]: $B/__ay_e2e__",
+          "skip unknown statement: CHECK_SRCDIR vector of size 1\n  0: ${ARCADIA_BUILD_ROOT}/__ay_e2e__",
           0,
           0
         ]

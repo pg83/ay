@@ -370,7 +370,6 @@ var (
 	strCheckDependentDirs                                                                    = internStr("CHECK_DEPENDENT_DIRS")
 	strCheckFormat                                                                           = internStr("CHECK_FORMAT")
 	strCheckName                                                                             = internStr("--check-name")
-	strCheckSrcdir                                                                           = internStr("CHECK_SRCDIR")
 	strChecker                                                                               = internStr("--checker")
 	strClang                                                                                 = internStr("clang")
 	strClang20ResourceGlobal                                                                 = internStr("CLANG20_RESOURCE_GLOBAL")
