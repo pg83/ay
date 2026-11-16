@@ -1,0 +1,189 @@
+{
+  "MlaunchConfigureErrorsTest.test_compound_node_builder_with_an_invalid_name": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "Invalid or repeated compound builder NAME: 1node",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null
+    }
+  },
+  "MlaunchConfigureErrorsTest.test_compound_node_builder_with_an_odd_option_list": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "COMPOUND_NODE_BUILDER expects keyword/value pairs",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null
+    }
+  },
+  "MlaunchConfigureErrorsTest.test_compound_node_builder_with_an_unknown_option": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "Unknown or repeated COMPOUND_NODE_BUILDER option: ROS_SPINNER_THREADS",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null
+    }
+  },
+  "MlaunchConfigureErrorsTest.test_compound_node_builder_with_an_unqualified_symbol": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "COMPOUND_NODE_BUILDER requires a qualified C++ function name",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null
+    }
+  },
+  "MlaunchConfigureErrorsTest.test_compound_node_builder_without_required_options": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "COMPOUND_NODE_BUILDER requires TARGET, HEADER and NAME",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null
+    }
+  },
+  "MlaunchConfigureErrorsTest.test_node_builder_outside_of_an_mlaunch_component": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "NODE_BUILDER is only supported in MLAUNCH_COMPONENT",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null
+    }
+  },
+  "MlaunchConfigureErrorsTest.test_node_builder_with_a_negative_spinner_count": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "ROS_SPINNER_THREADS must be a non-negative integer",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null
+    }
+  },
+  "MlaunchConfigureErrorsTest.test_node_builder_with_an_invalid_name": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "Invalid NODE_BUILDER NAME",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null
+    }
+  },
+  "MlaunchConfigureErrorsTest.test_node_builder_with_an_odd_option_list": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "NODE_BUILDER expects keyword/value pairs",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null
+    }
+  },
+  "MlaunchConfigureErrorsTest.test_node_builder_with_an_unknown_option": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "Unknown or repeated NODE_BUILDER option: E2E",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null
+    }
+  },
+  "MlaunchConfigureErrorsTest.test_node_builder_with_an_unqualified_symbol": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "NODE_BUILDER requires a qualified C++ function name",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null
+    }
+  },
+  "MlaunchConfigureErrorsTest.test_node_builder_without_required_options": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "Missing NODE_BUILDER options: HEADER, TARGET",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null
+    }
+  },
+  "MlaunchConfigureErrorsTest.test_second_node_builder": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "MLAUNCH_COMPONENT supports one NODE_BUILDER; compose multiple leaf components instead",
+          0,
+          0
+        ],
+        [
+          "NODE_BUILDER is only supported in MLAUNCH_COMPONENT",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null
+    }
+  }
+}
