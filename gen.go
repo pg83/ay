@@ -261,6 +261,7 @@ type GenCtx struct {
 	excluded            map[VFS]bool
 	addInclDirExists    map[VFS]bool
 	generatedModules    int
+	noModuleRefs        map[VFS]bool
 }
 
 type moduleMemoEntry struct {
@@ -869,7 +870,7 @@ func (ctx *GenCtx) makeFiles() []MakeFileEntry {
 	var out []MakeFileEntry
 
 	for key, evaluation := range ctx.dirs {
-		if key.platform != ctx.target || !below(key.path, map[VFS]bool{}) {
+		if key.platform != ctx.target || !below(key.path, map[VFS]bool{}) && !ctx.noModuleRefs[key.path] {
 			continue
 		}
 
@@ -2063,14 +2064,36 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 			peerInstance.Peer |= peerExplicit
 		}
 
+		where := makeFileWhere(instance.Path.relString())
+		explicit := kind == peerKindUserPeer && peerInstance.Peer&peerExplicit != 0
+
+		if present, isDir := ctx.fs.existsID(srcRootRel, p); explicit && present && !isDir {
+			ctx.onWarn(Warn{Kind: WarnModuleFailed, Where: where, Error: "[[alt1]]PEERDIR[[rst]] to non-directory $S/" + p.string()})
+
+			continue
+		}
+
 		peerResult := genModule(ctx, peerInstance)
+
+		if explicit && ctx.fs.isFileID(p, strYaMake) && ctx.evaluateDirVFS(peerVFS, ctx.target).declaration == nil {
+			ctx.noModuleRef(peerVFS)
+			ctx.onWarn(Warn{Kind: WarnModuleFailed, Where: where, Error: "No modules for [[alt1]]PEERDIR[[rst]] in [[imp]]$S/" + p.string() + "[[rst]]"})
+
+			continue
+		}
 
 		if peerResult == nil {
 			continue
 		}
 
 		if peerResult.missingMakefile {
-			ctx.onWarn(Warn{Kind: WarnModuleFailed, Where: makeFileWhere(instance.Path.relString()), Error: "[[alt1]]PEERDIR[[rst]] to " + ctx.missingDirectory(p) + "[[imp]]$S/" + p.string() + "[[rst]]"})
+			ctx.onWarn(Warn{Kind: WarnModuleFailed, Where: where, Error: "[[alt1]]PEERDIR[[rst]] to " + ctx.missingDirectory(p) + "[[imp]]$S/" + p.string() + "[[rst]]"})
+
+			continue
+		}
+
+		if explicit && internalPeerDenied(instance.Path.relString(), p.string(), isGoModuleType(peerResult.ModuleStmtName), env) {
+			ctx.onWarn(Warn{Kind: WarnModuleFailed, Where: where, Error: "[[alt1]]PEERDIR[[rst]] from [[imp]]$S/" + instance.Path.relString() + "[[rst]] to [[imp]]$S/" + p.string() + "[[rst]] is prohibited and skipped since latter is `internal` and former is not its sibling.\nSee https://docs.yandex-team.ru/ya-make/manual/common/peerdir_rules#internal for details"})
 
 			continue
 		}
@@ -2079,13 +2102,19 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 			ctx.loops.edge(instance.Path, peerVFS)
 		}
 
+		incompatible := Warn{Kind: WarnModuleFailed, Message: fmt.Sprintf("PEERDIR from %s to %s is not allowed and skipped: module types are incompatible", instance.Path.relString(), p.string()), Where: where, Error: "[[alt1]]PEERDIR[[rst]] to [[imp]]$S/" + p.string() + "[[rst]] is not allowed and skipped: module types are incompatible"}
+
 		if isGoModuleType(peerResult.ModuleStmtName) && !isGoModuleType(d.unit.Type) {
+			if explicit {
+				ctx.onWarn(incompatible)
+			}
+
 			continue
 		}
 
 		if peerResult.isPROGRAM && !(isRustModule(d.moduleStmt.Name) && peerResult.ModuleStmtName == tokCrateProcMacro) {
 			if kind == peerKindUserPeer {
-				ctx.onWarn(Warn{Kind: WarnModuleFailed, Message: fmt.Sprintf("PEERDIR from %s to %s is not allowed and skipped: module types are incompatible", instance.Path.relString(), p.string())})
+				ctx.onWarn(incompatible)
 			}
 
 			continue
@@ -3213,10 +3242,18 @@ func (ctx *GenCtx) toolResult(modulePath ARG) *ModuleEmitResult {
 
 	var res *ModuleEmitResult
 
+	user := ctx.whereModule
+
 	if dir := modulePath.string(); isJavaModuleType(ctx.moduleNameVFS(dirSourceOf(modulePath.str()))) {
 		res = ctx.javaToolResult(dir)
 	} else {
-		res = genModule(ctx, newToolInstance(ctx.host, dir))
+		if msg := ctx.toolDirError(modulePath.str()); msg != "" {
+			ctx.onWarn(Warn{Kind: WarnModuleFailed, Where: makeFileWhere(user.relString()), Error: msg})
+		}
+
+		if res = genModule(ctx, newToolInstance(ctx.host, dir)); res.LDRef == NodeRef(0) && res.ARPath != nil {
+			ctx.onWarn(Warn{Kind: WarnModuleFailed, Where: makeFileWhere(user.relString()), Error: "No suitable [[alt1]]TOOL[[rst]] module found in $S/" + dir})
+		}
 	}
 
 	ctx.consumeModuleWarnings(res)
@@ -3377,4 +3414,12 @@ func (ctx *GenCtx) pushFrame() *ModuleFrame {
 
 func (ctx *GenCtx) popFrame() {
 	ctx.frameDepth--
+}
+
+func (ctx *GenCtx) noModuleRef(dir VFS) {
+	if ctx.noModuleRefs == nil {
+		ctx.noModuleRefs = map[VFS]bool{}
+	}
+
+	ctx.noModuleRefs[dir] = true
 }

@@ -563,6 +563,10 @@ func (ctx *GenCtx) prepareTestDependencies(s *TestSuite) {
 	var rewritten []STR
 
 	for _, dep := range s.depends {
+		if ctx.dependsDirError(dep) != "" {
+			continue
+		}
+
 		s.dependencyProjects = append(s.dependencyProjects, dep.source())
 
 		published := !ctx.targetDirs[dep]

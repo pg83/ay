@@ -2707,6 +2707,10 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 					}
 				}
 
+				if present, isDir := fs.existsID(srcRootRel, rooted.rel()); rooted.isSource() && !(present && isDir) {
+					onWarn(Warn{Kind: WarnMisconfiguration, Where: makeFileWhere(modulePath), Error: "[[alt1]]SRCDIR[[rst]] to non existent directory " + ymakeVFS(rooted)})
+				}
+
 				if !slices.Contains(d.srcDirs, rooted) {
 					d.srcDirs = append(d.srcDirs, rooted)
 				}
@@ -2811,6 +2815,10 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 
 			d.antlrRuns = append(d.antlrRuns, expanded)
 		case *RunProgramStmt:
+			if v.ToolPath != 0 {
+				ctx.checkRunProgramTool(expandStmtTokenAny(v.ToolPath, env), modulePath, onWarn)
+			}
+
 			appendRunProgram(v, env, d)
 		case *SplitCodegenStmt:
 			expanded := *v

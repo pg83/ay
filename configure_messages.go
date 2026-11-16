@@ -20,6 +20,7 @@ var (
 	testSizeTimeouts     = map[string]int{"small": 60, "medium": 600, "large": 3600}
 	protoModelKeywords   = []string{"FILE", "OUTPUT_INCLUDES", "PROTODESC", "PROTODESC_NAME"}
 	usrvProtoKeywords    = []string{"FILE", "FILES", "IMPORTS", "OPTS_FILE", "ORIGINS", "OUTPUT_INCLUDES", "PROTODESC", "PROTODESC_NAME"}
+	libraryModuleTypes   = map[TOK]bool{tokLibrary: true, tokPy3Library: true, tokGoLibrary: true, tokProtoLibrary: true}
 )
 
 var addInclLanguages = func() []ANY {
@@ -1392,4 +1393,80 @@ func checkSrcdirErrors(args []ANY) []string {
 	}
 
 	return errs
+}
+
+func internalPeerDenied(from, to string, goPeer bool, env Environment) bool {
+	dir := "$S/" + to
+
+	if !strings.Contains(dir, "internal") {
+		return false
+	}
+
+	if !goPeer {
+		if !env.bool(envCheckInternal) {
+			return false
+		}
+
+		for _, exception := range strings.Fields(env.string(envInternalExceptions)) {
+			if strings.Contains(dir, exception) {
+				return false
+			}
+		}
+	}
+
+	parent, child := strings.Split("$S/"+from, "/"), strings.Split(dir, "/")
+	prefix := 0
+
+	for prefix < len(parent) && prefix < len(child) && parent[prefix] == child[prefix] {
+		prefix++
+	}
+
+	return slices.Contains(child[min(prefix+1, len(child)):], "internal")
+}
+
+func (ctx *GenCtx) toolDirError(dir STR) string {
+	switch present, isDir := ctx.fs.existsID(srcRootRel, dir); {
+	case !present || !isDir:
+		return "Trying to use [[alt1]]TOOL[[rst]] from missing directory: [[imp]]$S/" + dir.string() + "[[rst]]"
+	case !ctx.fs.isFileID(dir, strYaMake):
+		return "Trying to use [[alt1]]TOOL[[rst]] from directory without ya.make: [[imp]]$S/" + dir.string() + "[[rst]]"
+	}
+
+	if ctx.evaluateDirVFS(dir.source(), ctx.host).declaration == nil {
+		ctx.evaluateDirVFS(dir.source(), ctx.target)
+		ctx.noModuleRef(dir.source())
+
+		return "[[alt1]]TOOL[[rst]] not found: no modules in $S/" + dir.string()
+	}
+
+	return ""
+}
+
+func (ctx *GenCtx) checkRunProgramTool(tool ANY, modulePath string, onWarn func(Warn)) {
+	if rel := tool.str(); rel != 0 && tool.vfs() == 0 && !strHasDollar(tool) {
+		msg := ctx.toolDirError(rel)
+
+		if msg == "" {
+			if declaration := ctx.evaluateDirVFS(rel.source(), ctx.host).declaration; declaration != nil && libraryModuleTypes[declaration.Name] {
+				msg = "No suitable [[alt1]]TOOL[[rst]] module found in $S/" + rel.string()
+			}
+		}
+
+		if msg != "" {
+			onWarn(Warn{Kind: WarnModuleFailed, Where: makeFileWhere(modulePath), Error: msg})
+		}
+	}
+}
+
+func (ctx *GenCtx) dependsDirError(dir STR) string {
+	rel := dir.sourceClean().rel()
+
+	switch present, isDir := ctx.fs.existsID(srcRootRel, rel); {
+	case present && !isDir:
+		return "DEPENDS to non-directory $S/" + rel.string()
+	case !present || !ctx.fs.isFileID(rel, strYaMake):
+		return "[[alt1]]DEPENDS[[rst]] to " + ctx.missingDirectory(rel) + "$S/" + rel.string()
+	}
+
+	return ""
 }

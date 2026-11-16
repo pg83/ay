@@ -111,6 +111,12 @@ func (ctx *GenCtx) configureDependencies() {
 	for i := 0; i < len(configuration.depends); i++ {
 		dependency := configuration.depends[i]
 
+		if msg := ctx.dependsDirError(dependency.to); msg != "" {
+			ctx.onWarn(Warn{Kind: WarnMisconfiguration, Where: makeFileWhere(dependency.from.relString()), Error: msg})
+
+			continue
+		}
+
 		configure(dependency.to.sourceClean())
 
 		if ctx.peerTests || ctx.rootPaths[dependency.from] {
