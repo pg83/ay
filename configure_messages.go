@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"reflect"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -14,6 +15,16 @@ var (
 	treePluginMacros     map[string]bool
 	pluginMacroDef       = regexp.MustCompile(`(?m)^def on([a-z0-9_]+)\(`)
 )
+
+var addInclLanguages = func() []ANY {
+	var out []ANY
+
+	for _, entry := range strings.Split(addInclLanguageList, "), ") {
+		out = append(out, internStr(entry[:strings.IndexByte(entry, ' ')]).any())
+	}
+
+	return out
+}()
 
 const addInclLanguageList = "asm (for .asm), c (for .cpp .cc .cxx .c .C .auxcpp .h .hh .hpp .cuh .H .hxx .xh .ipp .ixx ..inl ..vert ..frag ..tesc ..tese ..geom ..comp .cu .S .s .sfdl .m .mm .l .lex .lpp .y .ypp .gperf .asp .f .go), cython (for .pyx .pxd .pxi), flatc (for .fbs .fbs64), idl (for .idl), nlg (for .nlg), other (for .fml .fml2 .fml3 .pln .info .a .lua .sh .bin .py .pyi .pysrc .ts .js .tsx .jsx), proto (for .gzt .gztproto .proto .ev .cfgproto), ragel (for .rl .rh .rli .rl6 .rl5), ros (for .msg .srv .rostopic), sc (for .sc), swig (for .swg), xs (for .xs), xsyn (for .xsyn), ydl (for .ydl)"
 
@@ -209,33 +220,35 @@ func diagnoseAddIncl(args []ANY) *addInclDiag {
 	var d addInclDiag
 	var dirs []ANY
 
-	lang, scoped, expectLang := "", false, false
+	var lang ANY
+
+	scoped, expectLang := false, false
 
 	for _, arg := range args {
-		switch s := arg.string(); {
-		case s == "FOR":
-			if lang != "" {
-				d.errors = append(d.errors, "Two different languages specified for [[alt1]]ADDINCL[[rst]]: previous was \""+lang+"\"")
+		switch {
+		case arg == kwFOR.any():
+			if lang != 0 {
+				d.errors = append(d.errors, "Two different languages specified for [[alt1]]ADDINCL[[rst]]: previous was \""+lang.string()+"\"")
 			}
 
 			expectLang = true
 		case expectLang:
-			lang, expectLang = s, false
+			lang, expectLang = arg, false
 
-			if !strings.Contains(addInclLanguageList, s+" (for ") {
-				lang = ""
-				d.errors = append(d.errors, "Bad language argument in [[alt1]]ADDINCL[[rst]]: \""+s+"\". Possible languages: "+addInclLanguageList)
+			if !slices.Contains(addInclLanguages, arg) {
+				lang = 0
+				d.errors = append(d.errors, "Bad language argument in [[alt1]]ADDINCL[[rst]]: \""+arg.string()+"\". Possible languages: "+addInclLanguageList)
 			}
-		case s == "GLOBAL" || s == "ONE_LEVEL":
+		case arg == kwGLOBAL.any() || arg == kwONE_LEVEL.any():
 			scoped = true
-		case s == "LOCAL":
+		case arg == kwLOCAL.any():
 		default:
 			dirs = append(dirs, arg)
-			lang, scoped = "", false
+			lang, scoped = 0, false
 		}
 	}
 
-	if scoped || expectLang || lang != "" {
+	if scoped || expectLang || lang != 0 {
 		d.errors = append(d.errors, "Tail arguments in [[alt1]]ADDINCL[[rst]] without a dir to apply will be ignored")
 	}
 
@@ -248,30 +261,38 @@ func diagnoseAddIncl(args []ANY) *addInclDiag {
 	return &d
 }
 
-func (ctx *GenCtx) missingAddInclDirs(v *AddInclStmt, env Environment, modulePath string, onWarn func(Warn)) {
-	report := func(paths []ANY) {
-		for _, dir := range expandConfigVFSPaths(paths, env) {
-			if dir.isSource() && dir != srcRootDirVFS {
-				if present, isDir := ctx.fs.existsID(srcRootRel, dir.rel()); !present || !isDir {
-					onWarn(Warn{Kind: WarnMisconfiguration, Where: makeFileWhere(modulePath), Error: "[[alt1]]ADDINCL[[rst]] to non existent source directory " + ymakeVFS(dir)})
-				}
+func (ctx *GenCtx) checkAddInclDirs(dirs []VFS, modulePath string, onWarn func(Warn)) {
+	for _, dir := range dirs {
+		if !dir.isSource() || dir == srcRootDirVFS {
+			continue
+		}
+
+		exists, known := ctx.addInclDirExists[dir]
+
+		if !known {
+			present, isDir := ctx.fs.existsID(srcRootRel, dir.rel())
+
+			exists = present && isDir
+
+			if ctx.addInclDirExists == nil {
+				ctx.addInclDirExists = map[VFS]bool{}
 			}
-		}
-	}
 
-	if v.diag != nil {
-		for _, message := range v.diag.errors {
-			onWarn(Warn{Kind: WarnMisconfiguration, Where: makeFileWhere(modulePath), Error: message})
+			ctx.addInclDirExists[dir] = exists
 		}
 
-		report(v.diag.dirs)
+		if !exists {
+			onWarn(Warn{Kind: WarnMisconfiguration, Where: makeFileWhere(modulePath), Error: "[[alt1]]ADDINCL[[rst]] to non existent source directory " + ymakeVFS(dir)})
+		}
+	}
+}
 
-		return
+func (ctx *GenCtx) reportAddInclDiag(v *AddInclStmt, env Environment, modulePath string, onWarn func(Warn)) {
+	for _, message := range v.diag.errors {
+		onWarn(Warn{Kind: WarnMisconfiguration, Where: makeFileWhere(modulePath), Error: message})
 	}
 
-	for _, paths := range [...][]ANY{v.AllPaths, v.ProtoAllPaths, v.CythonPaths, v.AsmPaths, v.FlatcPaths, v.SwigPaths, v.ScPaths} {
-		report(paths)
-	}
+	ctx.checkAddInclDirs(expandConfigVFSPaths(v.diag.dirs, env), modulePath, onWarn)
 }
 
 func resourceDeclarations(stmt *DeclareResourceStmt, report func(string)) []*DeclareResourceStmt {

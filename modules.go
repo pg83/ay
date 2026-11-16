@@ -2617,29 +2617,54 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 
 			d.joinSrcs = append(d.joinSrcs, &expanded)
 		case *AddInclStmt:
-			ctx.missingAddInclDirs(v, env, modulePath, onWarn)
+			checked := v.diag == nil
+
+			if !checked {
+				ctx.reportAddInclDiag(v, env, modulePath, onWarn)
+			}
 
 			d.addInclGlobal = append(d.addInclGlobal, addInclDirs(v.GlobalPaths, env)...)
 			d.addInclOneLevel = append(d.addInclOneLevel, addInclDirs(v.OneLevelPaths, env)...)
 			d.addInclUserGlobal = append(d.addInclUserGlobal, addInclDirs(v.UserGlobalPaths, env)...)
 
-			for _, p := range expandConfigVFSPaths(v.AllPaths, env) {
+			all := expandConfigVFSPaths(v.AllPaths, env)
+
+			for _, p := range all {
 				if p != srcRootDirVFS {
 					d.addLocalIncl(prioAddIncl, p)
 				}
 			}
 
-			d.cythonAddIncl = append(d.cythonAddIncl, expandConfigVFSPaths(v.CythonPaths, env)...)
+			cython := expandConfigVFSPaths(v.CythonPaths, env)
+
+			if checked {
+				ctx.checkAddInclDirs(all, modulePath, onWarn)
+				ctx.checkAddInclDirs(cython, modulePath, onWarn)
+			}
+
+			asm := expandConfigVFSPaths(v.AsmPaths, env)
+			proto := addInclDirs(v.ProtoAllPaths, env)
+			flatc := expandConfigVFSPaths(v.FlatcPaths, env)
+			swig := expandConfigVFSPaths(v.SwigPaths, env)
+			sc := expandConfigVFSPaths(v.ScPaths, env)
+
+			if checked {
+				for _, dirs := range [...][]VFS{asm, proto, flatc, swig, sc} {
+					ctx.checkAddInclDirs(dirs, modulePath, onWarn)
+				}
+			}
+
+			d.cythonAddIncl = append(d.cythonAddIncl, cython...)
 			d.cythonAddInclGlobal = append(d.cythonAddInclGlobal, expandConfigVFSPaths(v.CythonGlobalPaths, env)...)
-			d.asmAddIncl = append(d.asmAddIncl, expandConfigVFSPaths(v.AsmPaths, env)...)
+			d.asmAddIncl = append(d.asmAddIncl, asm...)
 			d.protoAddIncl = append(d.protoAddIncl, addInclDirs(v.ProtoPaths, env)...)
 			d.protoAddInclGlobal = append(d.protoAddInclGlobal, addInclDirs(v.ProtoGlobalPaths, env)...)
-			d.protoIncludeLocal = append(d.protoIncludeLocal, addInclDirs(v.ProtoAllPaths, env)...)
-			d.flatcAddIncl = append(d.flatcAddIncl, expandConfigVFSPaths(v.FlatcPaths, env)...)
+			d.protoIncludeLocal = append(d.protoIncludeLocal, proto...)
+			d.flatcAddIncl = append(d.flatcAddIncl, flatc...)
 			d.flatcAddInclGlobal = append(d.flatcAddInclGlobal, expandConfigVFSPaths(v.FlatcGlobalPaths, env)...)
-			d.swigAddIncl = append(d.swigAddIncl, expandConfigVFSPaths(v.SwigPaths, env)...)
+			d.swigAddIncl = append(d.swigAddIncl, swig...)
 			d.swigAddInclGlobal = append(d.swigAddInclGlobal, expandConfigVFSPaths(v.SwigGlobalPaths, env)...)
-			d.scAddIncl = append(d.scAddIncl, expandConfigVFSPaths(v.ScPaths, env)...)
+			d.scAddIncl = append(d.scAddIncl, sc...)
 			d.scAddInclGlobal = append(d.scAddInclGlobal, expandConfigVFSPaths(v.ScGlobalPaths, env)...)
 			d.scAddInclExport = append(d.scAddInclExport, expandConfigVFSPaths(v.ScExportPaths, env)...)
 		case *CFlagsStmt:

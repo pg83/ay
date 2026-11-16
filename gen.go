@@ -259,6 +259,7 @@ type GenCtx struct {
 	loops               *moduleLoops
 	plainCycles         int
 	excluded            map[VFS]bool
+	addInclDirExists    map[VFS]bool
 }
 
 type moduleMemoEntry struct {
