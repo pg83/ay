@@ -468,3 +468,58 @@ func pySetRepr(values []string) string {
 
 	return "{" + strings.Join(quoted, ", ") + "}"
 }
+
+func restrictPath(modulePath string, args []ANY, onWarn func(Warn)) {
+	if len(args) == 0 {
+		return
+	}
+
+	paths, message := args, "forbidden"
+
+	if i := slices.IndexFunc(args, func(arg ANY) bool { return arg.string() == "MSG" }); i >= 0 {
+		paths, message = args[:i], joinAnys(args[i+1:], " ")
+	}
+
+	for _, prefix := range paths {
+		if strings.HasPrefix(modulePath, prefix.string()) {
+			return
+		}
+	}
+
+	onWarn(Warn{Kind: WarnMisconfiguration, Where: makeFileWhere(modulePath), Error: "Path '[[imp]]$S/" + modulePath + "[[rst]]' is restricted - [[bad]]" + message + "[[rst]]. Valid path prefixes are: [[unimp]]" + joinAnys(paths, ", ") + "[[rst]]"})
+}
+
+func assertMacro(modulePath string, args []ANY, env Environment, onWarn func(Warn)) {
+	if len(args) > 0 && strings.EqualFold(env.string(internEnvSTR(args[0].str())), "no") {
+		onWarn(Warn{Kind: WarnMisconfiguration, Where: makeFileWhere(modulePath), Error: joinAnys(args[1:], " ")})
+	}
+}
+
+func validateInDirs(modulePath, pattern, srcdir string, dirs []string, onWarn func(Warn)) bool {
+	valid := true
+
+	report := func(message string) {
+		onWarn(Warn{Kind: WarnMisconfiguration, Where: makeFileWhere(modulePath), Error: "[[imp]]DECLARE_IN_DIRS[[rst]]: " + message})
+		valid = false
+	}
+
+	if strings.Contains(pattern, "**") {
+		report("'**' in files mask is prohibited. Seen [[unimp]]" + pattern + "[[rst]]")
+	}
+
+	for _, mask := range [...]string{"*", "?"} {
+		if strings.Contains(srcdir, mask) {
+			report("'" + mask + "' in [[imp]]SRCDIR[[rst]] argument is prohibited. Seen [[unimp]]" + srcdir + "[[rst]]")
+		}
+	}
+
+	for _, dir := range dirs {
+		for _, mask := range [...]string{"*", "?", "$", ".."} {
+			if strings.Contains(dir, mask) {
+				report("'" + mask + "' in [[imp]]DIRS[[rst]] argument is prohibited. Seen [[unimp]]" + dir + "[[rst]]")
+			}
+		}
+	}
+
+	return valid
+}

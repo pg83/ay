@@ -637,7 +637,11 @@ func (ctx *GenCtx) emitTestSuite(s *TestSuite) []NodeRef {
 				s.externalLocalFiles = append(s.externalLocalFiles, rel)
 				s.deps = append(s.deps, ctx.emitExternalLocalTestData(rel))
 			} else if present, isDir := ctx.fs.exists(srcRootRel, rel+".external"); present && !isDir {
-				storage, resource := readLargeFileDescriptor(ctx.fs, source(rel+".external"), rel+".external")
+				storage, resource, err := readLargeFileDescriptor(ctx.fs, source(rel+".external"))
+
+				if err != "" {
+					throwFmt("LARGE_FILES: error processing placeholder file \"%s.\": %s", rel+".external", err)
+				}
 
 				if storage == "sandbox" {
 					if dir := path.Dir(file); dir != "." {

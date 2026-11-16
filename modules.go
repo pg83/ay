@@ -2877,6 +2877,10 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 		case *ResourceFilesStmt:
 			applyResourceFiles(fs, modulePath, expandResourceFileArgs(v.Args, env), v.Line, d)
 		case *AllResourceFilesStmt:
+			if slices.ContainsFunc(v.Args, func(arg ANY) bool { return arg.string() == "*" || arg.string() == "?" }) {
+				onWarn(Warn{Kind: WarnMisconfiguration, Where: makeFileWhere(modulePath), Error: "Wildcards in [[imp]]" + stmtMacroName(v) + "[[rst]] are not allowed"})
+			}
+
 			if isGoModuleType(d.unit.Type) {
 				entries := expandAllResourceFiles(d, nil, fs, modulePath, env, v)
 
@@ -3430,6 +3434,12 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 	}
 
 	if v.Name == tokInvalid {
+		if v.Raw == strAssert {
+			assertMacro(modulePath, v.Args, env, onWarn)
+
+			return true
+		}
+
 		return false
 	}
 
@@ -3523,7 +3533,9 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 	case tokFiles:
 		d.addFiles(v.Args)
 	case tokDeclareInDirs:
-		applyDeclareInDirs(fs, modulePath, v, env)
+		applyDeclareInDirs(fs, modulePath, v, env, onWarn)
+	case tokRestrictPath:
+		restrictPath(modulePath, expandStmtTokens(v.Args, env), onWarn)
 	case tokYaToolsConf:
 		if len(v.Args) != 1 {
 			throwFmt("%s: YA_TOOLS_CONF expects one directory, got %d arguments", modulePath, len(v.Args))
@@ -6019,7 +6031,7 @@ func expandStmtTokenAny(item ANY, env Environment) ANY {
 	return internAny(expandStmtToken(item.string(), env))
 }
 
-func applyDeclareInDirs(fs FS, modulePath string, v UnknownStmt, env Environment) {
+func applyDeclareInDirs(fs FS, modulePath string, v UnknownStmt, env Environment, onWarn func(Warn)) {
 	if len(v.Args) < 2 {
 		throwFmt("gen: %s: DECLARE_IN_DIRS expects a var prefix and a pattern", modulePath)
 	}
@@ -6054,6 +6066,12 @@ func applyDeclareInDirs(fs FS, modulePath string, v UnknownStmt, env Environment
 				throwFmt("gen: %s: DECLARE_IN_DIRS: unexpected argument %q", modulePath, t)
 			}
 		}
+	}
+
+	if !validateInDirs(modulePath, pattern, srcdir, dirs, onWarn) {
+		env.setString(internEnv(prefix+"_FILES"), "")
+
+		return
 	}
 
 	sourceRoot := srcdir == srcRootDirVFS.string() || strings.HasPrefix(srcdir, srcRootDirVFS.string()+"/")

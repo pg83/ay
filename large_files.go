@@ -9,13 +9,17 @@ import (
 )
 
 const largeFileDescriptor = `import json, sys
-res_desc = json.load(sys.stdin)
-storage = res_desc["storage"]
-res_id = res_desc["resource_id"]
+try:
+    res_desc = json.load(sys.stdin)
+    storage = res_desc["storage"]
+    res_id = res_desc["resource_id"]
+except Exception as e:
+    sys.stdout.write(str(e))
+    sys.exit(1)
 print(json.dumps([storage.lower(), '{}'.format(res_id)]))
 `
 
-func readLargeFileDescriptor(fs FS, placeholder VFS, external string) (string, string) {
+func readLargeFileDescriptor(fs FS, placeholder VFS) (string, string, string) {
 	var values [2]string
 
 	if err := try(func() {
@@ -31,10 +35,10 @@ func readLargeFileDescriptor(fs FS, placeholder VFS, external string) (string, s
 
 		throw(json.Unmarshal(data, &values))
 	}); err != nil {
-		throwFmt("LARGE_FILES: error processing placeholder file \"%s.\": %s", external, err)
+		return "", "", err.Error()
 	}
 
-	return values[0], values[1]
+	return values[0], values[1], ""
 }
 
 func resolveLargeFileSource(fs FS, codegen *CodegenRegistry, modulePath, name string, srcDirs []VFS) VFS {
@@ -94,11 +98,24 @@ func applyLargeFiles(fs FS, codegen *CodegenRegistry, modulePath string, stmt Un
 		external := arg + ".external"
 		placeholder := resolveLargeFileSource(fs, codegen, modulePath, external, d.srcDirs)
 
-		if placeholder == 0 || !placeholder.isSource() {
-			throwFmt("LARGE_FILES: neither actual data nor placeholder is found for \"%s\"", arg)
+		report := func(message string) {
+			onWarn(Warn{Kind: WarnMisconfiguration, Where: makeFileWhere(modulePath), Error: message})
 		}
 
-		storage, resource := readLargeFileDescriptor(fs, placeholder, external)
+		if placeholder == 0 || !placeholder.isSource() {
+			report("LARGE_FILES: neither actual data nor placeholder is found for \"" + arg + "\"")
+
+			return
+		}
+
+		storage, resource, err := readLargeFileDescriptor(fs, placeholder)
+
+		if err != "" {
+			report("LARGE_FILES: error processing placeholder file \"" + external + ".\": " + err)
+
+			return
+		}
+
 		fromArgs := []string{"FILE", resource, "OUT_NOAUTO", arg}
 
 		if slash := strings.LastIndexByte(arg, '/'); slash >= 0 {
@@ -111,8 +128,10 @@ func applyLargeFiles(fs FS, codegen *CodegenRegistry, modulePath string, stmt Un
 
 			from.DeclSeq = d.nextDeclSeq()
 			d.fromSandboxes = append(d.fromSandboxes, from)
+		case "mds":
+			throwFmt("LARGE_FILES: FROM_MDS lowering is not modelled (placeholder \"%s\")", external)
 		default:
-			throwFmt("LARGE_FILES: FROM_%s lowering is not modelled (placeholder \"%s\")", strings.ToUpper(storage), external)
+			report("skip unknown statement: FROM_" + strings.ToUpper(storage) + " " + vecDump(internAnys(fromArgs)))
 		}
 	}
 }

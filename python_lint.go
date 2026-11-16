@@ -26,15 +26,15 @@ func (s *pythonLintState) bind(env Environment) {
 }
 
 func (s *pythonLintState) value() string {
-	if s.raw != "" && s.raw != "none" && s.raw != "none_internal" && s.raw != "ktlint" {
-		throwFmt("Unsupported value for NO_LINT macro: %s", s.raw)
-	}
-
 	return s.raw
 }
 
 func (d *ModuleData) collectPythonLintFiles(module string, group int, report func(string)) {
 	raw := d.pythonLint.value()
+
+	if raw != "" && raw != "none" && raw != "none_internal" && raw != "ktlint" {
+		report("Unsupported value for NO_LINT macro: " + raw)
+	}
 
 	if raw == "none" && !pythonNoLintAllowed(module) {
 		report("NO_LINT() is allowed only in " + strings.Join(pythonNoLintPaths, ", "))

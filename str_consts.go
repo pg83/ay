@@ -292,6 +292,7 @@ var (
 	strArchive                                                                               = internStr("--archive")
 	strAsm                                                                                   = internStr("asm")
 	strAsmFlags                                                                              = internStr("++asm-flags")
+	strAssert                                                                                = internStr("ASSERT")
 	strAuto                                                                                  = internStr("AUTO")
 	strB                                                                                     = internStr("$(B)")
 	strB2                                                                                    = internStr("-b")

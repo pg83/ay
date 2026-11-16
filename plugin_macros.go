@@ -11,7 +11,7 @@ var pluginMacroNames = map[STR]bool{
 	internStr("ALICE_GENERATE_FUNCTION_SPECS"):              true,
 	strAllResourceFiles:                                     true,
 	strAllResourceFilesFromDirs:                             true,
-	internStr("ASSERT"):                                     true,
+	strAssert:                                               true,
 	internStr("BUNDLE"):                                     true,
 	internStr("C35_GRPC_LINTER_TESTS_DATA"):                 true,
 	internStr("CHECK_ALLOWED_PATH"):                         true,
