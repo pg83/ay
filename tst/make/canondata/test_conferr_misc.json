@@ -370,6 +370,13 @@
       "$S/__ay_e2e__/tests": null
     }
   },
+  "MiscConfigureErrorsTest.test_typescript_quote_after_a_failed_import": {
+    "configure_errors": {},
+    "make_files": {
+      "$S/__ay_e2e__": null,
+      "$S/__ay_e2e__/tests": null
+    }
+  },
   "MiscConfigureErrorsTest.test_unreadable_source": {
     "configure_errors": {
       "At top level": [

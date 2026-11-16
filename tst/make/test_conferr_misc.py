@@ -144,6 +144,10 @@ class MiscConfigureErrorsTest(MakeTest):
         self.ts_imports("import value from answer;\n")
         self.assertConfigureLikeYa()
 
+    def test_typescript_quote_after_a_failed_import(self):
+        self.ts_imports("let stdout = '';\nlet stderr = '';\nconst kinds = ['import'];\nconst code = 'import(no-cycle)';\n")
+        self.assertConfigureLikeYa()
+
     def ts_tests(self, *statements):
         self.write("lib/ya.make", "TS_LIBRARY()\nTS_BUILD_SCRIPT(nots:build)\nTS_BUILD_OUTPUTS(dist)\n" + "".join(s + "\n" for s in statements) + "END()\n")
         self.write("lib/package.json", json.dumps({"name": "@e2e/lib", "version": "1.0.0", "engines": {"node": nodejs_version()}, "files": ["src", "dist"], "scripts": {"nots:build": "tsc"}}))
