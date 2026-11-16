@@ -1,0 +1,170 @@
+{
+  "InternalPluginConfigureErrorsTest.test_grpc_linter_data_outside_of_the_arcadia_root": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "Error at macro 'C35_GRPC_LINTER_TESTS_DATA': Param 'root' (e2e) should start with '${ARCADIA_ROOT}/'",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null
+    }
+  },
+  "InternalPluginConfigureErrorsTest.test_offer_converters_with_a_foreign_header": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "Expected --view-config with an offers_catalog .pb.h header",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null
+    }
+  },
+  "InternalPluginConfigureErrorsTest.test_offer_converters_with_a_package_name_collision": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "Converter package name collision 'a_b': api/proto/yandex/market/b2b/offers_catalog/a_b and api/proto/yandex/market/b2b/offers_catalog/a/b",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null
+    }
+  },
+  "InternalPluginConfigureErrorsTest.test_offer_converters_without_triples": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "Expected --view-config header message triples",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null
+    }
+  },
+  "InternalPluginConfigureErrorsTest.test_risk_data_model_with_an_unknown_argument": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "Error at macro 'RISK_GEN_DATA_MODEL': Arg 'E2E' is unknown, known args are ['FILE', 'OUTPUT_INCLUDES', 'PROTODESC', 'PROTODESC_NAME']",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null
+    }
+  },
+  "InternalPluginConfigureErrorsTest.test_ros_srcs_partial_without_a_library": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "Expected library name after PARTIAL",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null
+    }
+  },
+  "InternalPluginConfigureErrorsTest.test_ros_srcs_unsupported_file": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "Unsupported ROS file: value.e2e",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null
+    }
+  },
+  "InternalPluginConfigureErrorsTest.test_ros_srcs_zero_copy_service": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "ZERO_COPY for .srv file is not allowed",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null
+    }
+  },
+  "InternalPluginConfigureErrorsTest.test_sandbox_import_of_a_missing_path": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "REGISTER_SANDBOX_IMPORT: File or directory missing does not exist",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null
+    }
+  },
+  "InternalPluginConfigureErrorsTest.test_usrv_files_with_malformed_dependencies": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "Malformed dependencies JSON `deps.json`: JSONDecodeError('Expecting value: line 1 column 1 (char 0)')",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null
+    }
+  },
+  "InternalPluginConfigureErrorsTest.test_usrv_files_without_dependencies_for_a_file": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "Dependencies for value.cpp not found in deps.json",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null
+    }
+  },
+  "InternalPluginConfigureErrorsTest.test_usrv_proto_structs_with_an_unknown_argument": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "Error at macro 'USRV_GEN_PROTO_STRUCTS': Arg 'E2E' is unknown, known args are ['FILE', 'FILES', 'IMPORTS', 'OPTS_FILE', 'ORIGINS', 'OUTPUT_INCLUDES', 'PROTODESC', 'PROTODESC_NAME']",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null
+    }
+  }
+}
