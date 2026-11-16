@@ -1,0 +1,148 @@
+{
+  "NotsConfigureErrorsTest.test_build_env_without_a_value": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "Env var 'MODE' is provided in a list, but var value is not provided",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null
+    }
+  },
+  "NotsConfigureErrorsTest.test_files_in_a_library": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "\u001b[0;36mTS_LIBRARY\u001b[0;49m does not support \u001b[0;36mTS_FILES\u001b[0;49m macro\nIf you used it to mark files as inputs - just remove it, all files are inputs for \u001b[0;36mTS_LIBRARY\u001b[0;49m\nIf you used it to mark files as outputs - write them in \u001b[0;36mfiles\u001b[0;49m field in \u001b[0;36mpackage.json\u001b[0;49m",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null
+    }
+  },
+  "NotsConfigureErrorsTest.test_large_files_without_a_destination": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "Macro TS_LARGE_FILES() requires to use DESTINATION parameter.\n   TS_LARGE_FILES(\n       DESTINATION some_dir\n       large/file1\n       large/file2\n   )\nDocs: https://docs.yandex-team.ru/frontend-in-arcadia/references/TS_PACKAGE#ts-large-files.",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null
+    }
+  },
+  "NotsConfigureErrorsTest.test_library_outputs_missing_in_package_files": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "Directories from \u001b[0;36mTS_BUILD_OUTPUTS()\u001b[0;49m are expected to be listed in \u001b[0;36mpackage.json#files\u001b[0;49m.\nFollowing directories are missing in \u001b[0;36mpackage.json#files\u001b[0;49m: \u001b[0;31mout\u001b[0;49m",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null
+    }
+  },
+  "NotsConfigureErrorsTest.test_library_without_a_build_script": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "Module build script is required but not set.\nUse macro \u001b[0;36mTS_BUILD_SCRIPT(nots:build)\u001b[0;49m to set it up.",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null
+    }
+  },
+  "NotsConfigureErrorsTest.test_library_without_outputs": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "Module outputs are required but not set.\nUse macro \u001b[0;36mTS_BUILD_OUTPUTS(build)\u001b[0;49m to set it up.",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null
+    }
+  },
+  "NotsConfigureErrorsTest.test_test_config_in_test_for": {
+    "configure_errors": {
+      "__ay_e2e__/tests": [
+        [
+          "\u001b[0;36mTS_TEST_FOR\u001b[0;49m does not support \u001b[0;36mTS_TEST_CONFIG\u001b[0;49m macro.\nSet proper config path in test script in \u001b[0;36mpackage.json\u001b[0;49m",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null,
+      "$S/__ay_e2e__/lib": null,
+      "$S/__ay_e2e__/tests": null
+    }
+  },
+  "NotsConfigureErrorsTest.test_test_for_a_relative_path_without_relative": {
+    "configure_errors": {
+      "__ay_e2e__/tests": [
+        [
+          "You are using a relative path for a module. You have to add RELATIVE key, like (RELATIVE ../lib)",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null,
+      "$S/__ay_e2e__/lib": null,
+      "$S/__ay_e2e__/tests": null
+    }
+  },
+  "NotsConfigureErrorsTest.test_test_for_without_a_test_script": {
+    "configure_errors": {
+      "__ay_e2e__/tests": [
+        [
+          "\u001b[0;31mMissing test script\u001b[0;49m \n\u001b[0;36mTS_TEST_FOR\u001b[0;49m requires to use at least one \u001b[0;36mTS_TEST\u001b[0;49m macro \nhttps://docs.yandex-team.ru/frontend-in-arcadia/references/TS_TEST_FOR",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null,
+      "$S/__ay_e2e__/lib": null,
+      "$S/__ay_e2e__/tests": null
+    }
+  },
+  "NotsConfigureErrorsTest.test_unit_tests_in_a_library": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "\u001b[0;36mTS_LIBRARY\u001b[0;49m forbids to use \u001b[0;36mTS_TEST\u001b[0;49m macro\nYou cannot describe unit-tests inside of \u001b[0;36mTS_LIBRARY\u001b[0;49m\nhttps://docs.yandex-team.ru/frontend-in-arcadia/index/quick-start#unit-tests-in-ts-library",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null
+    }
+  }
+}
