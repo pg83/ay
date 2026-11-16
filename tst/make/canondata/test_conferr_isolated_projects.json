@@ -1,0 +1,76 @@
+{
+  "IsolatedProjectsConfigureErrorsTest.test_addincl_of_an_isolated_project": {
+    "configure_errors": {},
+    "make_files": {
+      "$S/__ay_e2e__": null
+    }
+  },
+  "IsolatedProjectsConfigureErrorsTest.test_data_from_an_isolated_project": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "The project depends on [[alt1]]isolated project[[rst]] [[imp]]__ay_e2e__/isolated[[rst]]\n\n    $B/__ay_e2e__/__ay_e2e__ -> $S/__ay_e2e__/isolated",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null
+    }
+  },
+  "IsolatedProjectsConfigureErrorsTest.test_depends_on_an_isolated_project": {
+    "configure_errors": {},
+    "make_files": {
+      "$S/__ay_e2e__": null,
+      "$S/__ay_e2e__/isolated": null
+    }
+  },
+  "IsolatedProjectsConfigureErrorsTest.test_include_from_an_isolated_project": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "The project depends on [[alt1]]isolated project[[rst]] [[imp]]__ay_e2e__/isolated[[rst]]\n\n    $S/__ay_e2e__/value.cpp -> $S/__ay_e2e__/isolated/isolated.h",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null
+    }
+  },
+  "IsolatedProjectsConfigureErrorsTest.test_peerdir_inside_an_isolated_project": {
+    "configure_errors": {},
+    "make_files": {
+      "$S/__ay_e2e__": null,
+      "$S/__ay_e2e__/isolated": null
+    }
+  },
+  "IsolatedProjectsConfigureErrorsTest.test_peerdir_into_an_isolated_project": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "The project depends on [[alt1]]isolated project[[rst]] [[imp]]__ay_e2e__/isolated[[rst]]\n\n    $B/__ay_e2e__/lib__ay_e2e__.a -> $B/__ay_e2e__/isolated/lib__ay_e2e__-isolated.a",
+          0,
+          0
+        ],
+        [
+          "The project depends on [[alt1]]isolated project[[rst]] [[imp]]__ay_e2e__/isolated[[rst]]\n\n    $B/__ay_e2e__/lib__ay_e2e__.a -> $S/__ay_e2e__/isolated",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null,
+      "$S/__ay_e2e__/isolated": null
+    }
+  },
+  "IsolatedProjectsConfigureErrorsTest.test_srcdir_in_an_isolated_project": {
+    "configure_errors": {},
+    "make_files": {
+      "$S/__ay_e2e__": null
+    }
+  }
+}
