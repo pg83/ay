@@ -1,22 +1,14 @@
 """Private C++ toolchain target aliases for CLI fixtures."""
 
-import json
+from tst.make import toolchains
 
 
 def add_linux_clang_target(test, architecture):
-    config = json.loads((test.root / "build/ya.conf.json").read_text())
-    selected = None
-    for name, chain in config["toolchain"].items():
-        if "c++" not in chain.get("tools", {}) or chain.get("params", {}).get("type") != "clang":
-            continue
-        for platform in chain["platforms"]:
-            if platform.get("default") and platform.get("host", {}).get("os") == "LINUX" and platform.get("target") == {"os": "LINUX", "arch": "x86_64"}:
-                selected = name, chain, platform
-                break
-        if selected is not None:
-            break
+    selected = toolchains.default_linux_clang(test)
     test.assertIsNotNone(selected)
-    name, chain, platform = selected
-    chain["platforms"] = [platform, dict(platform, target={"os": "LINUX", "arch": architecture})]
-    config["toolchain"] = {key: value for key, value in config["toolchain"].items() if "c++" not in value.get("tools", {}) or key == name}
-    test.write_tree("build/ya.conf.json", json.dumps(config))
+    path, name, chain, platform = selected
+    files = toolchains.cxx_files(test)
+    for file, config in files.items():
+        config["toolchains"] = {key: value for key, value in config["toolchains"].items() if not toolchains.is_cxx(value) or key == name}
+    files[path]["toolchains"][name]["platforms"] = [platform, dict(platform, target={"os": "LINUX", "arch": architecture})]
+    toolchains.write(test, files)

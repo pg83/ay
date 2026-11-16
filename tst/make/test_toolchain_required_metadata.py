@@ -1,21 +1,18 @@
-import json
-
+from tst.make import toolchains
 from tst.make.lib import MakeTest
 
 
 class ToolchainRequiredMetadataTest(MakeTest):
     def check_missing_field(self, field):
-        config = json.loads((self.root / "build/ya.conf.json").read_text())
+        files = toolchains.cxx_files(self)
         removed = 0
-        for chain in config["toolchain"].values():
-            if "c++" not in chain.get("tools", {}):
-                continue
-            container = chain["tools"]["c++"] if field == "bottle" else chain["params"]
+        for _, _, chain in toolchains.cxx_entries(files):
+            container = chain["tools"]["c++"] if field == "bottle" else chain.get("params", {})
             if field in container:
                 del container[field]
                 removed += 1
         self.assertGreater(removed, 0)
-        self.write_tree("build/ya.conf.json", json.dumps(config))
+        toolchains.write(self, files)
         self.write("ya.make", "LIBRARY()\nSRCS(answer.cpp)\nEND()\n")
         self.write("answer.cpp", "int answer() { return 42; }\n")
         self.assertNotEqual(self.make().returncode, 0)
