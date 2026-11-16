@@ -1,0 +1,132 @@
+{
+  "JavaDependencyManagementConfigureErrorsTest.test_auto_resolved_version_conflict": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "[[alt1]]Auto resolved[[rst]] versions conflict: 33.7.1-jre, 32.1.3-jre ([[imp]]contrib/java/com/google/guava/guava/33.7.1-jre[[rst]] chosen)",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null,
+      "$S/__ay_e2e__/one": null,
+      "$S/__ay_e2e__/two": null
+    }
+  },
+  "JavaDependencyManagementConfigureErrorsTest.test_dependency_management_older_than_a_peer": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "[[alt1]]More recent[[rst]] libraries versions in PEERDIRs: 33.7.1-jre ([[imp]]contrib/java/com/google/guava/guava/32.1.3-jre[[rst]] required by DEPENDENCY_MANAGEMENT)",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null,
+      "$S/__ay_e2e__/one": null
+    }
+  },
+  "JavaDependencyManagementConfigureErrorsTest.test_dependency_management_outside_of_manageable_paths": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "[[alt1]]DEPENDENCY_MANAGEMENT[[rst]] for [[imp]]__ay_e2e__/e2e[[rst]] which is outside of paths allowed for manageable dependencies",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null
+    }
+  },
+  "JavaDependencyManagementConfigureErrorsTest.test_dependency_management_to_a_missing_version": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "[[alt1]]DEPENDENCY_MANAGEMENT[[rst]] replaces peerdir to [[imp]]$S/contrib/java/com/google/guava/guava[[rst]] with dependency to missing directory or directory without module [[imp]]contrib/java/com/google/guava/guava/0.0.0-e2e[[rst]]",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null
+    }
+  },
+  "JavaDependencyManagementConfigureErrorsTest.test_dependency_management_version_conflict": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "[[alt1]]Different[[rst]] libraries versions in PEERDIRs: 32.1.3-jre ([[imp]]contrib/java/com/google/guava/guava/33.7.1-jre[[rst]] required by DEPENDENCY_MANAGEMENT)",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null,
+      "$S/__ay_e2e__/one": null
+    }
+  },
+  "JavaDependencyManagementConfigureErrorsTest.test_dependency_version_without_dependency_management": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "Dependency version resolved [[alt1]]without DEPENDENCY_MANAGEMENT[[rst]]: [[imp]]contrib/java/com/google/guava/guava/33.7.1-jre[[rst]]",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null
+    }
+  },
+  "JavaDependencyManagementConfigureErrorsTest.test_peerdir_to_a_default_version": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "Dependency with [[alt1]]default[[rst]] version: [[imp]]contrib/java/com/google/guava/guava/33.7.1-jre[[rst]]",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null
+    }
+  },
+  "JavaDependencyManagementConfigureErrorsTest.test_peerdir_to_a_direct_version": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "PEERDIR to [[alt1]]direct[[rst]] version: [[imp]]contrib/java/com/google/guava/guava/33.7.1-jre[[rst]]",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null
+    }
+  },
+  "JavaDependencyManagementConfigureErrorsTest.test_unknown_java_dependencies_configuration": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "Unknown JAVA_DEPENDENCIES_CONFIGURATION value 'E2E'. Allowed only [FORBID_DIRECT_PEERDIRS' FORBID_DEFAULT_VERSIONS' FORBID_CONFLICT' FORBID_CONFLICT_DM' FORBID_CONFLICT_DM_RECENT' REQUIRE_DM]",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null
+    }
+  }
+}
