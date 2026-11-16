@@ -467,6 +467,7 @@ var (
 	strDlopenCallback                                                                        = internStr("--dlopen-callback")
 	strDocsOutput                                                                            = internStr("--docs-output")
 	strDoctestModules                                                                        = internStr("--doctest-modules")
+	strDontRequireLicense                                                                    = internStr("_DONT_REQUIRE_LICENSE")
 	strDsdcAlwayslinkOptionIsSet                                                             = internStr("-DSDC_ALWAYSLINK_OPTION_IS_SET")
 	strDsunAwtFontconfigContribJavaOpenjdkFontconfigFontconfigPropertiesDjavaAwtHeadlessTrue = internStr("-Dsun.awt.fontconfig=contrib/java/openjdk-fontconfig/fontconfig.properties -Djava.awt.headless=true")
 	strDummyParam                                                                            = internStr("dummy_param")

@@ -756,13 +756,15 @@ func parseFeatureVersions(value, dir string) ([]featureVersion, []string) {
 	return features, errs
 }
 
-func (ctx *GenCtx) captureTransitive(modulePath string, env Environment, d *ModuleData) *transitiveInfo {
+func (ctx *GenCtx) captureTransitive(modulePath string, env Environment, d *ModuleData, platform *Platform) *transitiveInfo {
 	licenses := ctx.licenses
 	own := licenses.defaultProps
 
 	var info transitiveInfo
 
-	if d.license == 0 {
+	switch {
+	case d.license == 0 && d.confModule != nil && platform.conf.requiresNoLicense(d.confModule):
+	case d.license == 0:
 		for _, prefix := range licenses.fieldsOf(env.str(envEXPLICIT_LICENSE_PREFIXES)) {
 			if !pathIsPrefixOf(prefix, modulePath) {
 				continue
@@ -776,10 +778,12 @@ func (ctx *GenCtx) captureTransitive(modulePath string, env Environment, d *Modu
 
 			break
 		}
-	} else if parse := licenses.parse(d.license); parse.err != "" {
-		info.licenseErrors = append(info.licenseErrors, "Module LICENSE must be valid SPDX expression: "+parse.err)
-	} else {
-		own = parse.props
+	default:
+		if parse := licenses.parse(d.license); parse.err != "" {
+			info.licenseErrors = append(info.licenseErrors, "Module LICENSE must be valid SPDX expression: "+parse.err)
+		} else {
+			own = parse.props
+		}
 	}
 
 	if mw := licenses.restrictionOf(env, envMODULEWISE_LICENSES_RESTRICTION_TYPES, envMODULEWISE_LICENSES_RESTRICTIONS, "MODULEWISE_LICENSE_RESTRICTION", true); mw.kind != constraintNone || len(mw.errs) != 0 {

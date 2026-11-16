@@ -1504,7 +1504,7 @@ func endModule(ctx *GenCtx, modulePath string, kind ModuleKind, language Languag
 	d.moduleEnded = true
 
 	if platform != ctx.host {
-		d.transitive = ctx.captureTransitive(modulePath, env, d)
+		d.transitive = ctx.captureTransitive(modulePath, env, d, platform)
 	}
 }
 

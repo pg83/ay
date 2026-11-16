@@ -357,6 +357,8 @@ type JavaData struct {
 	env                    Environment
 	jdkChecks              []string
 	abiJarRequested        bool
+	depsConfig             uint8
+	earlyDM                map[int][]ANY
 }
 
 type javaTestData struct {
@@ -504,6 +506,9 @@ func genJavaModule(ctx *GenCtx, instance ModuleInstance, moduleName TOK, stmts [
 	ctx.jc.register(jm)
 
 	jm.data = collectJavaData(ctx, jm, stmts, env)
+
+	ctx.javaCheckManageableRoots(jm, env)
+
 	jm.rules = ctx.javaDMRulesFor(jm)
 
 	if unit.fbs {

@@ -141,11 +141,12 @@ func collectJavaData(ctx *GenCtx, jm *JavaModule, stmts []Stmt, env Environment)
 
 	d.javacOpts.setBase(javacActiveProcessorsOpt)
 	clear(d.rawVars)
+
 	collectJavaStmts(ctx, jm, d, stmts, env)
 
 	peers, dm := len(d.peerStmts), len(d.dm)
 
-	javaModuleBody(ctx, jm, d, env)
+	javaModuleBody(ctx, jm, d, env, d.earlyDM)
 	javaDeferredChecks(ctx, jm, d, env)
 
 	slices.Reverse(d.peerStmts)
@@ -280,6 +281,7 @@ func collectJavaStmts(ctx *GenCtx, jm *JavaModule, d *JavaData, stmts []Stmt, en
 			platform := jm.instance.Platform
 
 			d.confModule = platform.conf.module(owner, multimoduleSub(owner, jm.unit.sub, LangJava, false).string())
+			d.earlyDM = javaEarlyBodyArgs(jm, d, env)
 
 			platform.conf.initModule(env, d.confModule, &d.setVars)
 			javaModulePrologue(ctx, jm, d, env)
@@ -525,7 +527,29 @@ func javaConfBodyToo(name STR) bool {
 	return false
 }
 
-func javaModuleBody(ctx *GenCtx, jm *JavaModule, d *JavaData, env Environment) {
+func javaEarlyBodyArgs(jm *JavaModule, d *JavaData, env Environment) map[int][]ANY {
+	if d.confModule == nil {
+		return nil
+	}
+
+	var early map[int][]ANY
+
+	platform := jm.instance.Platform
+
+	for i, call := range platform.conf.bodyCalls(d.confModule) {
+		if call.name == kwDEPENDENCY_MANAGEMENT {
+			if early == nil {
+				early = map[int][]ANY{}
+			}
+
+			early[i] = platform.conf.expandArgs(env, call.args)
+		}
+	}
+
+	return early
+}
+
+func javaModuleBody(ctx *GenCtx, jm *JavaModule, d *JavaData, env Environment, early map[int][]ANY) {
 	if d.confModule == nil {
 		return
 	}
@@ -536,8 +560,12 @@ func javaModuleBody(ctx *GenCtx, jm *JavaModule, d *JavaData, env Environment) {
 
 	defer func() { d.inModuleBody = false }()
 
-	for _, call := range platform.conf.bodyCalls(d.confModule) {
-		args := platform.conf.expandArgs(env, call.args)
+	for i, call := range platform.conf.bodyCalls(d.confModule) {
+		args, ok := early[i]
+
+		if !ok {
+			args = platform.conf.expandArgs(env, call.args)
+		}
 
 		var scratch [1]Stmt
 
@@ -827,6 +855,9 @@ func applyJavaMacro(ctx *GenCtx, jm *JavaModule, d *JavaData, name STR, args []s
 	case kwUBERJAR_SERVICES_RESOURCE_TRANSFORMER:
 		env.setString(envUberjarServicesResourceTransformerFlag, "--service-transformer")
 	case kwJAVA_DEPENDENCIES_CONFIGURATION:
+		if !env.is(envIGNORE_JAVA_DEPENDENCIES_CONFIGURATION, strYes) {
+			d.depsConfig |= ctx.javaDependenciesConfiguration(jm, args)
+		}
 	case kwJAVA_TEST_PEERDIR, kwJAVA_RUNTIME_PEERDIR:
 		if !javaMacroIsAlias(jm, name) {
 			return true

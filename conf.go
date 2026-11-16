@@ -970,6 +970,7 @@ type confModule struct {
 	read          []bool
 	planned       bool
 	checkProvides int8
+	noLicense     int8
 }
 
 type confInitStep struct {
@@ -3464,17 +3465,25 @@ func (c *Conf) forbiddenMacros(owner STR) map[STR]STR {
 }
 
 func (c *Conf) checksProvides(module *confModule) bool {
-	if module.checkProvides == 0 {
-		module.checkProvides = 1
+	return c.callsMacro(module, &module.checkProvides, strCheckProvides)
+}
+
+func (c *Conf) requiresNoLicense(module *confModule) bool {
+	return c.callsMacro(module, &module.noLicense, strDontRequireLicense)
+}
+
+func (c *Conf) callsMacro(module *confModule, verdict *int8, name STR) bool {
+	if *verdict == 0 {
+		*verdict = 1
 
 		for base := module; base != nil; base = c.tables.module(base.parent, "") {
-			if slices.ContainsFunc(base.body, func(call ConfMacroCall) bool { return call.name == strCheckProvides }) {
-				module.checkProvides = 2
+			if slices.ContainsFunc(base.body, func(call ConfMacroCall) bool { return call.name == name }) {
+				*verdict = 2
 
 				break
 			}
 		}
 	}
 
-	return module.checkProvides == 2
+	return *verdict == 2
 }

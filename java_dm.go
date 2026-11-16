@@ -2,7 +2,9 @@ package main
 
 import (
 	"iter"
+	"path"
 	"slices"
+	"strconv"
 	"strings"
 )
 
@@ -24,6 +26,14 @@ const (
 	javaIncludedUnseen javaIncludedState = iota
 	javaIncludedPending
 	javaIncludedDone
+)
+
+const (
+	javaForbidDirectPeerdirs uint8 = 1 << iota
+	javaForbidConflict
+	javaForbidConflictDM
+	javaForbidConflictDMRecent
+	javaRequireDM
 )
 
 type javaPeerResolution uint8
@@ -458,10 +468,16 @@ func (r *javaDMRules) pins(m *JavaModule) bool {
 }
 
 type javaConflictResolver struct {
-	ctx    *GenCtx
-	parent *JavaModule
-	rules  *javaDMRules
-	lv     *javaResolveLevel
+	ctx       *GenCtx
+	parent    *JavaModule
+	rules     *javaDMRules
+	lv        *javaResolveLevel
+	conflicts map[uint32]*javaConflictRecord
+}
+
+type javaConflictRecord struct {
+	lib, version string
+	versions     []string
 }
 
 func (r *javaConflictResolver) accept(conflict, target *JavaModule, managed bool) *JavaModule {
@@ -484,8 +500,17 @@ func (r *javaConflictResolver) resolve(cur javaResolvedPeer, depth int) *JavaMod
 	}
 
 	lv := r.lv
+	flags := r.parent.data.depsConfig
 
 	if l := lv.lib(cur.m.lib); l.epoch == lv.epoch {
+		if rec := r.conflicts[cur.m.lib]; rec != nil && (flags&javaForbidConflict != 0 && l.kind != jprManaged || flags&(javaForbidConflictDM|javaForbidConflictDMRecent) != 0 && l.kind == jprManaged) {
+			if len(rec.versions) == 0 {
+				rec.versions = append(rec.versions, rec.version)
+			}
+
+			rec.versions = append(rec.versions, path.Base(cur.m.dir))
+		}
+
 		if l.kind == jprManaged {
 			lv.resolveTo(cur.m.id, l.m)
 		}
@@ -495,6 +520,13 @@ func (r *javaConflictResolver) resolve(cur javaResolvedPeer, depth int) *JavaMod
 
 	*lv.lib(cur.m.lib) = javaLibSlot{epoch: lv.epoch, m: cur.m.id, kind: cur.resolution}
 
+	var rec *javaConflictRecord
+
+	if r.conflicts != nil {
+		rec = &javaConflictRecord{lib: javaPathParent(cur.m.dir), version: path.Base(cur.m.dir)}
+		r.conflicts[cur.m.lib] = rec
+	}
+
 	resolved := r.explicitResolution(cur.m, depth == 1)
 
 	if resolved == nil {
@@ -503,6 +535,14 @@ func (r *javaConflictResolver) resolve(cur javaResolvedPeer, depth int) *JavaMod
 		}
 
 		return r.accept(cur.m, cur.m, false)
+	}
+
+	if rec != nil {
+		if flags&(javaForbidConflictDM|javaForbidConflictDMRecent) != 0 && resolved != cur.m {
+			rec.versions = append(rec.versions, rec.version)
+		}
+
+		rec.version = path.Base(resolved.dir)
 	}
 
 	*lv.lib(cur.m.lib) = javaLibSlot{epoch: lv.epoch, m: resolved.id, kind: jprManaged}
@@ -530,7 +570,11 @@ func (ctx *GenCtx) javaManageLocalPeers(jm *JavaModule, rawPeers []*JavaModule, 
 			ruleID := rules.ruleForPeer(peer, true)
 
 			if ruleID == 0 {
-				ctx.onWarn(Warn{Kind: WarnModuleFailed, Message: jm.dir + ": Dependency with default version: " + peer.proxyFor.dir})
+				ctx.javaDMError(jm, "Dependency with [[alt1]]default[[rst]] version: [[imp]]"+peer.proxyFor.dir+"[[rst]]")
+
+				if jm.data.depsConfig&javaRequireDM != 0 {
+					ctx.javaDMError(jm, "Dependency version resolved [[alt1]]without DEPENDENCY_MANAGEMENT[[rst]]: [[imp]]"+peer.proxyFor.dir+"[[rst]]")
+				}
 
 				continue
 			}
@@ -539,7 +583,7 @@ func (ctx *GenCtx) javaManageLocalPeers(jm *JavaModule, rawPeers []*JavaModule, 
 			target := ctx.javaContrib(jm, ctx.jc.pathSTR(ruleID))
 
 			if target == nil {
-				ctx.onWarn(Warn{Kind: WarnModuleFailed, Message: jm.dir + ": DEPENDENCY_MANAGEMENT replaces peerdir to " + peer.dir + " with dependency to missing directory or directory without module " + rule})
+				ctx.javaDMError(jm, "[[alt1]]DEPENDENCY_MANAGEMENT[[rst]] replaces peerdir to [[imp]]$S/"+peer.dir+"[[rst]] with dependency to missing directory or directory without module [[imp]]"+rule+"[[rst]]")
 
 				continue
 			}
@@ -553,6 +597,14 @@ func (ctx *GenCtx) javaManageLocalPeers(jm *JavaModule, rawPeers []*JavaModule, 
 
 		if peer.contribWithVer {
 			resolution = jprDirect
+
+			if jm.data.depsConfig&javaForbidDirectPeerdirs != 0 {
+				ctx.javaDMError(jm, "PEERDIR to [[alt1]]direct[[rst]] version: [[imp]]"+peer.dir+"[[rst]]")
+			}
+
+			if jm.data.depsConfig&javaRequireDM != 0 {
+				ctx.javaDMError(jm, "Dependency version resolved [[alt1]]without DEPENDENCY_MANAGEMENT[[rst]]: [[imp]]"+peer.dir+"[[rst]]")
+			}
 		}
 
 		out = append(out, javaResolvedPeer{m: peer, resolution: resolution, impl: impl})
@@ -643,6 +695,12 @@ func (ctx *GenCtx) javaResolveConflicts(jm *JavaModule, lv *javaResolveLevel) {
 	}
 
 	resolver := javaConflictResolver{ctx: ctx, parent: jm, rules: jm.rules, lv: lv}
+
+	if jm.data.depsConfig&(javaForbidConflict|javaForbidConflictDM|javaForbidConflictDMRecent) != 0 {
+		resolver.conflicts = map[uint32]*javaConflictRecord{}
+
+		defer resolver.reportConflicts()
+	}
 
 	lv.addMembers(jm.closure)
 
@@ -1015,6 +1073,101 @@ func (jm *JavaModule) eachUnmanageable(f func(javaForeignPeer)) {
 	if jm.unit.transparent {
 		for _, d := range jm.direct {
 			d.m.eachUnmanageable(f)
+		}
+	}
+}
+
+func (ctx *GenCtx) javaDependenciesConfiguration(jm *JavaModule, args []string) uint8 {
+	var flags uint8
+
+	for _, arg := range args {
+		switch arg {
+		case "FORBID_DIRECT_PEERDIRS":
+			flags |= javaForbidDirectPeerdirs
+		case "FORBID_DEFAULT_VERSIONS":
+		case "FORBID_CONFLICT":
+			flags |= javaForbidConflict
+		case "FORBID_CONFLICT_DM":
+			flags |= javaForbidConflictDM
+		case "FORBID_CONFLICT_DM_RECENT":
+			flags |= javaForbidConflictDMRecent
+		case "REQUIRE_DM":
+			flags |= javaRequireDM
+		default:
+			ctx.javaDMError(jm, "Unknown JAVA_DEPENDENCIES_CONFIGURATION value '"+arg+"'. Allowed only [FORBID_DIRECT_PEERDIRS' FORBID_DEFAULT_VERSIONS' FORBID_CONFLICT' FORBID_CONFLICT_DM' FORBID_CONFLICT_DM_RECENT' REQUIRE_DM]")
+		}
+	}
+
+	return flags
+}
+
+func (ctx *GenCtx) javaDMError(jm *JavaModule, msg string) {
+	ctx.onWarn(Warn{Kind: WarnMisconfiguration, Where: makeFileWhere(jm.dir), Error: msg})
+}
+
+func (ctx *GenCtx) javaCheckManageableRoots(jm *JavaModule, env Environment) {
+	if len(jm.data.dm) == 0 || jm.unit.transparent {
+		return
+	}
+
+	roots := strings.Fields(env.expand(env.string(envMANAGEABLE_PEERS_ROOTS)))
+
+	for _, item := range jm.data.dm {
+		if !slices.ContainsFunc(roots, func(root string) bool { return javaPathIsPrefixOf(root, item.string()) }) {
+			ctx.javaDMError(jm, "[[alt1]]DEPENDENCY_MANAGEMENT[[rst]] for [[imp]]"+item.string()+"[[rst]] which is outside of paths allowed for manageable dependencies")
+		}
+	}
+}
+
+func javaVersionLess(l, r string) bool {
+	ls, rs := strings.Split(l, "."), strings.Split(r, ".")
+
+	for i := 0; i < len(ls) && i < len(rs); i++ {
+		lv, lerr := strconv.Atoi(ls[i])
+		rv, rerr := strconv.Atoi(rs[i])
+
+		switch {
+		case lerr == nil && rerr == nil:
+			if lv != rv {
+				return lv < rv
+			}
+		case ls[i] != rs[i]:
+			return ls[i] < rs[i]
+		}
+	}
+
+	if len(rs) <= len(ls) {
+		return false
+	}
+
+	return slices.ContainsFunc(rs[len(ls):], func(part string) bool {
+		v, err := strconv.Atoi(part)
+
+		return err != nil || v != 0
+	})
+}
+
+func (r *javaConflictResolver) reportConflicts() {
+	flags := r.parent.data.depsConfig
+
+	for libID, rec := range r.conflicts {
+		managed := r.lv.lib(libID).kind == jprManaged
+		chosen := "[[imp]]" + rec.lib + "/" + rec.version + "[[rst]]"
+
+		if flags&javaForbidConflict != 0 && len(rec.versions) != 0 && !managed {
+			r.ctx.javaDMError(r.parent, "[[alt1]]Auto resolved[[rst]] versions conflict: "+strings.Join(rec.versions, ", ")+" ("+chosen+" chosen)")
+		}
+
+		if flags&javaForbidConflictDM != 0 && len(rec.versions) != 0 && managed {
+			r.ctx.javaDMError(r.parent, "[[alt1]]Different[[rst]] libraries versions in PEERDIRs: "+strings.Join(rec.versions, ", ")+" ("+chosen+" required by DEPENDENCY_MANAGEMENT)")
+		}
+
+		if flags&javaForbidConflictDMRecent != 0 && managed {
+			newer := slices.DeleteFunc(slices.Clone(rec.versions), func(v string) bool { return !javaVersionLess(rec.version, v) })
+
+			if len(newer) != 0 {
+				r.ctx.javaDMError(r.parent, "[[alt1]]More recent[[rst]] libraries versions in PEERDIRs: "+strings.Join(newer, ", ")+" ("+chosen+" required by DEPENDENCY_MANAGEMENT)")
+			}
 		}
 	}
 }
