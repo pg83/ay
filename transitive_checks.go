@@ -138,6 +138,7 @@ type licenseConf struct {
 	parsed       map[STR]licenseParse
 	fields       map[STR][]string
 	restrictions map[restrictionKey]*restrictionParse
+	defaultErr   string
 }
 
 type restrictionKey struct {
@@ -307,6 +308,8 @@ func (ctx *GenCtx) loadLicenseConf(env Environment) *licenseConf {
 	if c.defaultName != "" {
 		if parse := c.parse(internStr(c.defaultName)); parse.err == "" {
 			c.defaultProps = parse.props
+		} else {
+			c.defaultErr = "Failed to evaluate default license: " + parse.err
 		}
 	}
 
@@ -1259,7 +1262,31 @@ func (tc *transitiveChecker) checkGoTest(m *ModuleEmitResult) {
 	}
 }
 
+func (ctx *GenCtx) reportDefaultLicense() {
+	var dirs []string
+
+	if len(ctx.startModules) != 0 {
+		dirs = append(dirs, ctx.startModules[0].transitiveDir())
+	}
+
+	if ctx.firstTool != nil {
+		dirs = append(dirs, ctx.firstTool.transitiveDir())
+	}
+
+	if ctx.testMode {
+		dirs = append(dirs, "build/platform/test_tool")
+	}
+
+	for _, dir := range dirs {
+		ctx.onWarn(Warn{Kind: WarnMisconfiguration, Where: makeFileWhere(dir), Error: ctx.licenses.defaultErr})
+	}
+}
+
 func (ctx *GenCtx) checkTransitiveRequirements() {
+	if ctx.licenses.defaultErr != "" {
+		ctx.reportDefaultLicense()
+	}
+
 	tc := &transitiveChecker{ctx: ctx, licenses: ctx.licenses}
 
 	var walk func(*ModuleEmitResult)
@@ -1286,6 +1313,10 @@ func (ctx *GenCtx) checkTransitiveRequirements() {
 }
 
 func (ctx *GenCtx) recordTool(res *ModuleEmitResult) {
+	if ctx.firstTool == nil {
+		ctx.firstTool = res
+	}
+
 	if ctx.frameDepth == 0 {
 		return
 	}

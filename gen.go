@@ -276,6 +276,7 @@ type GenCtx struct {
 	peerLists           *BumpAllocator[*ModuleEmitResult]
 	blacklist           *Blacklist
 	isolated            *IsolatedProjects
+	firstTool           *ModuleEmitResult
 }
 
 type moduleMemoEntry struct {

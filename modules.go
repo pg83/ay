@@ -389,6 +389,7 @@ type ModuleData struct {
 	transitive              *transitiveInfo
 	goTestFor               STR
 	versionSet              bool
+	lintersTop              bool
 }
 
 type DeclaredToken struct {
@@ -1481,7 +1482,30 @@ func collectModuleAutoinclude(ctx *GenCtx, modulePath string, kind ModuleKind, l
 	}
 
 	d.autoincluded = true
+	d.lintersTop = true
 	collectStmts(ctx, modulePath, kind, language, ctx.autoincludeStmts(modulePath, onWarn), env, d, onWarn, platform)
+}
+
+func (d *ModuleData) checkLintersStmt(s Stmt, modulePath string, onWarn func(Warn), platform *Platform) {
+	switch v := s.(type) {
+	case *SetStmt, *DefaultVarStmt, *IfStmt, *IncludeStmt, *MissingIncludeStmt, *ConfigureErrorStmt, *ModuleStmt, *EndStmt:
+		return
+	case *UnknownStmt:
+		switch v.Name {
+		case tokEnable, tokDisable, tokSetAppend, tokMessage, tokIncludeOnce, tokNoBuildIf, tokBuildOnlyIf:
+			return
+		}
+	}
+
+	name := stmtMacroNameID(s)
+
+	if d.confModule != nil {
+		name = platform.conf.moduleAlias(d.confModule, name)
+	}
+
+	if !policyDrops(d, name) && !platform.conf.allowedInLintersMake(name) {
+		onWarn(Warn{Kind: WarnMisconfiguration, Where: makeFileWhere(modulePath), Error: name.string() + " is not allowed in linters.make.inc!"})
+	}
 }
 
 func endModule(ctx *GenCtx, modulePath string, kind ModuleKind, language Language, env Environment, d *ModuleData, onWarn func(Warn), platform *Platform) {
@@ -2157,10 +2181,17 @@ func stmtMacroNameID(s Stmt) STR {
 
 func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Language, stmts []Stmt, env Environment, d *ModuleData, onWarn func(Warn), platform *Platform) {
 	fs := ctx.fs
+	linters := d.lintersTop
+
+	d.lintersTop = false
 
 	for _, s := range stmts {
 		if d.discarded {
 			return
+		}
+
+		if linters {
+			d.checkLintersStmt(s, modulePath, onWarn, platform)
 		}
 
 		if d.moduleStmt == nil && !d.moduleOpening && !allowedOutsideModule(s) {
@@ -2569,6 +2600,10 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 
 				if strHasDollar(pTok) && strings.Contains(pTok.string(), "${") {
 					continue
+				}
+
+				if dir := pTok.string(); pTok.vfs() == 0 && len(dir) > 1 && dir[len(dir)-1] == '/' && dir[0] != '/' {
+					onWarn(Warn{Kind: WarnMisconfiguration, Where: makeFileWhere(modulePath), Error: dir + " has trailing /"})
 				}
 
 				pTok = peerdirModulePath(pTok).any()
@@ -3009,6 +3044,7 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 				taken = v.Else
 			}
 
+			d.lintersTop = linters
 			collectStmts(ctx, modulePath, kind, language, taken, env, d, onWarn, platform)
 		case *UnknownStmt:
 			if d.skipModuleContentStmt(v.Name) {

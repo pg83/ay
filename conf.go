@@ -106,6 +106,7 @@ type ConfFile struct {
 	callNames  []string
 	callsGuard string
 	callsStart int
+	lintersOK  []STR
 }
 
 func (f *ConfFile) flushCalls() {
@@ -997,6 +998,7 @@ type confProgram struct {
 	inits       map[STR]*ConfMacro
 	commands    map[string]*confCommand
 	commandVars map[string]bool
+	lintersOK   map[STR]bool
 }
 
 type confCommand struct {
@@ -1018,6 +1020,7 @@ type confTables struct {
 	variants    DenseMap[STR, []ConfVariant]
 	peers       DenseMap[STR, []confPeerVariant]
 	moduleCount int
+	lintersOK   map[STR]bool
 }
 
 func confTableInput(r ConfStmtRef) bool {
@@ -1049,7 +1052,7 @@ func (s *ConfState) tablesFor(program *confProgram) *confTables {
 		}
 	}
 
-	t := &confTables{state: s, macros: program.macros, inits: program.inits}
+	t := &confTables{state: s, macros: program.macros, inits: program.inits, lintersOK: program.lintersOK}
 
 	for _, r := range stmts {
 		if confTableInput(r) {
@@ -1070,7 +1073,11 @@ func (pm *IncludeParserManager) confProgram(f *ConfFile, walking []string) *conf
 		return f.program
 	}
 
-	p := &confProgram{macros: map[STR]*ConfMacro{}, inits: map[STR]*ConfMacro{}, commands: map[string]*confCommand{}}
+	p := &confProgram{macros: map[STR]*ConfMacro{}, inits: map[STR]*ConfMacro{}, commands: map[string]*confCommand{}, lintersOK: map[STR]bool{}}
+
+	for _, name := range f.lintersOK {
+		p.lintersOK[name] = true
+	}
 
 	for name, macro := range f.macros {
 		p.macros[name] = macro
@@ -1127,6 +1134,10 @@ func (pm *IncludeParserManager) confProgram(f *ConfFile, walking []string) *conf
 
 		for name, command := range imported.commands {
 			p.commands[name] = command
+		}
+
+		for name := range imported.lintersOK {
+			p.lintersOK[name] = true
 		}
 	}
 
@@ -2713,6 +2724,7 @@ type confMacroBody struct {
 	conditions bool
 	command    bool
 	foreach    bool
+	lintersOK  bool
 }
 
 func (f *ConfFile) addMacro(header string, branch int32, body *confMacroBody) {
@@ -2726,6 +2738,10 @@ func (f *ConfFile) addMacro(header string, branch int32, body *confMacroBody) {
 	sig, specialized := f.state.parseMacroSignature(f.rel, params)
 	key := internStr(strings.TrimSpace(name))
 	calls := body.calls
+
+	if body.lintersOK {
+		f.lintersOK = append(f.lintersOK, key)
+	}
 
 	if body.cmd != "" || body.peerdir != "" || body.addincl != "" {
 		command := key.string()
@@ -2788,6 +2804,8 @@ func (body *confMacroBody) addLine(line string) {
 				body.peerdir = strings.TrimSpace(value)
 			case ".ADDINCL":
 				body.addincl = strings.TrimSpace(value)
+			case ".ALLOWED_IN_LINTERS_MAKE":
+				body.lintersOK = strings.TrimSpace(value) == "yes"
 			}
 		}
 
@@ -3470,6 +3488,10 @@ func (c *Conf) checksProvides(module *confModule) bool {
 
 func (c *Conf) requiresNoLicense(module *confModule) bool {
 	return c.callsMacro(module, &module.noLicense, strDontRequireLicense)
+}
+
+func (c *Conf) allowedInLintersMake(name STR) bool {
+	return c.tables.lintersOK[name]
 }
 
 func (c *Conf) callsMacro(module *confModule, verdict *int8, name STR) bool {

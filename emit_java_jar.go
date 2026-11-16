@@ -425,9 +425,15 @@ func (ctx *GenCtx) javaEmitJar(jm *JavaModule) {
 	for _, dep := range d.externalDeps {
 		if rel, ok := strings.CutPrefix(dep, "$(S)/"); ok {
 			b.input(source(rel))
-		} else {
-			b.input(source(jm.dir, "/", dep))
+
+			continue
 		}
+
+		if msg := ctx.javaExternalDependencyError(jm.dir, dep); msg != "" {
+			ctx.onWarn(Warn{Kind: WarnMisconfiguration, Where: makeFileWhere(jm.dir), Error: msg})
+		}
+
+		b.input(source(jm.dir, "/", dep))
 	}
 
 	b.setKV(pkJV, pcLightBlue, true)
@@ -611,4 +617,16 @@ func javacScriptsOf() []VFS {
 	}
 
 	return javacScriptsLazy
+}
+
+func (ctx *GenCtx) javaExternalDependencyError(dir, dep string) string {
+	if strings.HasPrefix(dep, "/") {
+		return "source file name is outside the build tree: " + dep
+	}
+
+	if ctx.fs.isFilePathClean(path.Join(dir, dep)) || ctx.fs.isFilePathClean(path.Clean(dep)) {
+		return ""
+	}
+
+	return "cannot find source file: " + dep
 }
