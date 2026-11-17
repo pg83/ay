@@ -409,6 +409,17 @@ func (e *EmitContext) notsLegacyStyles(dir string, state *NotsPrepared, head []s
 			continue
 		}
 
+		if check.name == "eslint" {
+			if present, _ := e.ctx.fs.exists(srcRootRel, path.Join(dir, check.config)); !present {
+				where := makeFileWhere(dir)
+
+				e.ctx.onWarn(Warn{Kind: WarnMisconfiguration, Where: where, Error: "Unexpected error while creating dart record Exception('eslint config not found: " + check.config + "'), field ESLINT_CONFIG_PATH"})
+				e.ctx.onWarn(Warn{Kind: WarnMisconfiguration, Where: where, Error: "'NoneType' object does not support item assignment"})
+
+				return nil
+			}
+		}
+
 		if tool, macro := notsMissingConfigNames(check.name); tool != "" {
 			if present, _ := e.ctx.fs.exists(srcRootRel, path.Join(dir, check.config)); !present {
 				e.ctx.onWarn(Warn{Kind: WarnMisconfiguration, Where: makeFileWhere(dir), Error: "Config for " + tool + " not found: " + check.config + ".\nSet the correct value in `" + macro + "(<config_filename>)` macro in the `ya.make` file."})
