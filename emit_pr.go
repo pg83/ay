@@ -405,7 +405,7 @@ func prOutputParsedIncludes(na *NodeArenas, outFile ANY, stmt *RunProgramStmt, p
 	local := na.dirs.alloc(len(stmt.OutputIncludes))[:0]
 
 	for _, f := range stmt.OutputIncludes {
-		local = append(local, IncludeDirective{kind: includeQuoted, target: includeTarget(f)})
+		local = append(local, IncludeDirective{kind: includeQuoted, outputInclude: true, target: includeTarget(f)})
 	}
 
 	na.dirs.commit(len(local))

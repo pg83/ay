@@ -109,6 +109,10 @@ func parseSwigIncludeLine(b []byte) (string, IncludeKind, bool) {
 		b = b[1:]
 	}
 
+	if bytes.HasPrefix(b, []byte(`""`)) {
+		return `""`, includeMacro, true
+	}
+
 	target, kind, ok := parseDelimitedIncludeTarget(b)
 
 	return bytesString(target), kind, ok

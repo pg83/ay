@@ -1534,6 +1534,8 @@ func endModule(ctx *GenCtx, modulePath string, kind ModuleKind, language Languag
 		onWarn(Warn{Kind: WarnMisconfiguration, Where: makeFileWhere(modulePath), Error: "final target module shouldn't have NEED_ADD_FAKE_SRC enabled, ignored"})
 	}
 
+	addGoOutputIncludePeers(modulePath, d, platform.Go)
+
 	if ctx.checkDependsInDart && d.moduleStmt != nil && (isUnitTestModule(d.moduleStmt.Name) || isPythonTestModule(d.moduleStmt.Name)) {
 		for _, dir := range strings.Fields(env.string(envTestDependsValue)) {
 			if !slices.Contains(d.test.depends, internStr(dir)) {

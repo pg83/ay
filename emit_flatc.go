@@ -85,8 +85,9 @@ func flatcDirectGeneratedHeaderIncludes(na *NodeArenas, scanner *IncludeScanner,
 
 	for _, imp := range direct {
 		out = append(out, IncludeDirective{
-			kind:   includeQuoted,
-			target: includeTarget(internStr(strings.ReplaceAll(imp.target.string(), ext, ext+".h")).any()),
+			kind:          includeQuoted,
+			outputInclude: imp.outputInclude,
+			target:        includeTarget(internStr(strings.ReplaceAll(imp.target.string(), ext, ext+".h")).any()),
 		})
 	}
 
@@ -244,7 +245,7 @@ func (e *EmitContext) emitFlatcProducer(srcVFS VFS, v *FlatcVariant) {
 		e.codegen.inheritParsedIncludes(headerVFS, flRef, inherited)
 	}
 
-	cppIncludes := ctx.na.dirList(IncludeDirective{kind: includeQuoted, target: includeTarget(headerVFS.rel().any())})
+	cppIncludes := ctx.na.dirList(append([]IncludeDirective{{kind: includeQuoted, target: includeTarget(headerVFS.rel().any())}}, headerIncludes...)...)
 
 	e.register(GeneratedFileSpec{
 		OutputPath:     cppVFS,

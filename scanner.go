@@ -48,8 +48,9 @@ const (
 type IncludeKind uint8
 
 type IncludeDirective struct {
-	kind   IncludeKind
-	target ANY
+	kind          IncludeKind
+	outputInclude bool
+	target        ANY
 }
 
 func includeTarget(s ANY) ANY {
@@ -1418,7 +1419,11 @@ func (sc *ScanCtx) resolveSearchPath(out []VFS, includerAbs, incDir VFS, d Inclu
 	}
 
 	if quoted {
-		sv := s.parsers.fs.resolveSourceUnder(incDir.rel(), targetID)
+		sv := STR(0)
+
+		if !d.outputInclude || !includerAbs.isBuild() {
+			sv = s.parsers.fs.resolveSourceUnder(incDir.rel(), targetID)
+		}
 
 		if sv != 0 {
 			out = append(out, sv.source())

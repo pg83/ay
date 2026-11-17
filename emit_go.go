@@ -1422,3 +1422,64 @@ func (e *EmitContext) emitGoExe(resolved []ResolvedPeer, objRefs []NodeRef, objO
 func (e *EmitContext) isGoArchive(p VFS) bool {
 	return isGoModuleType(e.codegen.moduleType(p))
 }
+
+func addGoOutputIncludePeers(modulePath string, d *ModuleData, std *GoStd) {
+	for _, program := range d.runPrograms {
+		if len(program.OutputIncludes) == 0 {
+			continue
+		}
+
+		outs := append(slices.Clone(program.OUTFiles), program.OUTNoAutoFiles...)
+
+		if program.StdoutFile != nil {
+			outs = append(outs, *program.StdoutFile)
+		}
+
+		for _, out := range outs {
+			if srcExtClassOf(out) != srcExtGo {
+				continue
+			}
+
+			rel := copyFileOutputVFS(modulePath, out.string()).relString()
+
+			for _, include := range program.OutputIncludes {
+				dir := goOutputImportDir(std, include.string(), strings.HasPrefix(rel, std.Prefix+"/"), strings.HasPrefix(rel, std.Prefix+"/cmd/"))
+
+				if dir == "" || dir == modulePath || slices.Contains(d.peerdirs, internStr(dir).any()) {
+					continue
+				}
+
+				d.peerdirs = append(d.peerdirs, internStr(dir).any())
+			}
+		}
+	}
+}
+
+func goOutputImportDir(std *GoStd, imp string, inStd, inStdCmd bool) string {
+	slash := strings.IndexByte(imp, '/')
+	dot := -1
+
+	switch {
+	case slash >= 0:
+		dot = strings.LastIndexByte(imp[:slash], '.')
+	case imp == "unsafe" || imp == "C":
+		return ""
+	default:
+		dot = strings.IndexByte(imp, '.')
+	}
+
+	switch {
+	case dot < 0 && slash >= 0 && strings.HasPrefix(imp, "golang_org/"):
+		return std.Prefix + "/vendor/" + imp
+	case dot < 0:
+		return std.Prefix + "/" + imp
+	case strings.HasPrefix(imp, goArcPrefix):
+		return imp[len(goArcPrefix):]
+	case inStdCmd:
+		return std.Prefix + "/cmd/vendor/" + imp
+	case inStd:
+		return std.Prefix + "/vendor/" + imp
+	}
+
+	return goVendorPrefix + "/" + imp
+}
