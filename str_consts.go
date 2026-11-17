@@ -251,6 +251,8 @@ var (
 	moduleLangTokenPy2                                                                       = internStr("PY2")
 	moduleLangTokenPy3                                                                       = internStr("PY3")
 	opensslUnistdTarget                                                                      = internStr("unistd.h")
+	rosTopicTypeWithoutPackage                                                               = internStr("Topic description is ill-formed: ros message should be described as ros_package_name/TypeName")
+	rosTopicWithoutType                                                                      = internStr("Topic is ill-formed, no ros message to describe type")
 	srcRootRel                                                                               = internStr("")
 	str11                                                                                    = internStr("11")
 	str14                                                                                    = internStr("14")

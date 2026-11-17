@@ -4865,6 +4865,12 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 			toCpp := v.Args[0] != strH.any()
 
 			for _, pTok := range v.Args[1:] {
+				if pTok.vfs() == 0 {
+					onWarn(Warn{Kind: WarnMisconfiguration, Where: makeFileWhere(modulePath), Error: "Ambigous resolution for INDUCED_DEPS argument: " + pTok.string()})
+
+					continue
+				}
+
 				dir := IncludeDirective{kind: includeQuoted, target: includeTarget(pTok)}
 
 				if toHeader {

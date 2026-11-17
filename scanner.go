@@ -108,6 +108,10 @@ func (d IncludeDiagnostic) warn() Warn {
 		message = "Can't resolve macro target " + d.Directive.target.string() + " from " + ymakeVFS(d.Includer)
 	}
 
+	if message == "" && d.Directive.kind == includeRos {
+		message = d.Directive.target.string()
+	}
+
 	return Warn{
 		Kind:        WarnMissingInclude,
 		includer:    d.Includer,
@@ -466,7 +470,7 @@ func (sc *ScanCtx) parserConfig() *ScanConfig {
 		return ctx.config(scanDomainSc)
 	case FlatbuffersIncludeDirectiveParser:
 		return ctx.config(scanDomainFlatc)
-	case RosIncludeDirectiveParser:
+	case RosIncludeDirectiveParser, RosTopicIncludeDirectiveParser:
 		return ctx.config(scanDomainRos)
 	case ProtoIncludeDirectiveParser, CfgProtoIncludeDirectiveParser:
 		if sc.domain != scanDomainProto {
@@ -964,6 +968,12 @@ func (sc *ScanCtx) resolve(out []VFS, includerAbs, incDir VFS, d IncludeDirectiv
 	}
 
 	if d.kind == includeRos {
+		if t := d.target.str(); t == rosTopicTypeWithoutPackage || t == rosTopicWithoutType {
+			sc.warnUnresolved(includerAbs, d, false)
+
+			return out
+		}
+
 		if resolved := resolveRosInclude(s.parsers.fs, sc.cfg.ownAddIncl, d.target.string()); resolved != 0 {
 			return append(out, resolved)
 		}

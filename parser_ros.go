@@ -1,6 +1,9 @@
 package main
 
-import "strings"
+import (
+	"bytes"
+	"strings"
+)
 
 type RosIncludeDirectiveParser struct{}
 
@@ -41,6 +44,39 @@ func (RosIncludeDirectiveParser) parse(_ string, data [][]byte, a *BumpAllocator
 
 		k = addDirective(block, k, IncludeDirective{kind: includeRos, target: includeTarget(internStr(name).any())})
 	})
+
+	a.commit(k)
+
+	return ParsedIncludeSet{parsedIncludesLocal: block[:k:k]}
+}
+
+type RosTopicIncludeDirectiveParser struct{}
+
+func (RosTopicIncludeDirectiveParser) parse(_ string, data [][]byte, a *BumpAllocator[IncludeDirective]) ParsedIncludeSet {
+	block := a.alloc(directiveBlockHint)
+	k := 0
+	found := false
+
+	eachLine(data, func(line []byte) {
+		message, ok := bytes.CutPrefix(line, []byte("type: "))
+
+		if found || !ok {
+			return
+		}
+
+		if bytes.IndexByte(message, '/') < 0 {
+			k = addDirective(block, k, IncludeDirective{kind: includeRos, target: rosTopicTypeWithoutPackage.any()})
+
+			return
+		}
+
+		found = true
+		k = addDirective(block, k, IncludeDirective{kind: includeRos, target: includeTarget(internBytes(message).any())})
+	})
+
+	if !found {
+		k = addDirective(block, k, IncludeDirective{kind: includeRos, target: rosTopicWithoutType.any()})
+	}
 
 	a.commit(k)
 

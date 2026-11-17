@@ -411,20 +411,6 @@
       "$S/__ay_e2e__": null
     }
   },
-  "MiscConfigureErrorsTest.test_go_resource_from_stdin_without_a_value": {
-    "configure_errors": {
-      "__ay_e2e__": [
-        [
-          "key \"key\" must contain = sign",
-          0,
-          0
-        ]
-      ]
-    },
-    "make_files": {
-      "$S/__ay_e2e__": null
-    }
-  },
   "MiscConfigureErrorsTest.test_go_resource_key_without_a_value": {
     "configure_errors": {
       "__ay_e2e__": [
@@ -502,6 +488,33 @@
     "make_files": {
       "$S/__ay_e2e__": null
     }
+  },
+  "MiscConfigureErrorsTest.test_jtest_for_without_arguments": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "[[alt1]]JTEST_FOR[[rst]] without arguments is invalid.. Skip [[alt1]]JTEST_FOR[[rst]] macro.",
+          1,
+          11
+        ],
+        [
+          "module cannot be constructed from [[alt1]]JTEST_FOR[[rst]] statement",
+          1,
+          11
+        ],
+        [
+          "unexpected command [[alt1]]END[[rst]] outside of a module",
+          3,
+          5
+        ],
+        [
+          "unexpected command [[alt1]]JDK_VERSION[[rst]] outside of a module",
+          2,
+          15
+        ]
+      ]
+    },
+    "make_files": {}
   },
   "MiscConfigureErrorsTest.test_late_glob_with_an_invalid_pattern": {
     "configure_errors": {

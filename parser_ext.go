@@ -17,6 +17,7 @@ func buildParserExtMatcher(proto ProtoIncludeDirectiveParser) *ExtMatcher[Includ
 	return newExtMatcher([]ExtEntry[IncludeDirectiveParser]{
 		{".msg", RosIncludeDirectiveParser{}},
 		{".srv", RosIncludeDirectiveParser{}},
+		{".rostopic", RosTopicIncludeDirectiveParser{}},
 		{".y", lexParser},
 		{".l", lexParser},
 		{".a", nil},

@@ -41,6 +41,7 @@ var statelessIncludeParsers = [...]IncludeDirectiveParser{
 	includeParserFortran:     FortranIncludeDirectiveParser{},
 	includeParserNlg:         NlgIncludeDirectiveParser{},
 	includeParserSsqls:       SsqlsIncludeDirectiveParser{},
+	includeParserRosTopic:    RosTopicIncludeDirectiveParser{},
 }
 
 const directiveBlockHint = 1 << 14
@@ -63,6 +64,7 @@ const (
 	includeParserSsqls
 	includeParserProto
 	includeParserCfgProto
+	includeParserRosTopic
 )
 
 func isParserSpace(b byte) bool {
@@ -121,6 +123,8 @@ func includeParserKind(parser IncludeDirectiveParser) IncludeParserKind {
 		return includeParserTS
 	case RosIncludeDirectiveParser:
 		return includeParserRos
+	case RosTopicIncludeDirectiveParser:
+		return includeParserRosTopic
 	case FortranIncludeDirectiveParser:
 		return includeParserFortran
 	case NlgIncludeDirectiveParser:
