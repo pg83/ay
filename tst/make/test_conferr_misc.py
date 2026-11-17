@@ -51,10 +51,6 @@ class MiscConfigureErrorsTest(MakeTest):
         self.library()
         self.assertConfigureLikeYa()
 
-    def test_jtest_for_without_arguments(self):
-        self.write("ya.make", "JTEST_FOR()\nJDK_VERSION(17)\nEND()\n")
-        self.assertConfigureLikeYa()
-
     def test_go_resource_key_without_a_value(self):
         self.write("ya.make", "GO_LIBRARY()\nSRCS(value.go)\nRESOURCE(- E2E)\nEND()\n")
         self.write("value.go", "package value\n")
@@ -401,6 +397,35 @@ class MiscConfigureErrorsTest(MakeTest):
     def test_swig_include_with_empty_quotes(self):
         self.write("ya.make", "LIBRARY(named)\nSRCS(answer.swg)\nEND()\n")
         self.write("answer.swg", '%module answer\n%include ""\n')
+        self.assertConfigureLikeYa()
+
+    def ros_topic(self, text):
+        self.library(f"RUN_PROGRAM({PROJECT}/tool IN value.rostopic STDOUT out.txt)")
+        self.write("tool/ya.make", "PROGRAM()\nSRCS(main.cpp)\nEND()\n")
+        self.write("tool/main.cpp", "int main() { return 0; }\n")
+        self.write("value.rostopic", text)
+
+    def test_ros_topic_type_without_a_package(self):
+        self.ros_topic("type: Answer\n")
+        self.assertConfigureLikeYa()
+
+    def test_ros_topic_without_a_type(self):
+        self.ros_topic("name: answer\n")
+        self.assertConfigureLikeYa()
+
+    def test_go_resource_from_stdin_without_a_value(self):
+        self.write("ya.make", "GO_LIBRARY()\nSRCS(value.go)\nRESOURCE(- key)\nEND()\n")
+        self.write("value.go", "package value\n")
+        self.assertConfigureLikeYa()
+
+    def test_jtest_for_without_arguments(self):
+        self.write("ya.make", "JTEST_FOR()\nEND()\n")
+        self.assertConfigureLikeYa()
+
+    def test_induced_deps_with_a_relative_path(self):
+        self.write("ya.make", "PROGRAM()\nSRCS(main.cpp)\nINDUCED_DEPS(h value.h)\nEND()\n")
+        self.write("main.cpp", "int main() { return 0; }\n")
+        self.write("value.h", "#pragma once\n")
         self.assertConfigureLikeYa()
 
     def ts_tests(self, *statements):

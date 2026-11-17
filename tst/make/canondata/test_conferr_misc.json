@@ -411,6 +411,20 @@
       "$S/__ay_e2e__": null
     }
   },
+  "MiscConfigureErrorsTest.test_go_resource_from_stdin_without_a_value": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "key \"key\" must contain = sign",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null
+    }
+  },
   "MiscConfigureErrorsTest.test_go_resource_key_without_a_value": {
     "configure_errors": {
       "__ay_e2e__": [
@@ -461,6 +475,20 @@
       "$S/__ay_e2e__": null
     }
   },
+  "MiscConfigureErrorsTest.test_induced_deps_with_a_relative_path": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "Ambigous resolution for INDUCED_DEPS argument: value.h",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null
+    }
+  },
   "MiscConfigureErrorsTest.test_java_classpath_cmd_type_that_is_unknown": {
     "configure_errors": {
       "__ay_e2e__": [
@@ -474,33 +502,6 @@
     "make_files": {
       "$S/__ay_e2e__": null
     }
-  },
-  "MiscConfigureErrorsTest.test_jtest_for_without_arguments": {
-    "configure_errors": {
-      "__ay_e2e__": [
-        [
-          "[[alt1]]JTEST_FOR[[rst]] without arguments is invalid.. Skip [[alt1]]JTEST_FOR[[rst]] macro.",
-          1,
-          11
-        ],
-        [
-          "module cannot be constructed from [[alt1]]JTEST_FOR[[rst]] statement",
-          1,
-          11
-        ],
-        [
-          "unexpected command [[alt1]]END[[rst]] outside of a module",
-          3,
-          5
-        ],
-        [
-          "unexpected command [[alt1]]JDK_VERSION[[rst]] outside of a module",
-          2,
-          15
-        ]
-      ]
-    },
-    "make_files": {}
   },
   "MiscConfigureErrorsTest.test_late_glob_with_an_invalid_pattern": {
     "configure_errors": {
@@ -824,6 +825,41 @@
     },
     "make_files": {
       "$S/__ay_e2e__": null
+    }
+  },
+  "MiscConfigureErrorsTest.test_ros_topic_type_without_a_package": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "Topic description is ill-formed: ros message should be described as ros_package_name/TypeName",
+          0,
+          0
+        ],
+        [
+          "Topic is ill-formed, no ros message to describe type",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null,
+      "$S/__ay_e2e__/tool": null
+    }
+  },
+  "MiscConfigureErrorsTest.test_ros_topic_without_a_type": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "Topic is ill-formed, no ros message to describe type",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null,
+      "$S/__ay_e2e__/tool": null
     }
   },
   "MiscConfigureErrorsTest.test_run_program_with_a_directory_input": {
