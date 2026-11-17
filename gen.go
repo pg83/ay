@@ -879,7 +879,7 @@ func (ctx *GenCtx) scanModuleConfiguration(instance ModuleInstance) (*ModuleStmt
 					continue
 				}
 
-				if _, partitioned := partitionedRecurses[v.Name]; partitioned || v.Name == tokRecurse || v.Name == tokRecurseRootRelative || v.Name == tokRecurseForTests {
+				if partitioned := v.Name == tokPartitionedRecurse || v.Name == tokPartitionedRecurseForTests || v.Name == tokPartitionedRecurseRootRelative; partitioned || v.Name == tokRecurse || v.Name == tokRecurseRootRelative || v.Name == tokRecurseForTests {
 					expanded := *v
 
 					for _, arg := range v.Args {
@@ -1394,8 +1394,10 @@ func moduleStmts(ctx *GenCtx, dir string) []Stmt {
 		mf = &MakeFile{Path: pe.File}
 	}
 
-	if rel := joinRel(dir, "ya.make"); ctx.unreadable[rel] {
-		ctx.onWarn(Warn{Kind: WarnMisconfiguration, Where: makeFileWhere(dir), Error: "File '$S/" + rel + "' is unreadable"})
+	if len(ctx.unreadable) != 0 {
+		if rel := joinRel(dir, "ya.make"); ctx.unreadable[rel] {
+			ctx.onWarn(Warn{Kind: WarnMisconfiguration, Where: makeFileWhere(dir), Error: "File '$S/" + rel + "' is unreadable"})
+		}
 	}
 
 	ctx.parsedFiles[key] = mf

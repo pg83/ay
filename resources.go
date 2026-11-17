@@ -927,6 +927,10 @@ func resourceGlobalTokenValue(args []ANY, globals []ResourceDecl) CompilerFlagVa
 }
 
 func resourceJSONError(fs FS, rel string) string {
+	if _, ok := fs.resourceBundle(internStr(rel)); ok {
+		return ""
+	}
+
 	head := "Unable to load jsonFile [[imp]]" + fs.root() + "/" + rel + "[[rst]]: "
 
 	if !fs.isFilePathClean(rel) {

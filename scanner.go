@@ -1026,6 +1026,10 @@ func (sc *ScanCtx) resolve(out []VFS, includerAbs, incDir VFS, d IncludeDirectiv
 	mappings, hasMultiTarget, sysinclClaimed = s.sysincl.lookup(includerAbs, d.target.str())
 
 	if d.quotedLike() && len(searchOut) > 0 {
+		if len(mappings) == 0 {
+			return out
+		}
+
 		local := false
 
 		if searchOut[0].isBuild() == includerAbs.isBuild() {

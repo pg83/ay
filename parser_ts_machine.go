@@ -1,18 +1,35 @@
 package main
 
-import "sync"
+import (
+	"math/bits"
+	"sync"
+	"unsafe"
+)
 
-var tsMachines = sync.OnceValue(func() map[string]*tsMachine {
-	return map[string]*tsMachine{
-		"import":  newTSMachine(func(b tsBuilder) tsFrag { return b.alt(b.decl(), b.call()) }),
-		"export":  newTSMachine(func(b tsBuilder) tsFrag { return b.alt(b.seq(b.sps(), b.lit("=")), b.decl()) }),
-		"require": newTSMachine(func(b tsBuilder) tsFrag { return b.call() }),
+var tsMachines = sync.OnceValue(func() tsMachineSet {
+	return tsMachineSet{
+		imports:  newTSMachine(func(b tsBuilder) tsFrag { return b.alt(b.decl(), b.call()) }),
+		exports:  newTSMachine(func(b tsBuilder) tsFrag { return b.alt(b.seq(b.sps(), b.lit("=")), b.decl()) }),
+		requires: newTSMachine(func(b tsBuilder) tsFrag { return b.call() }),
 	}
 })
 
+const (
+	tsDFAUnknown int32 = -1
+	tsDFADead    int32 = -2
+)
+
+type tsMachineSet struct{ imports, exports, requires *tsMachine }
+
 type tsMachine struct {
-	nodes []tsNode
-	start int
+	nodes    []tsNode
+	start    int
+	classes  []*[256]bool
+	closures [][]uint64
+
+	states [][]uint64
+	index  map[string]int32
+	trans  []*[256]int32
 }
 
 type tsNode struct {
@@ -163,50 +180,123 @@ func (b tsBuilder) decl() tsFrag {
 }
 
 func newTSMachine(build func(b tsBuilder) tsFrag) *tsMachine {
-	m := &tsMachine{}
+	m := &tsMachine{index: map[string]int32{}}
 	f := build(tsBuilder{m})
+	words := (len(m.nodes) + 63) / 64
 
 	m.start = f.start
+	m.classes = make([]*[256]bool, len(m.nodes))
+	m.closures = make([][]uint64, len(m.nodes))
+
+	for n, node := range m.nodes {
+		if node.match != nil {
+			class := new([256]bool)
+
+			for c := range 256 {
+				class[c] = node.match(byte(c))
+			}
+
+			m.classes[n] = class
+		}
+
+		m.closures[n] = make([]uint64, words)
+		m.close(m.closures[n], n)
+	}
+
+	m.state(m.closures[m.start])
 
 	return m
 }
 
-func (m *tsMachine) closure(set []bool, list []int, n int) []int {
-	if set[n] {
-		return list
+func (m *tsMachine) close(set []uint64, n int) {
+	if set[n/64]&(1<<(n%64)) != 0 {
+		return
 	}
 
-	set[n] = true
-	list = append(list, n)
+	set[n/64] |= 1 << (n % 64)
 
 	for _, e := range m.nodes[n].eps {
-		list = m.closure(set, list, e)
+		m.close(set, e)
+	}
+}
+
+func (m *tsMachine) state(set []uint64) int32 {
+	key := unsafe.String((*byte)(unsafe.Pointer(&set[0])), len(set)*8)
+
+	if id, ok := m.index[key]; ok {
+		return id
 	}
 
-	return list
+	id := int32(len(m.states))
+	trans := new([256]int32)
+
+	for c := range trans {
+		trans[c] = tsDFAUnknown
+	}
+
+	m.states = append(m.states, set)
+	m.trans = append(m.trans, trans)
+	m.index[key] = id
+
+	return id
+}
+
+func (m *tsMachine) step(state int32, c byte) int32 {
+	next := make([]uint64, len(m.states[state]))
+	live := false
+
+	for w, word := range m.states[state] {
+		for word != 0 {
+			n := w*64 + bits.TrailingZeros64(word)
+
+			word &= word - 1
+
+			if class := m.classes[n]; class != nil && class[c] {
+				for i, bit := range m.closures[m.nodes[n].next] {
+					next[i] |= bit
+				}
+
+				live = true
+			}
+		}
+	}
+
+	to := tsDFADead
+
+	if live {
+		to = m.state(next)
+	}
+
+	m.trans[state][c] = to
+
+	return to
 }
 
 func tsFailPos(s string, pos int, keyword string) int {
-	m := tsMachines()[keyword]
-	set := make([]bool, len(m.nodes))
-	active := m.closure(set, nil, m.start)
+	machines := tsMachines()
+	m := machines.requires
+
+	switch keyword {
+	case "import":
+		m = machines.imports
+	case "export":
+		m = machines.exports
+	}
+
+	state := int32(0)
 
 	for p := pos; p < len(s); p++ {
-		clear(set)
+		next := m.trans[state][s[p]]
 
-		var next []int
-
-		for _, n := range active {
-			if node := m.nodes[n]; node.match != nil && node.match(s[p]) {
-				next = m.closure(set, next, node.next)
-			}
+		if next == tsDFAUnknown {
+			next = m.step(state, s[p])
 		}
 
-		if len(next) == 0 {
+		if next == tsDFADead {
 			return p
 		}
 
-		active = next
+		state = next
 	}
 
 	return len(s)
