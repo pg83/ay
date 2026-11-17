@@ -132,6 +132,23 @@
       "$S/__ay_e2e__": null
     }
   },
+  "MiscConfigureErrorsTest.test_dll_for_its_own_directory": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "Syntax error in __ay_e2e__/ya.make:1:26: DLL_FOR: the current directory ($S/__ay_e2e__) can not be used as an argument\nDLL_FOR(__ay_e2e__ answer[ <- HERE ])\nEND()",
+          0,
+          0
+        ],
+        [
+          "unexpected command [[alt1]]END[[rst]] outside of a module",
+          2,
+          5
+        ]
+      ]
+    },
+    "make_files": {}
+  },
   "MiscConfigureErrorsTest.test_dll_with_exports_in_the_header": {
     "configure_errors": {
       "__ay_e2e__": [
@@ -173,6 +190,28 @@
     "make_files": {
       "$S/__ay_e2e__": null
     }
+  },
+  "MiscConfigureErrorsTest.test_go_test_for_its_own_directory": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "Syntax error in __ay_e2e__/ya.make:1:23: GO_TEST_FOR: the current directory ($S/__ay_e2e__) can not be used as an argument\nGO_TEST_FOR(__ay_e2e__[ <- HERE ])\nGO_TEST_SRCS(value_test.go)\nEND()",
+          0,
+          0
+        ],
+        [
+          "unexpected command [[alt1]]END[[rst]] outside of a module",
+          3,
+          5
+        ],
+        [
+          "unexpected command [[alt1]]GO_TEST_SRCS[[rst]] outside of a module",
+          2,
+          27
+        ]
+      ]
+    },
+    "make_files": {}
   },
   "MiscConfigureErrorsTest.test_jtest_for_without_arguments": {
     "configure_errors": {

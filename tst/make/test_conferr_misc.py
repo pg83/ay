@@ -172,6 +172,15 @@ class MiscConfigureErrorsTest(MakeTest):
         self.partitioned(json.dumps({"partitions": {"3": {"0": ["one"]}}}))
         self.assertConfigureLikeYa()
 
+    def test_go_test_for_its_own_directory(self):
+        self.write("ya.make", f"GO_TEST_FOR({PROJECT})\nGO_TEST_SRCS(value_test.go)\nEND()\n")
+        self.write("value_test.go", "package value\n")
+        self.assertConfigureLikeYa()
+
+    def test_dll_for_its_own_directory(self):
+        self.write("ya.make", f"DLL_FOR({PROJECT} answer)\nEND()\n")
+        self.assertConfigureLikeYa()
+
     def ts_tests(self, *statements):
         self.write("lib/ya.make", "TS_LIBRARY()\nTS_BUILD_SCRIPT(nots:build)\nTS_BUILD_OUTPUTS(dist)\n" + "".join(s + "\n" for s in statements) + "END()\n")
         self.write("lib/package.json", json.dumps({"name": "@e2e/lib", "version": "1.0.0", "engines": {"node": nodejs_version()}, "files": ["src", "dist"], "scripts": {"nots:build": "tsc"}}))
