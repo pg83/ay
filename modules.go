@@ -600,7 +600,7 @@ func parseCopyFileEntry(args []string, withContext bool, line int) CopyFileEntry
 	}
 
 	if positional < 2 {
-		throwFmt("gen: COPY_FILE at line %d expects at least source and destination, got %d args", line, len(args))
+		entry.Dst = ""
 	}
 
 	return entry
@@ -1528,6 +1528,11 @@ func endModule(ctx *GenCtx, modulePath string, kind ModuleKind, language Languag
 	d.unit.HashTag = env.str(envMODULE_TAG)
 	d.pyNamespacePython2 = env.is(envPYTHON2, strYes)
 	d.moduleEnded = true
+
+	if t := d.unit.Type; d.moduleStmt != nil && (isLinkingModuleType(t) || isProgramModuleType(t)) &&
+		(len(d.srcs) == 0 && env.bool(envNeedAddFakeSrc) || env.bool(envFakeModule)) {
+		onWarn(Warn{Kind: WarnMisconfiguration, Where: makeFileWhere(modulePath), Error: "final target module shouldn't have NEED_ADD_FAKE_SRC enabled, ignored"})
+	}
 
 	if ctx.checkDependsInDart && d.moduleStmt != nil && (isUnitTestModule(d.moduleStmt.Name) || isPythonTestModule(d.moduleStmt.Name)) {
 		for _, dir := range strings.Fields(env.string(envTestDependsValue)) {
@@ -2856,6 +2861,15 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 			}
 
 		case *ConfigureFileStmt:
+			if v.BadArgs != nil {
+				where := makeFileWhere(modulePath)
+
+				onWarn(Warn{Kind: WarnMisconfiguration, Where: where, Error: "CONFIGURE_FILE(" + strings.Join(v.BadArgs, " ") + ") was not processed properly: MapMacroVars failed\n. Skip CONFIGURE_FILE"})
+				onWarn(Warn{Kind: WarnMisconfiguration, Where: where, Error: "macro 'CONFIGURE_FILE': Wrong number of arguments: 2 != " + strconv.Itoa(len(v.BadArgs)) + "\n\tArgs: (" + strings.Join(v.BadArgs, " ") + ")"})
+
+				continue
+			}
+
 			expanded := *v
 
 			expanded.Src = expandStmtToken(v.Src, env)
@@ -4171,6 +4185,12 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 		d.hasFbs = true
 	case tokCopyFile, tokCopyFileWithContext:
 		entry := parseCopyFileEntry(anyStrs(v.Args), v.Name == tokCopyFileWithContext, v.Line)
+
+		if entry.Dst == "" {
+			onWarn(Warn{Kind: WarnMisconfiguration, Where: makeFileWhere(modulePath), Error: "macro 0 resulted in no outputs, can't add to graph"})
+
+			break
+		}
 
 		entry.DeclSeq = d.nextDeclSeq()
 		d.copyFiles = append(d.copyFiles, entry)

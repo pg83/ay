@@ -531,6 +531,7 @@ type ConfigureFileStmt struct {
 	Dst     string
 	Line    int
 	DeclSeq int
+	BadArgs []string
 }
 
 type CreateBuildInfoStmt struct {
@@ -1629,7 +1630,7 @@ func buildStmtForID(nameID STR, args []ANY, line int, fail func(format string, a
 	case stmtKindConfigureFile:
 
 		if len(args) != 2 {
-			fail("CONFIGURE_FILE expects exactly 2 arguments (src dst), got %d", len(args))
+			return &ConfigureFileStmt{BadArgs: anyStrs(args), Line: line}
 		}
 
 		return &ConfigureFileStmt{Src: args[0].string(), Dst: args[1].string(), Line: line}

@@ -236,6 +236,7 @@ var (
 	envNO_DEBUGINFO                           = internEnv("NO_DEBUGINFO")
 	envNO_STRIP                               = internEnv("NO_STRIP")
 	envNasmFlags                              = internEnv("NASM_FLAGS")
+	envNeedAddFakeSrc                         = internEnv("NEED_ADD_FAKE_SRC")
 	envNeedPlatformPeerdirs                   = internEnv("NEED_PLATFORM_PEERDIRS")
 	envNeedSbomInfo                           = internEnv("_NEED_SBOM_INFO")
 	envNoCompilerWarnings                     = internEnv("NO_COMPILER_WARNINGS")
