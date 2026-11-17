@@ -27,6 +27,20 @@
       "$S/__ay_e2e__": null
     }
   },
+  "MiscConfigureErrorsTest.test_biome_config_that_is_missing": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "Config for biome not found: missing.json.\nSet the correct value in `TS_BIOME(<config_filename>)` macro in the `ya.make` file.",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null
+    }
+  },
   "MiscConfigureErrorsTest.test_biome_with_a_missing_config": {
     "configure_errors": {
       "__ay_e2e__/lib": [
@@ -1001,6 +1015,20 @@
       "__ay_e2e__": [
         [
           "Unexpected error while creating dart record TypeError('sequence item 0: expected str instance, tuple found'), field LINT-CONFIGS",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null
+    }
+  },
+  "MiscConfigureErrorsTest.test_stylelint_config_that_is_missing": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "Config for stylelint not found: missing.config.js.\nSet the correct value in `TS_STYLELINT(<config_filename>)` macro in the `ya.make` file.",
           0,
           0
         ]

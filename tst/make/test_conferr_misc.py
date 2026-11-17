@@ -437,6 +437,23 @@ class MiscConfigureErrorsTest(MakeTest):
         self.write("lib/ya.make", "RECURSE()\n")
         self.assertConfigureLikeYa()
 
+    def ts_tsc(self, *statements):
+        self.write("ya.make", "TS_TSC()\nTS_BUILD_OUTPUTS(dist)\n" + "".join(s + "\n" for s in statements) + "END()\n")
+        self.write("package.json", json.dumps({"name": "@e2e/tsc", "version": "1.0.0", "engines": {"node": nodejs_version()}, "files": ["src", "dist"], "scripts": {"nots:build": "tsc"}}))
+        self.write("pnpm-lock.yaml", "lockfileVersion: '9.0'\nimporters:\n  .: {}\n")
+        self.write("tsconfig.json", json.dumps({"compilerOptions": {"rootDir": "src", "outDir": "dist"}, "include": ["src/**/*.ts"]}))
+        self.write("src/answer.ts", "export const answer = 42;\n")
+        self.write("src/style.css", "body { color: blue; }\n")
+        self.write(".eslintrc.js", "module.exports = {};\n")
+
+    def test_stylelint_config_that_is_missing(self):
+        self.ts_tsc("TS_STYLELINT(missing.config.js)")
+        self.assertConfigureLikeYa()
+
+    def test_biome_config_that_is_missing(self):
+        self.ts_tsc("TS_BIOME(missing.json)")
+        self.assertConfigureLikeYa()
+
     def ts_tests(self, *statements):
         self.write("lib/ya.make", "TS_LIBRARY()\nTS_BUILD_SCRIPT(nots:build)\nTS_BUILD_OUTPUTS(dist)\n" + "".join(s + "\n" for s in statements) + "END()\n")
         self.write("lib/package.json", json.dumps({"name": "@e2e/lib", "version": "1.0.0", "engines": {"node": nodejs_version()}, "files": ["src", "dist"], "scripts": {"nots:build": "tsc"}}))
