@@ -56,6 +56,25 @@
       "$S/__ay_e2e__": null
     }
   },
+  "MiscConfigureErrorsTest.test_configure_file_with_one_argument": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "CONFIGURE_FILE(value.h.in) was not processed properly: MapMacroVars failed\n. Skip CONFIGURE_FILE",
+          0,
+          0
+        ],
+        [
+          "macro 'CONFIGURE_FILE': Wrong number of arguments: 2 != 1\n\tArgs: (value.h.in)",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null
+    }
+  },
   "MiscConfigureErrorsTest.test_copy_file_of_a_directory": {
     "configure_errors": {
       "__ay_e2e__": [
@@ -66,6 +85,20 @@
         ],
         [
           "input dependency in COPY_FILE $L/TEXT/$S/__ay_e2e__/sub points to a directory and cannot be processed. Please provide a file path instead.",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null
+    }
+  },
+  "MiscConfigureErrorsTest.test_copy_file_with_one_argument": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "macro 0 resulted in no outputs, can't add to graph",
           0,
           0
         ]
@@ -657,6 +690,20 @@
     "make_files": {
       "$S/__ay_e2e__": null,
       "$S/__ay_e2e__/sub": null
+    }
+  },
+  "MiscConfigureErrorsTest.test_program_with_need_add_fake_src": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "final target module shouldn't have NEED_ADD_FAKE_SRC enabled, ignored",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null
     }
   },
   "MiscConfigureErrorsTest.test_pytest_bin_with_an_unknown_argument": {

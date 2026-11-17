@@ -371,6 +371,19 @@ class MiscConfigureErrorsTest(MakeTest):
         self.glob_macro("_LATE_GLOB(E2E_FILES e2e**.cpp)")
         self.assertConfigureLikeYa()
 
+    def test_program_with_need_add_fake_src(self):
+        self.write("ya.make", "PROGRAM()\nENABLE(NEED_ADD_FAKE_SRC)\nEND()\n")
+        self.assertConfigureLikeYa()
+
+    def test_copy_file_with_one_argument(self):
+        self.library("COPY_FILE(value.cpp)")
+        self.assertConfigureLikeYa()
+
+    def test_configure_file_with_one_argument(self):
+        self.library("CONFIGURE_FILE(value.h.in)")
+        self.write("value.h.in", "#pragma once\n")
+        self.assertConfigureLikeYa()
+
     def ts_tests(self, *statements):
         self.write("lib/ya.make", "TS_LIBRARY()\nTS_BUILD_SCRIPT(nots:build)\nTS_BUILD_OUTPUTS(dist)\n" + "".join(s + "\n" for s in statements) + "END()\n")
         self.write("lib/package.json", json.dumps({"name": "@e2e/lib", "version": "1.0.0", "engines": {"node": nodejs_version()}, "files": ["src", "dist"], "scripts": {"nots:build": "tsc"}}))
