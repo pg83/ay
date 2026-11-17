@@ -5,6 +5,7 @@ import (
 	"regexp"
 	"regexp/syntax"
 	"slices"
+	"strconv"
 	"strings"
 )
 
@@ -202,9 +203,10 @@ func (b *peerPolicySideBuilder) side() peerPolicySide {
 }
 
 type PeerPolicies struct {
-	rules []PeerPolicyRule
-	from  peerPolicySide
-	to    peerPolicySide
+	rules  []PeerPolicyRule
+	from   peerPolicySide
+	to     peerPolicySide
+	errors []string
 }
 
 func (pm *IncludeParserManager) peerPolicies(value string) *PeerPolicies {
@@ -238,8 +240,12 @@ func (pm *IncludeParserManager) peerPolicies(value string) *PeerPolicies {
 	}
 
 	for _, file := range paths {
-		for line, text := range strings.Split(string(concatChunks(pm.fs.read(file))), "\n") {
-			text = strings.TrimSpace(text)
+		var rules []PeerPolicyRule
+
+		bad := ""
+
+		for line, raw := range strings.Split(string(concatChunks(pm.fs.read(file))), "\n") {
+			text := strings.TrimSpace(raw)
 
 			if text == "" || strings.HasPrefix(text, "#") {
 				continue
@@ -253,11 +259,21 @@ func (pm *IncludeParserManager) peerPolicies(value string) *PeerPolicies {
 			}
 
 			if len(fields) != 3 || fields[1] != "->" || (policy != "ALLOW" && policy != "DENY" && policy != "DEFAULT") {
-				throwFmt("peerdir policy: %s:%d: invalid rule %s", file, line+1, text)
+				bad = "Syntax error at line " + strconv.Itoa(line+1) + " in " + pm.fs.root() + "/" + file + ": " + strings.TrimRight(raw, "\r")
+
+				break
 			}
 
-			rule := PeerPolicyRule{from: compile(fields[0]), to: compile(fields[2]), allow: policy == "ALLOW"}
+			rules = append(rules, PeerPolicyRule{from: compile(fields[0]), to: compile(fields[2]), allow: policy == "ALLOW"})
+		}
 
+		if bad != "" {
+			policies.errors = append(policies.errors, bad)
+
+			continue
+		}
+
+		for _, rule := range rules {
 			from.place(len(policies.rules), rule.from)
 			to.place(len(policies.rules), rule.to)
 			policies.rules = append(policies.rules, rule)

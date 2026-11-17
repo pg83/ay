@@ -1171,3 +1171,35 @@ func (r *javaConflictResolver) reportConflicts() {
 		}
 	}
 }
+
+func forcedDMExceptionErrors(env Environment) []string {
+	const name = "_FORCED_DEPENDENCY_MANAGEMENT_EXCEPTIONS"
+
+	var errs []string
+
+	state, lib, excludes := 0, "", 0
+
+	for _, item := range strings.Fields(env.expand(env.string(internEnv(name)))) {
+		switch {
+		case state == 0 && item == "FOR":
+			state = 1
+		case state == 0:
+			errs = append(errs, "Wait FOR in "+name+" but get "+item)
+		case state == 1 && item == "FOR":
+			errs = append(errs, "Not found library for FOR in "+name)
+			state = 0
+		case state == 1:
+			lib, state = item, 2
+		case item == "FOR":
+			if excludes == 0 {
+				errs = append(errs, "Not found excludes after FOR for "+lib+" in "+name)
+			}
+
+			state, excludes = 1, 0
+		default:
+			excludes++
+		}
+	}
+
+	return errs
+}

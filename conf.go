@@ -1021,6 +1021,7 @@ type confTables struct {
 	peers       DenseMap[STR, []confPeerVariant]
 	moduleCount int
 	lintersOK   map[STR]bool
+	errors      []string
 }
 
 func confTableInput(r ConfStmtRef) bool {
@@ -1731,18 +1732,45 @@ func (t *confTables) orderVariants(owner string, variants []string, selfPeers ma
 	done := map[string]bool{}
 	order := 0
 
+	var stack []string
+
+	looped := false
+
 	var visit func(tag string)
 
 	visit = func(tag string) {
-		if done[tag] || !slices.Contains(tags, tag) {
+		if !slices.Contains(tags, tag) {
+			return
+		}
+
+		if i := slices.Index(stack, tag); i >= 0 {
+			if !looped {
+				names := make([]string, 0, len(stack)-i+1)
+
+				for _, name := range append(stack[i:], tag) {
+					names = append(names, "[[alt1]]"+name+"[[rst]]")
+				}
+
+				t.errors = append(t.errors, "A loop has been detected between sub-modules of multi-module [[alt1]]"+owner+"[[rst]]: "+strings.Join(names, " -> "))
+			}
+
+			looped = true
+
+			return
+		}
+
+		if done[tag] {
 			return
 		}
 
 		done[tag] = true
+		stack = append(stack, tag)
 
 		for _, peer := range selfPeers[internV("env", tag, suffix)] {
 			visit(peer)
 		}
+
+		stack = stack[:len(stack)-1]
 
 		if module, _ := t.modules.get(internV(tag, suffix)); module != nil {
 			module.order = order
@@ -3488,6 +3516,10 @@ func (c *Conf) checksProvides(module *confModule) bool {
 
 func (c *Conf) requiresNoLicense(module *confModule) bool {
 	return c.callsMacro(module, &module.noLicense, strDontRequireLicense)
+}
+
+func (c *Conf) confErrors() []string {
+	return c.tables.errors
 }
 
 func (c *Conf) allowedInLintersMake(name STR) bool {

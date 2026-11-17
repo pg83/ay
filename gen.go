@@ -480,6 +480,22 @@ func newGenCtx(fs FS, parsers *IncludeParserManager, hostP, targetP *Platform, e
 		onWarn(Warn{Kind: WarnMisconfiguration, Where: "At top level", Error: "Cannot read source file $S/" + rel + ": " + strings.ToUpper(text[:1]) + text[1:] + " (" + strconv.Itoa(int(errno)) + ")"})
 	}
 
+	for _, p := range [...]*Platform{targetP, hostP} {
+		for _, msg := range p.peerPolicies.errors {
+			onWarn(Warn{Kind: WarnMisconfiguration, Where: "At top level", Error: msg})
+		}
+	}
+
+	for _, p := range [...]*Platform{targetP, hostP} {
+		for _, msg := range p.conf.confErrors() {
+			onWarn(Warn{Kind: WarnMisconfiguration, Where: "At top level", Error: msg})
+		}
+	}
+
+	for _, msg := range forcedDMExceptionErrors(targetP.ifEnv) {
+		onWarn(Warn{Kind: WarnMisconfiguration, Where: "At top level", Error: msg})
+	}
+
 	ctx.licenses = ctx.loadLicenseConf(targetP.ifEnv)
 	ctx.autoincludeIdx = loadAutoincludeIndex(fs, targetP.ifEnv, onWarn)
 	ctx.blacklist = ctx.loadBlacklist(targetP.ifEnv)
