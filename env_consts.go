@@ -319,6 +319,8 @@ var (
 	envREALPRJNAME                            = internEnv("REALPRJNAME")
 	envREQUIRED_TRANSITIVE_PEERS              = internEnv("REQUIRED_TRANSITIVE_PEERS")
 	envRagel6Flags                            = internEnv("RAGEL6_FLAGS")
+	envRecursePartitionIndex                  = internEnv("RECURSE_PARTITION_INDEX")
+	envRecursePartitionsCount                 = internEnv("RECURSE_PARTITIONS_COUNT")
 	envRosPurePy                              = internEnv("ROS_PURE_PY")
 	envRuffFileProcessingTime                 = internEnv("RUFF_FILE_PROCESSING_TIME")
 	envRunJavascriptAfterBuildInputs          = internEnv("_RUN_JAVASCRIPT_AFTER_BUILD_INPUTS")

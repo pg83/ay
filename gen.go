@@ -852,7 +852,7 @@ func (ctx *GenCtx) scanModuleConfiguration(instance ModuleInstance) (*ModuleStmt
 					continue
 				}
 
-				if v.Name == tokRecurse || v.Name == tokRecurseRootRelative || v.Name == tokRecurseForTests {
+				if _, partitioned := partitionedRecurses[v.Name]; partitioned || v.Name == tokRecurse || v.Name == tokRecurseRootRelative || v.Name == tokRecurseForTests {
 					expanded := *v
 
 					for _, arg := range v.Args {
@@ -864,10 +864,15 @@ func (ctx *GenCtx) scanModuleConfiguration(instance ModuleInstance) (*ModuleStmt
 					}
 
 					expanded.Args = expandStmtTokens(v.Args, env)
+
+					if partitioned {
+						expanded = ctx.partitionedRecurse(dir, expanded, env, ctx.onWarn)
+					}
+
 					children = appendConfigurationRecurses(children, dir, expanded, platform)
 
 					for len(kinds) < len(children) {
-						kinds = append(kinds, v.Name)
+						kinds = append(kinds, expanded.Name)
 					}
 				}
 			}
