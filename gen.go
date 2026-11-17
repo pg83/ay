@@ -481,8 +481,10 @@ func newGenCtx(fs FS, parsers *IncludeParserManager, hostP, targetP *Platform, e
 	}
 
 	for _, p := range [...]*Platform{targetP, hostP} {
-		for _, msg := range p.peerPolicies.errors {
-			onWarn(Warn{Kind: WarnMisconfiguration, Where: "At top level", Error: msg})
+		if policies := p.peerPolicies; policies != nil {
+			for _, msg := range policies.errors {
+				onWarn(Warn{Kind: WarnMisconfiguration, Where: "At top level", Error: msg})
+			}
 		}
 	}
 
