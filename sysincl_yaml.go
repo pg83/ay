@@ -61,6 +61,10 @@ func parseSysInclSubset(name string, data []byte, onWarn func(Warn)) []SysIncl {
 		case "source_filter":
 			s := string(unquoteYScalar(name, lineNo, val))
 
+			if sysinclRegexError(s) != "" {
+				throwFmt("%s:%d: source_filter %q is not a regex", name, lineNo, s)
+			}
+
 			rec.Filter = compileSourceFilter(name, lineNo, s, onWarn)
 		case "case_sensitive":
 			sensitive, ok := yamlBool(string(val))

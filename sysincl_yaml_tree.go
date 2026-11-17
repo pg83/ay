@@ -1,6 +1,7 @@
 package main
 
 import (
+	"regexp/syntax"
 	"slices"
 	"strconv"
 	"strings"
@@ -529,6 +530,12 @@ func (r *sysinclTreeReader) section(n *yamlNode, context string) *yamlNode {
 		}
 
 		filter = f.value
+
+		if msg := sysinclRegexError(filter); msg != "" {
+			r.report("Error while parsing sysincl section at " + n.mark() + " in " + context + ": library/cpp/regex/pcre/regexp.cpp:165: RegExp " + filter + ": Error: regular expression " + filter + " is wrong: " + msg)
+
+			return nil
+		}
 	}
 
 	caseSensitive := true
@@ -640,4 +647,14 @@ func lineEnd(src []byte, pos int) int {
 	}
 
 	return len(src)
+}
+
+func sysinclRegexError(pat string) string {
+	if _, err := syntax.Parse(pat, syntax.Perl); err != nil {
+		if e, ok := err.(*syntax.Error); ok && e.Code == syntax.ErrMissingBracket {
+			return "unbalanced [] at offset " + strconv.Itoa(len(pat))
+		}
+	}
+
+	return ""
 }

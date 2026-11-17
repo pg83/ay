@@ -792,8 +792,13 @@ func (e *EmitContext) emitPyNamespaceForGroup(groupIndex int, group PySrcGroup) 
 func (e *EmitContext) emitPyMainObjcopy() ([]NodeRef, []VFS) {
 	_, _, d := e.ctx, e.instance, e.d
 	kv := "PY_MAIN=" + d.pyMain.string()
+	refs, outs := e.emitKvOnlyResource(d.unit.HashTag, []string{kv}, []STR{internStr(kv)})
 
-	return e.emitKvOnlyResource(d.unit.HashTag, []string{kv}, []STR{internStr(kv)})
+	if d.extraPytestBins > 0 && len(outs) != 0 {
+		e.ctx.onWarn(Warn{Kind: WarnDupSrc, Where: makeFileWhere(e.instance.Path.relString()), Error: ymakeVFS(outs[0]) + " was already added in this project. Skip command: 0"})
+	}
+
+	return refs, outs
 }
 
 func (e *EmitContext) emitNoCheckImportsObjcopy() ([]NodeRef, []VFS) {

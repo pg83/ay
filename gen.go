@@ -280,6 +280,7 @@ type GenCtx struct {
 	isolated            *IsolatedProjects
 	firstTool           *ModuleEmitResult
 	unreadable          map[string]bool
+	lastSrcDir          [2]string
 }
 
 type moduleMemoEntry struct {

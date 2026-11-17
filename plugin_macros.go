@@ -62,7 +62,7 @@ var pluginMacroNames = map[STR]bool{
 	internStr("SDC_DIAGS_SPLIT_GENERATOR_V4"):               true,
 	internStr("SDC_INSTALL"):                                true,
 	strSetupExectest:                                        true,
-	internStr("SETUP_PYTEST_BIN"):                           true,
+	strSetupPytestBin:                                       true,
 	internStr("SETUP_RUN_PYTHON"):                           true,
 	internStr("SET_CPP_COVERAGE_FLAGS"):                     true,
 	strSplitCodegen:                                         true,

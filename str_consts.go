@@ -857,6 +857,7 @@ var (
 	strSetAppend                                                                             = internStr("SET_APPEND")
 	strSetAppendWithGlobal                                                                   = internStr("SET_APPEND_WITH_GLOBAL")
 	strSetupExectest                                                                         = internStr("SETUP_EXECTEST")
+	strSetupPytestBin                                                                        = internStr("SETUP_PYTEST_BIN")
 	strSetupPythonpathEnv                                                                    = internStr("--setup-pythonpath-env")
 	strSflags                                                                                = internStr("SFLAGS")
 	strShadow                                                                                = internStr("-shadow")

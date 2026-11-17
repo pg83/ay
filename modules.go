@@ -390,6 +390,7 @@ type ModuleData struct {
 	goTestFor               STR
 	versionSet              bool
 	lintersTop              bool
+	extraPytestBins         int
 }
 
 type DeclaredToken struct {
@@ -2507,6 +2508,10 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 				continue
 			}
 
+			if ctx.unreadableSourceDir(modulePath, v.Sources, onWarn) {
+				continue
+			}
+
 			routeAllToGlobal := d.moduleStmt != nil && isYqlUdfStaticModule(d.moduleStmt.Name)
 			goSrcs := isGoModuleType(d.unit.Type)
 			globalNext := false
@@ -3516,6 +3521,28 @@ func warnUnmodelledMacro(onWarn func(Warn), modulePath string, name TOK) {
 
 func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, env Environment, onWarn func(Warn)) bool {
 	if applyRustMacro(v, modulePath, env, d) {
+		return true
+	}
+
+	if v.macroName() == strSetupPytestBin && d.pyMain != nil {
+		d.extraPytestBins++
+
+		var unknown []string
+
+		for i := 0; i < len(v.Args); i++ {
+			if v.Args[i].string() == "RUNNER_BIN" {
+				i++
+
+				continue
+			}
+
+			unknown = append(unknown, "'"+v.Args[i].string()+"'")
+		}
+
+		if len(unknown) != 0 {
+			onWarn(Warn{Kind: WarnMisconfiguration, Where: makeFileWhere(modulePath), Error: "Unknown arguments found while processing add_pytest_bin macro: [" + strings.Join(unknown, ", ") + "]"})
+		}
+
 		return true
 	}
 
@@ -6941,4 +6968,49 @@ func (d *ModuleData) multimoduleTagsAllowed(env Environment) bool {
 	}
 
 	return d.moduleStmt.Name == tokProtoLibrary || env.bool(envGO_PROTO) || multimoduleShapes[multimoduleOwner(d.moduleStmt)] != nil
+}
+
+func (ctx *GenCtx) unreadableSourceDir(modulePath string, sources []ANY, onWarn func(Warn)) bool {
+	osfs := ctx.fs.(*OsFS)
+
+	for _, src := range sources {
+		if src.vfs() != 0 {
+			continue
+		}
+
+		text := src.string()
+		slash := strings.LastIndexByte(text, '/')
+
+		if slash <= 0 || text[:slash] == ctx.lastSrcDir[1] && modulePath == ctx.lastSrcDir[0] || !pathIsClean(text) {
+			continue
+		}
+
+		ctx.lastSrcDir = [2]string{modulePath, text[:slash]}
+
+		dirID := internJoined(modulePath, text[:slash])
+
+		if ctx.fs.listdir(dirID); len(osfs.unreadableDirs) == 0 {
+			continue
+		}
+
+		dir := dirID.string()
+		errno := osfs.unreadableDirs[dir]
+
+		if errno == 0 {
+			continue
+		}
+
+		reason := errno.Error()
+
+		reason = strings.ToUpper(reason[:1]) + reason[1:]
+
+		where := makeFileWhere(modulePath)
+
+		onWarn(Warn{Kind: WarnMisconfiguration, Where: where, Error: "Cannot read source directory $S/" + dir + ": Can't read directory content: (Error " + strconv.Itoa(int(errno)) + ": " + reason + ") devtools/ymake/symbols/readdir.cpp:61: Can't open directory '" + ctx.fs.root() + "/" + dir + "' by opendir() (" + strconv.Itoa(int(errno)) + ")"})
+		onWarn(Warn{Kind: WarnMisconfiguration, Where: where, Error: "SRCS(" + strings.Join(anyStrs(sources), " ") + ") was not processed properly: Readdir errors make graph unreliable. Skip SRCS"})
+
+		return true
+	}
+
+	return false
 }

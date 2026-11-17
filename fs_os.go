@@ -85,6 +85,8 @@ type OsFS struct {
 	fsBackend
 
 	onReadError func(rel string, err syscall.Errno)
+
+	unreadableDirs map[string]syscall.Errno
 }
 
 func newFS(srcRoot string) FS {

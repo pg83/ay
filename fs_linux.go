@@ -140,6 +140,14 @@ func (fs *OsFS) fstatatRel(rel string, st *syscall.Stat_t) bool {
 func (fs *OsFS) readDirAll(rel string, buf *[]byte) (int, bool) {
 	fd, errno := fs.openatRel(fs.rootFD, rel, syscall.O_RDONLY|syscall.O_CLOEXEC|syscall.O_DIRECTORY)
 
+	if errno == syscall.EACCES || errno == syscall.EPERM {
+		if fs.unreadableDirs == nil {
+			fs.unreadableDirs = map[string]syscall.Errno{}
+		}
+
+		fs.unreadableDirs[rel] = errno
+	}
+
 	if errno != 0 {
 		return 0, false
 	}
