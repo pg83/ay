@@ -271,6 +271,25 @@
       "$S/__ay_e2e__": null
     }
   },
+  "MiscConfigureErrorsTest.test_eslint_config_that_is_missing": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "'NoneType' object does not support item assignment",
+          0,
+          0
+        ],
+        [
+          "Unexpected error while creating dart record Exception('eslint config not found: .eslintrc.js'), field ESLINT_CONFIG_PATH",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null
+    }
+  },
   "MiscConfigureErrorsTest.test_external_resource_by_json_without_the_platform": {
     "configure_errors": {
       "__ay_e2e__": [

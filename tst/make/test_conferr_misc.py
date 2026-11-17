@@ -454,6 +454,11 @@ class MiscConfigureErrorsTest(MakeTest):
         self.ts_tsc("TS_BIOME(missing.json)")
         self.assertConfigureLikeYa()
 
+    def test_eslint_config_that_is_missing(self):
+        self.ts_tsc("TS_STYLELINT(missing.config.js)")
+        (self.project / ".eslintrc.js").unlink()
+        self.assertConfigureLikeYa()
+
     def ts_tests(self, *statements):
         self.write("lib/ya.make", "TS_LIBRARY()\nTS_BUILD_SCRIPT(nots:build)\nTS_BUILD_OUTPUTS(dist)\n" + "".join(s + "\n" for s in statements) + "END()\n")
         self.write("lib/package.json", json.dumps({"name": "@e2e/lib", "version": "1.0.0", "engines": {"node": nodejs_version()}, "files": ["src", "dist"], "scripts": {"nots:build": "tsc"}}))
