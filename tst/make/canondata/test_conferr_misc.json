@@ -56,6 +56,20 @@
       "$S/__ay_e2e__": null
     }
   },
+  "MiscConfigureErrorsTest.test_conf_macro_command_without_a_kv_p": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "No kv->p in command with output: $(BUILD_ROOT)/__ay_e2e__/out.cpp",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null
+    }
+  },
   "MiscConfigureErrorsTest.test_configure_file_with_one_argument": {
     "configure_errors": {
       "__ay_e2e__": [
@@ -127,6 +141,25 @@
       "At top level": [
         [
           "Error while reading blacklist file __ay_e2e__/missing.list: (Error 2: No such file or directory) util/system/file.cpp:936: can't open \"$(SOURCE_ROOT)/__ay_e2e__/missing.list\" with mode RdOnly|Seq (0x00000028)",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null
+    }
+  },
+  "MiscConfigureErrorsTest.test_cython_coverage_include_of_a_missing_file": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "'$(SOURCE_ROOT)/contrib/tools/cython/Cython/Includes' includes missing file: missing.pxi ($(SOURCE_ROOT)/__ay_e2e__/missing.pxi)",
+          0,
+          0
+        ],
+        [
+          "could not resolve include file: [[imp]]missing.pxi[[rst]] included from here: [[imp]]$S/__ay_e2e__/value.pyx[[rst]]",
           0,
           0
         ]
@@ -937,6 +970,20 @@
       "__ay_e2e__": [
         [
           "try to process by extension in SRCS a directory: $S/__ay_e2e__/sub. Won't be processed!",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null
+    }
+  },
+  "MiscConfigureErrorsTest.test_stdin_resource_with_an_empty_value": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "Syntax error: empty KEY or VALUE in RESOURCE(- KEY=VALUE), guard with \"\"",
           0,
           0
         ]
