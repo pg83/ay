@@ -8,6 +8,8 @@ import (
 	"strings"
 )
 
+const licensePropsMax = 31
+
 const (
 	constraintNone constraintType = iota
 	constraintDeny
@@ -138,7 +140,7 @@ type licenseConf struct {
 	parsed       map[STR]licenseParse
 	fields       map[STR][]string
 	restrictions map[restrictionKey]*restrictionParse
-	defaultErr   string
+	runErrors    []string
 }
 
 type restrictionKey struct {
@@ -282,6 +284,11 @@ func (ctx *GenCtx) loadLicenseConf(env Environment) *licenseConf {
 
 	sort.Strings(c.names)
 
+	if len(c.names) >= licensePropsMax {
+		c.runErrors = append(c.runErrors, "To many license properties.")
+		c.names = c.names[:licensePropsMax]
+	}
+
 	for bit, name := range c.names {
 		for i, list := range groups[name] {
 			for _, license := range list {
@@ -309,7 +316,7 @@ func (ctx *GenCtx) loadLicenseConf(env Environment) *licenseConf {
 		if parse := c.parse(internStr(c.defaultName)); parse.err == "" {
 			c.defaultProps = parse.props
 		} else {
-			c.defaultErr = "Failed to evaluate default license: " + parse.err
+			c.runErrors = append(c.runErrors, "Failed to evaluate default license: "+parse.err)
 		}
 	}
 
@@ -1278,12 +1285,14 @@ func (ctx *GenCtx) reportDefaultLicense() {
 	}
 
 	for _, dir := range dirs {
-		ctx.onWarn(Warn{Kind: WarnMisconfiguration, Where: makeFileWhere(dir), Error: ctx.licenses.defaultErr})
+		for _, msg := range ctx.licenses.runErrors {
+			ctx.onWarn(Warn{Kind: WarnMisconfiguration, Where: makeFileWhere(dir), Error: msg})
+		}
 	}
 }
 
 func (ctx *GenCtx) checkTransitiveRequirements() {
-	if ctx.licenses.defaultErr != "" {
+	if len(ctx.licenses.runErrors) != 0 {
 		ctx.reportDefaultLicense()
 	}
 

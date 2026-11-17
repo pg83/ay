@@ -1529,6 +1529,14 @@ func endModule(ctx *GenCtx, modulePath string, kind ModuleKind, language Languag
 	d.pyNamespacePython2 = env.is(envPYTHON2, strYes)
 	d.moduleEnded = true
 
+	if ctx.checkDependsInDart && d.moduleStmt != nil && (isUnitTestModule(d.moduleStmt.Name) || isPythonTestModule(d.moduleStmt.Name)) {
+		for _, dir := range strings.Fields(env.string(envTestDependsValue)) {
+			if !slices.Contains(d.test.depends, internStr(dir)) {
+				onWarn(Warn{Kind: WarnMisconfiguration, Where: makeFileWhere(modulePath), Error: "Test dependency to [[imp]]" + dir + "[[rst]] is not listed as [[alt1]]DEPENDS[[rst]]"})
+			}
+		}
+	}
+
 	if !d.versionSet && !env.is(envSKIP_VERSION_REQUIREMENTS, strYes) {
 		if prefix := ctx.licenses.explicitPrefix(env, envEXPLICIT_VERSION_PREFIXES, envEXPLICIT_VERSION_EXCEPTIONS, modulePath); prefix != "" {
 			onWarn(Warn{Kind: WarnMisconfiguration, Where: makeFileWhere(modulePath), Error: "Explicit VERSION must be specified for modules inside " + prefix + " directory"})
@@ -2193,6 +2201,10 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 
 		if linters {
 			d.checkLintersStmt(s, modulePath, onWarn, platform)
+		}
+
+		if d.moduleEnded && len(ctx.scopeOnly) != 0 {
+			ctx.scopeOnlyVariables(modulePath, s, onWarn)
 		}
 
 		if d.moduleStmt == nil && !d.moduleOpening && !allowedOutsideModule(s) {
@@ -3524,6 +3536,17 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 		return true
 	}
 
+	switch v.macroName() {
+	case strMacrosWithError:
+		onWarn(Warn{Kind: WarnMisconfiguration, Where: makeFileWhere(modulePath), Error: "MACROS_WITH_ERROR(" + strings.Join(anyStrs(v.Args), " ") + ") was not processed properly: Expected fail in MACROS_WITH_ERROR. Skip MACROS_WITH_ERROR"})
+
+		return true
+	case strAssertNoYamake:
+		assertNoYaMake(modulePath, anyStrs(v.Args), onWarn)
+
+		return true
+	}
+
 	if v.macroName() == strSetupPytestBin && d.pyMain != nil {
 		d.extraPytestBins++
 
@@ -3963,7 +3986,12 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 			d.srcs = append(d.srcs, SrcMeta{Source: source(dir + "/" + name).any(), Prio: stmtPrioDefault, Seq: d.nextDeclSeq()})
 		}
 	case tokStyleCpp:
-		d.collectCPPStyle(v, env)
+		if len(v.Args) != 0 && v.Args[0] != kwCONFIG_TYPE.any() {
+			onWarn(Warn{Kind: WarnMisconfiguration, Where: makeFileWhere(modulePath), Error: "Unexpected error while creating dart record TypeError('sequence item 0: expected str instance, tuple found'), field LINT-CONFIGS"})
+		} else {
+			d.collectCPPStyle(v, env)
+		}
+
 		env.setBool(envUseAllSrcs, true)
 		applyHeaders(fs, modulePath, []ANY{str4.any()}, d)
 
@@ -7013,4 +7041,53 @@ func (ctx *GenCtx) unreadableSourceDir(modulePath string, sources []ANY, onWarn 
 	}
 
 	return false
+}
+
+func assertNoYaMake(modulePath string, args []string, onWarn func(Warn)) {
+	files, msg := args, "prohibited from recursive glob match"
+
+	if i := slices.Index(args, "MSG"); i >= 0 {
+		files, msg = args[:i], strings.Join(args[i+1:], " ")
+	}
+
+	for _, file := range files {
+		if strings.HasSuffix(file, "ya.make") {
+			if rel, ok := strings.CutPrefix(file, "$(S)/"); ok {
+				file = "${ARCADIA_ROOT}/" + rel
+			} else if rel, ok := strings.CutPrefix(file, "$(B)/"); ok {
+				file = "${ARCADIA_BUILD_ROOT}/" + rel
+			}
+
+			onWarn(Warn{Kind: WarnMisconfiguration, Where: makeFileWhere(modulePath), Error: "unexpected ya.make: '[[imp]]" + file + "[[rst]]' - " + msg})
+
+			return
+		}
+	}
+}
+
+func (ctx *GenCtx) scopeOnlyVariables(modulePath string, s Stmt, onWarn func(Warn)) {
+	var args []ANY
+
+	switch v := s.(type) {
+	case *UnknownStmt:
+		args = v.Args
+	case *SetStmt:
+		args = []ANY{v.Value.any()}
+	default:
+		return
+	}
+
+	for _, arg := range args {
+		text := arg.string()
+
+		if strings.IndexByte(text, '$') < 0 {
+			continue
+		}
+
+		for _, name := range ctx.scopeOnly {
+			if strings.Contains(text, "${"+name+"}") || strings.Contains(text, "$"+name) {
+				onWarn(Warn{Kind: WarnMisconfiguration, Where: makeFileWhere(modulePath), Error: "Cannot use variable " + name + " outside of a module"})
+			}
+		}
+	}
 }

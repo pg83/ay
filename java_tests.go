@@ -352,6 +352,13 @@ func (jm *JavaModule) junitTestJar() VFS {
 func (ctx *GenCtx) javaJunitSuite(jm *JavaModule) *TestSuite {
 	d := jm.data
 	t := d.test
+
+	if cp := t.classpathCmdType; cp != "" && cp != "MANIFEST" && cp != "COMMAND_FILE" && cp != "LIST" {
+		ctx.onWarn(Warn{Kind: WarnMisconfiguration, Where: makeFileWhere(jm.dir), Error: "Invalid dart field value DartValueError('$S/" + jm.dir + ": TEST_JAVA_CLASSPATH_CMD_TYPE(" + cp + ") are invalid. Choose argument from MANIFEST, COMMAND_FILE or LIST)'), field JAVA_CLASSPATH_CMD_TYPE"})
+
+		return nil
+	}
+
 	testJar := jm.junitTestJar()
 	cpf := build(strings.TrimSuffix(testJar.relString(), path.Ext(testJar.relString())), ".test.cpf")
 	closure := ctx.javaManagedPeersClosure(jm)

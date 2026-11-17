@@ -281,6 +281,8 @@ type GenCtx struct {
 	firstTool           *ModuleEmitResult
 	unreadable          map[string]bool
 	lastSrcDir          [2]string
+	scopeOnly           []string
+	checkDependsInDart  bool
 }
 
 type moduleMemoEntry struct {
@@ -499,6 +501,8 @@ func newGenCtx(fs FS, parsers *IncludeParserManager, hostP, targetP *Platform, e
 		onWarn(Warn{Kind: WarnMisconfiguration, Where: "At top level", Error: msg})
 	}
 
+	ctx.scopeOnly = strings.Fields(targetP.ifEnv.expand(targetP.ifEnv.string(envModuleScopeOnlyVars)))
+	ctx.checkDependsInDart = stringIsTruthy(targetP.ifEnv.string(envCheckDependsInDart))
 	ctx.licenses = ctx.loadLicenseConf(targetP.ifEnv)
 	ctx.autoincludeIdx = loadAutoincludeIndex(fs, targetP.ifEnv, onWarn)
 	ctx.blacklist = ctx.loadBlacklist(targetP.ifEnv)
