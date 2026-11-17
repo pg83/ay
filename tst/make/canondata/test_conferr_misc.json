@@ -444,6 +444,23 @@
       "$S/__ay_e2e__": null
     }
   },
+  "MiscConfigureErrorsTest.test_go_test_for_a_directory_without_a_module": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "No module defined in [[imp]]$S/__ay_e2e__/lib/ya.make[[rst]]",
+          0,
+          0
+        ],
+        [
+          "unexpected command [[alt1]]END[[rst]] outside of a module",
+          2,
+          5
+        ]
+      ]
+    },
+    "make_files": {}
+  },
   "MiscConfigureErrorsTest.test_go_test_for_its_own_directory": {
     "configure_errors": {
       "__ay_e2e__": [

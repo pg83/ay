@@ -432,6 +432,11 @@ class MiscConfigureErrorsTest(MakeTest):
         self.library("RESOURCE(- conftest.py=)")
         self.assertConfigureLikeYa()
 
+    def test_go_test_for_a_directory_without_a_module(self):
+        self.write("ya.make", f"GO_TEST_FOR({PROJECT}/lib)\nEND()\n")
+        self.write("lib/ya.make", "RECURSE()\n")
+        self.assertConfigureLikeYa()
+
     def ts_tests(self, *statements):
         self.write("lib/ya.make", "TS_LIBRARY()\nTS_BUILD_SCRIPT(nots:build)\nTS_BUILD_OUTPUTS(dist)\n" + "".join(s + "\n" for s in statements) + "END()\n")
         self.write("lib/package.json", json.dumps({"name": "@e2e/lib", "version": "1.0.0", "engines": {"node": nodejs_version()}, "files": ["src", "dist"], "scripts": {"nots:build": "tsc"}}))
