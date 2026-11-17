@@ -867,6 +867,10 @@ func (ctx *GenCtx) scanModuleConfiguration(instance ModuleInstance) (*ModuleStmt
 
 					failedModule = !d.withGoTestForStmts(ctx, dir, v, scan)
 
+					if !failedModule && module == nil {
+						ctx.onWarn(Warn{Kind: WarnMisconfiguration, Where: makeFileWhere(dir), Error: "No module defined in [[imp]]$S/" + d.goTestFor.string() + "/ya.make[[rst]]"})
+					}
+
 					continue
 				}
 
