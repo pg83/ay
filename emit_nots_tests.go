@@ -409,6 +409,12 @@ func (e *EmitContext) notsLegacyStyles(dir string, state *NotsPrepared, head []s
 			continue
 		}
 
+		if tool, macro := notsMissingConfigNames(check.name); tool != "" {
+			if present, _ := e.ctx.fs.exists(srcRootRel, path.Join(dir, check.config)); !present {
+				e.ctx.onWarn(Warn{Kind: WarnMisconfiguration, Where: makeFileWhere(dir), Error: "Config for " + tool + " not found: " + check.config + ".\nSet the correct value in `" + macro + "(<config_filename>)` macro in the `ya.make` file."})
+			}
+		}
+
 		s := e.notsSuite(check.name, state.Globals, false)
 
 		s.ciType = strStyle
@@ -474,4 +480,15 @@ func notsScriptName(script string) string {
 	}
 
 	return b.String()
+}
+
+func notsMissingConfigNames(check string) (string, string) {
+	switch check {
+	case "ts_stylelint":
+		return "stylelint", "TS_STYLELINT"
+	case "ts_biome":
+		return "biome", "TS_BIOME"
+	}
+
+	return "", ""
 }
