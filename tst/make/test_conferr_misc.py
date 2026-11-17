@@ -274,6 +274,23 @@ class MiscConfigureErrorsTest(MakeTest):
         self.library()
         self.assertConfigureLikeYa()
 
+    def test_pytest_bin_with_an_unknown_argument(self):
+        self.write("ya.make", "PY3TEST()\nTEST_SRCS(test_value.py)\nSETUP_PYTEST_BIN(e2e)\nEND()\n")
+        self.write("test_value.py", "def test_value():\n    assert True\n")
+        self.assertConfigureLikeYa()
+
+    def test_sysincl_source_filter_that_is_not_a_regex(self):
+        self.sysincl("- source_filter: \"[\"\n  includes:\n  - e2e_value.h\n")
+        self.library()
+        self.assertConfigureLikeYa()
+
+    def test_source_in_an_unreadable_directory(self):
+        self.library("SRCS(sub/value.cpp)")
+        self.write("sub/value.cpp", "int sub() { return 42; }\n")
+        (self.project / "sub").chmod(0)
+        self.addCleanup((self.project / "sub").chmod, 0o755)
+        self.assertConfigureLikeYa()
+
     def ts_tests(self, *statements):
         self.write("lib/ya.make", "TS_LIBRARY()\nTS_BUILD_SCRIPT(nots:build)\nTS_BUILD_OUTPUTS(dist)\n" + "".join(s + "\n" for s in statements) + "END()\n")
         self.write("lib/package.json", json.dumps({"name": "@e2e/lib", "version": "1.0.0", "engines": {"node": nodejs_version()}, "files": ["src", "dist"], "scripts": {"nots:build": "tsc"}}))

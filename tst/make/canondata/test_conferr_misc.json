@@ -477,6 +477,25 @@
       "$S/__ay_e2e__/sub": null
     }
   },
+  "MiscConfigureErrorsTest.test_pytest_bin_with_an_unknown_argument": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "$B/__ay_e2e__/objcopy_23676bb9c0572091a3fbe2ef07.o was already added in this project. Skip command: 0",
+          0,
+          0
+        ],
+        [
+          "Unknown arguments found while processing add_pytest_bin macro: ['e2e']",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null
+    }
+  },
   "MiscConfigureErrorsTest.test_recurse_into_an_unreadable_ya_make": {
     "configure_errors": {
       "At top level": [
@@ -576,6 +595,25 @@
       "$S/__ay_e2e__": null
     }
   },
+  "MiscConfigureErrorsTest.test_source_in_an_unreadable_directory": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "Cannot read source directory $S/__ay_e2e__/sub: Can't read directory content: (Error 13: Permission denied) devtools/ymake/symbols/readdir.cpp:61: Can't open directory '$(SOURCE_ROOT)/__ay_e2e__/sub' by opendir() (13)",
+          0,
+          0
+        ],
+        [
+          "SRCS(sub/value.cpp) was not processed properly: Readdir errors make graph unreliable. Skip SRCS",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null
+    }
+  },
   "MiscConfigureErrorsTest.test_srcs_with_a_directory": {
     "configure_errors": {
       "__ay_e2e__": [
@@ -610,6 +648,20 @@
       "__ay_e2e__": [
         [
           "sysincl/addincl mismatch for include e2e_value.h from $S/__ay_e2e__/value.cpp addincl: $S/__ay_e2e__/inc/e2e_value.h sysincls: ${ARCADIA_ROOT}/__ay_e2e__/sys/e2e_value.h",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null
+    }
+  },
+  "MiscConfigureErrorsTest.test_sysincl_source_filter_that_is_not_a_regex": {
+    "configure_errors": {
+      "At top level": [
+        [
+          "Error while parsing sysincl section at line: 0 column: 2 in $(SOURCE_ROOT)/__ay_e2e__/sysincl.yml: library/cpp/regex/pcre/regexp.cpp:165: RegExp [: Error: regular expression [ is wrong: unbalanced [] at offset 1",
           0,
           0
         ]
