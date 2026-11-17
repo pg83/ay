@@ -279,6 +279,7 @@ type GenCtx struct {
 	blacklist           *Blacklist
 	isolated            *IsolatedProjects
 	firstTool           *ModuleEmitResult
+	unreadable          map[string]bool
 }
 
 type moduleMemoEntry struct {
@@ -469,6 +470,12 @@ func newGenCtx(fs FS, parsers *IncludeParserManager, hostP, targetP *Platform, e
 
 	fs.(*OsFS).onReadError = func(rel string, errno syscall.Errno) {
 		text := errno.Error()
+
+		if ctx.unreadable == nil {
+			ctx.unreadable = map[string]bool{}
+		}
+
+		ctx.unreadable[rel] = true
 
 		onWarn(Warn{Kind: WarnMisconfiguration, Where: "At top level", Error: "Cannot read source file $S/" + rel + ": " + strings.ToUpper(text[:1]) + text[1:] + " (" + strconv.Itoa(int(errno)) + ")"})
 	}
@@ -1367,6 +1374,10 @@ func moduleStmts(ctx *GenCtx, dir string) []Stmt {
 		ctx.onWarn(Warn{Kind: WarnMisconfiguration, Message: err.Error(), Where: makeFileWhere(dir), Error: makefileParseError(ctx.fs, pe)})
 
 		mf = &MakeFile{Path: pe.File}
+	}
+
+	if rel := joinRel(dir, "ya.make"); ctx.unreadable[rel] {
+		ctx.onWarn(Warn{Kind: WarnMisconfiguration, Where: makeFileWhere(dir), Error: "File '$S/" + rel + "' is unreadable"})
 	}
 
 	ctx.parsedFiles[key] = mf

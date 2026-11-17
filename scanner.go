@@ -1,6 +1,7 @@
 package main
 
 import (
+	"slices"
 	"strings"
 	"sync"
 )
@@ -96,15 +97,23 @@ type IncludeDiagnostic struct {
 	Includer   VFS
 	Unresolved bool
 	reported   bool
+	message    string
 }
 
 func (d IncludeDiagnostic) warn() Warn {
+	message := d.message
+
+	if message == "" && d.Directive.kind == includeMacro {
+		message = "Can't resolve macro target " + d.Directive.target.string() + " from " + ymakeVFS(d.Includer)
+	}
+
 	return Warn{
-		Kind:     WarnMissingInclude,
-		includer: d.Includer,
-		target:   d.Directive.target,
-		quoted:   d.Directive.kind == includeQuoted || d.Directive.kind == includeMacro,
-		ts:       d.Directive.kind == includeTypeScript,
+		Kind:        WarnMissingInclude,
+		includer:    d.Includer,
+		target:      d.Directive.target,
+		quoted:      d.Directive.kind == includeQuoted || d.Directive.kind == includeMacro,
+		ts:          d.Directive.kind == includeTypeScript,
+		includeText: message,
 	}
 }
 
@@ -1000,8 +1009,8 @@ func (sc *ScanCtx) resolve(out []VFS, includerAbs, incDir VFS, d IncludeDirectiv
 			out = sc.resolve(out, includerAbs, incDir, IncludeDirective{kind: includeSystem, target: target.any()})
 		}
 
-		if len(out) == mark {
-			sc.warnUnresolved(includerAbs, d, claimed)
+		if len(aliases) == 0 && !claimed {
+			sc.warnUnresolved(includerAbs, d, false)
 		}
 
 		return out
@@ -1017,22 +1026,30 @@ func (sc *ScanCtx) resolve(out []VFS, includerAbs, incDir VFS, d IncludeDirectiv
 	mappings, hasMultiTarget, sysinclClaimed = s.sysincl.lookup(includerAbs, d.target.str())
 
 	if d.quotedLike() && len(searchOut) > 0 {
-		bypass := !hasMultiTarget
+		local := false
 
-		if !bypass && searchOut[0].isBuild() == includerAbs.isBuild() {
+		if searchOut[0].isBuild() == includerAbs.isBuild() {
 			incDir := pathDir(includerAbs.relString())
 			rel := searchOut[0].relString()
 			t := d.target.string()
 
 			if incDir != "" {
-				bypass = len(rel) == len(incDir)+1+len(t) &&
+				local = len(rel) == len(incDir)+1+len(t) &&
 					rel[:len(incDir)] == incDir && rel[len(incDir)] == '/' && rel[len(incDir)+1:] == t
 			} else {
-				bypass = rel == t
+				local = rel == t
 			}
 		}
 
-		if bypass {
+		if !local && len(mappings) != 0 && !slices.Contains(mappings, searchOut[0]) {
+			sc.sysinclMismatch(includerAbs, d, searchOut[0], mappings)
+
+			out = sc.sysinclTargets(out, mark, includerAbs, d, mappings)
+
+			return out
+		}
+
+		if !hasMultiTarget || local {
 			return out
 		}
 	}
@@ -1046,30 +1063,19 @@ func (sc *ScanCtx) resolve(out []VFS, includerAbs, incDir VFS, d IncludeDirectiv
 	}
 
 	if len(searchOut) == 0 {
-	fastLoop:
-		for _, abs := range mappings {
-			for _, q := range out[mark:] {
-				if q == abs {
-					continue fastLoop
-				}
-			}
-
-			if s.parsers.fs.resolveSourceUnder(srcRootRel, abs.rel()) == 0 {
-				continue
-			}
-
-			out = append(out, abs)
-		}
+		out = sc.sysinclTargets(out, mark, includerAbs, d, mappings)
 
 		if len(out) == mark {
 			sc.warnUnresolved(includerAbs, d, sysinclClaimed)
-
-			return out
 		}
 
 		return out
 	}
 
+	return sc.sysinclTargets(out, mark, includerAbs, d, mappings)
+}
+
+func (sc *ScanCtx) sysinclTargets(out []VFS, mark int, includerAbs VFS, d IncludeDirective, mappings []VFS) []VFS {
 mapLoop:
 	for _, abs := range mappings {
 		for _, q := range out[mark:] {
@@ -1078,7 +1084,13 @@ mapLoop:
 			}
 		}
 
-		if s.parsers.fs.resolveSourceUnder(srcRootRel, abs.rel()) == 0 {
+		if sc.scanner.parsers.fs.resolveSourceUnder(srcRootRel, abs.rel()) == 0 {
+			if !d.cythonProbe() {
+				sc.diagnostics = append(sc.diagnostics,
+					IncludeDiagnostic{Directive: d, Includer: includerAbs, Unresolved: true, message: "can't resolve sysincl target: " + sysinclTargetText(abs)},
+					IncludeDiagnostic{Directive: IncludeDirective{kind: includeSystem, target: internStr(ymakeVFS(abs)).any()}, Includer: includerAbs, Unresolved: true})
+			}
+
 			continue
 		}
 
@@ -1086,6 +1098,25 @@ mapLoop:
 	}
 
 	return out
+}
+
+func sysinclTargetText(v VFS) string {
+	if v.isBuild() {
+		return "${ARCADIA_BUILD_ROOT}/" + v.relString()
+	}
+
+	return "${ARCADIA_ROOT}/" + v.relString()
+}
+
+func (sc *ScanCtx) sysinclMismatch(includerAbs VFS, d IncludeDirective, addincl VFS, mappings []VFS) {
+	targets := make([]string, len(mappings))
+
+	for i, v := range mappings {
+		targets[i] = sysinclTargetText(v)
+	}
+
+	sc.diagnostics = append(sc.diagnostics, IncludeDiagnostic{Directive: d, Includer: includerAbs, Unresolved: true,
+		message: "sysincl/addincl mismatch for include " + d.target.string() + " from " + ymakeVFS(includerAbs) + " addincl: " + ymakeVFS(addincl) + " sysincls: " + strings.Join(targets, " ")})
 }
 
 func (sc *ScanCtx) warnUnresolved(includerAbs VFS, d IncludeDirective, sysinclClaimed bool) {

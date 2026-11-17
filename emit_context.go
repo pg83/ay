@@ -84,6 +84,7 @@ type EmitContext struct {
 	pyccEmission       PyccTool
 	pyccOk             bool
 	protoResVal        ProtoSrcsResult
+	commandOutputs     map[VFS]bool
 }
 
 type CollectedObjs struct {
@@ -190,6 +191,7 @@ func newEmitContextIn(frame *ModuleFrame, ctx *GenCtx, instance ModuleInstance, 
 		prodSeqs:          prev.prodSeqs[:0],
 		producerOutputs:   clearedMap(prev.producerOutputs),
 		protoPaths:        prev.protoPaths[:0],
+		commandOutputs:    clearedMap(prev.commandOutputs),
 	}
 
 	return &frame.emitCtx

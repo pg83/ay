@@ -76,6 +76,8 @@ type Warn struct {
 	Row    int
 	Column int
 	ts     bool
+
+	includeText string
 }
 
 func makeFileWhere(dir string) string {

@@ -138,6 +138,10 @@ func (e *EmitContext) emitRunPython(stmt *RunPythonStmt, resourceUses []STR) []A
 	ctx.na.vfs.commit(len(outputs))
 	outputs = outputs[:len(outputs):len(outputs)]
 
+	if e.skipCommandOutputs(outputs) {
+		return nil
+	}
+
 	hasCCShard, _ := splitCodegenDetect(stmt)
 
 	var splitSrcs []VFS

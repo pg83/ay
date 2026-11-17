@@ -150,6 +150,22 @@ func (e *EmitContext) emitRunProgram(stmt *RunProgramStmt) {
 		outVFSByToken[*stmt.StdoutFile] = vfs
 	}
 
+	commandOutputs := make([]VFS, 0, len(outVFSByToken))
+
+	for _, list := range [][]ANY{stmt.OUTFiles, stmt.OUTNoAutoFiles} {
+		for _, f := range list {
+			commandOutputs = append(commandOutputs, outVFSByToken[f])
+		}
+	}
+
+	if stdoutVFS != nil {
+		commandOutputs = append(commandOutputs, *stdoutVFS)
+	}
+
+	if e.skipCommandOutputs(commandOutputs) {
+		return
+	}
+
 	var mainOutputVFS VFS
 
 	switch {
@@ -832,4 +848,43 @@ func isBareTokenBoundary(c byte) bool {
 	}
 
 	return true
+}
+
+func (e *EmitContext) skipCommandOutputs(outputs []VFS) bool {
+	where := makeFileWhere(e.instance.Path.relString())
+	module := moduleNodeName(e.instance, &ModuleEmitResult{}, e.d.moduleStmt)
+
+	if t := e.d.unit.Type; isLinkingModuleType(t) || isProgramModuleType(t) {
+		module = "$B/" + dirPrefix(e.instance.Path) + programBinaryName(e.instance, e.d.moduleStmt)
+	}
+
+	for _, out := range outputs {
+		if e.commandOutputs[out] {
+			e.ctx.onWarn(Warn{Kind: WarnDupSrc, Where: where, Error: ymakeVFS(out) + " was already added in this project. Skip command: 0"})
+
+			return true
+		}
+
+		if ymakeVFS(out) == module {
+			e.ctx.onWarn(Warn{Kind: WarnMisconfiguration, Where: where, Error: "The name of intermediate output " + module + " matches the module name. Skip command: 0"})
+
+			return true
+		}
+	}
+
+	if len(outputs) == 0 {
+		e.ctx.onWarn(Warn{Kind: WarnMisconfiguration, Where: where, Error: "macro 0 resulted in no outputs, can't add to graph"})
+
+		return true
+	}
+
+	if e.commandOutputs == nil {
+		e.commandOutputs = map[VFS]bool{}
+	}
+
+	for _, out := range outputs {
+		e.commandOutputs[out] = true
+	}
+
+	return false
 }
