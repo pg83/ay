@@ -445,3 +445,79 @@ func parseCythonIncludeTarget(b []byte) ([]byte, bool) {
 
 	return b[1 : 1+end], true
 }
+
+func pyxSourceRel(modulePath, src string) (string, bool) {
+	for _, root := range [...]string{"${ARCADIA_ROOT}/", "$(S)/", "$S/"} {
+		if rest, ok := strings.CutPrefix(src, root); ok {
+			return path.Clean(rest), true
+		}
+	}
+
+	if strings.HasPrefix(src, "$") {
+		return "", false
+	}
+
+	return path.Join(modulePath, src), true
+}
+
+func reportPyxMissingIncludes(fs FS, rel string, py3 bool, seen map[string]bool, report func(string)) {
+	if seen[rel] {
+		return
+	}
+
+	seen[rel] = true
+
+	if present, isDir := fs.exists(srcRootRel, rel); !present || isDir {
+		return
+	}
+
+	cythonIncludes := "contrib/tools/cython_py2/Cython/Includes"
+
+	if py3 {
+		cythonIncludes = "contrib/tools/cython/Cython/Includes"
+	}
+
+	raw := concatChunks(fs.read(rel))
+
+	for len(raw) > 0 {
+		line, rest, newline := bytes.Cut(raw, []byte{'\n'})
+
+		raw = rest
+
+		if !newline {
+			break
+		}
+
+		t := trimParserSpace(line)
+		target, ok := cutParserKeyword(t, "include")
+
+		if !ok || target[0] != '"' && target[0] != '\'' {
+			continue
+		}
+
+		include, ok := parseCythonIncludeTarget(target)
+
+		if !ok {
+			continue
+		}
+
+		inc := string(include)
+		local := path.Join(path.Dir(rel), inc)
+
+		if present, _ := fs.exists(srcRootRel, local); present {
+			reportPyxMissingIncludes(fs, local, py3, seen, report)
+
+			continue
+		}
+
+		if present, _ := fs.exists(srcRootRel, path.Clean(inc)); present {
+			continue
+		}
+
+		if present, _ := fs.exists(srcRootRel, path.Join(cythonIncludes, inc)); present {
+			continue
+		}
+
+		report("'" + fs.root() + "/" + cythonIncludes + "' includes missing file: " + inc + " (" + fs.root() + "/" + local + ")")
+	}
+}

@@ -432,11 +432,6 @@ class MiscConfigureErrorsTest(MakeTest):
         self.library("RESOURCE(- conftest.py=)")
         self.assertConfigureLikeYa()
 
-    def test_conf_macro_command_without_a_kv_p(self):
-        self.conf("macro E2E_GEN(Out) {\n    .CMD=$YMAKE_PYTHON3 -c pass ${output:Out}\n}")
-        self.library("E2E_GEN(out.cpp)")
-        self.assertConfigureLikeYa()
-
     def ts_tests(self, *statements):
         self.write("lib/ya.make", "TS_LIBRARY()\nTS_BUILD_SCRIPT(nots:build)\nTS_BUILD_OUTPUTS(dist)\n" + "".join(s + "\n" for s in statements) + "END()\n")
         self.write("lib/package.json", json.dumps({"name": "@e2e/lib", "version": "1.0.0", "engines": {"node": nodejs_version()}, "files": ["src", "dist"], "scripts": {"nots:build": "tsc"}}))

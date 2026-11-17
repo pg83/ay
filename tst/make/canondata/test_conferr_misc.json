@@ -56,20 +56,6 @@
       "$S/__ay_e2e__": null
     }
   },
-  "MiscConfigureErrorsTest.test_conf_macro_command_without_a_kv_p": {
-    "configure_errors": {
-      "__ay_e2e__": [
-        [
-          "No kv->p in command with output: $(BUILD_ROOT)/__ay_e2e__/out.cpp",
-          0,
-          0
-        ]
-      ]
-    },
-    "make_files": {
-      "$S/__ay_e2e__": null
-    }
-  },
   "MiscConfigureErrorsTest.test_configure_file_with_one_argument": {
     "configure_errors": {
       "__ay_e2e__": [

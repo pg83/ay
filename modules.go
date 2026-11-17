@@ -2987,6 +2987,19 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 
 			pairs, dontParse, dontCompress := expandResourcePairs(v.Args, v.Line, env)
 
+			yasm := !dontCompress && !env.bool(envARCH_AARCH64) && !env.bool(envARCH_ARM) && !env.bool(envARCH_PPC64LE) &&
+				!env.bool(envArchWasm32) && !env.bool(envArchWasm64)
+
+			for _, pair := range pairs {
+				if pair.Path != "-" || !yasm || env.bool(envYmakeUseObjcopy) && resourceCanObjcopy(pair.Path, pair.Key) {
+					continue
+				}
+
+				if name, value, _ := strings.Cut(pair.Key, "="); name == "" || value == "" {
+					onWarn(Warn{Kind: WarnMisconfiguration, Where: makeFileWhere(modulePath), Error: "Syntax error: empty KEY or VALUE in RESOURCE(- KEY=VALUE), guard with \"\""})
+				}
+			}
+
 			ensureResourcePeer(modulePath, d)
 
 			seq := d.nextDeclSeq()
@@ -5607,6 +5620,14 @@ func collectPySrcGroup(fs FS, modulePath string, v UnknownStmt, d *ModuleData, e
 	}
 
 	slices.SortStableFunc(pyxs, func(a, b pyxDeclaration) int { return cythonVariantBucket(a.stmt) - cythonVariantBucket(b.stmt) })
+
+	if env.is(envCythonCoverage, strYes) {
+		for _, pyx := range pyxs {
+			if rel, ok := pyxSourceRel(modulePath, pyx.stmt.Src); ok {
+				reportPyxMissingIncludes(fs, rel, !d.usePython2, map[string]bool{}, report)
+			}
+		}
+	}
 
 	for _, pyx := range pyxs {
 		pyx.stmt.Seq = d.nextDeclSeq()
