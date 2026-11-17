@@ -572,6 +572,46 @@
       "$S/__ay_e2e__": null
     }
   },
+  "MiscConfigureErrorsTest.test_output_includes_of_a_flatbuffers_output": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "could not resolve include file: [[imp]]value.h[[rst]] included from here: [[imp]]$B/__ay_e2e__/out.fbs.cpp[[rst]]",
+          0,
+          0
+        ],
+        [
+          "could not resolve include file: [[imp]]value.h[[rst]] included from here: [[imp]]$B/__ay_e2e__/out.fbs.h[[rst]]",
+          0,
+          0
+        ],
+        [
+          "could not resolve include file: [[imp]]value.h[[rst]] included from here: [[imp]]$B/__ay_e2e__/out.fbs[[rst]]",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null,
+      "$S/__ay_e2e__/tool": null
+    }
+  },
+  "MiscConfigureErrorsTest.test_output_includes_of_a_go_output": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "[[alt1]]PEERDIR[[rst]] to missing directory: [[imp]]$S/vendor/value.h[[rst]]",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null,
+      "$S/__ay_e2e__/tool": null
+    }
+  },
   "MiscConfigureErrorsTest.test_output_named_as_the_module": {
     "configure_errors": {
       "__ay_e2e__": [
@@ -884,6 +924,20 @@
     "make_files": {
       "$S/__ay_e2e__": null,
       "$S/__ay_e2e__/lib": null
+    }
+  },
+  "MiscConfigureErrorsTest.test_swig_include_with_empty_quotes": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "Can't resolve macro target \"\" from $S/__ay_e2e__/answer.swg",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null
     }
   },
   "MiscConfigureErrorsTest.test_sysincl_and_addincl_mismatch": {

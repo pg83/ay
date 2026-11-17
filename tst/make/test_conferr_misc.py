@@ -384,6 +384,25 @@ class MiscConfigureErrorsTest(MakeTest):
         self.write("value.h.in", "#pragma once\n")
         self.assertConfigureLikeYa()
 
+    def output_includes(self, out):
+        self.library(f"RUN_PROGRAM({PROJECT}/tool STDOUT {out} OUTPUT_INCLUDES value.h)")
+        self.write("tool/ya.make", "PROGRAM()\nSRCS(main.cpp)\nEND()\n")
+        self.write("tool/main.cpp", "int main() { return 0; }\n")
+        self.write("value.h", "#pragma once\n")
+
+    def test_output_includes_of_a_go_output(self):
+        self.output_includes("out.go")
+        self.assertConfigureLikeYa()
+
+    def test_output_includes_of_a_flatbuffers_output(self):
+        self.output_includes("out.fbs")
+        self.assertConfigureLikeYa()
+
+    def test_swig_include_with_empty_quotes(self):
+        self.write("ya.make", "LIBRARY(named)\nSRCS(answer.swg)\nEND()\n")
+        self.write("answer.swg", '%module answer\n%include ""\n')
+        self.assertConfigureLikeYa()
+
     def ts_tests(self, *statements):
         self.write("lib/ya.make", "TS_LIBRARY()\nTS_BUILD_SCRIPT(nots:build)\nTS_BUILD_OUTPUTS(dist)\n" + "".join(s + "\n" for s in statements) + "END()\n")
         self.write("lib/package.json", json.dumps({"name": "@e2e/lib", "version": "1.0.0", "engines": {"node": nodejs_version()}, "files": ["src", "dist"], "scripts": {"nots:build": "tsc"}}))
