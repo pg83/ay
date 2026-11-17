@@ -42,6 +42,20 @@
       "$S/__ay_e2e__/lib": null
     }
   },
+  "MiscConfigureErrorsTest.test_command_without_outputs": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "macro 0 resulted in no outputs, can't add to graph",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null
+    }
+  },
   "MiscConfigureErrorsTest.test_copy_file_of_a_directory": {
     "configure_errors": {
       "__ay_e2e__": [
@@ -213,6 +227,20 @@
     },
     "make_files": {}
   },
+  "MiscConfigureErrorsTest.test_include_of_an_undefined_macro": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "Can't resolve macro target UNDEFINED_HEADER from $S/__ay_e2e__/value.cpp",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null
+    }
+  },
   "MiscConfigureErrorsTest.test_jtest_for_without_arguments": {
     "configure_errors": {
       "__ay_e2e__": [
@@ -239,6 +267,20 @@
       ]
     },
     "make_files": {}
+  },
+  "MiscConfigureErrorsTest.test_output_named_as_the_module": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "The name of intermediate output $B/__ay_e2e__/answer matches the module name. Skip command: 0",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null
+    }
   },
   "MiscConfigureErrorsTest.test_partitioned_recurse_of_a_missing_directory": {
     "configure_errors": {
@@ -331,6 +373,25 @@
       "$S/__ay_e2e__": null,
       "$S/__ay_e2e__/sub": null
     }
+  },
+  "MiscConfigureErrorsTest.test_recurse_into_an_unreadable_ya_make": {
+    "configure_errors": {
+      "At top level": [
+        [
+          "Cannot read source file $S/__ay_e2e__/sub/ya.make: Permission denied (13)",
+          0,
+          0
+        ]
+      ],
+      "__ay_e2e__/sub": [
+        [
+          "File '$S/__ay_e2e__/sub/ya.make' is unreadable",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {}
   },
   "MiscConfigureErrorsTest.test_resource_uri_from_a_missing_json": {
     "configure_errors": {
@@ -439,6 +500,53 @@
     "make_files": {
       "$S/__ay_e2e__": null,
       "$S/__ay_e2e__/lib": null
+    }
+  },
+  "MiscConfigureErrorsTest.test_sysincl_and_addincl_mismatch": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "sysincl/addincl mismatch for include e2e_value.h from $S/__ay_e2e__/value.cpp addincl: $S/__ay_e2e__/inc/e2e_value.h sysincls: ${ARCADIA_ROOT}/__ay_e2e__/sys/e2e_value.h",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null
+    }
+  },
+  "MiscConfigureErrorsTest.test_sysincl_to_a_missing_target": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "can't resolve sysincl target: ${ARCADIA_ROOT}/__ay_e2e__/missing/e2e_value.h",
+          0,
+          0
+        ],
+        [
+          "could not resolve include file: [[imp]]$S/__ay_e2e__/missing/e2e_value.h[[rst]] included from here: [[imp]]$S/__ay_e2e__/value.cpp[[rst]]",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null
+    }
+  },
+  "MiscConfigureErrorsTest.test_two_commands_with_the_same_output": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "$B/__ay_e2e__/out.txt was already added in this project. Skip command: 0",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null
     }
   },
   "MiscConfigureErrorsTest.test_typescript_import_of_a_missing_module": {

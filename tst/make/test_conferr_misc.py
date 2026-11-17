@@ -181,6 +181,55 @@ class MiscConfigureErrorsTest(MakeTest):
         self.write("ya.make", f"DLL_FOR({PROJECT} answer)\nEND()\n")
         self.assertConfigureLikeYa()
 
+    def test_two_commands_with_the_same_output(self):
+        self.library("RUN_PYTHON3(first.py STDOUT out.txt)", "RUN_PYTHON3(second.py STDOUT out.txt)")
+        self.write("first.py", "print(1)\n")
+        self.write("second.py", "print(2)\n")
+        self.assertConfigureLikeYa()
+
+    def test_command_without_outputs(self):
+        self.library("RUN_PYTHON3(gen.py)")
+        self.write("gen.py", "print(42)\n")
+        self.assertConfigureLikeYa()
+
+    def test_output_named_as_the_module(self):
+        self.write("ya.make", "PROGRAM(answer)\nSRCS(main.cpp)\nRUN_PYTHON3(gen.py STDOUT answer)\nEND()\n")
+        self.write("main.cpp", "int main() { return 0; }\n")
+        self.write("gen.py", "print(42)\n")
+        self.assertConfigureLikeYa()
+
+    def test_include_of_an_undefined_macro(self):
+        self.library()
+        self.write("value.cpp", "#include UNDEFINED_HEADER\nint value() { return 42; }\n")
+        self.assertConfigureLikeYa()
+
+    def sysincl(self, text):
+        core = self.root / "build/ymake.core.conf"
+        self.write_tree("build/ymake.core.conf", core.read_text() + f"\nSYSINCL+={PROJECT}/sysincl.yml\n")
+        self.write("sysincl.yml", text)
+
+    def test_sysincl_to_a_missing_target(self):
+        self.sysincl(f"- includes:\n  - e2e_value.h: {PROJECT}/missing/e2e_value.h\n")
+        self.library()
+        self.write("value.cpp", "#include <e2e_value.h>\nint value() { return 42; }\n")
+        self.assertConfigureLikeYa()
+
+    def test_sysincl_and_addincl_mismatch(self):
+        self.sysincl(f"- includes:\n  - e2e_value.h: {PROJECT}/sys/e2e_value.h\n")
+        self.library(f"ADDINCL({PROJECT}/inc)")
+        self.write("value.cpp", '#include "e2e_value.h"\nint value() { return 42; }\n')
+        self.write("sys/e2e_value.h", "#pragma once\n")
+        self.write("inc/e2e_value.h", "#pragma once\n")
+        self.assertConfigureLikeYa()
+
+    def test_recurse_into_an_unreadable_ya_make(self):
+        self.write("ya.make", "RECURSE(sub)\n")
+        self.write("sub/ya.make", "LIBRARY()\nSRCS(value.cpp)\nEND()\n")
+        self.write("sub/value.cpp", "int value() { return 42; }\n")
+        (self.project / "sub/ya.make").chmod(0)
+        self.addCleanup((self.project / "sub/ya.make").chmod, 0o644)
+        self.assertConfigureLikeYa()
+
     def ts_tests(self, *statements):
         self.write("lib/ya.make", "TS_LIBRARY()\nTS_BUILD_SCRIPT(nots:build)\nTS_BUILD_OUTPUTS(dist)\n" + "".join(s + "\n" for s in statements) + "END()\n")
         self.write("lib/package.json", json.dumps({"name": "@e2e/lib", "version": "1.0.0", "engines": {"node": nodejs_version()}, "files": ["src", "dist"], "scripts": {"nots:build": "tsc"}}))
