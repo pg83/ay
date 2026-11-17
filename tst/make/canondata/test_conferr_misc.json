@@ -266,6 +266,20 @@
       "$S/__ay_e2e__": null
     }
   },
+  "MiscConfigureErrorsTest.test_glob_assert_without_ya_make": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "unexpected ya.make: '[[imp]]${ARCADIA_ROOT}/__ay_e2e__/sub/ya.make[[rst]]' - no modules expected inside",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null
+    }
+  },
   "MiscConfigureErrorsTest.test_go_resource_key_without_a_value": {
     "configure_errors": {
       "__ay_e2e__": [
@@ -316,6 +330,20 @@
       "$S/__ay_e2e__": null
     }
   },
+  "MiscConfigureErrorsTest.test_java_classpath_cmd_type_that_is_unknown": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "Invalid dart field value DartValueError('$S/__ay_e2e__: TEST_JAVA_CLASSPATH_CMD_TYPE(BOGUS) are invalid. Choose argument from MANIFEST, COMMAND_FILE or LIST)'), field JAVA_CLASSPATH_CMD_TYPE",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null
+    }
+  },
   "MiscConfigureErrorsTest.test_jtest_for_without_arguments": {
     "configure_errors": {
       "__ay_e2e__": [
@@ -342,6 +370,34 @@
       ]
     },
     "make_files": {}
+  },
+  "MiscConfigureErrorsTest.test_macros_with_error": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "MACROS_WITH_ERROR() was not processed properly: Expected fail in MACROS_WITH_ERROR. Skip MACROS_WITH_ERROR",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null
+    }
+  },
+  "MiscConfigureErrorsTest.test_module_scope_variable_outside_of_a_module": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "Cannot use variable E2E_SCOPED outside of a module",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null
+    }
   },
   "MiscConfigureErrorsTest.test_multimodule_with_a_sub_module_loop": {
     "configure_errors": {
@@ -628,6 +684,20 @@
       "$S/__ay_e2e__": null
     }
   },
+  "MiscConfigureErrorsTest.test_style_cpp_with_an_unknown_config_type": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "Unexpected error while creating dart record TypeError('sequence item 0: expected str instance, tuple found'), field LINT-CONFIGS",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null
+    }
+  },
   "MiscConfigureErrorsTest.test_stylelint_with_a_missing_config": {
     "configure_errors": {
       "__ay_e2e__/lib": [
@@ -681,6 +751,48 @@
         ],
         [
           "could not resolve include file: [[imp]]$S/__ay_e2e__/missing/e2e_value.h[[rst]] included from here: [[imp]]$S/__ay_e2e__/value.cpp[[rst]]",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null
+    }
+  },
+  "MiscConfigureErrorsTest.test_test_dependency_not_listed_as_depends": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "Test dependency to [[imp]]__ay_e2e__/sub[[rst]] is not listed as [[alt1]]DEPENDS[[rst]]",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null
+    }
+  },
+  "MiscConfigureErrorsTest.test_too_many_license_properties": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "To many license properties.",
+          0,
+          0
+        ]
+      ],
+      "build/platform/test_tool": [
+        [
+          "To many license properties.",
+          0,
+          0
+        ]
+      ],
+      "contrib/tools/ragel6": [
+        [
+          "To many license properties.",
           0,
           0
         ]

@@ -291,6 +291,44 @@ class MiscConfigureErrorsTest(MakeTest):
         self.addCleanup((self.project / "sub").chmod, 0o755)
         self.assertConfigureLikeYa()
 
+    def test_macros_with_error(self):
+        self.library("MACROS_WITH_ERROR()")
+        self.assertConfigureLikeYa()
+
+    def test_java_classpath_cmd_type_that_is_unknown(self):
+        self.write("ya.make", "JUNIT5()\nJDK_VERSION(17)\nJAVA_SRCS(AnswerTest.java)\nTEST_JAVA_CLASSPATH_CMD_TYPE(BOGUS)\nEND()\n")
+        self.write("AnswerTest.java", "package e2e; public class AnswerTest {}\n")
+        self.assertConfigureLikeYa()
+
+    def test_style_cpp_with_an_unknown_config_type(self):
+        self.library("STYLE_CPP(bogus)")
+        self.assertConfigureLikeYa()
+
+    def test_glob_assert_without_ya_make(self):
+        self.conf("macro E2E_NO_MODULES_INSIDE() {\n    _GLOB(E2E_YAMAKES **/ya.make EXCLUDE ya.make)\n    _ASSERT_NO_YAMAKE($E2E_YAMAKES MSG no modules expected inside)\n}")
+        self.library("E2E_NO_MODULES_INSIDE()")
+        self.write("sub/ya.make", "LIBRARY()\nEND()\n")
+        self.assertConfigureLikeYa()
+
+    def test_module_scope_variable_outside_of_a_module(self):
+        self.conf("_MODULE_SCOPE_ONLY_VARS=E2E_SCOPED\nE2E_SCOPED=value")
+        self.write("ya.make", "LIBRARY()\nSRCS(value.cpp)\nEND()\nMESSAGE(${E2E_SCOPED})\n")
+        self.write("value.cpp", "int value() { return 42; }\n")
+        self.assertConfigureLikeYa()
+
+    def test_too_many_license_properties(self):
+        self.conf(f"LICENSES+={PROJECT}/license.json")
+        self.write("license.json", json.dumps({f"E2E_GROUP_{i}": {"static": ["E2E-" + str(i)], "dynamic": ["E2E-" + str(i)]} for i in range(25)}))
+        self.library()
+        self.assertConfigureLikeYa()
+
+    def test_test_dependency_not_listed_as_depends(self):
+        self.conf("CHECK_DEPENDS_IN_DART=yes")
+        self.unittest(f"SET_APPEND(TEST_DEPENDS_VALUE {PROJECT}/sub)")
+        self.write("sub/ya.make", "PROGRAM()\nSRCS(main.cpp)\nEND()\n")
+        self.write("sub/main.cpp", "int main() { return 0; }\n")
+        self.assertConfigureLikeYa()
+
     def ts_tests(self, *statements):
         self.write("lib/ya.make", "TS_LIBRARY()\nTS_BUILD_SCRIPT(nots:build)\nTS_BUILD_OUTPUTS(dist)\n" + "".join(s + "\n" for s in statements) + "END()\n")
         self.write("lib/package.json", json.dumps({"name": "@e2e/lib", "version": "1.0.0", "engines": {"node": nodejs_version()}, "files": ["src", "dist"], "scripts": {"nots:build": "tsc"}}))
