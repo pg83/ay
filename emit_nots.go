@@ -51,6 +51,7 @@ type NotsModule struct {
 	ConfigChanged       bool
 	Forbids             map[STR]STR
 	OutputPrefixInvalid bool
+	TypecheckConfigs    []string
 }
 
 type NotsCheck struct {
@@ -209,6 +210,7 @@ func applyNotsStmt(v UnknownStmt, c *NotsModule, env Environment) bool {
 		}
 	case "TS_TYPECHECK":
 		c.Typecheck = true
+		c.TypecheckConfigs = args
 
 		if len(args) > 0 {
 			c.TypecheckConfig = args[0]

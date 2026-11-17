@@ -409,6 +409,14 @@ func (e *EmitContext) notsLegacyStyles(dir string, state *NotsPrepared, head []s
 			continue
 		}
 
+		if check.name == "tsc_typecheck" {
+			if message := notsTypecheckConfigError(e.ctx.fs, dir, c, check.config); message != "" {
+				e.ctx.onWarn(Warn{Kind: WarnMisconfiguration, Where: makeFileWhere(dir), Error: message})
+
+				continue
+			}
+		}
+
 		if check.name == "eslint" {
 			if present, _ := e.ctx.fs.exists(srcRootRel, path.Join(dir, check.config)); !present {
 				where := makeFileWhere(dir)
@@ -502,4 +510,25 @@ func notsMissingConfigNames(check string) (string, string) {
 	}
 
 	return "", ""
+}
+
+func notsTypecheckConfigError(fs FS, dir string, c *NotsModule, config string) string {
+	switch {
+	case len(c.TypecheckConfigs) > 1:
+		return "You have set several tsconfig files for TS_TYPECHECK: " + pyListRepr(c.TypecheckConfigs) + ". Only one tsconfig is allowed for `TS_TYPECHECK(<config_filename>)` macro."
+	case len(c.TypecheckConfigs) == 0 && len(c.Configs) > 1:
+		macros := make([]string, len(c.Configs))
+
+		for i, config := range c.Configs {
+			macros[i] = "TS_TYPECHECK(" + config + ")"
+		}
+
+		return "Module uses several tsconfig files, specify which one to use for typecheck: " + strings.Join(macros, " or ")
+	}
+
+	if present, _ := fs.exists(srcRootRel, path.Join(dir, config)); !present {
+		return "tsconfig for typecheck not found: " + config
+	}
+
+	return ""
 }
