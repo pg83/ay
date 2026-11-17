@@ -459,6 +459,20 @@ class MiscConfigureErrorsTest(MakeTest):
         (self.project / ".eslintrc.js").unlink()
         self.assertConfigureLikeYa()
 
+    def test_typecheck_with_several_configs(self):
+        self.ts_tsc("TS_TYPECHECK(tsconfig.json other.json)")
+        self.write("other.json", "{}\n")
+        self.assertConfigureLikeYa()
+
+    def test_typecheck_config_that_is_missing(self):
+        self.ts_tsc("TS_TYPECHECK(missing.json)")
+        self.assertConfigureLikeYa()
+
+    def test_typecheck_of_a_module_with_several_configs(self):
+        self.ts_tsc("TS_CONFIG(tsconfig.json other.json)", "TS_TYPECHECK()")
+        self.write("other.json", json.dumps({"compilerOptions": {"rootDir": "src", "outDir": "dist"}, "include": ["src/**/*.ts"]}))
+        self.assertConfigureLikeYa()
+
     def ts_tests(self, *statements):
         self.write("lib/ya.make", "TS_LIBRARY()\nTS_BUILD_SCRIPT(nots:build)\nTS_BUILD_OUTPUTS(dist)\n" + "".join(s + "\n" for s in statements) + "END()\n")
         self.write("lib/package.json", json.dumps({"name": "@e2e/lib", "version": "1.0.0", "engines": {"node": nodejs_version()}, "files": ["src", "dist"], "scripts": {"nots:build": "tsc"}}))

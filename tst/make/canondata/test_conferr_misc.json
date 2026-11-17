@@ -1189,6 +1189,48 @@
       "$S/__ay_e2e__": null
     }
   },
+  "MiscConfigureErrorsTest.test_typecheck_config_that_is_missing": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "tsconfig for typecheck not found: missing.json",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null
+    }
+  },
+  "MiscConfigureErrorsTest.test_typecheck_of_a_module_with_several_configs": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "Module uses several tsconfig files, specify which one to use for typecheck: TS_TYPECHECK(tsconfig.json) or TS_TYPECHECK(other.json)",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null
+    }
+  },
+  "MiscConfigureErrorsTest.test_typecheck_with_several_configs": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "You have set several tsconfig files for TS_TYPECHECK: ['tsconfig.json', 'other.json']. Only one tsconfig is allowed for `TS_TYPECHECK(<config_filename>)` macro.",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null
+    }
+  },
   "MiscConfigureErrorsTest.test_typescript_import_of_a_missing_module": {
     "configure_errors": {
       "__ay_e2e__/tests": [
