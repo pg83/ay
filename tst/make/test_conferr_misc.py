@@ -329,6 +329,48 @@ class MiscConfigureErrorsTest(MakeTest):
         self.write("sub/main.cpp", "int main() { return 0; }\n")
         self.assertConfigureLikeYa()
 
+    def glob_macro(self, call):
+        self.conf("macro E2E_GLOB() {\n    " + call + "\n}")
+        self.library("E2E_GLOB()")
+
+    def test_glob_restriction_without_a_value(self):
+        self.glob_macro("_GLOB(E2E_FILES *.cpp RESTRICTIONS MAX_MATCHES)")
+        self.assertConfigureLikeYa()
+
+    def test_glob_restriction_with_an_invalid_value(self):
+        self.glob_macro("_GLOB(E2E_FILES *.cpp RESTRICTIONS MAX_MATCHES many)")
+        self.assertConfigureLikeYa()
+
+    def test_glob_with_an_unknown_restriction(self):
+        self.glob_macro("_GLOB(E2E_FILES *.cpp RESTRICTIONS E2E_LIMIT)")
+        self.assertConfigureLikeYa()
+
+    def test_glob_with_an_invalid_pattern(self):
+        self.glob_macro("_GLOB(E2E_FILES e2e**.cpp)")
+        self.assertConfigureLikeYa()
+
+    def test_glob_with_two_recursive_parts(self):
+        self.glob_macro("_GLOB(E2E_FILES **/sub/**/*.cpp)")
+        self.assertConfigureLikeYa()
+
+    def test_glob_with_too_many_matches(self):
+        self.glob_macro("_GLOB(E2E_FILES *.cpp RESTRICTIONS MAX_MATCHES 1)")
+        self.write("other.cpp", "int other() { return 42; }\n")
+        self.assertConfigureLikeYa()
+
+    def test_glob_with_too_many_watched_dirs(self):
+        self.glob_macro("_GLOB(E2E_FILES **/*.cpp RESTRICTIONS MAX_WATCH_DIRS 1)")
+        self.write("sub/other.cpp", "int other() { return 42; }\n")
+        self.assertConfigureLikeYa()
+
+    def test_late_glob_without_arguments(self):
+        self.glob_macro("_LATE_GLOB()")
+        self.assertConfigureLikeYa()
+
+    def test_late_glob_with_an_invalid_pattern(self):
+        self.glob_macro("_LATE_GLOB(E2E_FILES e2e**.cpp)")
+        self.assertConfigureLikeYa()
+
     def ts_tests(self, *statements):
         self.write("lib/ya.make", "TS_LIBRARY()\nTS_BUILD_SCRIPT(nots:build)\nTS_BUILD_OUTPUTS(dist)\n" + "".join(s + "\n" for s in statements) + "END()\n")
         self.write("lib/package.json", json.dumps({"name": "@e2e/lib", "version": "1.0.0", "engines": {"node": nodejs_version()}, "files": ["src", "dist"], "scripts": {"nots:build": "tsc"}}))

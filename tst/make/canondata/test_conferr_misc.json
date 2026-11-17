@@ -280,6 +280,104 @@
       "$S/__ay_e2e__": null
     }
   },
+  "MiscConfigureErrorsTest.test_glob_restriction_with_an_invalid_value": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "Invalid value 'many' for MAX_MATCHES in _GLOB",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null
+    }
+  },
+  "MiscConfigureErrorsTest.test_glob_restriction_without_a_value": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "No value for MAX_MATCHES in _GLOB",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null
+    }
+  },
+  "MiscConfigureErrorsTest.test_glob_with_an_invalid_pattern": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "Invalid pattern in [[alt1]]_GLOB[[rst]]: recursive part in pattern is not allowed",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null
+    }
+  },
+  "MiscConfigureErrorsTest.test_glob_with_an_unknown_restriction": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "Unknown restriction name E2E_LIMIT in _GLOB",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null
+    }
+  },
+  "MiscConfigureErrorsTest.test_glob_with_too_many_matches": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "Glob restrictions violated in [[alt1]]_GLOB[[rst]] (*.cpp): too many matched files - 2",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null
+    }
+  },
+  "MiscConfigureErrorsTest.test_glob_with_too_many_watched_dirs": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "Glob restrictions violated in [[alt1]]_GLOB[[rst]] (**/*.cpp): too many watched dirs - 2",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null
+    }
+  },
+  "MiscConfigureErrorsTest.test_glob_with_two_recursive_parts": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "Invalid pattern in [[alt1]]_GLOB[[rst]]: only one recursive part is allowed",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null
+    }
+  },
   "MiscConfigureErrorsTest.test_go_resource_key_without_a_value": {
     "configure_errors": {
       "__ay_e2e__": [
@@ -370,6 +468,34 @@
       ]
     },
     "make_files": {}
+  },
+  "MiscConfigureErrorsTest.test_late_glob_with_an_invalid_pattern": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "Invalid pattern in [[alt1]]_LATE_GLOB[[rst]]: recursive part in pattern is not allowed",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null
+    }
+  },
+  "MiscConfigureErrorsTest.test_late_glob_without_arguments": {
+    "configure_errors": {
+      "__ay_e2e__": [
+        [
+          "empty argument in [[alt1]]_LATE_GLOB[[rst]]",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null
+    }
   },
   "MiscConfigureErrorsTest.test_macros_with_error": {
     "configure_errors": {
