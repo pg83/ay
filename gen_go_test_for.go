@@ -5,7 +5,7 @@ import (
 	"strings"
 )
 
-func (d *ModuleData) withGoTestForStmts(ctx *GenCtx, dir string, stmt *UnknownStmt, visit func([]Stmt)) {
+func (d *ModuleData) withGoTestForStmts(ctx *GenCtx, dir string, stmt *UnknownStmt, visit func([]Stmt)) bool {
 	if len(stmt.Args) == 0 {
 		throwFmt("GO_TEST_FOR expects a source directory")
 	}
@@ -19,7 +19,9 @@ func (d *ModuleData) withGoTestForStmts(ctx *GenCtx, dir string, stmt *UnknownSt
 	forDir := forDirID.string()
 
 	if forDir == dir {
-		throwFmt("GO_TEST_FOR: the current directory (%s) can not be used as an argument", dir)
+		ctx.onWarn(statementSyntaxError(ctx.fs, dir, stmt.Line, "GO_TEST_FOR", "GO_TEST_FOR: the current directory ($S/"+dir+") can not be used as an argument"))
+
+		return false
 	}
 
 	d.goTestFor = forDirID
@@ -39,6 +41,8 @@ func (d *ModuleData) withGoTestForStmts(ctx *GenCtx, dir string, stmt *UnknownSt
 	})
 
 	visit(ctx.parseFileCached(internJoined(forDir, "ya.make")))
+
+	return true
 }
 
 func (d *ModuleData) moduleContentDeclaration(stmt *ModuleStmt) *ModuleStmt {

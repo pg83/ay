@@ -826,14 +826,16 @@ func (ctx *GenCtx) scanModuleConfiguration(instance ModuleInstance) (*ModuleStmt
 
 				if v.Name == tokDllFor {
 					applyModule()
-					withDllForStmts(ctx, dir, v, scan)
+
+					failedModule = !withDllForStmts(ctx, dir, v, scan)
 
 					continue
 				}
 
 				if v.Name == tokGoTestFor {
 					applyModule()
-					d.withGoTestForStmts(ctx, dir, v, scan)
+
+					failedModule = !d.withGoTestForStmts(ctx, dir, v, scan)
 
 					continue
 				}

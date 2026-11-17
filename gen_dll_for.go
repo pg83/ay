@@ -5,7 +5,7 @@ import (
 	"strings"
 )
 
-func withDllForStmts(ctx *GenCtx, dir string, stmt *UnknownStmt, visit func([]Stmt)) {
+func withDllForStmts(ctx *GenCtx, dir string, stmt *UnknownStmt, visit func([]Stmt)) bool {
 	if len(stmt.Args) == 0 {
 		throwFmt("DLL_FOR expects a source directory")
 	}
@@ -21,7 +21,9 @@ func withDllForStmts(ctx *GenCtx, dir string, stmt *UnknownStmt, visit func([]St
 	}
 
 	if forDir == dir {
-		throwFmt("DLL_FOR: the current directory (%s) can not be used as an argument", dir)
+		ctx.onWarn(statementSyntaxError(ctx.fs, dir, stmt.Line, "DLL_FOR", "DLL_FOR: the current directory ($S/"+dir+") can not be used as an argument"))
+
+		return false
 	}
 
 	for _, active := range ctx.dllForStack {
@@ -64,6 +66,8 @@ func withDllForStmts(ctx *GenCtx, dir string, stmt *UnknownStmt, visit func([]St
 
 	out = appendDllForModule(out, ctx.parseFileCached(internJoined(forDir, "ya.make")), args)
 	visit(out)
+
+	return true
 }
 
 func appendDllForModule(out, stmts []Stmt, args []ANY) []Stmt {
