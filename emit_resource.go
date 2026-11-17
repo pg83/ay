@@ -35,6 +35,14 @@ func resourceCanObjcopy(path, key string) bool {
 	return true
 }
 
+func resourceYasmPacked(env Environment, pair ResourcePair) bool {
+	if env.bool(envYmakeUseObjcopy) && resourceCanObjcopy(pair.Path, pair.Key) {
+		return false
+	}
+
+	return !env.bool(envARCH_AARCH64) && !env.bool(envARCH_ARM) && !env.bool(envARCH_PPC64LE) && !env.bool(envArchWasm32) && !env.bool(envArchWasm64)
+}
+
 func resourceHashInto(buf []byte, list []string, moduleTag string) (string, []byte) {
 	if len(list) > 1 {
 		sort.Strings(list)

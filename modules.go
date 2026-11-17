@@ -2987,15 +2987,12 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 
 			pairs, dontParse, dontCompress := expandResourcePairs(v.Args, v.Line, env)
 
-			yasm := !dontCompress && !env.bool(envARCH_AARCH64) && !env.bool(envARCH_ARM) && !env.bool(envARCH_PPC64LE) &&
-				!env.bool(envArchWasm32) && !env.bool(envArchWasm64)
-
 			for _, pair := range pairs {
-				if pair.Path != "-" || !yasm || env.bool(envYmakeUseObjcopy) && resourceCanObjcopy(pair.Path, pair.Key) {
+				if pair.Path != "-" || dontCompress {
 					continue
 				}
 
-				if name, value, _ := strings.Cut(pair.Key, "="); name == "" || value == "" {
+				if name, value, _ := strings.Cut(pair.Key, "="); (name == "" || value == "") && resourceYasmPacked(env, pair) {
 					onWarn(Warn{Kind: WarnMisconfiguration, Where: makeFileWhere(modulePath), Error: "Syntax error: empty KEY or VALUE in RESOURCE(- KEY=VALUE), guard with \"\""})
 				}
 			}
