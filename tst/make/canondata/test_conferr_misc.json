@@ -75,6 +75,34 @@
       "$S/__ay_e2e__": null
     }
   },
+  "MiscConfigureErrorsTest.test_custom_blacklist_that_is_missing": {
+    "configure_errors": {
+      "At top level": [
+        [
+          "Error while reading blacklist file __ay_e2e__/missing.blacklist: (Error 2: No such file or directory) util/system/file.cpp:936: can't open \"$(SOURCE_ROOT)/__ay_e2e__/missing.blacklist\" with mode RdOnly|Seq (0x00000028)",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null
+    }
+  },
+  "MiscConfigureErrorsTest.test_custom_isolated_projects_that_are_missing": {
+    "configure_errors": {
+      "At top level": [
+        [
+          "Error while reading blacklist file __ay_e2e__/missing.list: (Error 2: No such file or directory) util/system/file.cpp:936: can't open \"$(SOURCE_ROOT)/__ay_e2e__/missing.list\" with mode RdOnly|Seq (0x00000028)",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null
+    }
+  },
   "MiscConfigureErrorsTest.test_default_module_license_that_is_invalid": {
     "configure_errors": {
       "__ay_e2e__": [
@@ -191,6 +219,53 @@
       "$S/__ay_e2e__": null
     }
   },
+  "MiscConfigureErrorsTest.test_forced_dependency_management_exceptions_without_a_library": {
+    "configure_errors": {
+      "At top level": [
+        [
+          "Not found library for FOR in _FORCED_DEPENDENCY_MANAGEMENT_EXCEPTIONS",
+          0,
+          0
+        ],
+        [
+          "Wait FOR in _FORCED_DEPENDENCY_MANAGEMENT_EXCEPTIONS but get contrib/java/e2e",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null
+    }
+  },
+  "MiscConfigureErrorsTest.test_forced_dependency_management_exceptions_without_excludes": {
+    "configure_errors": {
+      "At top level": [
+        [
+          "Not found excludes after FOR for contrib/java/e2e in _FORCED_DEPENDENCY_MANAGEMENT_EXCEPTIONS",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null
+    }
+  },
+  "MiscConfigureErrorsTest.test_forced_dependency_management_exceptions_without_for": {
+    "configure_errors": {
+      "At top level": [
+        [
+          "Wait FOR in _FORCED_DEPENDENCY_MANAGEMENT_EXCEPTIONS but get e2e",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null
+    }
+  },
   "MiscConfigureErrorsTest.test_go_resource_key_without_a_value": {
     "configure_errors": {
       "__ay_e2e__": [
@@ -268,6 +343,20 @@
     },
     "make_files": {}
   },
+  "MiscConfigureErrorsTest.test_multimodule_with_a_sub_module_loop": {
+    "configure_errors": {
+      "At top level": [
+        [
+          "A loop has been detected between sub-modules of multi-module [[alt1]]E2E_LOOP[[rst]]: [[alt1]]E2E_FIRST[[rst]] -> [[alt1]]E2E_SECOND[[rst]] -> [[alt1]]E2E_FIRST[[rst]]",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null
+    }
+  },
   "MiscConfigureErrorsTest.test_output_named_as_the_module": {
     "configure_errors": {
       "__ay_e2e__": [
@@ -342,6 +431,20 @@
     "make_files": {
       "$S/__ay_e2e__": null,
       "$S/__ay_e2e__/one": null
+    }
+  },
+  "MiscConfigureErrorsTest.test_peer_policy_line_with_a_syntax_error": {
+    "configure_errors": {
+      "At top level": [
+        [
+          "Syntax error at line 11 in $(SOURCE_ROOT)/build/rules/peerdir_policies/junk.policy: ALLOW a -> b c",
+          0,
+          0
+        ]
+      ]
+    },
+    "make_files": {
+      "$S/__ay_e2e__": null
     }
   },
   "MiscConfigureErrorsTest.test_peerdir_to_a_multimodule_excluding_the_tag": {

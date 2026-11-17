@@ -230,6 +230,50 @@ class MiscConfigureErrorsTest(MakeTest):
         self.addCleanup((self.project / "sub/ya.make").chmod, 0o644)
         self.assertConfigureLikeYa()
 
+    def conf(self, text):
+        core = self.root / "build/ymake.core.conf"
+        self.write_tree("build/ymake.core.conf", core.read_text() + "\n" + text + "\n")
+
+    def test_custom_blacklist_that_is_missing(self):
+        self.conf(f"CUSTOM_BLACKLIST={PROJECT}/missing.blacklist")
+        self.library()
+        self.assertConfigureLikeYa()
+
+    def test_custom_isolated_projects_that_are_missing(self):
+        self.conf(f"CUSTOM_ISOLATED_PROJECTS={PROJECT}/missing.list")
+        self.library()
+        self.assertConfigureLikeYa()
+
+    def test_peer_policy_line_with_a_syntax_error(self):
+        path = "build/rules/peerdir_policies/junk.policy"
+        self.write_tree(path, (self.root / path).read_text() + "ALLOW a -> b c\n")
+        self.library()
+        self.assertConfigureLikeYa()
+
+    def java_program(self):
+        self.write("ya.make", "JAVA_PROGRAM(answer)\nJDK_VERSION(17)\nJAVA_SRCS(Main.java)\nEND()\n")
+        self.write("Main.java", "package e2e; public class Main { public static void main(String[] args) {} }\n")
+
+    def test_forced_dependency_management_exceptions_without_for(self):
+        self.conf("_FORCED_DEPENDENCY_MANAGEMENT_EXCEPTIONS=e2e")
+        self.java_program()
+        self.assertConfigureLikeYa()
+
+    def test_forced_dependency_management_exceptions_without_a_library(self):
+        self.conf("_FORCED_DEPENDENCY_MANAGEMENT_EXCEPTIONS=FOR FOR contrib/java/e2e")
+        self.java_program()
+        self.assertConfigureLikeYa()
+
+    def test_forced_dependency_management_exceptions_without_excludes(self):
+        self.conf("_FORCED_DEPENDENCY_MANAGEMENT_EXCEPTIONS=FOR contrib/java/e2e FOR contrib/java/other e2e")
+        self.java_program()
+        self.assertConfigureLikeYa()
+
+    def test_multimodule_with_a_sub_module_loop(self):
+        self.conf("multimodule E2E_LOOP {\n    module E2E_FIRST: LIBRARY {\n        .PEERDIRSELF=E2E_SECOND\n    }\n    module E2E_SECOND: LIBRARY {\n        .PEERDIRSELF=E2E_FIRST\n    }\n}")
+        self.library()
+        self.assertConfigureLikeYa()
+
     def ts_tests(self, *statements):
         self.write("lib/ya.make", "TS_LIBRARY()\nTS_BUILD_SCRIPT(nots:build)\nTS_BUILD_OUTPUTS(dist)\n" + "".join(s + "\n" for s in statements) + "END()\n")
         self.write("lib/package.json", json.dumps({"name": "@e2e/lib", "version": "1.0.0", "engines": {"node": nodejs_version()}, "files": ["src", "dist"], "scripts": {"nots:build": "tsc"}}))
