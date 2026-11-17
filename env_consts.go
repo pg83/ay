@@ -230,6 +230,7 @@ var (
 	envModuleCommonConfigsDir                 = internEnv("MODULE_COMMON_CONFIGS_DIR")
 	envModuleKind                             = internEnv("MODULE_KIND")
 	envModuleScopeOnlyVars                    = internEnv("_MODULE_SCOPE_ONLY_VARS")
+	envModulesWithExtendedGlobRestrictions    = internEnv("MODULES_WITH_EXTENDED_GLOB_RESTRICTIONS")
 	envModver                                 = internEnv("MODVER")
 	envMsvc                                   = internEnv("MSVC")
 	envNO_DEBUGINFO                           = internEnv("NO_DEBUGINFO")

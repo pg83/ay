@@ -1,8 +1,8 @@
 package main
 
 import (
-	"fmt"
 	"slices"
+	"strconv"
 	"strings"
 )
 
@@ -167,6 +167,21 @@ func ymakeGlob(fs FS, pattern string, excludePatterns ...string) []string {
 }
 
 func ymakeGlobIDs(fs FS, pattern string, excludePatterns ...string) []STR {
+	return ymakeGlobIDsStat(fs, pattern, nil, excludePatterns...)
+}
+
+type globStat struct {
+	matched int
+	watched map[STR]bool
+}
+
+func (s *globStat) watch(dir STR) {
+	if s != nil {
+		s.watched[dir] = true
+	}
+}
+
+func ymakeGlobIDsStat(fs FS, pattern string, stat *globStat, excludePatterns ...string) []STR {
 	excludes := make([]*globMatcher, len(excludePatterns))
 
 	for i, p := range excludePatterns {
@@ -192,6 +207,10 @@ func ymakeGlobIDs(fs FS, pattern string, excludePatterns ...string) []STR {
 				rel := relID.string()
 				present, isDir := fs.exists(srcRootRel, rel)
 
+				if stat != nil && (last || !present) {
+					stat.watch(internStr(pathDir(rel)))
+				}
+
 				switch {
 				case !present:
 				case isDir:
@@ -200,6 +219,8 @@ func ymakeGlobIDs(fs FS, pattern string, excludePatterns ...string) []STR {
 					matches = append(matches, relID)
 				}
 			case globPattern, globAnything:
+				stat.watch(d.key())
+
 				for _, packed := range fs.listdir(d.key()).names {
 					name, isDir := STR(packed>>1).string(), packed&1 != 0
 
@@ -254,10 +275,26 @@ func ymakeGlobIDs(fs FS, pattern string, excludePatterns ...string) []STR {
 				}
 
 				next = append(next, d)
+
+				if stat != nil {
+					for _, n := range next {
+						stat.watch(n.key())
+					}
+				}
+			}
+		}
+
+		if stat != nil && !last && (part.kind == globPattern || part.kind == globAnything) {
+			for _, n := range next {
+				stat.watch(n.key())
 			}
 		}
 
 		dirs = next
+	}
+
+	if stat != nil {
+		stat.matched += len(matches)
 	}
 
 	return matches
@@ -276,14 +313,22 @@ func (d globDir) key() STR {
 	return internStr(d.text)
 }
 
-func applyGlobStmt(fs FS, module string, args []ANY, env Environment, onWarn func(Warn)) {
+func applyGlobStmt(fs FS, module string, name TOK, args []ANY, env Environment, onWarn func(Warn)) {
+	macro := name.string()
+
+	report := func(msg string) {
+		onWarn(Warn{Kind: WarnMisconfiguration, Where: makeFileWhere(module), Error: msg})
+	}
+
 	if len(args) == 0 {
-		throwFmt("%s: empty argument in _GLOB", module)
+		report("empty argument in [[alt1]]" + macro + "[[rst]]")
+
+		return
 	}
 
 	markUserArg(args[0])
 
-	var patterns, excludes, restrictions []string
+	var patterns, written, excludes, restrictions []string
 
 	section := ""
 
@@ -296,25 +341,123 @@ func applyGlobStmt(fs FS, module string, args []ANY, env Environment, onWarn fun
 		case section == "EXCLUDE":
 			excludes = append(excludes, styleSourcePath(module, arg))
 		default:
+			written = append(written, arg)
 			patterns = append(patterns, styleSourcePath(module, arg))
 		}
 	}
 
-	for i := 0; i < len(restrictions); i += 2 {
-		switch restrictions[i] {
-		case "MAX_MATCHES", "MAX_WATCH_DIRS", "SKIPPED_MIN_MATCHES", "SKIPPED_ERROR_PERCENT":
-		default:
-			onWarn(Warn{Kind: WarnBadMacroArgs, Message: fmt.Sprintf("%s: Unknown restriction name %s in _GLOB", module, restrictions[i])})
-		}
+	limits := parseGlobRestrictions(restrictions, macro, report)
+
+	if slices.Contains(strings.Fields(env.string(envModulesWithExtendedGlobRestrictions)), module) {
+		limits.maxMatches *= 10
+		limits.maxWatchDirs *= 10
 	}
+
+	stat := &globStat{watched: map[STR]bool{}}
 
 	var files []string
 
-	for _, pattern := range patterns {
-		for _, file := range ymakeGlob(fs, pattern, excludes...) {
-			files = append(files, "${ARCADIA_ROOT}/"+file)
+	for i, pattern := range patterns {
+		if msg := globPatternError(written[i]); msg != "" {
+			report("Invalid pattern in [[alt1]]" + macro + "[[rst]]: " + msg)
+
+			continue
+		}
+
+		for _, id := range ymakeGlobIDsStat(fs, pattern, stat, excludes...) {
+			files = append(files, "${ARCADIA_ROOT}/"+id.string())
 		}
 	}
 
+	if len(stat.watched) == 0 {
+		stat.watched[internStr(module)] = true
+	}
+
+	var violated []string
+
+	if stat.matched >= limits.maxMatches {
+		violated = append(violated, "too many matched files - "+strconv.Itoa(stat.matched))
+	}
+
+	if len(stat.watched) >= limits.maxWatchDirs {
+		violated = append(violated, "too many watched dirs - "+strconv.Itoa(len(stat.watched)))
+	}
+
+	if len(violated) != 0 {
+		report("Glob restrictions violated in [[alt1]]" + macro + "[[rst]] (" + strings.Join(written, ", ") + "): " + strings.Join(violated, ", "))
+	}
+
 	env.setString(internEnv(args[0].string()), strings.Join(dedupKeepOrder(files), " "))
+}
+
+type globLimits struct {
+	maxMatches, maxWatchDirs int
+}
+
+func parseGlobRestrictions(r []string, macro string, report func(string)) globLimits {
+	limits := globLimits{maxMatches: 10000, maxWatchDirs: 5000}
+
+	for i := 0; i < len(r); i++ {
+		parse := func(name string, minValue, maxValue int) int {
+			if r[i] != name {
+				return -1
+			}
+
+			if i+1 == len(r) {
+				report("No value for " + name + " in " + macro)
+
+				return -2
+			}
+
+			i++
+
+			v, err := strconv.Atoi(r[i])
+
+			if err != nil || v < minValue || v > maxValue {
+				report("Invalid value '" + r[i] + "' for " + name + " in " + macro)
+
+				return -3
+			}
+
+			return v
+		}
+
+		maxMatches := parse("MAX_MATCHES", 1, 1000000)
+		maxWatchDirs := parse("MAX_WATCH_DIRS", 1, 1000000)
+		skippedMin := parse("SKIPPED_MIN_MATCHES", 1, 1000000)
+		skippedPercent := parse("SKIPPED_ERROR_PERCENT", 0, 99)
+
+		if maxMatches > 0 {
+			limits.maxMatches = maxMatches
+		}
+
+		if maxWatchDirs > 0 {
+			limits.maxWatchDirs = maxWatchDirs
+		}
+
+		if maxMatches == -1 && maxWatchDirs == -1 && skippedMin == -1 && skippedPercent == -1 {
+			report("Unknown restriction name " + r[i] + " in " + macro)
+		}
+	}
+
+	return limits
+}
+
+func globPatternError(pattern string) string {
+	recursive := false
+
+	for _, part := range strings.Split(pattern, "/") {
+		switch {
+		case part == "**":
+			if recursive {
+				return "only one recursive part is allowed"
+			}
+
+			recursive = true
+		case strings.Contains(part, "**"):
+			return "recursive part in pattern is not allowed"
+		}
+	}
+
+	return ""
 }

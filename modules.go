@@ -3702,7 +3702,7 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 	case tokGolaunchSrcs, tokGolaunchSrcdir, tokRuntimePeerdir, tokResourcePeerdir, tokGolaunchFunction, tokGolaunchOverride, tokNoGolaunchSrcs, tokGenerateGolaunchCallbacks, tokGolaunchCompositeComps:
 		applyMlaunchStmt(modulePath, v, env, d)
 	case tokGlob, tokLateGlob:
-		applyGlobStmt(fs, modulePath, v.Args, env, onWarn)
+		applyGlobStmt(fs, modulePath, v.Name, v.Args, env, onWarn)
 	case tokAddCustomExplicitLinterCheck:
 		d.collectCustomStyle(modulePath, v.Args, env)
 	case tokSdcDiagsSplitGeneratorV3:
