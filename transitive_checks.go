@@ -1400,16 +1400,16 @@ func mergeProvided(a, b *providedSummary) *providedSummary {
 func (r *ModuleEmitResult) recordTransitive(ctx *GenCtx, d *ModuleData, tools []*ModuleEmitResult, platform *Platform) {
 	r.license, r.features, r.transitive = d.license, d.features, d.transitive
 
-	if ctx.blacklist != nil {
-		if rule := ctx.blacklist.match(r.testProject.relString()); rule != "" {
-			r.blacklistRule = internStr(rule)
+	if platform != ctx.host {
+		if ctx.blacklist != nil {
+			if rule := ctx.blacklist.match(r.testProject.relString()); rule != "" {
+				r.blacklistRule = internStr(rule)
+			}
 		}
-	}
 
-	if ctx.isolated != nil {
-		r.inIsolated = ctx.isolated.contains(r.testProject.relString())
+		if ctx.isolated != nil {
+			r.inIsolated = ctx.isolated.contains(r.testProject.relString())
 
-		if platform != ctx.host {
 			ctx.checkModuleIsolation(r, d)
 		}
 	}
@@ -1421,10 +1421,12 @@ func (r *ModuleEmitResult) recordTransitive(ctx *GenCtx, d *ModuleData, tools []
 	needed := false
 
 	for _, p := range r.testPeers {
-		if passesPeers(p) {
-			r.provided = mergeProvided(r.provided, p.provided)
-		} else {
-			r.provided = mergeProvided(r.provided, ownProvided(p))
+		if p.provided != nil || p.transitive != nil {
+			if passesPeers(p) {
+				r.provided = mergeProvided(r.provided, p.provided)
+			} else {
+				r.provided = mergeProvided(r.provided, ownProvided(p))
+			}
 		}
 
 		needed = needed || p.transitiveState&transitiveNeeded != 0

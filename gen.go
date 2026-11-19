@@ -2176,40 +2176,41 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 			peerInstance.Peer |= peerExplicit
 		}
 
-		where := makeFileWhere(instance.Path.relString())
 		explicit := kind == peerKindUserPeer && peerInstance.Peer&peerExplicit != 0
 
-		if present, isDir := ctx.fs.existsID(srcRootRel, p); explicit && present && !isDir {
-			ctx.onWarn(Warn{Kind: WarnModuleFailed, Where: where, Error: "[[alt1]]PEERDIR[[rst]] to non-directory $S/" + p.string()})
+		if explicit && !ctx.fs.listdir(p).listable() {
+			if present, isDir := ctx.fs.existsID(srcRootRel, p); present && !isDir {
+				ctx.onWarn(Warn{Kind: WarnModuleFailed, Where: makeFileWhere(instance.Path.relString()), Error: "[[alt1]]PEERDIR[[rst]] to non-directory $S/" + p.string()})
 
-			continue
+				continue
+			}
 		}
 
 		peerResult := genModule(ctx, peerInstance)
 
-		if explicit && ctx.fs.isFileID(p, strYaMake) && ctx.evaluateDirVFS(peerVFS, ctx.target).declaration == nil {
+		if explicit && (peerResult == nil || peerResult.ModuleStmtName == 0) && ctx.fs.isFileID(p, strYaMake) && ctx.evaluateDirVFS(peerVFS, ctx.target).declaration == nil {
 			ctx.noModuleRef(peerVFS)
-			ctx.onWarn(Warn{Kind: WarnModuleFailed, Where: where, Error: "No modules for [[alt1]]PEERDIR[[rst]] in [[imp]]$S/" + p.string() + "[[rst]]"})
+			ctx.onWarn(Warn{Kind: WarnModuleFailed, Where: makeFileWhere(instance.Path.relString()), Error: "No modules for [[alt1]]PEERDIR[[rst]] in [[imp]]$S/" + p.string() + "[[rst]]"})
 
 			continue
 		}
 
 		if peerResult == nil {
 			if explicit {
-				ctx.onWarn(Warn{Kind: WarnModuleFailed, Where: where, Error: "[[alt1]]PEERDIR[[rst]] from module tagged [[alt1]]" + env.string(envMODULE_TAG) + "[[rst]] to [[imp]]$S/" + p.string() + "[[rst]] is prohibited by incompatible tags and skipped"})
+				ctx.onWarn(Warn{Kind: WarnModuleFailed, Where: makeFileWhere(instance.Path.relString()), Error: "[[alt1]]PEERDIR[[rst]] from module tagged [[alt1]]" + env.string(envMODULE_TAG) + "[[rst]] to [[imp]]$S/" + p.string() + "[[rst]] is prohibited by incompatible tags and skipped"})
 			}
 
 			continue
 		}
 
 		if peerResult.missingMakefile {
-			ctx.onWarn(Warn{Kind: WarnModuleFailed, Where: where, Error: "[[alt1]]PEERDIR[[rst]] to " + ctx.missingDirectory(p) + "[[imp]]$S/" + p.string() + "[[rst]]"})
+			ctx.onWarn(Warn{Kind: WarnModuleFailed, Where: makeFileWhere(instance.Path.relString()), Error: "[[alt1]]PEERDIR[[rst]] to " + ctx.missingDirectory(p) + "[[imp]]$S/" + p.string() + "[[rst]]"})
 
 			continue
 		}
 
 		if explicit && internalPeerDenied(instance.Path.relString(), p.string(), isGoModuleType(peerResult.ModuleStmtName), env) {
-			ctx.onWarn(Warn{Kind: WarnModuleFailed, Where: where, Error: "[[alt1]]PEERDIR[[rst]] from [[imp]]$S/" + instance.Path.relString() + "[[rst]] to [[imp]]$S/" + p.string() + "[[rst]] is prohibited and skipped since latter is `internal` and former is not its sibling.\nSee https://docs.yandex-team.ru/ya-make/manual/common/peerdir_rules#internal for details"})
+			ctx.onWarn(Warn{Kind: WarnModuleFailed, Where: makeFileWhere(instance.Path.relString()), Error: "[[alt1]]PEERDIR[[rst]] from [[imp]]$S/" + instance.Path.relString() + "[[rst]] to [[imp]]$S/" + p.string() + "[[rst]] is prohibited and skipped since latter is `internal` and former is not its sibling.\nSee https://docs.yandex-team.ru/ya-make/manual/common/peerdir_rules#internal for details"})
 
 			continue
 		}
@@ -2218,11 +2219,9 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 			ctx.loops.edge(instance.Path, peerVFS)
 		}
 
-		incompatible := Warn{Kind: WarnModuleFailed, Message: fmt.Sprintf("PEERDIR from %s to %s is not allowed and skipped: module types are incompatible", instance.Path.relString(), p.string()), Where: where, Error: "[[alt1]]PEERDIR[[rst]] to [[imp]]$S/" + p.string() + "[[rst]] is not allowed and skipped: module types are incompatible"}
-
 		if isGoModuleType(peerResult.ModuleStmtName) && !isGoModuleType(d.unit.Type) {
 			if explicit && peerResult.ModuleStmtName != tokGoDll {
-				ctx.onWarn(incompatible)
+				ctx.onWarn(incompatiblePeerWarn(instance, p))
 			}
 
 			continue
@@ -2230,7 +2229,7 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 
 		if peerResult.isPROGRAM && !(isRustModule(d.moduleStmt.Name) && peerResult.ModuleStmtName == tokCrateProcMacro) {
 			if kind == peerKindUserPeer {
-				ctx.onWarn(incompatible)
+				ctx.onWarn(incompatiblePeerWarn(instance, p))
 			}
 
 			continue

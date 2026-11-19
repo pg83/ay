@@ -1112,11 +1112,25 @@ func (ctx *GenCtx) javaCheckManageableRoots(jm *JavaModule, env Environment) {
 
 	roots := strings.Fields(env.expand(env.string(envMANAGEABLE_PEERS_ROOTS)))
 
+	for i, root := range roots {
+		roots[i] = strings.TrimSuffix(root, "/")
+	}
+
 	for _, item := range jm.data.dm {
-		if !slices.ContainsFunc(roots, func(root string) bool { return javaPathIsPrefixOf(root, item.string()) }) {
-			ctx.javaDMError(jm, "[[alt1]]DEPENDENCY_MANAGEMENT[[rst]] for [[imp]]"+item.string()+"[[rst]] which is outside of paths allowed for manageable dependencies")
+		if path := item.string(); !javaUnderRoot(path, roots) {
+			ctx.javaDMError(jm, "[[alt1]]DEPENDENCY_MANAGEMENT[[rst]] for [[imp]]"+path+"[[rst]] which is outside of paths allowed for manageable dependencies")
 		}
 	}
+}
+
+func javaUnderRoot(path string, roots []string) bool {
+	for _, root := range roots {
+		if strings.HasPrefix(path, root) && (len(path) == len(root) || path[len(root)] == '/') {
+			return true
+		}
+	}
+
+	return false
 }
 
 func javaVersionLess(l, r string) bool {

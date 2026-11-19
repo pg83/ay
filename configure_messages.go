@@ -535,6 +535,22 @@ func reportPythonVersion(modulePath, macro string, env Environment, onWarn func(
 	}
 }
 
+func duplicateSTRs(values []STR) []string {
+	slices.Sort(values)
+
+	var dups []string
+
+	for i := 1; i < len(values); i++ {
+		if values[i] == values[i-1] && (i == 1 || values[i-1] != values[i-2]) {
+			dups = append(dups, values[i].string())
+		}
+	}
+
+	slices.Sort(dups)
+
+	return dups
+}
+
 func duplicates(values []string) []string {
 	seen, dups := map[string]bool{}, []string(nil)
 
@@ -1399,12 +1415,21 @@ func dataStatementErrors(fs FS, modulePath string, v UnknownStmt, onWarn func(Wa
 	missingConfig("<none>")
 }
 
-func internalPeerDenied(from, to string, goPeer bool, env Environment) bool {
-	dir := "$S/" + to
+func incompatiblePeerWarn(instance ModuleInstance, p STR) Warn {
+	return Warn{
+		Kind:    WarnModuleFailed,
+		Message: "PEERDIR from " + instance.Path.relString() + " to " + p.string() + " is not allowed and skipped: module types are incompatible",
+		Where:   makeFileWhere(instance.Path.relString()),
+		Error:   "[[alt1]]PEERDIR[[rst]] to [[imp]]$S/" + p.string() + "[[rst]] is not allowed and skipped: module types are incompatible",
+	}
+}
 
-	if !strings.Contains(dir, "internal") {
+func internalPeerDenied(from, to string, goPeer bool, env Environment) bool {
+	if !strings.Contains(to, "internal") {
 		return false
 	}
+
+	dir := "$S/" + to
 
 	if !goPeer {
 		if !env.bool(envCheckInternal) {

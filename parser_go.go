@@ -199,13 +199,7 @@ func goMayHaveCIncludes(data []byte) bool {
 
 		p += i
 
-		q := p + 1
-
-		for q < len(data) && (data[q] == ' ' || data[q] == '\t' || data[q] == '\v' || data[q] == '\f' || data[q] == '\r') {
-			q++
-		}
-
-		if q < len(data) && data[q] == '/' || bytesHasPrefixAt(data, q, "include") || bytesHasPrefixAt(data, q, "import") {
+		if q := skipWSAndBlockComments(data, p+1); bytesHasPrefixAt(data, q, "include") || bytesHasPrefixAt(data, q, "import") {
 			return true
 		}
 	}

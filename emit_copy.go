@@ -141,7 +141,7 @@ func (e *EmitContext) copyLoopSources(dst VFS) []VFS {
 
 func (e *EmitContext) skipDirectoryInput(macro, link string, inputs []VFS) bool {
 	for _, v := range inputs {
-		if !v.isSource() {
+		if !v.isSource() || e.ctx.fs.isFileVFSAny(v) {
 			continue
 		}
 

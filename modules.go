@@ -509,6 +509,18 @@ func (s PyScope) moduleName(modulePath, src string) string {
 	return pythonModuleName(modulePath, src, s.TopLevel, s.Namespace)
 }
 
+func (s PyScope) moduleNameSTR(modulePath, src string) STR {
+	if s.ModuleName != nil {
+		if id := s.ModuleName.str(); id != 0 {
+			return id
+		}
+
+		return internStr(s.ModuleName.string())
+	}
+
+	return pythonModuleNameSTR(modulePath, src, s.TopLevel, s.Namespace)
+}
+
 type ArchiveEntry struct {
 	DeclSeq      int
 	Name         string
@@ -5295,7 +5307,8 @@ func collectPySrcGroup(fs FS, modulePath string, v UnknownStmt, d *ModuleData, e
 		onWarn(Warn{Kind: WarnMisconfiguration, Where: makeFileWhere(modulePath), Error: message})
 	}
 
-	var pyModules, pyiModules []string
+	var pyModules []STR
+	var pyiModules []string
 
 	topLevel := false
 	mainNext := false
@@ -5594,7 +5607,7 @@ func collectPySrcGroup(fs FS, modulePath string, v UnknownStmt, d *ModuleData, e
 		}
 
 		if extIsPy(src) {
-			pyModules = append(pyModules, scope.moduleName(modulePath, src))
+			pyModules = append(pyModules, scope.moduleNameSTR(modulePath, src))
 		}
 
 		if srcID == 0 {
@@ -5608,7 +5621,7 @@ func collectPySrcGroup(fs FS, modulePath string, v UnknownStmt, d *ModuleData, e
 		d.pyGroupScopes = append(d.pyGroupScopes, scope)
 	}
 
-	if dups := duplicates(pyModules); len(dups) > 0 {
+	if dups := duplicateSTRs(pyModules); len(dups) > 0 {
 		report("Duplicate(s) is found in the PY_SRCS macro: " + pySetRepr(dups))
 	}
 
