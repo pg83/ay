@@ -113,15 +113,32 @@ func main() {
 }
 
 func dispatch(argv []string) {
+	internTable.sealConstants()
+
 	g, rest := parseGlobalFlags(argv[1:])
+
+	if g.TreeImage != "" {
+		openTreeImage(g.TreeImage).attachStrings()
+	}
+
 	code := runCommand(rest, g)
+
+	if g.TreeOut != "" && code == 0 {
+		writeTreeImage(g.TreeOut)
+	}
+
+	if g.Verbose && (g.TreeImage != "" || g.TreeOut != "") {
+		fmt.Fprintf(os.Stderr, "tree image: %d strings from the image, %d new, %d bytes of text\n", internTable.imageCount, internTable.count-max(internTable.imageCount, internTable.constCount), internTable.bytes.used)
+	}
 
 	runAtExitHooks()
 	os.Exit(code)
 }
 
 type GlobalFlags struct {
-	Verbose bool
+	Verbose   bool
+	TreeImage string
+	TreeOut   string
 }
 
 func parseGlobalFlags(argv []string) (g GlobalFlags, rest []string) {
@@ -144,6 +161,10 @@ func parseGlobalFlags(argv []string) (g GlobalFlags, rest []string) {
 			throwFmt("unknown --probe=%q (want map|callsite)", v)
 		case k == "verbose" || k == "v":
 			g.Verbose = true
+		case k == "tree-image":
+			g.TreeImage = v
+		case k == "tree-out":
+			g.TreeOut = v
 		case k == "no-report":
 		default:
 			throwFmt("unknown global flag %q", a)
@@ -182,6 +203,8 @@ func usageCommands(prefix []string, verbose bool) string {
 	}
 
 	b.WriteString("\n  " + clFlag("-v, --verbose") + "             expand collapsed groups (dev), hidden commands, and the flags below")
+	b.WriteString("\n  " + clFlag("--tree-image=<file>") + "       use a source tree image (dev/TREE.md)")
+	b.WriteString("\n  " + clFlag("--tree-out=<file>") + "         write a source tree image when the command succeeds")
 
 	if verbose {
 		b.WriteString("\n  " + clFlag("--probe=map|callsite|str") + "  dump the named runtime probe (map/callsite/str) on exit")

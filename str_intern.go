@@ -20,6 +20,26 @@ type InternTable struct {
 
 	cleanSeen BitSet
 	cleanYes  BitSet
+
+	frozen     *MmapedIntMap[STR]
+	constCount uint32
+	constBytes int
+	imageCount uint32
+}
+
+func (t *InternTable) sealConstants() {
+	t.constCount = t.count
+	t.constBytes = t.bytes.used
+}
+
+func internFind(hi uint64) *STR {
+	if frozen := internTable.frozen; frozen != nil {
+		if p := frozen.get(hi); p != nil {
+			return p
+		}
+	}
+
+	return internTable.ids.get(hi)
 }
 
 func newInternTable() InternTable {
@@ -121,7 +141,7 @@ func internAppend(off, n int, lo uint64) STR {
 func internStr(s string) STR {
 	h := chaosInternHash(xxh3.HashString128(s))
 
-	if p := internTable.ids.get(h.Hi); p != nil {
+	if p := internFind(h.Hi); p != nil {
 		if internLo(*p) == h.Lo {
 			return *p
 		}
@@ -212,7 +232,7 @@ func internBlock(block []byte, n int) STR {
 	buf := block[:n]
 	h := chaosInternHash(xxh3.Hash128(buf))
 
-	if p := internTable.ids.get(h.Hi); p != nil {
+	if p := internFind(h.Hi); p != nil {
 		if internLo(*p) == h.Lo {
 			return *p
 		}
@@ -246,7 +266,7 @@ func internCommitBlock(n int) int {
 func internBytes(b []byte) STR {
 	h := chaosInternHash(xxh3.Hash128(b))
 
-	if p := internTable.ids.get(h.Hi); p != nil {
+	if p := internFind(h.Hi); p != nil {
 		if internLo(*p) == h.Lo {
 			return *p
 		}
@@ -272,7 +292,7 @@ func internBytes(b []byte) STR {
 func internedBytes(b []byte) STR {
 	h := chaosInternHash(xxh3.Hash128(b))
 
-	if p := internTable.ids.get(h.Hi); p != nil {
+	if p := internFind(h.Hi); p != nil {
 		if internLo(*p) == h.Lo {
 			return *p
 		}
@@ -296,7 +316,7 @@ func (id STR) sharedString() string {
 func interned(s string) STR {
 	h := chaosInternHash(xxh3.HashString128(s))
 
-	if p := internTable.ids.get(h.Hi); p != nil {
+	if p := internFind(h.Hi); p != nil {
 		if internLo(*p) == h.Lo {
 			return *p
 		}
