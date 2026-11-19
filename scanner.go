@@ -448,7 +448,7 @@ func (sc *ScanCtx) setFileParser(file VFS) {
 	if parser, registered := sc.scanner.parsers.registry.registeredParserFor(file.relString()); registered {
 		sc.parser = parser
 	} else if file.isSource() {
-		if cached, ok := sc.scanner.parsers.cache.parsed.get(file.rel()); ok {
+		if cached, ok := sc.scanner.parsers.tree.peekParsed(file.rel()); ok {
 			sc.parser = sc.scanner.parsers.registry.parser(cached.parser)
 		}
 	}
@@ -511,7 +511,7 @@ func (s *IncludeScanner) includerDir(vfsPath VFS, info *GeneratedFileInfo) VFS {
 	}
 
 	if vfsPath.isSource() {
-		if cached, ok := s.parsers.cache.parsed.get(vfsPath.rel()); ok && cached.dir != 0 {
+		if cached, ok := s.parsers.tree.peekParsed(vfsPath.rel()); ok && cached.dir != 0 {
 			return cached.dir.source()
 		}
 	}

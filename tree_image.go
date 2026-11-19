@@ -26,7 +26,67 @@ const (
 	treeSectionStrIndexKeys
 	treeSectionStrIndexValues
 	treeSectionStrOverflow
+	treeSectionFileNo
+	treeSectionFileHash
+	treeSectionFileParsed
+	treeSectionDirectives
+	treeSectionParsedExtras
 )
+
+type TreeSession struct {
+	image *TreeImage
+	out   string
+	tree  *Tree
+}
+
+func openTreeSession(image, out string) *TreeSession {
+	s := &TreeSession{out: out}
+
+	if image != "" {
+		s.image = openTreeImage(image)
+		s.image.attachStrings()
+	}
+
+	return s
+}
+
+func (s *TreeSession) finish(code int, verbose bool) {
+	if s.out != "" && code == 0 {
+		writeTreeImage(s.out, s.tree)
+	}
+
+	if !verbose || s.out == "" && s.image == nil {
+		return
+	}
+
+	t := &internTable
+
+	fmt.Fprintf(os.Stderr, "tree image: %d strings from the image, %d new, %d bytes of text\n", t.imageCount, t.count-max(t.imageCount, t.constCount), t.bytes.used)
+
+	if s.tree != nil {
+		fmt.Fprintf(os.Stderr, "tree image: %d files parsed\n", s.tree.parses)
+	}
+}
+
+func binaryHash() uint64 {
+	return xxh3.Hash(throw2(os.ReadFile(throw2(os.Executable()))))
+}
+
+func mmapedSlice[T any](data []byte) []T {
+	var zero T
+
+	return unsafe.Slice((*T)(unsafe.Pointer(unsafe.SliceData(data))), len(data)/int(unsafe.Sizeof(zero)))
+}
+
+func (img *TreeImage) files() *MmapedFiles {
+	return &MmapedFiles{
+		fileNo:     mmapedSlice[uint32](img.mapped(treeSectionFileNo)),
+		hashes:     mmapedSlice[uint64](img.mapped(treeSectionFileHash)),
+		parsed:     mmapedSlice[MmapedParsed](img.mapped(treeSectionFileParsed)),
+		directives: mmapedSlice[IncludeDirective](img.mapped(treeSectionDirectives)),
+		extras:     mmapedSlice[MmapedExtra](img.mapped(treeSectionParsedExtras)),
+	}
+}
 
 type TreeSection uint32
 
@@ -80,8 +140,8 @@ func openTreeImage(path string) *TreeImage {
 
 	img.strCount = binary.LittleEndian.Uint32(header[16:])
 
-	if constCount, constBytes, constHash := binary.LittleEndian.Uint32(header[20:]), binary.LittleEndian.Uint64(header[24:]), binary.LittleEndian.Uint64(header[32:]); constCount != internTable.constCount || constBytes != uint64(internTable.constBytes) || constHash != internConstHash() {
-		throwFmt("tree image %s was written by another build of ay (%d constant strings, this build has %d)", path, constCount, internTable.constCount)
+	if constCount, constBytes, constHash := binary.LittleEndian.Uint32(header[20:]), binary.LittleEndian.Uint64(header[24:]), binary.LittleEndian.Uint64(header[32:]); constCount != internTable.constCount || constBytes != uint64(internTable.constBytes) || constHash != internConstHash() || binary.LittleEndian.Uint64(header[40:]) != binaryHash() {
+		throwFmt("tree image %s was written by another build of ay", path)
 	}
 
 	for i := range count {
@@ -110,13 +170,9 @@ func (img *TreeImage) attachStrings() {
 	t.imageCount = img.strCount
 	t.mapped = uint32(min(t.pos.mapped, t.lo.mapped) / 8)
 
-	keys, values := img.mapped(treeSectionStrIndexKeys), img.mapped(treeSectionStrIndexValues)
+	keys := mmapedSlice[uint64](img.mapped(treeSectionStrIndexKeys))
 
-	t.frozen = &MmapedIntMap[STR]{
-		keys:   unsafe.Slice((*uint64)(unsafe.Pointer(unsafe.SliceData(keys))), len(keys)/8),
-		values: unsafe.Slice((*STR)(unsafe.Pointer(unsafe.SliceData(values))), len(values)/4),
-		mask:   uint64(len(keys)/8 - 1),
-	}
+	t.frozen = &MmapedIntMap[STR]{keys: keys, values: mmapedSlice[STR](img.mapped(treeSectionStrIndexValues)), mask: uint64(len(keys) - 1)}
 
 	overflow := img.mapped(treeSectionStrOverflow)
 
@@ -179,7 +235,7 @@ func internIndexForImage() (keys []uint64, values []STR) {
 	return merged.keys, merged.values
 }
 
-func writeTreeImage(path string) {
+func writeTreeImage(path string, tree *Tree) {
 	t := &internTable
 	tmp := fmt.Sprintf("%s.%d.tmp", path, os.Getpid())
 	w := &TreeImageWriter{file: throw2(os.Create(tmp)), off: treeImageHeaderSize}
@@ -202,6 +258,10 @@ func writeTreeImage(path string) {
 	slices.Sort(overflow)
 	w.section(treeSectionStrOverflow, sliceBytesOf(overflow))
 
+	if tree != nil {
+		tree.writeFiles(w)
+	}
+
 	header := make([]byte, treeImageHeaderSize)
 
 	copy(header, treeImageMagic)
@@ -211,6 +271,7 @@ func writeTreeImage(path string) {
 	binary.LittleEndian.PutUint32(header[20:], t.constCount)
 	binary.LittleEndian.PutUint64(header[24:], uint64(t.constBytes))
 	binary.LittleEndian.PutUint64(header[32:], internConstHash())
+	binary.LittleEndian.PutUint64(header[40:], binaryHash())
 
 	for i, entry := range w.entries {
 		at := header[64+i*24:]

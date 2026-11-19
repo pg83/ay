@@ -16,6 +16,7 @@ type FS interface {
 	isFileVFS(v VFS) bool
 	noteFile(v VFS)
 	isReadFile(rel STR) bool
+	contentHash(rel STR) uint64
 	isDir(prefix STR, suffix string) bool
 	sourcePathExists(rel string) bool
 

@@ -148,7 +148,11 @@ func cmdMake(g GlobalFlags, args []string) int {
 	}
 
 	fs := newFS(mf.srcRoot)
-	parsers := newIncludeParserManagerFS(fs, newSharedParseCache())
+	tree := newTree(fs, g.Session.image)
+
+	g.Session.tree = tree
+
+	parsers := newIncludeParserManagerFS(fs, tree, newSharedParseCache())
 	rootYaConf := readYaConf(fs, "ya.conf")
 	hostP, targetP := makePlatforms(fs, mf, parsers, rootYaConf)
 	tests := newTestOpts(mf, rootYaConf)
@@ -194,7 +198,7 @@ func cmdMake(g GlobalFlags, args []string) int {
 		return 0
 	}
 
-	ex := newExecutor(mf.srcRoot, mf.bldRoot, fs, mf.threads, mf.keepGoing, mf.ninja, mf.sandboxing, mf.clear, mf.cmdPrefixes, events)
+	ex := newExecutor(mf.srcRoot, mf.bldRoot, tree.contentHash, mf.threads, mf.keepGoing, mf.ninja, mf.sandboxing, mf.clear, mf.cmdPrefixes, events)
 
 	ex.startGarbageCollector()
 

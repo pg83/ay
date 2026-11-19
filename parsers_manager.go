@@ -66,34 +66,12 @@ type ParsedSource struct {
 	bucket ParsedIncludeBucket
 }
 
-func (p ParsedSource) includes(cache *SharedParseCache) ParsedIncludeSet {
-	if p.extra != 0 {
-		return cache.parsedExtras.s[p.extra-1]
-	}
-
-	return ParsedIncludeSet{parsedIncludesLocal: p.local}
-}
-
-func (p ParsedSource) walkable(cache *SharedParseCache) []IncludeDirective {
-	if p.bucket == parsedIncludesLocal {
-		return p.local
-	}
-
-	if p.extra != 0 {
-		return cache.parsedExtras.s[p.extra-1][p.bucket]
-	}
-
-	return nil
-}
-
 type SharedParseCache struct {
 	notsJSON     SparseMap[STR, ParsedJSON]
 	usrvDeps     SparseMap[STR, *usrvDepsIndex]
 	notsYAML     SparseMap[STR, map[string]any]
 	notsLocks    SparseMap[STR, *NotsLockfile]
 	directives   *BumpAllocator[IncludeDirective]
-	parsed       DenseMap[STR, ParsedSource]
-	parsedExtras Vec[ParsedIncludeSet]
 	conf         *ConfState
 	confFiles    SparseMap[STR, *ConfFile]
 	sysinclYAMLs SparseMap[STR, []SysIncl]
@@ -116,6 +94,7 @@ func newSharedParseCache() *SharedParseCache {
 
 type IncludeParserManager struct {
 	fs              FS
+	tree            *Tree
 	cache           *SharedParseCache
 	scanConfigs     map[uint64]*ScanConfig
 	scanConfigCount uint32
@@ -125,9 +104,10 @@ type IncludeParserManager struct {
 	registry        IncludeDirectiveParserRegistry
 }
 
-func newIncludeParserManagerFS(fs FS, cache *SharedParseCache) *IncludeParserManager {
+func newIncludeParserManagerFS(fs FS, tree *Tree, cache *SharedParseCache) *IncludeParserManager {
 	return &IncludeParserManager{
 		fs:           fs,
+		tree:         tree,
 		cache:        cache,
 		addinclArena: newBumpAllocator[VFS](),
 		registry:     newIncludeDirectiveParserRegistry(),
@@ -167,17 +147,17 @@ func (pm *IncludeParserManager) sourceParsedBuckets(vfsPath VFS, ctxParser Inclu
 		ctxParser = pm.registry.defaultParser
 	}
 
-	return pm.sourceParsed(vfsPath, ctxParser).includes(pm.cache)
+	return pm.tree.includes(pm.sourceParsed(vfsPath, ctxParser))
 }
 
 func (pm *IncludeParserManager) sourceParsedWalkable(vfsPath VFS, ctxParser IncludeDirectiveParser) []IncludeDirective {
-	return pm.sourceParsed(vfsPath, ctxParser).walkable(pm.cache)
+	return pm.tree.walkable(pm.sourceParsed(vfsPath, ctxParser))
 }
 
 func (pm *IncludeParserManager) sourceParsed(vfsPath VFS, ctxParser IncludeDirectiveParser) ParsedSource {
 	key := vfsPath.rel()
 
-	if cached, ok := pm.cache.parsed.get(key); ok {
+	if cached, ok := pm.tree.peekParsed(key); ok {
 		return cached
 	}
 
@@ -193,43 +173,7 @@ func (pm *IncludeParserManager) sourceParsed(vfsPath VFS, ctxParser IncludeDirec
 		bucket = parsedIncludesRagelNative
 	}
 
-	if parser == nil || !pm.fs.isFileVFS(vfsPath) {
-		empty := ParsedSource{parser: includeParserKind(parser), bucket: bucket}
-
-		pm.cache.parsed.put(key, empty)
-
-		return empty
-	}
-
-	data := pm.fs.readPath(key)
-
-	if first := data[0]; len(first) >= 3 && first[0] == 0xEF && first[1] == 0xBB && first[2] == 0xBF {
-		data[0] = first[3:]
-	}
-
-	out := parser.parse(rel, data, pm.cache.directives)
-	parsed := ParsedSource{local: out[parsedIncludesLocal], parser: includeParserKind(parser), bucket: bucket}
-
-	if len(parsed.local) > 0 {
-		parsed.dir = internDirText(pathDir(rel))
-	}
-
-	for _, entries := range out[1:] {
-		if entries != nil {
-			pm.cache.parsedExtras.pushBack(out)
-			parsed.extra = uint32(pm.cache.parsedExtras.len())
-
-			if parsed.dir == 0 {
-				parsed.dir = internDirText(pathDir(rel))
-			}
-
-			break
-		}
-	}
-
-	pm.cache.parsed.put(key, parsed)
-
-	return parsed
+	return pm.tree.parse(vfsPath, rel, parser, bucket)
 }
 
 func (pm *IncludeParserManager) indexAddincl(a VFS) {

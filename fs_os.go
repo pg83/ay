@@ -342,6 +342,10 @@ func (fs *OsFS) isReadFile(rel STR) bool {
 	return fs.contentHashes.load(rel) != 0
 }
 
+func (fs *OsFS) contentHash(rel STR) uint64 {
+	return fs.contentHashes.load(rel)
+}
+
 func (fs *OsFS) resourceBundle(rel STR) (map[string]ResourceBundleEntry, bool) {
 	for i, key := range fs.bundleKeys {
 		if key == rel {

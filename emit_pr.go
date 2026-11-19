@@ -364,13 +364,13 @@ func prInputInducedIncludes(ctx *GenCtx, registry *CodegenRegistry, scanner *Inc
 					return
 				}
 
-				cached, ok := ctx.parsers.cache.parsed.get(input.rel())
+				cached, ok := ctx.parsers.tree.peekParsed(input.rel())
 
 				if !ok {
 					return
 				}
 
-				parsed = cached.includes(ctx.parsers.cache)
+				parsed = ctx.parsers.tree.includes(cached)
 				passIncludes = cached.parser == includeParserSwig
 			}
 

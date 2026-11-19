@@ -35,7 +35,7 @@ type CanonBuf struct {
 	eSeen     []bool
 	chunkMemo map[ChunkKey]ChunkAccum
 	hash      func(VFS) uint64
-	fsHashes  *ContentHashes
+	recorded  func(STR) uint64
 	futs      *PageVec[*NodeFuture]
 	fetchRefs *DenseMap[STR, NodeRef]
 }
@@ -69,10 +69,8 @@ func (c *CanonBuf) inputVal(v VFS) uint64 {
 }
 
 func (c *CanonBuf) sourceHash(v VFS) uint64 {
-	if c.fsHashes != nil {
-		if h := c.fsHashes.load(v.rel()); h != 0 {
-			return h
-		}
+	if h := c.recorded(v.rel()); h != 0 {
+		return h
 	}
 
 	return c.hash(v)

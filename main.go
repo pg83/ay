@@ -117,19 +117,11 @@ func dispatch(argv []string) {
 
 	g, rest := parseGlobalFlags(argv[1:])
 
-	if g.TreeImage != "" {
-		openTreeImage(g.TreeImage).attachStrings()
-	}
+	g.Session = openTreeSession(g.TreeImage, g.TreeOut)
 
 	code := runCommand(rest, g)
 
-	if g.TreeOut != "" && code == 0 {
-		writeTreeImage(g.TreeOut)
-	}
-
-	if g.Verbose && (g.TreeImage != "" || g.TreeOut != "") {
-		fmt.Fprintf(os.Stderr, "tree image: %d strings from the image, %d new, %d bytes of text\n", internTable.imageCount, internTable.count-max(internTable.imageCount, internTable.constCount), internTable.bytes.used)
-	}
+	g.Session.finish(code, g.Verbose)
 
 	runAtExitHooks()
 	os.Exit(code)
@@ -139,6 +131,7 @@ type GlobalFlags struct {
 	Verbose   bool
 	TreeImage string
 	TreeOut   string
+	Session   *TreeSession
 }
 
 func parseGlobalFlags(argv []string) (g GlobalFlags, rest []string) {
