@@ -253,7 +253,6 @@ var (
 	envNoPythonIncls                          = internEnv("NO_PYTHON_INCLS")
 	envNoWshadow                              = internEnv("NO_WSHADOW")
 	envNolibc                                 = internEnv("NOLIBC")
-	envNonFatalAddinclToMissing               = internEnv("NON_FATAL_ADDINCL_TO_MISSING")
 	envNoplatform                             = internEnv("NOPLATFORM")
 	envNoplatformResources                    = internEnv("NOPLATFORM_RESOURCES")
 	envNoruntime                              = internEnv("NORUNTIME")

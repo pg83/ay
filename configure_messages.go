@@ -390,7 +390,7 @@ func diagnoseAddIncl(args []ANY) *addInclDiag {
 }
 
 func (ctx *GenCtx) checkAddInclDirs(dirs []VFS, env Environment, modulePath string, onWarn func(Warn)) {
-	if env.bool(envNonFatalAddinclToMissing) {
+	if env.bool(internedEnv("NON_FATAL_ADDINCL_TO_MISSING")) {
 		return
 	}
 
