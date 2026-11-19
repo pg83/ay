@@ -69,7 +69,7 @@ func (ctx *GenCtx) recordConfiguration(instance ModuleInstance, recurses []VFS, 
 
 	configuration := &ctx.configuration
 
-	if !configuration.processing {
+	if !configuration.processing && len(recurses) != 0 {
 		if configuration.recurses == nil {
 			configuration.recurses = map[VFS][]VFS{}
 		}

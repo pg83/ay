@@ -592,9 +592,8 @@ func (ctx *GenCtx) prepareTestDependencies(s *TestSuite) {
 			}
 
 			if python {
-				clear(ctx.runtimeTestSeen)
-
-				s.pytestOutputDirs = append(s.pytestOutputDirs, ctx.runtimeTestOutputDirs(dependency, ctx.runtimeTestSeen)...)
+				ctx.testWalkEpoch++
+				s.pytestOutputDirs = ctx.runtimeTestOutputDirs(dependency, s.pytestOutputDirs)
 			}
 		}
 	}

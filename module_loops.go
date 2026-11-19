@@ -192,7 +192,7 @@ func moduleNodeName(instance ModuleInstance, result *ModuleEmitResult, decl *Mod
 }
 
 func (ctx *GenCtx) plainModuleDir(dir VFS) bool {
-	evaluation := ctx.dirs[dirEvaluationKey{dir, ctx.target}]
+	evaluation := ctx.dirs.get(dir, ctx.target)
 
 	return evaluation != nil && evaluation.declaration != nil && multimoduleShapes[multimoduleOwner(evaluation.declaration)] == nil
 }

@@ -105,19 +105,24 @@ func (ctx *GenCtx) runtimeTestDependencies(dir STR) []TestBuildDependency {
 
 	var artifacts []TestBuildDependency
 
-	seen := map[*ModuleEmitResult]bool{}
+	ctx.testWalkEpoch++
 
 	var visit func(TestBuildDependency, bool)
 
 	visit = func(dependency TestBuildDependency, root bool) {
 		result := dependency.result
-		module := ctx.runtimeTestDependencyModule(dependency)
 
-		if seen[result] || root && module.multimodule && module.bundle && !module.final {
+		if result.testWalkEpoch == ctx.testWalkEpoch {
 			return
 		}
 
-		seen[result] = true
+		module := ctx.runtimeTestDependencyModule(dependency)
+
+		if root && module.multimodule && module.bundle && !module.final {
+			return
+		}
+
+		result.testWalkEpoch = ctx.testWalkEpoch
 
 		if (!root || !module.multimodule || module.final) && !module.fake && testDependencyOutput(result) != 0 {
 			artifacts = append(artifacts, dependency)
@@ -171,26 +176,29 @@ func (ctx *GenCtx) runtimeTestDependencies(dir STR) []TestBuildDependency {
 	})
 }
 
-func (ctx *GenCtx) runtimeTestOutputDirs(dependency TestBuildDependency, seen map[*ModuleEmitResult]bool) []string {
+func (ctx *GenCtx) runtimeTestOutputDirs(dependency TestBuildDependency, dirs []string) []string {
 	result := dependency.result
 
-	if seen[result] {
-		return nil
+	if result.testWalkEpoch == ctx.testWalkEpoch {
+		return dirs
 	}
 
-	seen[result] = true
+	result.testWalkEpoch = ctx.testWalkEpoch
 
-	module := ctx.runtimeTestDependencyModule(dependency)
+	module := &result.testDependencyModule
+	sharedObject, unrollBundle := module.sharedObject, module.unrollBundle
 
-	if output := testDependencyOutput(result); output != 0 && module.sharedObject {
-		return []string{path.Dir(output.string())}
+	if jm := result.java; jm != nil {
+		sharedObject, unrollBundle = testDependencyBundleRendering(jm.data.moduleType)
 	}
 
-	var dirs []string
+	if output := testDependencyOutput(result); output != 0 && sharedObject {
+		return append(dirs, path.Dir(output.string()))
+	}
 
-	if module.unrollBundle {
+	if unrollBundle {
 		for _, peer := range module.peers {
-			dirs = append(dirs, ctx.runtimeTestOutputDirs(peer, seen)...)
+			dirs = ctx.runtimeTestOutputDirs(peer, dirs)
 		}
 	}
 

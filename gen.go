@@ -171,6 +171,7 @@ type ModuleEmitResult struct {
 	blacklistRule                   STR
 	inIsolated                      bool
 	finishSeq                       uint32
+	testWalkEpoch                   uint32
 }
 
 func protoResultWholeArchiveCmdPaths(res *ProtoSrcsResult) []VFS {
@@ -182,7 +183,7 @@ type GenCtx struct {
 	varWordCache        map[STR][]ANY
 	varMacroStmtCache   map[varMacroKey][]Stmt
 	scanData            ModuleData
-	dirs                map[dirEvaluationKey]*DirEvaluation
+	dirs                DirEvaluations
 	dependencyInstances map[STR][]ModuleInstance
 	dependencyBuilds    map[STR][]TestBuildDependency
 	configuration       ConfigurationDependencies
@@ -251,7 +252,7 @@ type GenCtx struct {
 	includeMemos        *IncludeMemos
 	goEnvMemo           map[[2]STR]EnvVars
 	goImportDirs        map[goImportKey]STR
-	runtimeTestSeen     map[*ModuleEmitResult]bool
+	testWalkEpoch       uint32
 	canonicalResources  map[STR][]string
 	javaSetVars         SetVars
 	frameSerial         uint32
@@ -454,7 +455,6 @@ func newGenCtx(fs FS, parsers *IncludeParserManager, hostP, targetP *Platform, e
 		parsedFiles:        map[STR]*MakeFile{},
 		includeMemos:       newIncludeMemos(),
 		goImportDirs:       map[goImportKey]STR{},
-		runtimeTestSeen:    map[*ModuleEmitResult]bool{},
 		canonicalResources: map[STR][]string{},
 		javaSetVars:        SetVars{vals: map[STR]STR{}, appends: map[STR]setVarChain{}},
 		varMacroStmtCache:  map[varMacroKey][]Stmt{},
@@ -551,11 +551,54 @@ type DirEvaluation struct {
 	owned        ownerChain
 	subscribers  []STR
 	recurseKinds []TOK
+	path         VFS
 }
 
-type dirEvaluationKey struct {
-	path     VFS
-	platform *Platform
+type DirEvaluations struct {
+	platforms []*Platform
+	rows      [][]*DirEvaluation
+}
+
+func (d *DirEvaluations) slot(platform *Platform) int {
+	for i, p := range d.platforms {
+		if p == platform {
+			return i
+		}
+	}
+
+	d.platforms = append(d.platforms, platform)
+	d.rows = append(d.rows, nil)
+
+	return len(d.platforms) - 1
+}
+
+func (d *DirEvaluations) get(dir VFS, platform *Platform) *DirEvaluation {
+	if rows, row := d.rows[d.slot(platform)], dirRows.rowOf(dir.rel()); int(row) < len(rows) {
+		return rows[row]
+	}
+
+	return nil
+}
+
+func (d *DirEvaluations) put(evaluation *DirEvaluation, platform *Platform) {
+	i, row := d.slot(platform), int(dirRows.rowFor(evaluation.path.rel()))
+
+	if row >= len(d.rows[i]) {
+		grown := make([]*DirEvaluation, max(row+1, 2*len(d.rows[i])))
+
+		copy(grown, d.rows[i])
+		d.rows[i] = grown
+	}
+
+	d.rows[i][row] = evaluation
+}
+
+func (d *DirEvaluations) each(platform *Platform, visit func(*DirEvaluation)) {
+	for _, evaluation := range d.rows[d.slot(platform)] {
+		if evaluation != nil {
+			visit(evaluation)
+		}
+	}
 }
 
 func (ctx *GenCtx) evaluateDir(dir string, platform *Platform) *DirEvaluation {
@@ -563,9 +606,7 @@ func (ctx *GenCtx) evaluateDir(dir string, platform *Platform) *DirEvaluation {
 }
 
 func (ctx *GenCtx) evaluateDirVFS(dir VFS, platform *Platform) *DirEvaluation {
-	key := dirEvaluationKey{dir, platform}
-
-	if evaluation, ok := ctx.dirs[key]; ok {
+	if evaluation := ctx.dirs.get(dir, platform); evaluation != nil {
 		return evaluation
 	}
 
@@ -574,13 +615,9 @@ func (ctx *GenCtx) evaluateDirVFS(dir VFS, platform *Platform) *DirEvaluation {
 	instance.Platform = platform
 
 	declaration, recurses, recurseKinds, subscribers := ctx.scanModuleConfiguration(instance)
-	evaluation := &DirEvaluation{declaration: declaration, recurses: recurses, subscribers: subscribers, recurseKinds: recurseKinds}
+	evaluation := &DirEvaluation{declaration: declaration, recurses: recurses, subscribers: subscribers, recurseKinds: recurseKinds, path: dir}
 
-	if ctx.dirs == nil {
-		ctx.dirs = map[dirEvaluationKey]*DirEvaluation{}
-	}
-
-	ctx.dirs[key] = evaluation
+	ctx.dirs.put(evaluation, platform)
 
 	return evaluation
 }
@@ -731,11 +768,11 @@ func (ctx *GenCtx) recurseClosure(root VFS) []VFS {
 }
 
 func (ctx *GenCtx) ownerChain(owner VFS, platform *Platform) *ownerChain {
-	return &ctx.dirs[dirEvaluationKey{owner, platform}].owned
+	return &ctx.dirs.get(owner, platform).owned
 }
 
 func (ctx *GenCtx) ownedBy(owner VFS, platform *Platform) ownerChain {
-	if evaluation := ctx.dirs[dirEvaluationKey{owner, platform}]; evaluation != nil {
+	if evaluation := ctx.dirs.get(owner, platform); evaluation != nil {
 		return evaluation.owned
 	}
 
@@ -939,7 +976,7 @@ func (ctx *GenCtx) makeFiles() []MakeFileEntry {
 			return has
 		}
 
-		evaluation := ctx.dirs[dirEvaluationKey{dir, ctx.target}]
+		evaluation := ctx.dirs.get(dir, ctx.target)
 
 		if evaluation == nil || seen[dir] {
 			return false
@@ -960,14 +997,14 @@ func (ctx *GenCtx) makeFiles() []MakeFileEntry {
 
 	var out []MakeFileEntry
 
-	for key, evaluation := range ctx.dirs {
-		if key.platform != ctx.target || !below(key.path, map[VFS]bool{}) && !ctx.noModuleRefs[key.path] {
-			continue
+	ctx.dirs.each(ctx.target, func(evaluation *DirEvaluation) {
+		if !below(evaluation.path, map[VFS]bool{}) && !ctx.noModuleRefs[evaluation.path] {
+			return
 		}
 
 		path := "$S"
 
-		if rel := key.path.relString(); rel != "" {
+		if rel := evaluation.path.relString(); rel != "" {
 			path += "/" + rel
 		}
 
@@ -980,7 +1017,7 @@ func (ctx *GenCtx) makeFiles() []MakeFileEntry {
 		slices.Sort(owners)
 
 		out = append(out, MakeFileEntry{Path: path, Owners: strings.Join(slices.Compact(owners), " ")})
-	}
+	})
 
 	slices.SortFunc(out, func(a, b MakeFileEntry) int { return strings.Compare(a.Path, b.Path) })
 
@@ -1687,7 +1724,7 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 	if ctx.loops != nil && instance.Platform == ctx.target {
 		defer func() {
 			if result != nil {
-				ctx.loops.finish(instance.Path, moduleNodeName(instance, result, ctx.dirs[dirEvaluationKey{instance.Path, instance.Platform}].declaration))
+				ctx.loops.finish(instance.Path, moduleNodeName(instance, result, ctx.dirs.get(instance.Path, instance.Platform).declaration))
 			}
 		}()
 	}
