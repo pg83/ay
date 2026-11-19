@@ -39,7 +39,7 @@ def slug(value):
 
 build.flags.allow({
     "arcadia": {
-        "descr": "existing Arcadia tree required by ay_e2e and ya_e2e",
+        "descr": "existing Arcadia tree required by ay_e2e, ya_e2e, configure and configure_ya",
         "default": "",
     },
     "group": {
@@ -399,55 +399,98 @@ for test_path in build.glob("$(S)/tst/**/test_*.py"):
         color="green",
     ))
 
-make_test_paths = sorted(build.glob("$(S)/tst/make/test_*.py"))
+make_test_names = [path.rsplit("/", 1)[-1].removesuffix(".py") for path in sorted(build.glob("$(S)/tst/make/test_*.py"))]
+# The Autocheck configure-error tests, one per ymake and build plugin configure
+# error site, run apart from the e2e suite: `configure` on ay, `configure_ya` on ya.
+configure_test_names = [name for name in make_test_names if name.startswith("test_conferr_") or name == "test_autocheck_configure_errors"]
+e2e_test_names = [name for name in make_test_names if name not in configure_test_names]
 make_test_inputs = sorted(build.glob("$(S)/tst/make/*.py")) + sorted(build.glob("$(S)/tst/make/canondata/*.json")) + ["$(S)/tst/backends.py"]
 # An external, mutable Arcadia is not an input tracked by build's CAS. Give
 # only these test invocations fresh identities; never reuse a cached pass.
 make_test_run = uuid.uuid4().hex
-ay_e2e_tests = []
-make_test_results = []
-make_coverage_archives = []
 make_test_binary = ay_test
-for test_path in make_test_paths:
-    name = test_path.rsplit("/", 1)[-1].removesuffix(".py")
-    result_file = f"$(B)/e2e/ay/{name}.json"
-    make_test_results.append(result_file)
-    test_inputs = list(make_test_inputs)
-    test_outputs = [result_file]
-    test_env = {"AY_E2E_RUN_ID": make_test_run, "PYTHONDONTWRITEBYTECODE": "1"}
-    test_deps = [make_test_binary]
-    if name in ("test_indexed_fs", "test_stat_syscall_errors"):
-        test_deps += [ay_gate_test, ay_index]
-        test_env.update(AY_GATE_TEST_BINARY=ay_gate_test.outputs[0], AY_INDEX_BINARY=ay_index.outputs[0])
-    test_commands = [
-        ["python3", "-m", "tst.make", "--backend", "ay",
-         "--arcadia", build.flags.arcadia, "--binary", make_test_binary.outputs[0],
-         "--work-dir", "$(B)/e2e/work", "--result-file", result_file, f"tst.make.{name}"],
-    ]
-    if race_enabled:
-        test_env["GORACE"] = "halt_on_error=1 atexit_sleep_ms=0"
-    if coverage_enabled:
-        covdata_dir = f"$(B)/coverage/make/raw/{name}"
-        coverage_archive = f"$(B)/coverage/make/{name}.tar"
-        test_commands.insert(0, mkdir(covdata_dir))
-        test_commands.append([
-            "python3", "$(S)/dev/coverage.py", "pack",
-            "--dir", covdata_dir, "--out", coverage_archive,
-        ])
-        test_inputs.append("$(S)/dev/coverage.py")
-        test_outputs.append(coverage_archive)
-        test_env["GOCOVERDIR"] = covdata_dir
-        make_coverage_archives.append(coverage_archive)
-    ay_e2e_tests.append(command(
-        name=f"ay_e2e_collect_{name.removeprefix('test_')}",
-        inputs=test_inputs,
-        outputs=test_outputs,
-        deps=test_deps,
-        cmd=test_commands,
+
+
+def ay_make_tests(names, prefix, results_dir):
+    tests, results, coverage = [], [], []
+    for name in names:
+        result_file = f"{results_dir}/{name}.json"
+        results.append(result_file)
+        test_inputs = list(make_test_inputs)
+        test_outputs = [result_file]
+        test_env = {"AY_E2E_RUN_ID": make_test_run, "PYTHONDONTWRITEBYTECODE": "1"}
+        test_deps = [make_test_binary]
+        if name in ("test_indexed_fs", "test_stat_syscall_errors"):
+            test_deps += [ay_gate_test, ay_index]
+            test_env.update(AY_GATE_TEST_BINARY=ay_gate_test.outputs[0], AY_INDEX_BINARY=ay_index.outputs[0])
+        test_commands = [
+            ["python3", "-m", "tst.make", "--backend", "ay",
+             "--arcadia", build.flags.arcadia, "--binary", make_test_binary.outputs[0],
+             "--work-dir", "$(B)/e2e/work", "--result-file", result_file, f"tst.make.{name}"],
+        ]
+        if race_enabled:
+            test_env["GORACE"] = "halt_on_error=1 atexit_sleep_ms=0"
+        if coverage_enabled:
+            covdata_dir = f"$(B)/coverage/make/raw/{name}"
+            coverage_archive = f"$(B)/coverage/make/{name}.tar"
+            test_commands.insert(0, mkdir(covdata_dir))
+            test_commands.append([
+                "python3", "$(S)/dev/coverage.py", "pack",
+                "--dir", covdata_dir, "--out", coverage_archive,
+            ])
+            test_inputs.append("$(S)/dev/coverage.py")
+            test_outputs.append(coverage_archive)
+            test_env["GOCOVERDIR"] = covdata_dir
+            coverage.append(coverage_archive)
+        tests.append(command(
+            name=f"{prefix}_{name.removeprefix('test_')}",
+            inputs=test_inputs,
+            outputs=test_outputs,
+            deps=test_deps,
+            cmd=test_commands,
+            cwd="$(S)",
+            env=test_env,
+            descr="BT", color="green", local=True,
+        ))
+    return tests, results, coverage
+
+
+def ya_make_tests(names, prefix, stamps_dir):
+    tests = []
+    for name in names:
+        stamp = f"{stamps_dir}/{name}.stamp"
+        tests.append(command(
+            name=f"{prefix}_{name.removeprefix('test_')}",
+            inputs=make_test_inputs,
+            outputs=[stamp],
+            deps=[ay],
+            cmd=[
+                ["python3", "-m", "tst.make", "--backend", "ya",
+                 "--arcadia", build.flags.arcadia, "--overlay-binary", ay.outputs[0],
+                 "--work-dir", "$(B)/e2e/work", f"tst.make.{name}"],
+                touch(stamp),
+            ],
+            cwd="$(S)",
+            env={"AY_E2E_RUN_ID": make_test_run, "PYTHONDONTWRITEBYTECODE": "1"},
+            descr="BT", color="green", local=True,
+        ))
+    return tests
+
+
+def make_test_gate(name, stamp, deps, results):
+    return command(
+        name=name,
+        inputs=["$(S)/tst/make/check.py", *results],
+        outputs=[stamp],
+        deps=deps,
+        cmd=["python3", "-m", "tst.make.check", "--stamp", stamp, *results],
         cwd="$(S)",
-        env=test_env,
         descr="BT", color="green", local=True,
-    ))
+    )
+
+
+ay_e2e_tests, make_test_results, make_coverage_archives = ay_make_tests(e2e_test_names, "ay_e2e_collect", "$(B)/e2e/ay")
+configure_tests, configure_results, configure_coverage_archives = ay_make_tests(configure_test_names, "configure_collect", "$(B)/configure/ay")
 
 ay_e2e_members = list(ay_e2e_tests)
 if coverage_enabled:
@@ -467,49 +510,27 @@ if coverage_enabled:
     )
     ay_e2e_members.append(make_coverage)
 
-ya_e2e_tests = []
-for test_path in make_test_paths:
-    name = test_path.rsplit("/", 1)[-1].removesuffix(".py")
-    stamp = f"$(B)/e2e/ya/{name}.stamp"
-    ya_e2e_tests.append(command(
-        name=f"ya_e2e_{name.removeprefix('test_')}",
-        inputs=make_test_inputs,
-        outputs=[stamp],
-        deps=[ay],
-        cmd=[
-            ["python3", "-m", "tst.make", "--backend", "ya",
-             "--arcadia", build.flags.arcadia, "--overlay-binary", ay.outputs[0],
-             "--work-dir", "$(B)/e2e/work", f"tst.make.{name}"],
-            touch(stamp),
-        ],
-        cwd="$(S)",
-        env={"AY_E2E_RUN_ID": make_test_run, "PYTHONDONTWRITEBYTECODE": "1"},
-        descr="BT", color="green", local=True,
-    ))
-ay_e2e_gate = command(
-    name="ay_e2e_gate",
-    inputs=["$(S)/tst/make/check.py", *make_test_results],
-    outputs=["$(B)/e2e/ay/gate.stamp"],
-    deps=ay_e2e_members,
-    cmd=["python3", "-m", "tst.make.check", "--stamp", "$(B)/e2e/ay/gate.stamp", *make_test_results],
-    cwd="$(S)",
-    descr="BT", color="green", local=True,
-)
+ya_e2e_tests = ya_make_tests(e2e_test_names, "ya_e2e", "$(B)/e2e/ya")
+configure_ya_tests = ya_make_tests(configure_test_names, "configure_ya", "$(B)/configure/ya")
+ay_e2e_gate = make_test_gate("ay_e2e_gate", "$(B)/e2e/ay/gate.stamp", ay_e2e_members, make_test_results)
+configure_gate = make_test_gate("configure_gate", "$(B)/configure/ay/gate.stamp", configure_tests, configure_results)
 group("ay_e2e", *ay_e2e_members, ay_e2e_gate)
 group("ay_e2e_results", *ay_e2e_members)
 group("ya_e2e", *ya_e2e_tests)
+group("configure", *configure_tests, configure_gate)
+group("configure_ya", *configure_ya_tests)
 
 if coverage_enabled:
     cli_coverage = command(
         name="cli_coverage",
-        inputs=["$(S)/dev/coverage.py", *coverage_archives, *make_coverage_archives],
+        inputs=["$(S)/dev/coverage.py", *coverage_archives, *make_coverage_archives, *configure_coverage_archives],
         outputs=["$(B)/coverage/cli/cover.out", "$(B)/coverage/cli/report.txt"],
-        deps=[*binary_tests, *ay_e2e_tests],
+        deps=[*binary_tests, *ay_e2e_tests, *configure_tests],
         cmd=[
             "python3", "$(S)/dev/coverage.py", "merge",
             "--out", "$(B)/coverage/cli/cover.out",
             "--report", "$(B)/coverage/cli/report.txt",
-            "--minimum", "90", *coverage_archives, *make_coverage_archives,
+            "--minimum", "90", *coverage_archives, *make_coverage_archives, *configure_coverage_archives,
         ],
         env=GO_ENV,
         descr="CV", color="yellow",

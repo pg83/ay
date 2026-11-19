@@ -22,6 +22,8 @@ graphs on fixed source slices.
 ./build -k validate_quick    # 12 small canonical graph cases for iteration
 ./build -j4 -Darcadia=/home/pg/2 ay_e2e
 ./build -Darcadia=/home/pg/2 ya_e2e
+./build -j4 -Darcadia=/home/pg/2 configure
+./build -Darcadia=/home/pg/2 configure_ya
 ./build -j4 -Dcoverage -Darcadia=/home/pg/2 ay_e2e
 ./build -j4 -Dcoverage -Darcadia=/home/pg/2 ay_e2e_results
 ./build -j4 -Dcoverage -Darcadia=/home/pg/2 cli_coverage
@@ -60,8 +62,13 @@ written, `.uc` streams decodable by `contexts_difference`) and compare what
 Autocheck consumes from the saved context: `configure_errors` and the fixture's
 `make_files`. The expected output is ya's own, recorded with
 `python3 -m tst.make --backend ya --canonize ...` into
-`tst/make/canondata/<module>.json`; `ya_e2e` checks ya against it and `ay_e2e`
-checks ay.
+`tst/make/canondata/<module>.json`.
+
+The configure-error modules (`tst/make/test_conferr_*.py` and
+`tst/make/test_autocheck_configure_errors.py`, one test per ymake and build plugin
+configure error site) run apart from the e2e suite: `configure` checks ay against
+the recorded output and fails on any red test, `configure_ya` checks ya; `ay_e2e`
+and `ya_e2e` do not run them. Their JSON statuses are in `.build/configure/ay/`.
 
 With `-Dcoverage`, `ay_e2e` uses an instrumented binary and merges each test
 module's counters into `.build/coverage/make/cover.out` and `report.txt`.
@@ -71,7 +78,8 @@ alone and has no minimum threshold.
 it is not a passing-test gate. The JSON statuses are in `.build/e2e/ay/`.
 `ay_e2e` checks those statuses and fails on any red test.
 
-`cli_coverage` combines the existing CLI tests and the make tests, writes
+`cli_coverage` combines the existing CLI tests and the make tests, `configure`
+included, writes
 `.build/coverage/cli/cover.out` and `report.txt`, and requires at least 90%
 statement coverage of the whole binary. It measures coverage independently
 of make test failures; use `ay_e2e` for their pass/fail status. Every make
