@@ -2816,12 +2816,14 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 
 				rooted, ok := moduleRootedVFS(modulePath, dir)
 
-				if !ok {
-					if id := dirTok.str(); id != 0 && id.cleanPath() {
-						rooted = id.source()
-					} else {
-						rooted = dirKey(dir).source()
-					}
+				switch id := dirTok.str(); {
+				case ok:
+				case dir == "$(S)" || dir == "$(B)":
+					rooted = cwdVFS(dir)
+				case id != 0 && id.cleanPath():
+					rooted = id.source()
+				default:
+					rooted = dirKey(dir).source()
 				}
 
 				if present, isDir := fs.existsID(srcRootRel, rooted.rel()); rooted.isSource() && !(present && isDir) {
