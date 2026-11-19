@@ -2,7 +2,7 @@ package main
 
 import "strings"
 
-func (fs *OsFS) testPathReadError(rel string) error {
+func (fs *LiveTree) testPathReadError(rel string) error {
 	if err, cached := fs.testReadErrors[rel]; cached {
 		return err
 	}

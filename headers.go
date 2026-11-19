@@ -2,7 +2,7 @@ package main
 
 import "path"
 
-func applyHeaders(fs FS, modulePath string, args []ANY, d *ModuleData) {
+func applyHeaders(fs Tree, modulePath string, args []ANY, d *ModuleData) {
 	files := headerFiles(fs, modulePath, args)
 	stmt := d.nextDeclSeq()
 
@@ -11,7 +11,7 @@ func applyHeaders(fs FS, modulePath string, args []ANY, d *ModuleData) {
 	}
 }
 
-func headerFiles(fs FS, modulePath string, args []ANY) []STR {
+func headerFiles(fs Tree, modulePath string, args []ANY) []STR {
 	dirs, lists := goMacroLists(args, "EXCLUDE")
 
 	resolve := func(arg ANY) VFS {

@@ -131,7 +131,7 @@ func (e *EmitContext) emitUsrvFile(file UsrvFile) {
 	}
 }
 
-func usrvAllSources(fs FS, module string, args []string) []string {
+func usrvAllSources(fs Tree, module string, args []string) []string {
 	var dirs, excludes []string
 
 	recursive, suffix := false, ""

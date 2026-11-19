@@ -36,7 +36,8 @@ const (
 type TreeSession struct {
 	image *TreeImage
 	out   string
-	tree  *Tree
+	tree  Tree
+	live  *LiveTree
 }
 
 func openTreeSession(image, out string) *TreeSession {
@@ -63,8 +64,8 @@ func (s *TreeSession) finish(code int, verbose bool) {
 
 	fmt.Fprintf(os.Stderr, "tree image: %d strings from the image, %d new, %d bytes of text\n", t.imageCount, t.count-max(t.imageCount, t.constCount), t.bytes.used)
 
-	if s.tree != nil {
-		fmt.Fprintf(os.Stderr, "tree image: %d files parsed\n", s.tree.parses)
+	if s.live != nil {
+		fmt.Fprintf(os.Stderr, "tree image: %d files parsed\n", s.live.parses)
 	}
 }
 
@@ -235,7 +236,7 @@ func internIndexForImage() (keys []uint64, values []STR) {
 	return merged.keys, merged.values
 }
 
-func writeTreeImage(path string, tree *Tree) {
+func writeTreeImage(path string, tree Tree) {
 	t := &internTable
 	tmp := fmt.Sprintf("%s.%d.tmp", path, os.Getpid())
 	w := &TreeImageWriter{file: throw2(os.Create(tmp)), off: treeImageHeaderSize}
@@ -259,7 +260,7 @@ func writeTreeImage(path string, tree *Tree) {
 	w.section(treeSectionStrOverflow, sliceBytesOf(overflow))
 
 	if tree != nil {
-		tree.writeFiles(w)
+		writeTreeFiles(w, tree)
 	}
 
 	header := make([]byte, treeImageHeaderSize)

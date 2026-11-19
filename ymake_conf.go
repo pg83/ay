@@ -104,7 +104,7 @@ func toolchainPlatformName(os OS, isa ISA) string {
 	return strings.ToUpper(toolchainNameDflt + "-" + string(os) + "-" + string(isa))
 }
 
-func readYaConfToolchains(fs FS) *YaConfToolchains {
+func readYaConfToolchains(fs Tree) *YaConfToolchains {
 	rel := yaConfJSON
 
 	if !fs.isFile(srcRootRel, rel) {
@@ -149,7 +149,7 @@ func readYaConfToolchains(fs FS) *YaConfToolchains {
 	return out
 }
 
-func (cfg *YaConfToolchains) mergeToolchainFiles(fs FS, dir string) {
+func (cfg *YaConfToolchains) mergeToolchainFiles(fs Tree, dir string) {
 	var files []string
 
 	for _, packed := range fs.listdir(dirKey(dir)).names {
@@ -255,7 +255,7 @@ func stringizeToolchainPlatform(p map[string]any, sep string) string {
 	return strings.ToUpper(tc + sep + os + sep + arch)
 }
 
-func resolveCxxToolchain(fs FS, cfg *YaConfToolchains, host, target string) *Toolchain {
+func resolveCxxToolchain(fs Tree, cfg *YaConfToolchains, host, target string) *Toolchain {
 	cxxKey := []byte(`"` + toolchainCxxTool + `"`)
 
 	for _, key := range cfg.order {
@@ -322,7 +322,7 @@ func resolveCxxToolchain(fs FS, cfg *YaConfToolchains, host, target string) *Too
 	panic(exceptionf("ymake conf: unsupported platforms host=%s target=%s for tool %s", host, target, toolchainCxxTool))
 }
 
-func newToolchain(fs FS, cfg *YaConfToolchains, key string, descr, tool, host, target map[string]any) *Toolchain {
+func newToolchain(fs Tree, cfg *YaConfToolchains, key string, descr, tool, host, target map[string]any) *Toolchain {
 	params, _ := descr["params"].(map[string]any)
 	env, _ := descr["env"].(map[string]any)
 	bottle, _ := tool["bottle"].(string)
@@ -387,7 +387,7 @@ func nilIfEmpty(s string) any {
 	return s
 }
 
-func toolchainFormulaValue(fs FS, formula any) map[string]any {
+func toolchainFormulaValue(fs Tree, formula any) map[string]any {
 	if m, ok := formula.(map[string]any); ok {
 		return m
 	}
@@ -502,7 +502,7 @@ func canonizeResourcePlatform(platform string) string {
 	panic(exceptionf("ymake conf: unsupported resource platform %q", platform))
 }
 
-func readLocalYmake(fs FS) [][2]string {
+func readLocalYmake(fs Tree) [][2]string {
 	if !fs.isFile(srcRootRel, localYmakeConf) {
 		return nil
 	}
@@ -538,7 +538,7 @@ func extendConfBuildType(buildType string) string {
 	return confBuildTypeDist + buildType
 }
 
-func startYmakeConf(fs FS, srcRoot, buildType string, localDistbuild bool, localFlags [][2]string, flags map[string]string, tc *Toolchain) *YmakeConfRun {
+func startYmakeConf(fs Tree, srcRoot, buildType string, localDistbuild bool, localFlags [][2]string, flags map[string]string, tc *Toolchain) *YmakeConfRun {
 	if !fs.isFile(srcRootRel, ymakeConfScript) {
 		throwFmt("ymake conf: %s is missing in %s", ymakeConfScript, srcRoot)
 	}

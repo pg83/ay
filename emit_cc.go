@@ -41,7 +41,7 @@ type ModuleCompileEnv struct {
 	COnlyFlags           []ANY
 	ClangWarnings        []ANY
 	SrcDirs              []VFS
-	FS                   FS
+	FS                   Tree
 	PeerCFlagsGlobal     []ANY
 	PeerCXXFlagsGlobal   []ANY
 	PeerCOnlyFlagsGlobal []ANY

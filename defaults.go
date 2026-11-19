@@ -64,6 +64,6 @@ func effectiveNoPlatform(f FlagSet) bool {
 	return f.NoLibc && f.NoRuntime && f.NoUtil
 }
 
-func peerYaMakeExists(fs FS, peerDir VFS) bool {
+func peerYaMakeExists(fs Tree, peerDir VFS) bool {
 	return fs.isFileID(peerDir.rel(), strYaMake)
 }

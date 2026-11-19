@@ -138,7 +138,7 @@ type GoStd struct {
 	ProtobufImports []STR
 }
 
-func confGoStdVersion(fs FS, parsers *IncludeParserManager) string {
+func confGoStdVersion(fs Tree, parsers *IncludeParserManager) string {
 	if !fs.isFile(srcRootRel, goConfRel) {
 		return ""
 	}

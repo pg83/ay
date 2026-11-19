@@ -989,7 +989,7 @@ type ProtoSrcsResult struct {
 	ProtoLibName         string
 }
 
-func protoSourceRel(fs FS, instance ModuleInstance, d *ModuleData, srcID ANY) STR {
+func protoSourceRel(fs Tree, instance ModuleInstance, d *ModuleData, srcID ANY) STR {
 	src := srcID.string()
 
 	if rooted, ok := moduleRootedVFS(instance.Path.relString(), src); ok {

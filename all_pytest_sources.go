@@ -5,7 +5,7 @@ import (
 	"strings"
 )
 
-func allPytestSrcArgs(fs FS, module string, stmt UnknownStmt) []ANY {
+func allPytestSrcArgs(fs Tree, module string, stmt UnknownStmt) []ANY {
 	var dirs []string
 
 	recursive, onlyTests := false, false

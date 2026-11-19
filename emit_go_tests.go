@@ -203,11 +203,11 @@ func (e *EmitContext) goVetSuite(vetReport VFS, globals []ResourceDecl) *TestSui
 	return s
 }
 
-func goDirSources(fs FS, dir string) []string {
+func goDirSources(fs Tree, dir string) []string {
 	return goDirFiles(fs, dir, false)
 }
 
-func goDirFiles(fs FS, dir string, tests bool) []string {
+func goDirFiles(fs Tree, dir string, tests bool) []string {
 	view := fs.listdir(dirKey(dir))
 	names := make([]string, 0, len(view.names))
 

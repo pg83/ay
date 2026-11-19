@@ -181,7 +181,7 @@ func expandResourceFiles(d *ModuleData, out []ResourceEntry, args []string) []Re
 	return out
 }
 
-func expandAllResourceFiles(d *ModuleData, out []ResourceEntry, fs FS, modulePath string, env Environment, stmt *AllResourceFilesStmt) []ResourceEntry {
+func expandAllResourceFiles(d *ModuleData, out []ResourceEntry, fs Tree, modulePath string, env Environment, stmt *AllResourceFilesStmt) []ResourceEntry {
 	prefix := ""
 	strip := ""
 
@@ -263,7 +263,7 @@ func allResourceDir(modulePath, dir string) (rel string, ok bool) {
 	return path.Clean(rel), true
 }
 
-func globMatch(fs FS, pattern string) []string {
+func globMatch(fs Tree, pattern string) []string {
 	var matches []string
 
 	globVisit(fs, pattern, func(file string, view bool) {
@@ -277,7 +277,7 @@ func globMatch(fs FS, pattern string) []string {
 	return matches
 }
 
-func globVisit(fs FS, pattern string, visit func(file string, view bool)) {
+func globVisit(fs Tree, pattern string, visit func(file string, view bool)) {
 	dirs := []globDir{{id: strEmpty}}
 
 	var joinBuf [256]byte
@@ -417,7 +417,7 @@ func globSegMatch(pat, name string) bool {
 	return px == len(pat)
 }
 
-func yaToolsConfResourceFiles(fs FS, confDir string, report func(string)) [][]string {
+func yaToolsConfResourceFiles(fs Tree, confDir string, report func(string)) [][]string {
 	confDir = strings.TrimRight(confDir, "/")
 
 	confAbs := fs.root() + "/" + confDir
@@ -545,7 +545,7 @@ func yaToolsConfResourceFiles(fs FS, confDir string, report func(string)) [][]st
 	return calls
 }
 
-func readJSONObject(fs FS, rel string) map[string]any {
+func readJSONObject(fs Tree, rel string) map[string]any {
 	var m map[string]any
 
 	throw(json.Unmarshal(concatChunks(fs.read(rel)), &m))

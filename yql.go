@@ -263,7 +263,7 @@ func finishYqlUdfModule(modulePath string, d *ModuleData, env Environment) {
 	}
 }
 
-func registerYqlPythonUdf(fs FS, modulePath string, stmt UnknownStmt, d *ModuleData, env Environment, onWarn func(Warn)) {
+func registerYqlPythonUdf(fs Tree, modulePath string, stmt UnknownStmt, d *ModuleData, env Environment, onWarn func(Warn)) {
 	name, resource, libra := "CustomPython", "", "no"
 
 	for i := 0; i < len(stmt.Args); i += 2 {
