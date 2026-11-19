@@ -3,7 +3,9 @@ package main
 import (
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"syscall"
 )
@@ -76,13 +78,17 @@ type OsFS struct {
 	knownFiles     BitSet
 	sourceUnder    *IntMap[STR]
 	sourceUnderHot [sourceUnderHotMask + 1]sourceUnderHotEntry
-	readResult     [2][]byte
+	emptyRead      [1][]byte
+	fill           DirFill
 	bundleKeys     []STR
 	bundleVals     []map[string]ResourceBundleEntry
 	walkQueue      []STR
 	walkBuf        []byte
 
-	fsBackend
+	backend        Backend
+	testReadErrors map[string]error
+	confRootOnce   sync.Once
+	confRootDir    string
 
 	onReadError func(rel string, err syscall.Errno)
 
@@ -91,16 +97,117 @@ type OsFS struct {
 
 func newFS(srcRoot string) FS {
 	fs := &OsFS{
-		srcRoot:     srcRoot,
-		rootSlash:   srcRoot + "/",
-		dirNames:    newBumpAllocator[uint32](),
-		dirEntries:  newIntSet(1 << 17),
-		sourceUnder: newIntMap[STR](1 << 18),
+		srcRoot:        srcRoot,
+		rootSlash:      srcRoot + "/",
+		dirNames:       newBumpAllocator[uint32](),
+		dirEntries:     newIntSet(1 << 17),
+		testReadErrors: map[string]error{},
+		sourceUnder:    newIntMap[STR](1 << 18),
 	}
 
-	fs.initBackend()
+	if info, err := os.Stat(srcRoot); err == nil && !info.IsDir() {
+		fs.backend = newIndexedBackend(srcRoot)
+	} else {
+		fs.backend = newDirBackend(srcRoot)
+	}
 
 	return fs
+}
+
+type DirFill struct {
+	dir   STR
+	block []uint32
+	k     int
+}
+
+func (fs *OsFS) dirBegin(limit int) {
+	fs.fill.block = fs.dirNames.alloc(limit)
+}
+
+func (fs *OsFS) dirEntry(name []byte, isDir bool) {
+	id := internBytes(name)
+	packed := uint32(id) << 1
+
+	if isDir {
+		packed |= 1
+	}
+
+	fs.fill.block[fs.fill.k] = packed
+	fs.fill.k++
+	fs.dirEntries.put(splitMix64(uint32(fs.fill.dir), uint32(id)), isDir)
+}
+
+func (fs *OsFS) readDirView(dir STR, rel string) DirView {
+	fs.fill = DirFill{dir: dir}
+
+	if errno := fs.backend.readDir(rel, fs); errno != 0 {
+		if errno == syscall.EACCES || errno == syscall.EPERM {
+			if fs.unreadableDirs == nil {
+				fs.unreadableDirs = map[string]syscall.Errno{}
+			}
+
+			fs.unreadableDirs[rel] = errno
+		}
+
+		return DirView{}
+	}
+
+	k := fs.fill.k
+
+	if k == 0 {
+		return DirView{dir: dir, names: emptyDirNames}
+	}
+
+	fs.dirNames.commit(k)
+
+	names := fs.fill.block[:k]
+
+	slices.SortFunc(names, func(a, b uint32) int {
+		return strings.Compare(STR(a>>1).string(), STR(b>>1).string())
+	})
+
+	return DirView{dir: dir, names: names}
+}
+
+func (fs *OsFS) dirHas(v DirView, name string) (present bool, isDir bool) {
+	return fs.dirHasInterned(v, name)
+}
+
+func (fs *OsFS) sourcePathExists(rel string) bool {
+	return fs.backend.exists(rel)
+}
+
+func (fs *OsFS) confRoot() string {
+	if root := fs.backend.localRoot(); root != "" {
+		return root
+	}
+
+	fs.confRootOnce.Do(func() {
+		root := throw2(os.MkdirTemp("", "ay-gate-conf-"))
+
+		atExit(func() { os.RemoveAll(root) })
+
+		for _, rel := range []string{ymakeConfScript, "build/internal"} {
+			fs.walk(rel, func(name string, isDir bool) bool {
+				out := filepath.Join(root, name)
+
+				if isDir {
+					throw(os.MkdirAll(out, 0o755))
+
+					return true
+				}
+
+				throw(os.MkdirAll(filepath.Dir(out), 0o755))
+				throw(os.WriteFile(out, concatChunks(fs.read(name)), 0o644))
+
+				return false
+			})
+		}
+
+		fs.confRootDir = root
+	})
+
+	return fs.confRootDir
 }
 
 func (fs *OsFS) listdir(dir STR) DirView {
@@ -115,7 +222,7 @@ func (fs *OsFS) listdir(dir STR) DirView {
 
 func (fs *OsFS) listdirSlow(dir STR) DirView {
 	row := dirRows.rowFor(dir)
-	v := fs.readDirViewRel(dir, dir.string())
+	v := fs.readDirView(dir, dir.string())
 
 	v.dir = dir
 
@@ -474,7 +581,19 @@ func (fs *OsFS) read(rel string) [][]byte {
 }
 
 func (fs *OsFS) readPath(rel STR) [][]byte {
-	chunks := fs.readFileRel(rel.string())
+	chunks, errno := fs.backend.readFile(rel.string())
+
+	switch {
+	case errno == syscall.EISDIR:
+		throwFmt("read %s: %v", rel.string(), errno)
+	case errno != 0 && errno != syscall.ENOENT && fs.onReadError != nil:
+		fs.onReadError(rel.string(), errno)
+
+		fs.emptyRead[0] = nil
+		chunks = fs.emptyRead[:1]
+	case errno != 0:
+		throwFmt("open %s: %v", rel.string(), errno)
+	}
 
 	fs.contentHashes.store(rel, contentHashChunks(chunks))
 

@@ -1,4 +1,5 @@
 import io
+import json
 import os
 import struct
 import subprocess
@@ -168,6 +169,18 @@ class IndexedGraphTest(IndexedMakeTest):
                 self.assertNotEqual(result.returncode, 0)
                 self.assertIn(name, result.stderr)
 
+    def test_directory_source_gives_the_graph_of_its_archive(self):
+        self.copy_project()
+        archived = self.graph()
+        previous = self.binary
+        self.binary = os.environ["AY_GATE_TEST_BINARY"]
+        try:
+            directory = MakeTest.make(self)
+        finally:
+            self.binary = previous
+        self.assertEqual(directory.returncode, 0, directory.stderr)
+        self.assertEqual(json.loads(directory.stdout), archived)
+
 
 @ay_only("indexed-source reader errors in the aygate executable")
 class IndexedSourceErrorsTest(MakeTest):
@@ -190,15 +203,3 @@ class IndexedSourceErrorsTest(MakeTest):
                                         cwd=self.root, text=True, capture_output=True, timeout=30)
                 self.assertNotEqual(result.returncode, 0)
                 self.assertIn(message, result.stderr.lower())
-
-    def test_directory_cannot_be_memory_mapped_as_an_indexed_archive(self):
-        indexed = self.work / "directory.indexed"
-        indexed.mkdir()
-        for index in range(16):
-            (indexed / f"entry_{index:02d}").write_text("")
-        self.assertGreaterEqual(indexed.stat().st_size, 64)
-        result = subprocess.run([os.environ["AY_GATE_TEST_BINARY"], "make", "-j0", "-G",
-                                 "--source-root", str(indexed), PROJECT],
-                                cwd=self.root, text=True, capture_output=True, timeout=30)
-        self.assertNotEqual(result.returncode, 0)
-        self.assertIn("mmap " + str(indexed), result.stderr)

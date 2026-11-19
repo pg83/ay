@@ -1,6 +1,10 @@
 package main
 
-import "github.com/zeebo/xxh3"
+import (
+	"syscall"
+
+	"github.com/zeebo/xxh3"
+)
 
 type FS interface {
 	root() string
@@ -35,6 +39,19 @@ type FS interface {
 	testPathReadError(rel string) error
 
 	confRoot() string
+}
+
+type Backend interface {
+	readFile(rel string) ([][]byte, syscall.Errno)
+	readDir(rel string, sink DirSink) syscall.Errno
+	exists(rel string) bool
+	readError(rel string) error
+	localRoot() string
+}
+
+type DirSink interface {
+	dirBegin(limit int)
+	dirEntry(name []byte, isDir bool)
 }
 
 func concatChunks(chunks [][]byte) []byte {
@@ -81,7 +98,6 @@ func dirKey(dir string) STR {
 
 type DirView struct {
 	dir   STR
-	node  int32
 	names []uint32
 }
 

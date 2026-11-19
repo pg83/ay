@@ -1,12 +1,6 @@
-//go:build !aygate
-
 package main
 
-import (
-	"os"
-	"strings"
-	"syscall"
-)
+import "strings"
 
 func (fs *OsFS) testPathReadError(rel string) error {
 	if err, cached := fs.testReadErrors[rel]; cached {
@@ -15,7 +9,7 @@ func (fs *OsFS) testPathReadError(rel string) error {
 
 	roots := []string{rel}
 
-	if info, err := os.Stat(fs.rootSlash + rel); err == nil && info.IsDir() {
+	if present, isDir := fs.existsRel(rel); present && isDir {
 		roots = nil
 
 		for _, packed := range fs.listdirRel(rel).names {
@@ -41,18 +35,13 @@ func (fs *OsFS) testPathReadError(rel string) error {
 				return false
 			}
 
-			file := fs.rootSlash + name
-			info, err := os.Lstat(file)
+			var cached bool
 
-			if err == nil && info.Mode().IsRegular() {
-				var cached bool
+			readErr, cached = fs.testReadErrors[name]
 
-				readErr, cached = fs.testReadErrors[name]
-
-				if !cached {
-					readErr = fs.readTestPathFile(file)
-					fs.testReadErrors[strings.Clone(name)] = readErr
-				}
+			if !cached {
+				readErr = fs.backend.readError(name)
+				fs.testReadErrors[strings.Clone(name)] = readErr
 			}
 
 			return false
@@ -62,30 +51,4 @@ func (fs *OsFS) testPathReadError(rel string) error {
 	fs.testReadErrors[rel] = readErr
 
 	return readErr
-}
-
-func (fs *OsFS) readTestPathFile(name string) error {
-	fd, err := syscall.Open(name, syscall.O_RDONLY|syscall.O_CLOEXEC, 0)
-
-	if err != nil {
-		return &os.PathError{Op: "open", Path: name, Err: err}
-	}
-
-	defer fs.closeFile(fd)
-
-	for {
-		n, err := chaosTestDataRead(fd, fs.readBuf)
-
-		if err == syscall.EINTR {
-			continue
-		}
-
-		if err != nil {
-			return &os.PathError{Op: "read", Path: name, Err: err}
-		}
-
-		if n == 0 {
-			return nil
-		}
-	}
 }
