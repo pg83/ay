@@ -3,6 +3,7 @@ package main
 import (
 	"errors"
 	"fmt"
+	"iter"
 	"os"
 	"path"
 	"path/filepath"
@@ -84,6 +85,7 @@ const (
 	peerKindUserPeer     = 2
 	peerKindUnitTestPeer = 3
 	KindForeignDescent   = KindJavaTestable + 1
+	memoChunkMax         = 32
 )
 
 type ModuleEmitResult struct {
@@ -299,39 +301,67 @@ type moduleMemoEntry struct {
 	resolved uint16
 }
 
-type moduleMemo struct {
-	slots Vec[uint32]
-	rows  [][]moduleMemoEntry
+type moduleMemoChunk struct {
+	entries []moduleMemoEntry
+	older   *moduleMemoChunk
 }
 
-func (m *moduleMemo) row(path STR) []moduleMemoEntry {
-	if row := dirRows.rowOf(path); int(row) < len(m.slots.s) {
-		if slot := m.slots.s[row]; slot != 0 {
-			return m.rows[slot-1]
-		}
+type moduleMemo struct {
+	newest  Vec[*moduleMemoChunk]
+	chunks  *BumpAllocator[moduleMemoChunk]
+	entries *BumpAllocator[moduleMemoEntry]
+}
+
+func newModuleMemo() *moduleMemo {
+	return &moduleMemo{chunks: newBumpAllocator[moduleMemoChunk](), entries: newBumpAllocator[moduleMemoEntry]()}
+}
+
+func (m *moduleMemo) newestChunk(path STR) *moduleMemoChunk {
+	if row := dirRows.rowOf(path); int(row) < len(m.newest.s) {
+		return m.newest.s[row]
 	}
 
 	return nil
 }
 
+func (m *moduleMemo) each(path STR) iter.Seq[*moduleMemoEntry] {
+	return func(yield func(*moduleMemoEntry) bool) {
+		for c := m.newestChunk(path); c != nil; c = c.older {
+			for i := len(c.entries) - 1; i >= 0; i-- {
+				if !yield(&c.entries[i]) {
+					return
+				}
+			}
+		}
+	}
+}
+
 func (m *moduleMemo) add(path STR, entry moduleMemoEntry) {
 	row := dirRows.rowFor(path)
 
-	m.slots.ensureLen(int(row) + 1)
+	m.newest.ensureLen(int(row) + 1)
 
-	slot := m.slots.s[row]
+	c := m.newest.s[row]
 
-	if slot == 0 {
-		m.rows = append(m.rows, nil)
-		slot = uint32(len(m.rows))
-		m.slots.s[row] = slot
+	if c == nil || len(c.entries) == cap(c.entries) {
+		size := 2
+
+		if c != nil {
+			size = min(2*cap(c.entries), memoChunkMax)
+		}
+
+		block := m.entries.alloc(size)[:0:size]
+
+		m.entries.commit(size)
+
+		chunk := m.chunks.one()
+
+		*chunk = moduleMemoChunk{entries: block, older: c}
+		c = chunk
+		m.newest.s[row] = c
 	}
 
-	m.rows[slot-1] = append(m.rows[slot-1], entry)
-}
-
-func newModuleMemo() *moduleMemo {
-	return &moduleMemo{}
+	c.entries = append(c.entries, entry)
 }
 
 type genPass struct {
@@ -3481,11 +3511,12 @@ func (ctx *GenCtx) memoEntry(in ModuleInstance) (moduleMemoEntry, bool) {
 	}
 
 	other := ctx.instanceVariant(in) & mask
-	row := ctx.memo.row(in.Path.rel())
 
-	for i := len(row) - 1; i >= 0; i-- {
-		if entry := &row[i]; entry.variant&mask == other && entry.peer == in.Peer && entry.tags == in.PeerTags {
-			return *entry, true
+	for c := ctx.memo.newestChunk(in.Path.rel()); c != nil; c = c.older {
+		for i := len(c.entries) - 1; i >= 0; i-- {
+			if entry := &c.entries[i]; entry.variant&mask == other && entry.peer == in.Peer && entry.tags == in.PeerTags {
+				return *entry, true
+			}
 		}
 	}
 

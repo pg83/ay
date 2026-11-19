@@ -1240,7 +1240,7 @@ func (tc *transitiveChecker) checkGoTest(m *ModuleEmitResult) {
 	if !tc.ctx.finishOrderBroken {
 		earliest = math.MaxUint32
 
-		for _, entry := range tc.ctx.memo.row(tested.rel()) {
+		for entry := range tc.ctx.memo.each(tested.rel()) {
 			if r := entry.result; r != nil && isTarget(r) {
 				earliest = min(earliest, r.finishSeq)
 			}
