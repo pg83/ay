@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"math"
 	"regexp"
 	"slices"
 	"sort"
@@ -1234,6 +1235,22 @@ func (tc *transitiveChecker) checkGoTest(m *ModuleEmitResult) {
 		return p.testProject == tested && p != m && isGoModuleType(p.ModuleStmtName)
 	}
 
+	earliest := uint32(0)
+
+	if !tc.ctx.finishOrderBroken {
+		earliest = math.MaxUint32
+
+		for entry := tc.ctx.memo.head(tested.rel()); entry != nil; entry = entry.next {
+			if r := entry.result; r != nil && isTarget(r) {
+				earliest = min(earliest, r.finishSeq)
+			}
+		}
+
+		if earliest == math.MaxUint32 {
+			return
+		}
+	}
+
 	var target *ModuleEmitResult
 	var reach func(*ModuleEmitResult) bool
 
@@ -1248,6 +1265,10 @@ func (tc *transitiveChecker) checkGoTest(m *ModuleEmitResult) {
 		x.transitiveState &^= transitiveReach
 
 		for _, q := range x.testPeers {
+			if q.finishSeq < earliest {
+				continue
+			}
+
 			if isTarget(q) || passesPeers(q) && reach(q) {
 				if isTarget(q) {
 					target = q
@@ -1263,7 +1284,7 @@ func (tc *transitiveChecker) checkGoTest(m *ModuleEmitResult) {
 	}
 
 	for _, peer := range m.testPeers {
-		if !isTarget(peer) && reach(peer) {
+		if peer.finishSeq >= earliest && !isTarget(peer) && reach(peer) {
 			tc.report(m.transitiveDir(), "go test issue: transitive dependencies on modules under test are prohibited in Arcadia due to scalability issues\nSee https://github.com/golang/go/issues/29258 and st/YMAKE-102 for more details\n"+dependencyPath(peer, target, false, false))
 		}
 	}
@@ -1397,7 +1418,14 @@ func mergeProvided(a, b *providedSummary) *providedSummary {
 	return out
 }
 
-func (r *ModuleEmitResult) recordTransitive(ctx *GenCtx, d *ModuleData, tools []*ModuleEmitResult, platform *Platform) {
+func (r *ModuleEmitResult) recordTransitive(ctx *GenCtx, d *ModuleData, tools []*ModuleEmitResult, platform *Platform, appendedPeers bool) {
+	if r.finishSeq == 0 {
+		ctx.finishSeq++
+		r.finishSeq = ctx.finishSeq
+	} else if appendedPeers {
+		ctx.finishOrderBroken = true
+	}
+
 	r.license, r.features, r.transitive = d.license, d.features, d.transitive
 
 	if platform != ctx.host {

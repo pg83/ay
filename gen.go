@@ -170,6 +170,7 @@ type ModuleEmitResult struct {
 	reachEpoch                      uint32
 	blacklistRule                   STR
 	inIsolated                      bool
+	finishSeq                       uint32
 }
 
 func protoResultWholeArchiveCmdPaths(res *ProtoSrcsResult) []VFS {
@@ -283,6 +284,8 @@ type GenCtx struct {
 	lastSrcDir          [2]string
 	scopeOnly           []string
 	checkDependsInDart  bool
+	finishSeq           uint32
+	finishOrderBroken   bool
 }
 
 type moduleMemoEntry struct {
@@ -1804,7 +1807,7 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 			result.testProject = instance.Path
 			result.testPeers = ctx.appendPeerList(result.testPeers, frame.testPeers)
 			result.variantOrder = variantOrder
-			result.recordTransitive(ctx, &frame.d, frame.tools, instance.Platform)
+			result.recordTransitive(ctx, &frame.d, frame.tools, instance.Platform, len(frame.testPeers) != 0)
 		}
 	}()
 
