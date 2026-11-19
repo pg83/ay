@@ -207,9 +207,10 @@ func (ctx *GenCtx) runtimeTestOutputDirs(dependency TestBuildDependency, dirs []
 
 func (ctx *GenCtx) testDependencyMainRefs(project VFS) map[NodeRef]bool {
 	refs := map[NodeRef]bool{}
+	row := ctx.memo.row(project.rel())
 
-	for entry := ctx.memo.head(project.rel()); entry != nil; entry = entry.next {
-		result := entry.result
+	for i := len(row) - 1; i >= 0; i-- {
+		result := row[i].result
 
 		if result == nil {
 			continue

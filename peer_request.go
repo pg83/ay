@@ -14,7 +14,7 @@ const (
 )
 
 func genRequestedPeer(ctx *GenCtx, request ModuleInstance) *ModuleEmitResult {
-	if entry := ctx.memoEntry(request); entry != nil {
+	if entry, ok := ctx.memoEntry(request); ok {
 		if entry.result == nil {
 			return nil
 		}
@@ -87,9 +87,7 @@ func genRequestedPeer(ctx *GenCtx, request ModuleInstance) *ModuleEmitResult {
 		return nil
 	}
 
-	entry := ctx.memoPut(request, result)
-
-	entry.resolved = ctx.instanceVariant(peer)
+	ctx.memoPutResolved(request, result, ctx.instanceVariant(peer))
 
 	return result
 }

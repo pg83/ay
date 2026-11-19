@@ -292,7 +292,6 @@ type GenCtx struct {
 }
 
 type moduleMemoEntry struct {
-	next     *moduleMemoEntry
 	result   *ModuleEmitResult
 	peer     PeerRequest
 	tags     STR
@@ -301,20 +300,38 @@ type moduleMemoEntry struct {
 }
 
 type moduleMemo struct {
-	heads   Vec[*moduleMemoEntry]
-	entries *BumpAllocator[moduleMemoEntry]
+	slots Vec[uint32]
+	rows  [][]moduleMemoEntry
 }
 
-func (m *moduleMemo) head(path STR) *moduleMemoEntry {
-	if row := dirRows.rowOf(path); int(row) < len(m.heads.s) {
-		return m.heads.s[row]
+func (m *moduleMemo) row(path STR) []moduleMemoEntry {
+	if row := dirRows.rowOf(path); int(row) < len(m.slots.s) {
+		if slot := m.slots.s[row]; slot != 0 {
+			return m.rows[slot-1]
+		}
 	}
 
 	return nil
 }
 
+func (m *moduleMemo) add(path STR, entry moduleMemoEntry) {
+	row := dirRows.rowFor(path)
+
+	m.slots.ensureLen(int(row) + 1)
+
+	slot := m.slots.s[row]
+
+	if slot == 0 {
+		m.rows = append(m.rows, nil)
+		slot = uint32(len(m.rows))
+		m.slots.s[row] = slot
+	}
+
+	m.rows[slot-1] = append(m.rows[slot-1], entry)
+}
+
 func newModuleMemo() *moduleMemo {
-	return &moduleMemo{entries: newBumpAllocator[moduleMemoEntry]()}
+	return &moduleMemo{}
 }
 
 type genPass struct {
@@ -3451,14 +3468,12 @@ func (ctx *GenCtx) instanceVariant(in ModuleInstance) uint16 {
 }
 
 func (ctx *GenCtx) memoGet(in ModuleInstance) *ModuleEmitResult {
-	if entry := ctx.memoEntry(in); entry != nil {
-		return entry.result
-	}
+	entry, _ := ctx.memoEntry(in)
 
-	return nil
+	return entry.result
 }
 
-func (ctx *GenCtx) memoEntry(in ModuleInstance) *moduleMemoEntry {
+func (ctx *GenCtx) memoEntry(in ModuleInstance) (moduleMemoEntry, bool) {
 	mask := ^uint16(0)
 
 	if in.Peer == 0 {
@@ -3466,28 +3481,23 @@ func (ctx *GenCtx) memoEntry(in ModuleInstance) *moduleMemoEntry {
 	}
 
 	other := ctx.instanceVariant(in) & mask
+	row := ctx.memo.row(in.Path.rel())
 
-	for entry := ctx.memo.head(in.Path.rel()); entry != nil; entry = entry.next {
-		if entry.variant&mask == other && entry.peer == in.Peer && entry.tags == in.PeerTags {
-			return entry
+	for i := len(row) - 1; i >= 0; i-- {
+		if entry := &row[i]; entry.variant&mask == other && entry.peer == in.Peer && entry.tags == in.PeerTags {
+			return *entry, true
 		}
 	}
 
-	return nil
+	return moduleMemoEntry{}, false
 }
 
-func (ctx *GenCtx) memoPut(in ModuleInstance, result *ModuleEmitResult) *moduleMemoEntry {
-	row := dirRows.rowFor(in.Path.rel())
-	variant := ctx.instanceVariant(in)
+func (ctx *GenCtx) memoPut(in ModuleInstance, result *ModuleEmitResult) {
+	ctx.memoPutResolved(in, result, 0)
+}
 
-	ctx.memo.heads.ensureLen(int(row) + 1)
-
-	entry := ctx.memo.entries.one()
-
-	*entry = moduleMemoEntry{next: ctx.memo.heads.s[row], result: result, variant: variant, peer: in.Peer, tags: in.PeerTags}
-	ctx.memo.heads.s[row] = entry
-
-	return entry
+func (ctx *GenCtx) memoPutResolved(in ModuleInstance, result *ModuleEmitResult, resolved uint16) {
+	ctx.memo.add(in.Path.rel(), moduleMemoEntry{result: result, variant: ctx.instanceVariant(in), peer: in.Peer, tags: in.PeerTags, resolved: resolved})
 }
 
 func (ctx *GenCtx) scannerForPlatform(p *Platform) *IncludeScanner {
