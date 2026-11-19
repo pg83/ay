@@ -155,7 +155,7 @@ func globExcluded(excludes []*globMatcher, rel string, isDir bool) bool {
 	})
 }
 
-func ymakeGlob(fs FS, pattern string, excludePatterns ...string) []string {
+func ymakeGlob(fs *Tree, pattern string, excludePatterns ...string) []string {
 	ids := ymakeGlobIDs(fs, pattern, excludePatterns...)
 	matches := make([]string, len(ids))
 
@@ -166,7 +166,7 @@ func ymakeGlob(fs FS, pattern string, excludePatterns ...string) []string {
 	return matches
 }
 
-func ymakeGlobIDs(fs FS, pattern string, excludePatterns ...string) []STR {
+func ymakeGlobIDs(fs *Tree, pattern string, excludePatterns ...string) []STR {
 	return ymakeGlobIDsStat(fs, pattern, nil, excludePatterns...)
 }
 
@@ -181,7 +181,7 @@ func (s *globStat) watch(dir STR) {
 	}
 }
 
-func ymakeGlobIDsStat(fs FS, pattern string, stat *globStat, excludePatterns ...string) []STR {
+func ymakeGlobIDsStat(fs *Tree, pattern string, stat *globStat, excludePatterns ...string) []STR {
 	excludes := make([]*globMatcher, len(excludePatterns))
 
 	for i, p := range excludePatterns {
@@ -313,7 +313,7 @@ func (d globDir) key() STR {
 	return internStr(d.text)
 }
 
-func applyGlobStmt(fs FS, module string, name TOK, args []ANY, env Environment, onWarn func(Warn)) {
+func applyGlobStmt(fs *Tree, module string, name TOK, args []ANY, env Environment, onWarn func(Warn)) {
 	macro := name.string()
 
 	report := func(msg string) {

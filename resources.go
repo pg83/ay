@@ -160,7 +160,7 @@ func isaPlatformKey(isa ISA) string {
 	return string(isa)
 }
 
-func declareExternalResourceByJSON(fs FS, modulePath string, stmt *DeclareResourceStmt, env Environment, onWarn func(Warn)) bool {
+func declareExternalResourceByJSON(fs *Tree, modulePath string, stmt *DeclareResourceStmt, env Environment, onWarn func(Warn)) bool {
 	name := "DECLARE_EXTERNAL_RESOURCE_BY_JSON"
 
 	if len(stmt.Args) < 2 || len(stmt.Args) > 3 {
@@ -197,7 +197,7 @@ func declareExternalResourceByJSON(fs FS, modulePath string, stmt *DeclareResour
 	return true
 }
 
-func resolveResourceDecls(fs FS, host *Platform, modulePath string, stmt *DeclareResourceStmt) []ResourceDecl {
+func resolveResourceDecls(fs *Tree, host *Platform, modulePath string, stmt *DeclareResourceStmt) []ResourceDecl {
 	switch stmt.Macro {
 	case tokDeclareExternalResource:
 
@@ -851,7 +851,7 @@ func moduleSourceRel(modulePath, arg string) string {
 	return cleanRel(joinRel(modulePath, arg))
 }
 
-func readResourceBundleJSON(fs FS, rel string) map[string]ResourceBundleEntry {
+func readResourceBundleJSON(fs *Tree, rel string) map[string]ResourceBundleEntry {
 	key := internStr(rel)
 
 	if bundle, ok := fs.resourceBundle(key); ok {
@@ -926,7 +926,7 @@ func resourceGlobalTokenValue(args []ANY, globals []ResourceDecl) CompilerFlagVa
 	return CompilerFlagValue{Args: args}
 }
 
-func resourceJSONError(fs FS, rel string) string {
+func resourceJSONError(fs *Tree, rel string) string {
 	if _, ok := fs.resourceBundle(internStr(rel)); ok {
 		return ""
 	}
@@ -944,7 +944,7 @@ func resourceJSONError(fs FS, rel string) string {
 	return ""
 }
 
-func resourceCommandError(fs FS, modulePath string, line int, name, forVar, msg string) Warn {
+func resourceCommandError(fs *Tree, modulePath string, line int, name, forVar, msg string) Warn {
 	row, col := statementEnd(concatChunks(fs.read(joinRel(modulePath, "ya.make"))), line, name)
 	text := "Command [[alt1]]" + name + "[[rst]] "
 
@@ -955,7 +955,7 @@ func resourceCommandError(fs FS, modulePath string, line int, name, forVar, msg 
 	return Warn{Kind: WarnMisconfiguration, Where: makeFileWhere(modulePath), Error: text + "failed with error: " + msg, Row: row, Column: col}
 }
 
-func statementSyntaxError(fs FS, modulePath string, line int, name, what string) Warn {
+func statementSyntaxError(fs *Tree, modulePath string, line int, name, what string) Warn {
 	file := joinRel(modulePath, "ya.make")
 	src := concatChunks(fs.read(file))
 	row, col := statementEnd(src, line, name)

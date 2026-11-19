@@ -78,7 +78,7 @@ func docsSource(s string) VFS {
 	return sourceClean(strings.TrimPrefix(s, "${ARCADIA_ROOT}/"))
 }
 
-func (d *DocsData) addSources(fs FS, module string, args []string) {
+func (d *DocsData) addSources(fs *Tree, module string, args []string) {
 	srcdir := "."
 	exclude := false
 
@@ -151,7 +151,7 @@ func docsGlobMatches(pattern, value string) bool {
 	return more == rest
 }
 
-func (d *DocsData) finish(fs FS, module string, env Environment) {
+func (d *DocsData) finish(fs *Tree, module string, env Environment) {
 	d.config = env.expandVariable(env.string(envDocsConfigValue))
 	d.vars = strings.Fields(env.expandVariable(env.string(envDocsVarsValue)))
 	d.plantuml = env.bool(envDocsUsePlantuml)

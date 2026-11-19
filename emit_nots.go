@@ -1107,7 +1107,7 @@ func notsGlob(pattern string) *globMatcher {
 	return matcher
 }
 
-func notsAllSourceFiles(fs FS, dir string) []VFS {
+func notsAllSourceFiles(fs *Tree, dir string) []VFS {
 	var files []VFS
 
 	fs.walk(dir, func(rel string, isDir bool) bool {

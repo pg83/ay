@@ -209,7 +209,7 @@ func (d *ModuleData) collectYAMLStyleWithConfig(module string, stmt UnknownStmt,
 	d.addFileStyleCheck(check)
 }
 
-func (d *ModuleData) collectStyleCheck(fs FS, module string, stmt UnknownStmt, env Environment) {
+func (d *ModuleData) collectStyleCheck(fs *Tree, module string, stmt UnknownStmt, env Environment) {
 	if styleChecksDisabled(env) {
 		return
 	}
@@ -237,7 +237,7 @@ func explicitStyleCheck(name TOK, env Environment) StyleCheck {
 	return check
 }
 
-func collectStyleFiles(fs FS, module string, stmt UnknownStmt) []VFS {
+func collectStyleFiles(fs *Tree, module string, stmt UnknownStmt) []VFS {
 	var dirs, recursive []string
 	var files []VFS
 	var excludes []*globMatcher

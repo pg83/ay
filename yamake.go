@@ -617,7 +617,7 @@ func (e *ParseError) Error() string {
 	return e.error()
 }
 
-func parseFileClean(fs FS, key STR, memos *IncludeMemos) (mf *MakeFile, err error) {
+func parseFileClean(fs *Tree, key STR, memos *IncludeMemos) (mf *MakeFile, err error) {
 	exc := try(func() {
 		bp := readChunksForParse(fs.readPath(key))
 
@@ -634,7 +634,7 @@ func parseFileClean(fs FS, key STR, memos *IncludeMemos) (mf *MakeFile, err erro
 	return mf, err
 }
 
-func readForParse(fs FS, rel string) *[]byte {
+func readForParse(fs *Tree, rel string) *[]byte {
 	return readChunksForParse(fs.read(rel))
 }
 
@@ -1144,7 +1144,7 @@ func (l *Lexer) readNumberOrWord(startLine, startCol int) Token {
 	return newToken(kind, l.src[start:pos], startLine, startCol)
 }
 
-func parse(fs FS, nameID STR, src []byte, memos *IncludeMemos) (mf *MakeFile, err error) {
+func parse(fs *Tree, nameID STR, src []byte, memos *IncludeMemos) (mf *MakeFile, err error) {
 	exc := try(func() {
 		mf = parseInternal(fs, nameID, src, memos)
 	})
@@ -1157,11 +1157,11 @@ func parse(fs FS, nameID STR, src []byte, memos *IncludeMemos) (mf *MakeFile, er
 	return mf, err
 }
 
-func parseInternal(fs FS, nameID STR, src []byte, memos *IncludeMemos) *MakeFile {
+func parseInternal(fs *Tree, nameID STR, src []byte, memos *IncludeMemos) *MakeFile {
 	return parseInternalWithStack(fs, nameID, src, nil, memos)
 }
 
-func parseInternalWithStack(fs FS, nameID STR, src []byte, stack []string, memos *IncludeMemos) *MakeFile {
+func parseInternalWithStack(fs *Tree, nameID STR, src []byte, stack []string, memos *IncludeMemos) *MakeFile {
 	st := acquireIncludeState(memos)
 
 	defer releaseIncludeState(st)
@@ -1169,7 +1169,7 @@ func parseInternalWithStack(fs FS, nameID STR, src []byte, stack []string, memos
 	return parseInternalWithState(fs, nameID, src, stack, st)
 }
 
-func parseInternalWithState(fs FS, nameID STR, src []byte, stack []string, includes *IncludeState) *MakeFile {
+func parseInternalWithState(fs *Tree, nameID STR, src []byte, stack []string, includes *IncludeState) *MakeFile {
 	name := nameID.string()
 
 	src = bytes.TrimPrefix(src, []byte{0xEF, 0xBB, 0xBF})
@@ -1516,7 +1516,7 @@ type Parser struct {
 	nameID       STR
 	includeStack []string
 	includes     *IncludeState
-	fs           FS
+	fs           *Tree
 	condScratch  []CondNode
 	condTokBuf   []Token
 	argScratch   []ANY

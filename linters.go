@@ -10,7 +10,7 @@ type AutoincludeIndex struct {
 	paths   string
 }
 
-func loadAutoincludeIndex(fs FS, env Environment, onWarn func(Warn)) *AutoincludeIndex {
+func loadAutoincludeIndex(fs *Tree, env Environment, onWarn func(Warn)) *AutoincludeIndex {
 	var keys []string
 	var linters []VFS
 

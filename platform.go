@@ -18,11 +18,11 @@ type PlatformConf struct {
 	ProtoHeaderEpilogue bool
 }
 
-func readPlatformConf(fs FS, parsers *IncludeParserManager) PlatformConf {
+func readPlatformConf(fs *Tree, parsers *IncludeParserManager) PlatformConf {
 	return PlatformConf{GoStdVersion: confGoStdVersion(fs, parsers), Linker: readLinkerConf(parsers), Parsers: parsers, ProtoHeaderEpilogue: confProtoHeaderEpilogue(fs)}
 }
 
-func confProtoHeaderEpilogue(fs FS) bool {
+func confProtoHeaderEpilogue(fs *Tree) bool {
 	const conf = "build/conf/proto.conf"
 
 	return fs.isFile(srcRootRel, conf) && strings.Contains(string(concatChunks(fs.read(conf))), "SET(PROTOC_TRANSITIVE_HEADERS $_CPP_PROTO_HEADERS_TRANSITIVE)")

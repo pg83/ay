@@ -256,7 +256,7 @@ func aliceProtoRequestJSON(request map[string][]string) string {
 	return "{" + strings.Join(parts, ", ") + "}"
 }
 
-func applyAliceProtoIncludes(fs FS, modulePath string, v UnknownStmt, d *ModuleData) {
+func applyAliceProtoIncludes(fs *Tree, modulePath string, v UnknownStmt, d *ModuleData) {
 	files := anyStrs(v.Args)
 
 	if v.Name == tokAliceGenerateProtoIncludes {

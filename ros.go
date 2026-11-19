@@ -212,7 +212,7 @@ func applyRosStmt(module string, stmt UnknownStmt, env Environment, d *ModuleDat
 	}
 }
 
-func resolveRosInclude(fs FS, includes []VFS, name string) VFS {
+func resolveRosInclude(fs *Tree, includes []VFS, name string) VFS {
 	pkg, msg, qualified := strings.Cut(name, "/")
 
 	if !qualified {
