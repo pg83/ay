@@ -3454,11 +3454,18 @@ func (ctx *GenCtx) toolResult(modulePath ARG) *ModuleEmitResult {
 	if dir := modulePath.string(); isJavaModuleType(ctx.moduleNameVFS(dirSourceOf(modulePath.str()))) {
 		res = ctx.javaToolResult(dir)
 	} else {
-		if msg := ctx.toolDirError(modulePath.str()); msg != "" {
-			ctx.onWarn(Warn{Kind: WarnModuleFailed, Where: makeFileWhere(user.relString()), Error: msg})
+		dirError := ctx.toolDirError(modulePath.str())
+
+		if dirError != "" {
+			ctx.onWarn(Warn{Kind: WarnModuleFailed, Where: makeFileWhere(user.relString()), Error: dirError})
 		}
 
-		if res = genModule(ctx, newToolInstance(ctx.host, dir)); res.LDRef == NodeRef(0) && res.ARPath != nil {
+		res = genModule(ctx, newToolInstance(ctx.host, dir))
+
+		switch {
+		case dirError == "" && res.ModuleStmtName == 0:
+			ctx.onWarn(Warn{Kind: WarnModuleFailed, Where: makeFileWhere(user.relString()), Error: ctx.toolWithoutModules(modulePath.str())})
+		case res.LDRef == NodeRef(0) && res.ARPath != nil:
 			ctx.onWarn(Warn{Kind: WarnModuleFailed, Where: makeFileWhere(user.relString()), Error: "No suitable [[alt1]]TOOL[[rst]] module found in $S/" + dir})
 		}
 	}

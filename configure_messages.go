@@ -1461,14 +1461,14 @@ func (ctx *GenCtx) toolDirError(dir STR) string {
 		return "Trying to use [[alt1]]TOOL[[rst]] from directory without ya.make: [[imp]]$S/" + dir.string() + "[[rst]]"
 	}
 
-	if ctx.evaluateDirVFS(dir.source(), ctx.host).declaration == nil {
-		ctx.evaluateDirVFS(dir.source(), ctx.target)
-		ctx.noModuleRef(dir.source())
-
-		return "[[alt1]]TOOL[[rst]] not found: no modules in $S/" + dir.string()
-	}
-
 	return ""
+}
+
+func (ctx *GenCtx) toolWithoutModules(dir STR) string {
+	ctx.evaluateDirVFS(dir.source(), ctx.target)
+	ctx.noModuleRef(dir.source())
+
+	return "[[alt1]]TOOL[[rst]] not found: no modules in $S/" + dir.string()
 }
 
 func (ctx *GenCtx) checkRunProgramTool(tool ANY, modulePath string, onWarn func(Warn)) {
@@ -1476,7 +1476,10 @@ func (ctx *GenCtx) checkRunProgramTool(tool ANY, modulePath string, onWarn func(
 		msg := ctx.toolDirError(rel)
 
 		if msg == "" {
-			if declaration := ctx.evaluateDirVFS(rel.source(), ctx.host).declaration; declaration != nil && libraryModuleTypes[declaration.Name] {
+			switch declaration := ctx.evaluateDirVFS(rel.source(), ctx.host).declaration; {
+			case declaration == nil:
+				msg = ctx.toolWithoutModules(rel)
+			case libraryModuleTypes[declaration.Name]:
 				msg = "No suitable [[alt1]]TOOL[[rst]] module found in $S/" + rel.string()
 			}
 		}
