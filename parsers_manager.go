@@ -9,6 +9,7 @@ const (
 
 	parsedIncludesProtoConfig
 	parsedIncludesAll
+	parsedIncludesGoImports
 	parsedIncludeBucketCount
 )
 

@@ -5,9 +5,7 @@ import (
 	"unsafe"
 )
 
-func parseGoImports(data []byte) []STR {
-	var out []STR
-
+func scanGoImports(data []byte, emit func(importPath []byte)) {
 	s := data
 	i := 0
 	n := len(s)
@@ -90,7 +88,7 @@ func parseGoImports(data []byte) []STR {
 		skipSpace()
 
 		if i >= n {
-			return out
+			return
 		}
 
 		kw := word()
@@ -109,7 +107,7 @@ func parseGoImports(data []byte) []STR {
 					skipSpace()
 
 					if i >= n {
-						return out
+						return
 					}
 
 					if s[i] == ')' {
@@ -119,18 +117,18 @@ func parseGoImports(data []byte) []STR {
 					}
 
 					if p := importPath(); len(p) > 0 {
-						out = append(out, internBytes(p))
+						emit(p)
 					} else {
 						i++
 					}
 				}
 			} else {
 				if p := importPath(); len(p) > 0 {
-					out = append(out, internBytes(p))
+					emit(p)
 				}
 			}
 		default:
-			return out
+			return
 		}
 	}
 }
@@ -142,10 +140,36 @@ func isGoIdentStart(c byte) bool {
 type GoCgoIncludeDirectiveParser struct{}
 
 func (GoCgoIncludeDirectiveParser) parse(rel string, data [][]byte, a *BumpAllocator[IncludeDirective]) ParsedIncludeSet {
-	comments := goCommentBodies(concatChunks(data))
+	src := concatChunks(data)
+
+	var set ParsedIncludeSet
+
+	imports := countedDirectives(a, func(block []IncludeDirective) int {
+		k := 0
+
+		scanGoImports(src, func(importPath []byte) {
+			if k < len(block) {
+				block[k] = IncludeDirective{kind: includeGoImport, target: internBytes(importPath).any()}
+			}
+
+			k++
+		})
+
+		return k
+	})
+
+	if len(imports) > 0 {
+		set[parsedIncludesGoImports] = imports
+	}
+
+	if !goMayHaveCIncludes(src) {
+		return set
+	}
+
+	comments := goCommentBodies(src)
 
 	if len(comments) == 0 {
-		return ParsedIncludeSet{}
+		return set
 	}
 
 	local := countedDirectives(a, func(block []IncludeDirective) int {
@@ -158,11 +182,33 @@ func (GoCgoIncludeDirectiveParser) parse(rel string, data [][]byte, a *BumpAlloc
 		return k
 	})
 
-	if len(local) == 0 {
-		return ParsedIncludeSet{}
+	if len(local) > 0 {
+		set[parsedIncludesLocal] = local
 	}
 
-	return ParsedIncludeSet{parsedIncludesLocal: local}
+	return set
+}
+
+func goMayHaveCIncludes(data []byte) bool {
+	for p := 0; ; p++ {
+		i := bytes.IndexByte(data[p:], '#')
+
+		if i < 0 {
+			return false
+		}
+
+		p += i
+
+		q := p + 1
+
+		for q < len(data) && (data[q] == ' ' || data[q] == '\t' || data[q] == '\v' || data[q] == '\f' || data[q] == '\r') {
+			q++
+		}
+
+		if q < len(data) && data[q] == '/' || bytesHasPrefixAt(data, q, "include") || bytesHasPrefixAt(data, q, "import") {
+			return true
+		}
+	}
 }
 
 func goCommentBodies(data []byte) [][]byte {

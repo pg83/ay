@@ -29,6 +29,7 @@ const (
 	includeCythonImportEnd
 	includeTypeScript
 	includeMacro
+	includeGoImport
 )
 
 const (
