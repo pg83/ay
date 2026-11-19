@@ -389,7 +389,11 @@ func diagnoseAddIncl(args []ANY) *addInclDiag {
 	return &d
 }
 
-func (ctx *GenCtx) checkAddInclDirs(dirs []VFS, modulePath string, onWarn func(Warn)) {
+func (ctx *GenCtx) checkAddInclDirs(dirs []VFS, env Environment, modulePath string, onWarn func(Warn)) {
+	if env.bool(envNonFatalAddinclToMissing) {
+		return
+	}
+
 	for _, dir := range dirs {
 		if !dir.isSource() || dir == srcRootDirVFS {
 			continue
@@ -420,7 +424,7 @@ func (ctx *GenCtx) reportAddInclDiag(v *AddInclStmt, env Environment, modulePath
 		onWarn(Warn{Kind: WarnMisconfiguration, Where: makeFileWhere(modulePath), Error: message})
 	}
 
-	ctx.checkAddInclDirs(expandConfigVFSPaths(v.diag.dirs, env), modulePath, onWarn)
+	ctx.checkAddInclDirs(expandConfigVFSPaths(v.diag.dirs, env), env, modulePath, onWarn)
 }
 
 func resourceDeclarations(stmt *DeclareResourceStmt, report func(string)) []*DeclareResourceStmt {

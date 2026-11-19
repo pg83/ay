@@ -2760,8 +2760,8 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 			cython := expandConfigVFSPaths(v.CythonPaths, env)
 
 			if checked {
-				ctx.checkAddInclDirs(all, modulePath, onWarn)
-				ctx.checkAddInclDirs(cython, modulePath, onWarn)
+				ctx.checkAddInclDirs(all, env, modulePath, onWarn)
+				ctx.checkAddInclDirs(cython, env, modulePath, onWarn)
 			}
 
 			asm := expandConfigVFSPaths(v.AsmPaths, env)
@@ -2772,7 +2772,7 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 
 			if checked {
 				for _, dirs := range [...][]VFS{asm, proto, flatc, swig, sc} {
-					ctx.checkAddInclDirs(dirs, modulePath, onWarn)
+					ctx.checkAddInclDirs(dirs, env, modulePath, onWarn)
 				}
 			}
 
