@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"encoding/binary"
 	"fmt"
 	"path/filepath"
 	"slices"
@@ -165,6 +166,9 @@ const (
 	splitCodegenDefaultOutNum = 25
 	splitCodegenStreamCount   = 5
 	structCodegenTool         = "kernel/struct_codegen/codegen_tool"
+	tokStreamKind             = 0x1f
+	tokStreamBackslash        = 0x20
+	tokStreamRaw              = 0x40
 )
 
 const (
@@ -619,11 +623,17 @@ func (e *ParseError) Error() string {
 
 func parseFileClean(fs Tree, key STR, memos *IncludeMemos) (mf *MakeFile, err error) {
 	exc := try(func() {
+		if tokens := fs.tokens(key); tokens != nil {
+			mf = throw2(parse(fs, key, nil, tokens, memos))
+
+			return
+		}
+
 		bp := readChunksForParse(fs.readPath(key))
 
 		defer releaseParseBuf(bp)
 
-		mf = throw2(parse(fs, key, *bp, memos))
+		mf = throw2(parse(fs, key, *bp, nil, memos))
 	})
 
 	if exc != nil {
@@ -693,6 +703,109 @@ type Lexer struct {
 	prevByte byte
 	tokBuf   []byte
 	inArgs   bool
+
+	replay   []byte
+	record   bool
+	holding  bool
+	held     Token
+	heldRaw  STR
+	rec      []byte
+	recLine  int
+	lastRaw  STR
+	replayAt int
+}
+
+func (l *Lexer) flushHeld() {
+	if !l.holding {
+		return
+	}
+
+	tok := l.held
+	head := byte(tok.kind)
+
+	if tok.backslash {
+		head |= tokStreamBackslash
+	}
+
+	if l.heldRaw != 0 {
+		head |= tokStreamRaw
+	}
+
+	l.rec = append(l.rec, head, tok.lead)
+	l.rec = binary.LittleEndian.AppendUint32(l.rec, uint32(tok.id))
+	l.rec = binary.AppendUvarint(l.rec, uint64(tok.line-l.recLine))
+	l.rec = binary.AppendUvarint(l.rec, uint64(tok.col))
+
+	if l.heldRaw != 0 {
+		l.rec = binary.LittleEndian.AppendUint32(l.rec, uint32(l.heldRaw))
+	}
+
+	l.recLine = tok.line
+	l.holding = false
+}
+
+func (l *Lexer) recorded() []byte {
+	l.flushHeld()
+
+	return l.rec
+}
+
+func (l *Lexer) replayNext() Token {
+	s := l.replay[l.replayAt:]
+	head := s[0]
+	tok := Token{kind: TokKind(head & tokStreamKind), lead: s[1], id: STR(binary.LittleEndian.Uint32(s[2:])), backslash: head&tokStreamBackslash != 0}
+	at := 6
+	delta, n := binary.Uvarint(s[at:])
+
+	at += n
+
+	col, n := binary.Uvarint(s[at:])
+
+	at += n
+	l.recLine += int(delta)
+	tok.line, tok.col = l.recLine, int(col)
+	l.lastRaw = 0
+
+	if head&tokStreamRaw != 0 {
+		l.lastRaw = STR(binary.LittleEndian.Uint32(s[at:]))
+		at += 4
+	}
+
+	l.replayAt += at
+
+	return tok
+}
+
+func (l *Lexer) begin() int {
+	if l.replay != nil {
+		return 0
+	}
+
+	l.skipTrivia()
+
+	return l.pos
+}
+
+func (l *Lexer) rawValue(start int, tok Token) STR {
+	if l.replay != nil {
+		if l.lastRaw != 0 {
+			return l.lastRaw
+		}
+
+		return tok.id
+	}
+
+	if l.pos-start == tok.n {
+		return tok.id
+	}
+
+	raw := internBytes(l.src[start:l.pos])
+
+	if l.record {
+		l.heldRaw = raw
+	}
+
+	return raw
 }
 
 func (l *Lexer) throwParse(line, col int, format string, args ...any) {
@@ -788,7 +901,19 @@ func commentBoundary(prev byte) bool {
 }
 
 func (l *Lexer) next() Token {
-	return l.readToken()
+	if l.replay != nil {
+		return l.replayNext()
+	}
+
+	tok := l.readToken()
+
+	if l.record {
+		l.flushHeld()
+
+		l.held, l.heldRaw, l.holding = tok, 0, true
+	}
+
+	return tok
 }
 
 func (l *Lexer) readToken() Token {
@@ -1144,9 +1269,9 @@ func (l *Lexer) readNumberOrWord(startLine, startCol int) Token {
 	return newToken(kind, l.src[start:pos], startLine, startCol)
 }
 
-func parse(fs Tree, nameID STR, src []byte, memos *IncludeMemos) (mf *MakeFile, err error) {
+func parse(fs Tree, nameID STR, src, tokens []byte, memos *IncludeMemos) (mf *MakeFile, err error) {
 	exc := try(func() {
-		mf = parseInternal(fs, nameID, src, memos)
+		mf = parseInternal(fs, nameID, src, tokens, memos)
 	})
 
 	if exc != nil {
@@ -1157,19 +1282,15 @@ func parse(fs Tree, nameID STR, src []byte, memos *IncludeMemos) (mf *MakeFile, 
 	return mf, err
 }
 
-func parseInternal(fs Tree, nameID STR, src []byte, memos *IncludeMemos) *MakeFile {
-	return parseInternalWithStack(fs, nameID, src, nil, memos)
-}
-
-func parseInternalWithStack(fs Tree, nameID STR, src []byte, stack []string, memos *IncludeMemos) *MakeFile {
+func parseInternal(fs Tree, nameID STR, src, tokens []byte, memos *IncludeMemos) *MakeFile {
 	st := acquireIncludeState(memos)
 
 	defer releaseIncludeState(st)
 
-	return parseInternalWithState(fs, nameID, src, stack, st)
+	return parseInternalWithState(fs, nameID, src, tokens, nil, st)
 }
 
-func parseInternalWithState(fs Tree, nameID STR, src []byte, stack []string, includes *IncludeState) *MakeFile {
+func parseInternalWithState(fs Tree, nameID STR, src, tokens []byte, stack []string, includes *IncludeState) *MakeFile {
 	name := nameID.string()
 
 	src = bytes.TrimPrefix(src, []byte{0xEF, 0xBB, 0xBF})
@@ -1177,12 +1298,13 @@ func parseInternalWithState(fs Tree, nameID STR, src []byte, stack []string, inc
 	p := parserPool.Get().(*Parser)
 	lex := p.lex
 	tokBuf := lex.tokBuf
+	rec := lex.rec
 	condScratch := p.condScratch
 	condTokBuf := p.condTokBuf
 
 	defer parserPool.Put(p)
 
-	*lex = Lexer{name: name, src: src, line: 1, col: 1, tokBuf: tokBuf[:0]}
+	*lex = Lexer{name: name, src: src, line: 1, col: 1, tokBuf: tokBuf[:0], replay: tokens, rec: rec[:0], record: tokens == nil && fs.recordsTokens()}
 
 	argScratch := p.argScratch
 	stmtScratch := scrubCap(p.stmtScratch)
@@ -1196,6 +1318,10 @@ func parseInternalWithState(fs Tree, nameID STR, src []byte, stack []string, inc
 
 	mf.Stmts, _ = p.parseStmts(termTopLevel)
 	mf.IncludeOnce, _ = includes.once.get(uint64(nameID.strID()))
+
+	if lex.record {
+		fs.keepTokens(nameID, lex.recorded())
+	}
 
 	return mf
 }
@@ -1445,8 +1571,7 @@ func (p *Parser) parseMacroArgsLexical(nameTok Token, lexical *[]ANY) []ANY {
 		start := 0
 
 		if lexical != nil || lexicalArgs {
-			p.lex.skipTrivia()
-			start = p.lex.pos
+			start = p.lex.begin()
 		}
 
 		tok := p.lex.next()
@@ -1468,8 +1593,8 @@ func (p *Parser) parseMacroArgsLexical(nameTok Token, lexical *[]ANY) []ANY {
 					if tok.backslash {
 						value = internStr(strings.ReplaceAll(tok.string(), "\\", ""))
 					}
-				} else if p.lex.pos-start != tok.n {
-					value = internBytes(p.lex.src[start:p.lex.pos])
+				} else {
+					value = p.lex.rawValue(start, tok)
 				}
 			}
 
@@ -2811,18 +2936,26 @@ func (p *Parser) expandOneInclude(nameTok Token, rel string) {
 		}
 	}
 
-	if present, _ := p.fs.exists(srcRootRel, target); !present {
-		p.stmtScratch = append(p.stmtScratch, &MissingIncludeStmt{File: p.name, Path: target, Line: nameTok.line})
+	tokens := p.fs.tokens(targetID)
 
-		return
+	var src []byte
+
+	if tokens == nil {
+		if present, _ := p.fs.exists(srcRootRel, target); !present {
+			p.stmtScratch = append(p.stmtScratch, &MissingIncludeStmt{File: p.name, Path: target, Line: nameTok.line})
+
+			return
+		}
+
+		bp := readForParse(p.fs, target)
+
+		defer releaseParseBuf(bp)
+
+		src = *bp
 	}
 
-	bp := readForParse(p.fs, target)
-
-	defer releaseParseBuf(bp)
-
 	start := len(p.includes.events)
-	included := parseInternalWithState(p.fs, internStr(target), *bp, chain, p.includes)
+	included := parseInternalWithState(p.fs, targetID, src, tokens, chain, p.includes)
 
 	p.includes.memos.byTarget[targetID] = append(p.includes.memos.byTarget[targetID], &includeMemo{stmts: included.Stmts, events: slices.Clone(p.includes.events[start:])})
 	p.stmtScratch = append(p.stmtScratch, included.Stmts...)

@@ -27,6 +27,18 @@ type MmapedFiles struct {
 	parsed     []MmapedParsed
 	directives []IncludeDirective
 	extras     []MmapedExtra
+	tokenSpans []MmapedSpan
+	tokenBytes []byte
+}
+
+func (f *MmapedFiles) tokens(no uint32) []byte {
+	s := f.tokenSpans[no]
+
+	if s.n == 0 {
+		return nil
+	}
+
+	return f.tokenBytes[s.off : s.off+s.n : s.off+s.n]
 }
 
 func (f *MmapedFiles) no(rel STR) uint32 {

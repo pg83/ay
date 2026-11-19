@@ -52,6 +52,26 @@ func (t *ImageTree) peekParsed(rel STR) (ParsedSource, bool) {
 	return ParsedSource{}, false
 }
 
+func (t *ImageTree) tokens(rel STR) []byte {
+	if stream := t.inner.tokens(rel); stream != nil {
+		return stream
+	}
+
+	if no := t.imageFile(rel); no != 0 {
+		return t.files.tokens(no)
+	}
+
+	return nil
+}
+
+func (t *ImageTree) keepTokens(rel STR, stream []byte) {
+	t.inner.keepTokens(rel, stream)
+}
+
+func (t *ImageTree) recordsTokens() bool {
+	return t.inner.recordsTokens()
+}
+
 func (t *ImageTree) parse(vfsPath VFS, rel string, parser IncludeDirectiveParser, bucket ParsedIncludeBucket) ParsedSource {
 	return t.inner.parse(vfsPath, rel, parser, bucket)
 }
@@ -184,6 +204,9 @@ func writeTreeFiles(w *TreeImageWriter, tree Tree) {
 
 	var directives []IncludeDirective
 	var extras []MmapedExtra
+	var tokenBytes []byte
+
+	tokenSpans := []MmapedSpan{{}}
 
 	add := func(list []IncludeDirective) MmapedSpan {
 		if list == nil {
@@ -200,13 +223,16 @@ func writeTreeFiles(w *TreeImageWriter, tree Tree) {
 	for id := STR(1); uint32(id) < count; id++ {
 		hash := tree.contentHash(id)
 		p, ok := tree.peekParsed(id)
+		stream := tree.tokens(id)
 
-		if hash == 0 && !ok {
+		if hash == 0 && !ok && stream == nil {
 			continue
 		}
 
 		fileNo[id] = uint32(len(hashes))
 		hashes = append(hashes, hash)
+		tokenSpans = append(tokenSpans, MmapedSpan{off: uint32(len(tokenBytes)), n: uint32(len(stream))})
+		tokenBytes = append(tokenBytes, stream...)
 
 		var rec MmapedParsed
 
@@ -237,4 +263,6 @@ func writeTreeFiles(w *TreeImageWriter, tree Tree) {
 	w.section(treeSectionFileParsed, sliceBytesOf(parsed))
 	w.section(treeSectionDirectives, sliceBytesOf(directives))
 	w.section(treeSectionParsedExtras, sliceBytesOf(extras))
+	w.section(treeSectionTokenSpans, sliceBytesOf(tokenSpans))
+	w.section(treeSectionTokenBytes, tokenBytes)
 }

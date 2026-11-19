@@ -31,6 +31,8 @@ const (
 	treeSectionFileParsed
 	treeSectionDirectives
 	treeSectionParsedExtras
+	treeSectionTokenSpans
+	treeSectionTokenBytes
 )
 
 type TreeSession struct {
@@ -65,7 +67,7 @@ func (s *TreeSession) finish(code int, verbose bool) {
 	fmt.Fprintf(os.Stderr, "tree image: %d strings from the image, %d new, %d bytes of text\n", t.imageCount, t.count-max(t.imageCount, t.constCount), t.bytes.used)
 
 	if s.live != nil {
-		fmt.Fprintf(os.Stderr, "tree image: %d files parsed\n", s.live.parses)
+		fmt.Fprintf(os.Stderr, "tree image: %d files read, %d of them parsed for includes, %d directories listed\n", s.live.reads, s.live.parses, s.live.listings)
 	}
 }
 
@@ -86,6 +88,8 @@ func (img *TreeImage) files() *MmapedFiles {
 		parsed:     mmapedSlice[MmapedParsed](img.mapped(treeSectionFileParsed)),
 		directives: mmapedSlice[IncludeDirective](img.mapped(treeSectionDirectives)),
 		extras:     mmapedSlice[MmapedExtra](img.mapped(treeSectionParsedExtras)),
+		tokenSpans: mmapedSlice[MmapedSpan](img.mapped(treeSectionTokenSpans)),
+		tokenBytes: img.mapped(treeSectionTokenBytes),
 	}
 }
 

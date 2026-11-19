@@ -39,6 +39,10 @@ type Tree interface {
 	setReadErrorHook(hook func(rel string, errno syscall.Errno))
 	unreadableDir(dir string) syscall.Errno
 
+	tokens(rel STR) []byte
+	keepTokens(rel STR, stream []byte)
+	recordsTokens() bool
+
 	peekParsed(rel STR) (ParsedSource, bool)
 	parse(vfsPath VFS, rel string, parser IncludeDirectiveParser, bucket ParsedIncludeBucket) ParsedSource
 	includes(p ParsedSource) ParsedIncludeSet

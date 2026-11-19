@@ -90,6 +90,10 @@ type LiveTree struct {
 	extras         Vec[ParsedIncludeSet]
 	directives     *BumpAllocator[IncludeDirective]
 	parses         int
+	reads          int
+	listings       int
+	recordTokens   bool
+	tokenStreams   DenseMap[STR, []byte]
 	testReadErrors map[string]error
 	confRootOnce   sync.Once
 	confRootDir    string
@@ -226,6 +230,8 @@ func (fs *LiveTree) listdir(dir STR) DirView {
 }
 
 func (fs *LiveTree) listdirSlow(dir STR) DirView {
+	fs.listings++
+
 	row := dirRows.rowFor(dir)
 	v := fs.readDirView(dir, dir.string())
 
@@ -586,6 +592,8 @@ func (fs *LiveTree) read(rel string) [][]byte {
 }
 
 func (fs *LiveTree) readPath(rel STR) [][]byte {
+	fs.reads++
+
 	chunks, errno := fs.backend.readFile(rel.string())
 
 	switch {
@@ -770,4 +778,18 @@ func (fs *LiveTree) walkable(p ParsedSource) []IncludeDirective {
 	}
 
 	return fs.extras.s[p.extra-1][p.bucket]
+}
+
+func (fs *LiveTree) tokens(rel STR) []byte {
+	stream, _ := fs.tokenStreams.get(rel)
+
+	return stream
+}
+
+func (fs *LiveTree) keepTokens(rel STR, stream []byte) {
+	fs.tokenStreams.put(rel, slices.Clone(stream))
+}
+
+func (fs *LiveTree) recordsTokens() bool {
+	return fs.recordTokens
 }

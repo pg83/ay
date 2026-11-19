@@ -149,6 +149,8 @@ func cmdMake(g GlobalFlags, args []string) int {
 
 	live := newLiveTree(mf.srcRoot)
 
+	live.recordTokens = g.Session.out != ""
+
 	var fs Tree = live
 
 	if image := g.Session.image; image != nil {
