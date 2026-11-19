@@ -26,19 +26,20 @@ func (ctx *GenCtx) prepareDiscoveredModuleTests(discovered []DiscoveredTargets) 
 		return nil
 	}
 
-	seen := map[*ModuleEmitResult]bool{}
 	groups := map[VFS][]*ModuleEmitResult{}
 	live := ctx.emit.reachableNodes(ctx.emit.publicationFrontier())
 
 	var projects []VFS
 	var visit func(*ModuleEmitResult)
 
+	ctx.discoverEpoch++
+
 	visit = func(result *ModuleEmitResult) {
-		if seen[result] {
+		if result.discoverEpoch == ctx.discoverEpoch {
 			return
 		}
 
-		seen[result] = true
+		result.discoverEpoch = ctx.discoverEpoch
 
 		if ctx.peerTests {
 			for _, peer := range result.testPeers {

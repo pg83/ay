@@ -172,6 +172,7 @@ type ModuleEmitResult struct {
 	inIsolated                      bool
 	finishSeq                       uint32
 	testWalkEpoch                   uint32
+	discoverEpoch                   uint32
 }
 
 func protoResultWholeArchiveCmdPaths(res *ProtoSrcsResult) []VFS {
@@ -287,6 +288,7 @@ type GenCtx struct {
 	checkDependsInDart  bool
 	finishSeq           uint32
 	finishOrderBroken   bool
+	discoverEpoch       uint32
 }
 
 type moduleMemoEntry struct {

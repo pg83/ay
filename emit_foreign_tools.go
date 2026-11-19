@@ -291,21 +291,41 @@ func (ctx *GenCtx) bindForeignTools() {
 func (e *StreamingEmitter) reachableNodes(roots []NodeRef) BitSet {
 	var visited BitSet
 
-	stack := append([]NodeRef(nil), roots...)
+	stack := make([]NodeRef, 0, len(roots))
+
+	for _, ref := range roots {
+		if !visited.has(uint32(ref)) {
+			visited.add(uint32(ref))
+			stack = append(stack, ref)
+		}
+	}
 
 	for len(stack) > 0 {
-		ref := stack[len(stack)-1]
+		node := e.nodes.s[stack[len(stack)-1]]
 
 		stack = stack[:len(stack)-1]
 
-		if visited.has(uint32(ref)) {
+		if node == nil {
 			continue
 		}
 
-		visited.add(uint32(ref))
+		for _, dep := range node.DepRefs {
+			if !visited.has(uint32(dep)) {
+				visited.add(uint32(dep))
+				stack = append(stack, dep)
+			}
+		}
 
-		if node := e.nodes.s[ref]; node != nil {
-			for dep := range node.buildDeps(e.fetchRefs) {
+		for _, dep := range node.ForeignDepRefs {
+			if !visited.has(uint32(dep)) {
+				visited.add(uint32(dep))
+				stack = append(stack, dep)
+			}
+		}
+
+		for _, pat := range node.Resources {
+			if dep, ok := node.resourceRef(pat, e.fetchRefs); ok && !visited.has(uint32(dep)) {
+				visited.add(uint32(dep))
 				stack = append(stack, dep)
 			}
 		}
