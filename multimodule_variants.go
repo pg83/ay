@@ -1,5 +1,10 @@
 package main
 
+import (
+	"maps"
+	"slices"
+)
+
 var (
 	shapeLibCPP     = variantShape{kind: KindLib, language: LangCPP}
 	shapeBinCPP     = variantShape{kind: KindBin, language: LangCPP}
@@ -226,8 +231,8 @@ func yqlUdfShapes() map[STR]variantShape {
 func shapeTable(shapes map[string]variantShape) map[STR]variantShape {
 	out := make(map[STR]variantShape, len(shapes))
 
-	for sub, shape := range shapes {
-		out[internStr(sub)] = shape
+	for _, sub := range slices.Sorted(maps.Keys(shapes)) {
+		out[internStr(sub)] = shapes[sub]
 	}
 
 	return out
