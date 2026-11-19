@@ -105,6 +105,13 @@ func internAppend(s string, lo uint64) STR {
 	id := STR(internTable.count)
 	cell := InternCell{str: s, lo: lo}
 
+	if len(internTable.flatStr) == cap(internTable.flatStr) {
+		grown := make([]string, len(internTable.flatStr), 2*cap(internTable.flatStr))
+
+		copy(grown, internTable.flatStr)
+		internTable.flatStr = grown
+	}
+
 	internTable.flatStr = append(internTable.flatStr, s)
 	internTable.flatLo.pushBack(lo)
 
