@@ -291,6 +291,7 @@ type GenCtx struct {
 	finishSeq           uint32
 	finishOrderBroken   bool
 	discoverEpoch       uint32
+	spareFrames         []*ModuleFrame
 }
 
 type moduleMemoEntry struct {
@@ -3601,17 +3602,32 @@ type ModuleFrame struct {
 	peerCOnlyFlagsGlobal []ANY
 	peerLinkCmdPaths     []VFS
 	tools                []*ModuleEmitResult
+	parked               bool
+}
+
+func (ctx *GenCtx) spareFrame() *ModuleFrame {
+	if n := len(ctx.spareFrames); n != 0 {
+		f := ctx.spareFrames[n-1]
+
+		ctx.spareFrames = ctx.spareFrames[:n-1]
+
+		return f
+	}
+
+	return &ModuleFrame{}
 }
 
 func (ctx *GenCtx) pushFrame() *ModuleFrame {
 	if ctx.frameDepth == len(ctx.frames) {
-		ctx.frames = append(ctx.frames, &ModuleFrame{})
+		ctx.frames = append(ctx.frames, ctx.spareFrame())
 	}
 
 	f := ctx.frames[ctx.frameDepth]
 
 	if f.pending != 0 {
-		f = &ModuleFrame{}
+		f.parked = true
+		f = ctx.spareFrame()
+
 		ctx.frames[ctx.frameDepth] = f
 	}
 

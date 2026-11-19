@@ -219,13 +219,23 @@ func (p *PendingEmit) fire() {
 	}
 
 	if frame != nil {
-		defer func() { frame.pending-- }()
+		defer frame.release()
 	}
 
 	if emitter != nil {
 		emitter.emitPending()
 	} else {
 		fn()
+	}
+}
+
+func (f *ModuleFrame) release() {
+	if f.pending--; f.pending == 0 && f.parked {
+		f.parked = false
+
+		ctx := f.emitCtx.ctx
+
+		ctx.spareFrames = append(ctx.spareFrames, f)
 	}
 }
 
