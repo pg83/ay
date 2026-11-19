@@ -473,11 +473,22 @@ type javaConflictResolver struct {
 	rules     *javaDMRules
 	lv        *javaResolveLevel
 	conflicts map[uint32]*javaConflictRecord
+	tracking  bool
 }
 
 type javaConflictRecord struct {
 	lib, version string
 	versions     []string
+}
+
+func (r *javaConflictResolver) record(lib uint32, rec *javaConflictRecord) *javaConflictRecord {
+	if r.conflicts == nil {
+		r.conflicts = map[uint32]*javaConflictRecord{}
+	}
+
+	r.conflicts[lib] = rec
+
+	return rec
 }
 
 func (r *javaConflictResolver) accept(conflict, target *JavaModule, managed bool) *JavaModule {
@@ -503,7 +514,13 @@ func (r *javaConflictResolver) resolve(cur javaResolvedPeer, depth int) *JavaMod
 	flags := r.parent.data.depsConfig
 
 	if l := lv.lib(cur.m.lib); l.epoch == lv.epoch {
-		if rec := r.conflicts[cur.m.lib]; rec != nil && (flags&javaForbidConflict != 0 && l.kind != jprManaged || flags&(javaForbidConflictDM|javaForbidConflictDMRecent) != 0 && l.kind == jprManaged) {
+		if r.tracking && (flags&javaForbidConflict != 0 && l.kind != jprManaged || flags&(javaForbidConflictDM|javaForbidConflictDMRecent) != 0 && l.kind == jprManaged) {
+			rec := r.conflicts[cur.m.lib]
+
+			if rec == nil {
+				rec = r.record(cur.m.lib, &javaConflictRecord{lib: javaPathParent(cur.m.dir), version: path.Base(r.ctx.jc.byID[l.m].dir)})
+			}
+
 			if len(rec.versions) == 0 {
 				rec.versions = append(rec.versions, rec.version)
 			}
@@ -520,13 +537,6 @@ func (r *javaConflictResolver) resolve(cur javaResolvedPeer, depth int) *JavaMod
 
 	*lv.lib(cur.m.lib) = javaLibSlot{epoch: lv.epoch, m: cur.m.id, kind: cur.resolution}
 
-	var rec *javaConflictRecord
-
-	if r.conflicts != nil {
-		rec = &javaConflictRecord{lib: javaPathParent(cur.m.dir), version: path.Base(cur.m.dir)}
-		r.conflicts[cur.m.lib] = rec
-	}
-
 	resolved := r.explicitResolution(cur.m, depth == 1)
 
 	if resolved == nil {
@@ -537,12 +547,8 @@ func (r *javaConflictResolver) resolve(cur javaResolvedPeer, depth int) *JavaMod
 		return r.accept(cur.m, cur.m, false)
 	}
 
-	if rec != nil {
-		if flags&(javaForbidConflictDM|javaForbidConflictDMRecent) != 0 && resolved != cur.m {
-			rec.versions = append(rec.versions, rec.version)
-		}
-
-		rec.version = path.Base(resolved.dir)
+	if r.tracking && flags&(javaForbidConflictDM|javaForbidConflictDMRecent) != 0 && resolved != cur.m {
+		r.record(cur.m.lib, &javaConflictRecord{lib: javaPathParent(cur.m.dir), version: path.Base(resolved.dir), versions: []string{path.Base(cur.m.dir)}})
 	}
 
 	*lv.lib(cur.m.lib) = javaLibSlot{epoch: lv.epoch, m: resolved.id, kind: jprManaged}
@@ -697,7 +703,7 @@ func (ctx *GenCtx) javaResolveConflicts(jm *JavaModule, lv *javaResolveLevel) {
 	resolver := javaConflictResolver{ctx: ctx, parent: jm, rules: jm.rules, lv: lv}
 
 	if jm.data.depsConfig&(javaForbidConflict|javaForbidConflictDM|javaForbidConflictDMRecent) != 0 {
-		resolver.conflicts = map[uint32]*javaConflictRecord{}
+		resolver.tracking = true
 
 		defer resolver.reportConflicts()
 	}
