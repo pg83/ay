@@ -1,3 +1,5 @@
+//go:build !aygate
+
 package main
 
 import (
@@ -18,11 +20,9 @@ type dirFDCacheEntry struct {
 	fd  int
 }
 
-type DirBackend struct {
-	root           string
-	rootSlash      string
+type fsBackend struct {
+	testReadErrors map[string]error
 	readBuf        []byte
-	readResult     [2][]byte
 	fileCloseQueue chan fdCloseBatch
 	closePending   fdCloseBatch
 	direntBuf      []byte
@@ -36,21 +36,16 @@ type DirBackend struct {
 	pathBuf        []byte
 }
 
-func newDirBackend(root string) *DirBackend {
-	b := &DirBackend{
-		root:           root,
-		rootSlash:      root + "/",
-		readBuf:        make([]byte, readChunkSize),
-		fileCloseQueue: make(chan fdCloseBatch, fdCloseQueueBatches),
-		dirFD:          -1,
-		dirFDs:         make(map[string]int, dirFDCacheSize),
-	}
+func (fs *OsFS) initBackend() {
+	fs.readBuf = make([]byte, readChunkSize)
+	fs.testReadErrors = map[string]error{}
+	fs.fileCloseQueue = make(chan fdCloseBatch, fdCloseQueueBatches)
+	fs.dirFD = -1
+	fs.dirFDs = make(map[string]int, dirFDCacheSize)
 
-	b.platformInit()
+	fs.platformInit()
 
-	go b.closeFiles()
-
-	return b
+	go fs.closeFiles()
 }
 
 type fdCloseBatch struct {
@@ -58,28 +53,28 @@ type fdCloseBatch struct {
 	fds [fdCloseBatchSize]int32
 }
 
-func (b *DirBackend) closeFiles() {
-	for batch := range b.fileCloseQueue {
+func (fs *OsFS) closeFiles() {
+	for batch := range fs.fileCloseQueue {
 		for i := 0; i < batch.n; i++ {
 			syscall.Close(int(batch.fds[i]))
 		}
 	}
 }
 
-func (b *DirBackend) closeFile(fd int) {
-	batch := &b.closePending
+func (fs *OsFS) closeFile(fd int) {
+	batch := &fs.closePending
 
 	batch.fds[batch.n] = int32(fd)
 	batch.n++
 
 	if batch.n == len(batch.fds) {
-		b.fileCloseQueue <- *batch
+		fs.fileCloseQueue <- *batch
 		batch.n = 0
 	}
 }
 
-func (b *DirBackend) exists(rel string) bool {
-	_, err := os.Stat(filepath.Join(b.root, rel))
+func (fs *OsFS) sourcePathExists(rel string) bool {
+	_, err := os.Stat(filepath.Join(fs.srcRoot, rel))
 
 	if err != nil && !errors.Is(err, syscall.ENOENT) && !errors.Is(err, syscall.ENOTDIR) &&
 		!errors.Is(err, syscall.ENAMETOOLONG) && !errors.Is(err, syscall.EACCES) && !errors.Is(err, syscall.EPERM) && !errors.Is(err, syscall.ELOOP) {
@@ -89,38 +84,6 @@ func (b *DirBackend) exists(rel string) bool {
 	return err == nil
 }
 
-func (b *DirBackend) readError(rel string) error {
-	name := b.rootSlash + rel
-
-	if info, err := os.Lstat(name); err != nil || !info.Mode().IsRegular() {
-		return nil
-	}
-
-	fd, err := syscall.Open(name, syscall.O_RDONLY|syscall.O_CLOEXEC, 0)
-
-	if err != nil {
-		return &os.PathError{Op: "open", Path: name, Err: err}
-	}
-
-	defer b.closeFile(fd)
-
-	for {
-		n, err := chaosTestDataRead(fd, b.readBuf)
-
-		if err == syscall.EINTR {
-			continue
-		}
-
-		if err != nil {
-			return &os.PathError{Op: "read", Path: name, Err: err}
-		}
-
-		if n == 0 {
-			return nil
-		}
-	}
-}
-
-func (b *DirBackend) localRoot() string {
-	return b.root
+func (fs *OsFS) confRoot() string {
+	return fs.srcRoot
 }

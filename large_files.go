@@ -19,7 +19,7 @@ except Exception as e:
 print(json.dumps([storage.lower(), '{}'.format(res_id)]))
 `
 
-func readLargeFileDescriptor(fs Tree, placeholder VFS) (string, string, string) {
+func readLargeFileDescriptor(fs FS, placeholder VFS) (string, string, string) {
 	var values [2]string
 
 	if err := try(func() {
@@ -41,7 +41,7 @@ func readLargeFileDescriptor(fs Tree, placeholder VFS) (string, string, string) 
 	return values[0], values[1], ""
 }
 
-func resolveLargeFileSource(fs Tree, codegen *CodegenRegistry, modulePath, name string, srcDirs []VFS) VFS {
+func resolveLargeFileSource(fs FS, codegen *CodegenRegistry, modulePath, name string, srcDirs []VFS) VFS {
 	if rooted, ok := moduleRootedVFS(modulePath, name); ok {
 		return rooted
 	}
@@ -71,7 +71,7 @@ func resolveLargeFileSource(fs Tree, codegen *CodegenRegistry, modulePath, name 
 	return 0
 }
 
-func applyLargeFiles(fs Tree, codegen *CodegenRegistry, modulePath string, stmt UnknownStmt, d *ModuleData, onWarn func(Warn)) {
+func applyLargeFiles(fs FS, codegen *CodegenRegistry, modulePath string, stmt UnknownStmt, d *ModuleData, onWarn func(Warn)) {
 	args := stmt.Args
 
 	if len(args) > 0 && args[0] == kwAUTOUPDATED.any() {

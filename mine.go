@@ -9,11 +9,11 @@ import (
 	"github.com/BurntSushi/toml"
 )
 
-func readYaConfSection(fs Tree, rel, wantSection string) map[string]string {
+func readYaConfSection(fs FS, rel, wantSection string) map[string]string {
 	return yaConfStringTable(readYaConf(fs, rel)[wantSection])
 }
 
-func readYaConf(fs Tree, rel string) map[string]any {
+func readYaConf(fs FS, rel string) map[string]any {
 	var root map[string]any
 
 	if _, err := toml.Decode(string(concatChunks(fs.read(rel))), &root); err != nil {

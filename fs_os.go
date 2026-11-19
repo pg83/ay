@@ -3,9 +3,7 @@ package main
 import (
 	"os"
 	"path/filepath"
-	"slices"
 	"strings"
-	"sync"
 	"sync/atomic"
 	"syscall"
 )
@@ -68,7 +66,7 @@ func (h *ContentHashes) load(rel STR) uint64 {
 	return atomic.LoadUint64(unsafeAt(*page, uint64(off)))
 }
 
-type LiveTree struct {
+type OsFS struct {
 	srcRoot        string
 	rootSlash      string
 	dirs           Vec[DirView]
@@ -78,148 +76,34 @@ type LiveTree struct {
 	knownFiles     BitSet
 	sourceUnder    *IntMap[STR]
 	sourceUnderHot [sourceUnderHotMask + 1]sourceUnderHotEntry
-	emptyRead      [1][]byte
-	fill           DirFill
+	readResult     [2][]byte
 	bundleKeys     []STR
 	bundleVals     []map[string]ResourceBundleEntry
 	walkQueue      []STR
 	walkBuf        []byte
 
-	backend        Backend
-	parsed         DenseMap[STR, ParsedSource]
-	extras         Vec[ParsedIncludeSet]
-	directives     *BumpAllocator[IncludeDirective]
-	parses         int
-	reads          int
-	listings       int
-	recordTokens   bool
-	tokenStreams   DenseMap[STR, []byte]
-	testReadErrors map[string]error
-	confRootOnce   sync.Once
-	confRootDir    string
+	fsBackend
 
 	onReadError func(rel string, err syscall.Errno)
 
 	unreadableDirs map[string]syscall.Errno
 }
 
-func newLiveTree(srcRoot string) *LiveTree {
-	fs := &LiveTree{
-		srcRoot:        srcRoot,
-		rootSlash:      srcRoot + "/",
-		dirNames:       newBumpAllocator[uint32](),
-		dirEntries:     newIntSet(1 << 17),
-		testReadErrors: map[string]error{},
-		directives:     newBumpAllocator[IncludeDirective](),
-		sourceUnder:    newIntMap[STR](1 << 18),
+func newFS(srcRoot string) FS {
+	fs := &OsFS{
+		srcRoot:     srcRoot,
+		rootSlash:   srcRoot + "/",
+		dirNames:    newBumpAllocator[uint32](),
+		dirEntries:  newIntSet(1 << 17),
+		sourceUnder: newIntMap[STR](1 << 18),
 	}
 
-	if info, err := os.Stat(srcRoot); err == nil && !info.IsDir() {
-		fs.backend = newIndexedBackend(srcRoot)
-	} else {
-		fs.backend = newDirBackend(srcRoot)
-	}
+	fs.initBackend()
 
 	return fs
 }
 
-type DirFill struct {
-	dir   STR
-	block []uint32
-	k     int
-}
-
-func (fs *LiveTree) dirBegin(limit int) {
-	fs.fill.block = fs.dirNames.alloc(limit)
-}
-
-func (fs *LiveTree) dirEntry(name []byte, isDir bool) {
-	id := internBytes(name)
-	packed := uint32(id) << 1
-
-	if isDir {
-		packed |= 1
-	}
-
-	fs.fill.block[fs.fill.k] = packed
-	fs.fill.k++
-	fs.dirEntries.put(splitMix64(uint32(fs.fill.dir), uint32(id)), isDir)
-}
-
-func (fs *LiveTree) readDirView(dir STR, rel string) DirView {
-	fs.fill = DirFill{dir: dir}
-
-	if errno := fs.backend.readDir(rel, fs); errno != 0 {
-		if errno == syscall.EACCES || errno == syscall.EPERM {
-			if fs.unreadableDirs == nil {
-				fs.unreadableDirs = map[string]syscall.Errno{}
-			}
-
-			fs.unreadableDirs[rel] = errno
-		}
-
-		return DirView{}
-	}
-
-	k := fs.fill.k
-
-	if k == 0 {
-		return DirView{dir: dir, names: emptyDirNames}
-	}
-
-	fs.dirNames.commit(k)
-
-	names := fs.fill.block[:k]
-
-	slices.SortFunc(names, func(a, b uint32) int {
-		return strings.Compare(STR(a>>1).string(), STR(b>>1).string())
-	})
-
-	return DirView{dir: dir, names: names}
-}
-
-func (fs *LiveTree) dirHas(v DirView, name string) (present bool, isDir bool) {
-	return fs.dirHasInterned(v, name)
-}
-
-func (fs *LiveTree) sourcePathExists(rel string) bool {
-	return fs.backend.exists(rel)
-}
-
-func (fs *LiveTree) confRoot() string {
-	if root := fs.backend.localRoot(); root != "" {
-		return root
-	}
-
-	fs.confRootOnce.Do(func() {
-		root := throw2(os.MkdirTemp("", "ay-gate-conf-"))
-
-		atExit(func() { os.RemoveAll(root) })
-
-		for _, rel := range []string{ymakeConfScript, "build/internal"} {
-			fs.walk(rel, func(name string, isDir bool) bool {
-				out := filepath.Join(root, name)
-
-				if isDir {
-					throw(os.MkdirAll(out, 0o755))
-
-					return true
-				}
-
-				throw(os.MkdirAll(filepath.Dir(out), 0o755))
-				throw(os.WriteFile(out, concatChunks(fs.read(name)), 0o644))
-
-				return false
-			})
-		}
-
-		fs.confRootDir = root
-	})
-
-	return fs.confRootDir
-}
-
-func (fs *LiveTree) listdir(dir STR) DirView {
+func (fs *OsFS) listdir(dir STR) DirView {
 	if row := dirRows.rowOf(dir); int(row) < len(fs.dirs.s) {
 		if cached := fs.dirs.s[row]; cached.dir != 0 {
 			return cached
@@ -229,11 +113,9 @@ func (fs *LiveTree) listdir(dir STR) DirView {
 	return fs.listdirSlow(dir)
 }
 
-func (fs *LiveTree) listdirSlow(dir STR) DirView {
-	fs.listings++
-
+func (fs *OsFS) listdirSlow(dir STR) DirView {
 	row := dirRows.rowFor(dir)
-	v := fs.readDirView(dir, dir.string())
+	v := fs.readDirViewRel(dir, dir.string())
 
 	v.dir = dir
 
@@ -277,7 +159,7 @@ func (c *recentSTRs) interned(name string) STR {
 	return id
 }
 
-func (fs *LiveTree) dirHasInterned(v DirView, name string) (present bool, isDir bool) {
+func (fs *OsFS) dirHasInterned(v DirView, name string) (present bool, isDir bool) {
 	id := internedRecent(name)
 
 	if id == 0 {
@@ -287,7 +169,7 @@ func (fs *LiveTree) dirHasInterned(v DirView, name string) (present bool, isDir 
 	return fs.dirHasID(v, id)
 }
 
-func (fs *LiveTree) dirHasID(v DirView, id STR) (present bool, isDir bool) {
+func (fs *OsFS) dirHasID(v DirView, id STR) (present bool, isDir bool) {
 	isDir, ok := fs.dirEntries.get(splitMix64(uint32(v.dir), uint32(id)))
 
 	if !ok {
@@ -297,7 +179,7 @@ func (fs *LiveTree) dirHasID(v DirView, id STR) (present bool, isDir bool) {
 	return true, isDir
 }
 
-func (fs *LiveTree) existsID(prefix, rel STR) (present bool, isDir bool) {
+func (fs *OsFS) existsID(prefix, rel STR) (present bool, isDir bool) {
 	if rel.isEmpty() {
 		return fs.listdir(prefix).listable(), true
 	}
@@ -319,11 +201,11 @@ func (fs *LiveTree) existsID(prefix, rel STR) (present bool, isDir bool) {
 	return fs.dirHasID(view, rel)
 }
 
-func (fs *LiveTree) exists(prefix STR, suffix string) (present bool, isDir bool) {
+func (fs *OsFS) exists(prefix STR, suffix string) (present bool, isDir bool) {
 	return fs.existsClean(prefix, suffix, suffix != "" && pathIsClean(suffix))
 }
 
-func (fs *LiveTree) existsClean(prefix STR, suffix string, clean bool) (present bool, isDir bool) {
+func (fs *OsFS) existsClean(prefix STR, suffix string, clean bool) (present bool, isDir bool) {
 	if suffix == "" {
 		return fs.listdir(prefix).listable(), true
 	}
@@ -391,19 +273,19 @@ func (fs *LiveTree) existsClean(prefix STR, suffix string, clean bool) (present 
 	return ok, d
 }
 
-func (fs *LiveTree) isFile(prefix STR, suffix string) bool {
+func (fs *OsFS) isFile(prefix STR, suffix string) bool {
 	p, d := fs.exists(prefix, suffix)
 
 	return p && !d
 }
 
-func (fs *LiveTree) isFileClean(prefix STR, suffix string) bool {
+func (fs *OsFS) isFileClean(prefix STR, suffix string) bool {
 	p, d := fs.existsClean(prefix, suffix, true)
 
 	return p && !d
 }
 
-func (fs *LiveTree) isFileID(dir, name STR) bool {
+func (fs *OsFS) isFileID(dir, name STR) bool {
 	v := fs.listdir(dir)
 
 	if !v.listable() {
@@ -415,7 +297,7 @@ func (fs *LiveTree) isFileID(dir, name STR) bool {
 	return present && !isDir
 }
 
-func (fs *LiveTree) isFilePathClean(rel string) bool {
+func (fs *OsFS) isFilePathClean(rel string) bool {
 	dir, name := splitDirName(rel)
 	v := fs.listdir(internDirText(dir))
 
@@ -428,7 +310,7 @@ func (fs *LiveTree) isFilePathClean(rel string) bool {
 	return present && !isDir
 }
 
-func (fs *LiveTree) isFileVFS(v VFS) bool {
+func (fs *OsFS) isFileVFS(v VFS) bool {
 	id := v.rel()
 
 	if fs.knownFiles.has(uint32(id)) {
@@ -444,7 +326,7 @@ func (fs *LiveTree) isFileVFS(v VFS) bool {
 	return true
 }
 
-func (fs *LiveTree) isFileVFSAny(v VFS) bool {
+func (fs *OsFS) isFileVFSAny(v VFS) bool {
 	if v.rel().cleanPath() {
 		return fs.isFileVFS(v)
 	}
@@ -452,19 +334,15 @@ func (fs *LiveTree) isFileVFSAny(v VFS) bool {
 	return fs.isFile(srcRootRel, v.relString())
 }
 
-func (fs *LiveTree) noteFile(v VFS) {
+func (fs *OsFS) noteFile(v VFS) {
 	fs.knownFiles.add(uint32(v.rel()))
 }
 
-func (fs *LiveTree) isReadFile(rel STR) bool {
+func (fs *OsFS) isReadFile(rel STR) bool {
 	return fs.contentHashes.load(rel) != 0
 }
 
-func (fs *LiveTree) contentHash(rel STR) uint64 {
-	return fs.contentHashes.load(rel)
-}
-
-func (fs *LiveTree) resourceBundle(rel STR) (map[string]ResourceBundleEntry, bool) {
+func (fs *OsFS) resourceBundle(rel STR) (map[string]ResourceBundleEntry, bool) {
 	for i, key := range fs.bundleKeys {
 		if key == rel {
 			return fs.bundleVals[i], true
@@ -474,20 +352,20 @@ func (fs *LiveTree) resourceBundle(rel STR) (map[string]ResourceBundleEntry, boo
 	return nil, false
 }
 
-func (fs *LiveTree) storeResourceBundle(rel STR, bundle map[string]ResourceBundleEntry) {
+func (fs *OsFS) storeResourceBundle(rel STR, bundle map[string]ResourceBundleEntry) {
 	fs.bundleKeys = append(fs.bundleKeys, rel)
 	fs.bundleVals = append(fs.bundleVals, bundle)
 }
 
-func (fs *LiveTree) resolveSourceUnder(prefix, target STR) STR {
+func (fs *OsFS) resolveSourceUnder(prefix, target STR) STR {
 	return fs.resolveSourceUnder0(prefix, target, false, false)
 }
 
-func (fs *LiveTree) resolveSourceUnderClean(prefix, target STR, targetClean bool) STR {
+func (fs *OsFS) resolveSourceUnderClean(prefix, target STR, targetClean bool) STR {
 	return fs.resolveSourceUnder0(prefix, target, targetClean, true)
 }
 
-func (fs *LiveTree) resolveSourceUnder0(prefix, target STR, targetClean, cleanKnown bool) STR {
+func (fs *OsFS) resolveSourceUnder0(prefix, target STR, targetClean, cleanKnown bool) STR {
 	p, t := uint32(prefix), uint32(target)
 	pair := uint64(p)<<32 | uint64(t)
 	hot := &fs.sourceUnderHot[chaosSourceUnderSlot((p*0x9e3779b1^t)&sourceUnderHotMask)]
@@ -558,13 +436,13 @@ func (fs *LiveTree) resolveSourceUnder0(prefix, target STR, targetClean, cleanKn
 	return v
 }
 
-func (fs *LiveTree) isDir(prefix STR, suffix string) bool {
+func (fs *OsFS) isDir(prefix STR, suffix string) bool {
 	p, d := fs.exists(prefix, suffix)
 
 	return p && d
 }
 
-func (fs *LiveTree) existsRel(rel string) (present bool, isDir bool) {
+func (fs *OsFS) existsRel(rel string) (present bool, isDir bool) {
 	rel = cleanRel(rel)
 
 	if rel == "" {
@@ -583,37 +461,23 @@ func (fs *LiveTree) existsRel(rel string) (present bool, isDir bool) {
 	return ok, d
 }
 
-func (fs *LiveTree) listdirRel(rel string) DirView {
+func (fs *OsFS) listdirRel(rel string) DirView {
 	return fs.listdir(dirKey(rel))
 }
 
-func (fs *LiveTree) read(rel string) [][]byte {
+func (fs *OsFS) read(rel string) [][]byte {
 	return fs.readPath(internStr(rel))
 }
 
-func (fs *LiveTree) readPath(rel STR) [][]byte {
-	fs.reads++
-
-	chunks, errno := fs.backend.readFile(rel.string())
-
-	switch {
-	case errno == syscall.EISDIR:
-		throwFmt("read %s: %v", rel.string(), errno)
-	case errno != 0 && errno != syscall.ENOENT && fs.onReadError != nil:
-		fs.onReadError(rel.string(), errno)
-
-		fs.emptyRead[0] = nil
-		chunks = fs.emptyRead[:1]
-	case errno != 0:
-		throwFmt("open %s: %v", rel.string(), errno)
-	}
+func (fs *OsFS) readPath(rel STR) [][]byte {
+	chunks := fs.readFileRel(rel.string())
 
 	fs.contentHashes.store(rel, contentHashChunks(chunks))
 
 	return chunks
 }
 
-func (fs *LiveTree) walkDirID(root STR, visit func(rel string, dir STR, isDir bool) bool) {
+func (fs *OsFS) walkDirID(root STR, visit func(rel string, dir STR, isDir bool) bool) {
 	if !fs.listdir(root).listable() || !visit(root.string(), root, true) {
 		return
 	}
@@ -651,7 +515,7 @@ func (fs *LiveTree) walkDirID(root STR, visit func(rel string, dir STR, isDir bo
 	fs.walkQueue, fs.walkBuf = queue[:0], buf[:0]
 }
 
-func (fs *LiveTree) walk(rel string, visit func(rel string, isDir bool) bool) {
+func (fs *OsFS) walk(rel string, visit func(rel string, isDir bool) bool) {
 	rel = cleanRel(rel)
 
 	present, isDir := fs.existsRel(rel)
@@ -697,99 +561,6 @@ func (fs *LiveTree) walk(rel string, visit func(rel string, isDir bool) bool) {
 	fs.walkQueue, fs.walkBuf = queue[:0], buf[:0]
 }
 
-func (fs *LiveTree) root() string {
+func (fs *OsFS) root() string {
 	return fs.srcRoot
-}
-
-func (fs *LiveTree) setReadErrorHook(hook func(rel string, errno syscall.Errno)) {
-	fs.onReadError = hook
-}
-
-func (fs *LiveTree) unreadableDir(dir string) syscall.Errno {
-	if len(fs.unreadableDirs) == 0 {
-		return 0
-	}
-
-	return fs.unreadableDirs[dir]
-}
-
-func (fs *LiveTree) peekParsed(rel STR) (ParsedSource, bool) {
-	return fs.parsed.get(rel)
-}
-
-func (fs *LiveTree) parse(vfsPath VFS, rel string, parser IncludeDirectiveParser, bucket ParsedIncludeBucket) ParsedSource {
-	key := vfsPath.rel()
-
-	if parser == nil || !fs.isFileVFS(vfsPath) {
-		empty := ParsedSource{parser: includeParserKind(parser), bucket: bucket}
-
-		fs.parsed.put(key, empty)
-
-		return empty
-	}
-
-	fs.parses++
-
-	data := fs.readPath(key)
-
-	if first := data[0]; len(first) >= 3 && first[0] == 0xEF && first[1] == 0xBB && first[2] == 0xBF {
-		data[0] = first[3:]
-	}
-
-	out := parser.parse(rel, data, fs.directives)
-	parsed := ParsedSource{local: out[parsedIncludesLocal], parser: includeParserKind(parser), bucket: bucket}
-
-	if len(parsed.local) > 0 {
-		parsed.dir = internDirText(pathDir(rel))
-	}
-
-	for _, entries := range out[1:] {
-		if entries != nil {
-			fs.extras.pushBack(out)
-			parsed.extra = uint32(fs.extras.len())
-
-			if parsed.dir == 0 {
-				parsed.dir = internDirText(pathDir(rel))
-			}
-
-			break
-		}
-	}
-
-	fs.parsed.put(key, parsed)
-
-	return parsed
-}
-
-func (fs *LiveTree) includes(p ParsedSource) ParsedIncludeSet {
-	if p.extra != 0 {
-		return fs.extras.s[p.extra-1]
-	}
-
-	return ParsedIncludeSet{parsedIncludesLocal: p.local}
-}
-
-func (fs *LiveTree) walkable(p ParsedSource) []IncludeDirective {
-	switch {
-	case p.bucket == parsedIncludesLocal:
-		return p.local
-	case p.extra == 0:
-		return nil
-	}
-
-	return fs.extras.s[p.extra-1][p.bucket]
-}
-
-func (fs *LiveTree) tokens(rel STR) []byte {
-	stream, _ := fs.tokenStreams.get(rel)
-
-	return stream
-}
-
-func (fs *LiveTree) keepTokens(rel STR, stream []byte) {
-	fs.tokenStreams.put(rel, slices.Clone(stream))
-}
-
-func (fs *LiveTree) recordsTokens() bool {
-	return fs.recordTokens
 }

@@ -35,7 +35,7 @@ type CanonBuf struct {
 	eSeen     []bool
 	chunkMemo map[ChunkKey]ChunkAccum
 	hash      func(VFS) uint64
-	recorded  func(STR) uint64
+	fsHashes  *ContentHashes
 	futs      *PageVec[*NodeFuture]
 	fetchRefs *DenseMap[STR, NodeRef]
 }
@@ -55,7 +55,7 @@ func (c *CanonBuf) inputVal(v VFS) uint64 {
 	}
 
 	if !c.eSeen[id] {
-		e := internLo(STR(id>>1)) ^ uint64(id&1)
+		e := internTable.cells.get(id>>1).lo ^ uint64(id&1)
 
 		if v.isSource() {
 			e ^= c.sourceHash(v)
@@ -69,8 +69,10 @@ func (c *CanonBuf) inputVal(v VFS) uint64 {
 }
 
 func (c *CanonBuf) sourceHash(v VFS) uint64 {
-	if h := c.recorded(v.rel()); h != 0 {
-		return h
+	if c.fsHashes != nil {
+		if h := c.fsHashes.load(v.rel()); h != 0 {
+			return h
+		}
 	}
 
 	return c.hash(v)
@@ -96,7 +98,7 @@ func (c *CanonBuf) writeBytes(s string) {
 }
 
 func (c *CanonBuf) writeSTR(s STR) {
-	c.writeUint64(internLo(s))
+	c.writeUint64(internTable.cells.get(uint32(s)).lo)
 }
 
 func (c *CanonBuf) writeRefUIDs(refs []NodeRef) {
@@ -203,19 +205,19 @@ func (c *CanonBuf) writeVFSSliceBody(vs []VFS) {
 
 func (c *CanonBuf) writeVFS(v VFS) {
 	c.writeByte(byte(uint32(v) & 1))
-	c.writeUint64(internLo(STR(uint32(v) >> 1)))
+	c.writeUint64(internTable.cells.get(uint32(v) >> 1).lo)
 }
 
 func (c *CanonBuf) writeANY(a ANY) {
 	if v := a.vfs(); v != 0 {
 		c.writeByte(1 | byte(uint32(v)&1)<<1)
-		c.writeUint64(internLo(STR(uint32(v) >> 1)))
+		c.writeUint64(internTable.cells.get(uint32(v) >> 1).lo)
 
 		return
 	}
 
 	c.writeByte(0)
-	c.writeUint64(internLo(a.str()))
+	c.writeUint64(internTable.cells.get(uint32(a.str())).lo)
 }
 
 func (c *CanonBuf) writeAnyChunks(chunks ArgChunks) {

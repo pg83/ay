@@ -79,7 +79,7 @@ type NodeFuture struct {
 	err    *Exception
 }
 
-func newExecutor(srcRoot, bldRoot string, recorded func(STR) uint64, threads int, keepGoing bool, ninja bool, sandboxing bool, clear bool, cmdPrefixes []CmdPrefix, events *EventQueue) *Executor {
+func newExecutor(srcRoot, bldRoot string, fs FS, threads int, keepGoing bool, ninja bool, sandboxing bool, clear bool, cmdPrefixes []CmdPrefix, events *EventQueue) *Executor {
 	ex := &Executor{
 		srcRoot:     srcRoot,
 		bldRoot:     bldRoot,
@@ -95,7 +95,11 @@ func newExecutor(srcRoot, bldRoot string, recorded func(STR) uint64, threads int
 		prepBatchCap: 1,
 	}
 
-	ex.canon = CanonBuf{hash: ex.contentHash, recorded: recorded, futs: ex.futs, chunkMemo: map[ChunkKey]ChunkAccum{}}
+	ex.canon = CanonBuf{hash: ex.contentHash, futs: ex.futs, chunkMemo: map[ChunkKey]ChunkAccum{}}
+
+	if osfs, ok := fs.(*OsFS); ok {
+		ex.canon.fsHashes = &osfs.contentHashes
+	}
 
 	if clear {
 		ex.clearCache()

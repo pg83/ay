@@ -3,7 +3,6 @@ package main
 import (
 	"cmp"
 	"fmt"
-	"maps"
 	"path"
 	"slices"
 	"strconv"
@@ -30,8 +29,8 @@ var javaConfGlobals = map[string]string{
 var javaConfGlobalEnv = func() []javaConfGlobal {
 	out := make([]javaConfGlobal, 0, len(javaConfGlobals))
 
-	for _, name := range slices.Sorted(maps.Keys(javaConfGlobals)) {
-		out = append(out, javaConfGlobal{name: internEnv(name), value: internStr(javaConfGlobals[name])})
+	for name, value := range javaConfGlobals {
+		out = append(out, javaConfGlobal{name: internEnv(name), value: internStr(value)})
 	}
 
 	return out
@@ -55,8 +54,8 @@ var javaUberjarFlagVars = []ENV{
 var javaConfGlobalBindings = func() []confMacroBinding {
 	var out []confMacroBinding
 
-	for _, name := range slices.Sorted(maps.Keys(javaConfGlobals)) {
-		out = append(out, confMacroBinding{name: internStr(name), values: []ANY{internAny(javaConfGlobals[name])}, bound: true})
+	for name, value := range javaConfGlobals {
+		out = append(out, confMacroBinding{name: internStr(name), values: []ANY{internAny(value)}, bound: true})
 	}
 
 	return out

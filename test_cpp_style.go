@@ -10,7 +10,7 @@ func (d *ModuleData) collectCPPStyle(stmt UnknownStmt, env Environment) {
 	d.styleChecks = append(d.styleChecks, cppStyleCheck(stmt, env))
 }
 
-func (d *JavaData) collectCPPStyle(fs Tree, dir string, stmt UnknownStmt, env Environment) {
+func (d *JavaData) collectCPPStyle(fs FS, dir string, stmt UnknownStmt, env Environment) {
 	check := cppStyleCheck(stmt, env)
 
 	for _, file := range headerFiles(fs, dir, []ANY{str4.any()}) {

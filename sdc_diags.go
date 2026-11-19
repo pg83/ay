@@ -58,7 +58,7 @@ func setupSdcDiagsModule(stmt *ModuleStmt, language Language, env Environment, d
 	d.peerdirs = append(d.peerdirs, internAnys([]string{"contrib/libs/protobuf", "sdg/sdc/myriapoda/yamakes/diagnostics/utils"})...)
 }
 
-func applySdcDiagsSplitGenerator(fs Tree, modulePath string, stmt UnknownStmt, env Environment, d *ModuleData, onWarn func(Warn)) {
+func applySdcDiagsSplitGenerator(fs FS, modulePath string, stmt UnknownStmt, env Environment, d *ModuleData, onWarn func(Warn)) {
 	files := anyStrs(stmt.Args)
 
 	if len(files) == 0 {
@@ -177,7 +177,7 @@ func sdcDiagsPluginFailure(modulePath string, stmt UnknownStmt, onWarn func(Warn
 	onWarn(Warn{Kind: WarnMisconfiguration, Where: makeFileWhere(modulePath), Error: name + "(" + strings.Join(args, " ") + ") was not processed properly: devtools/ymake/plugins/ymake_module.cpp:189: Invalid call: report_configure_error. Skip " + name})
 }
 
-func applySdcDiagsSplitGeneratorV3(fs Tree, modulePath string, stmt UnknownStmt, env Environment, d *ModuleData, onWarn func(Warn)) {
+func applySdcDiagsSplitGeneratorV3(fs FS, modulePath string, stmt UnknownStmt, env Environment, d *ModuleData, onWarn func(Warn)) {
 	if len(stmt.Args) != 1 {
 		sdcDiagsPluginFailure(modulePath, stmt, onWarn)
 

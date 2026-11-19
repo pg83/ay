@@ -78,7 +78,7 @@ func copyStatsFlags(dst, src map[string]string) {
 	}
 }
 
-func readOptionalYaConfSection(fs Tree, rel, wantSection string) map[string]string {
+func readOptionalYaConfSection(fs FS, rel, wantSection string) map[string]string {
 	if fs == nil || !fs.isFile(srcRootRel, rel) {
 		return nil
 	}
@@ -147,18 +147,7 @@ func cmdMake(g GlobalFlags, args []string) int {
 		throwFmt("make: no targets supplied and current working directory is outside the source root")
 	}
 
-	live := newLiveTree(mf.srcRoot)
-
-	live.recordTokens = g.Session.out != ""
-
-	var fs Tree = live
-
-	if image := g.Session.image; image != nil {
-		fs = newImageTree(image, live)
-	}
-
-	g.Session.tree, g.Session.live = fs, live
-
+	fs := newFS(mf.srcRoot)
 	parsers := newIncludeParserManagerFS(fs, newSharedParseCache())
 	rootYaConf := readYaConf(fs, "ya.conf")
 	hostP, targetP := makePlatforms(fs, mf, parsers, rootYaConf)
@@ -205,7 +194,7 @@ func cmdMake(g GlobalFlags, args []string) int {
 		return 0
 	}
 
-	ex := newExecutor(mf.srcRoot, mf.bldRoot, fs.contentHash, mf.threads, mf.keepGoing, mf.ninja, mf.sandboxing, mf.clear, mf.cmdPrefixes, events)
+	ex := newExecutor(mf.srcRoot, mf.bldRoot, fs, mf.threads, mf.keepGoing, mf.ninja, mf.sandboxing, mf.clear, mf.cmdPrefixes, events)
 
 	ex.startGarbageCollector()
 
@@ -240,7 +229,7 @@ func cmdMake(g GlobalFlags, args []string) int {
 	return 0
 }
 
-func makePlatforms(fs Tree, mf *MakeFlags, parsers *IncludeParserManager, rootYaConf map[string]any) (hostP, targetP *Platform) {
+func makePlatforms(fs FS, mf *MakeFlags, parsers *IncludeParserManager, rootYaConf map[string]any) (hostP, targetP *Platform) {
 	rootHostYaFlags := yaConfStringTable(rootYaConf["host_platform_flags"])
 	rootTargetYaFlags := yaConfStringTable(rootYaConf["flags"])
 	hostInternalYaFlags := readOptionalYaConfSection(fs, "build/internal/ya.conf", "host_platform_flags")
@@ -373,7 +362,7 @@ func yaToolchainFlags(flags map[string]string, tc *Toolchain, tcFlags map[string
 	flags["YA"] = "yes"
 }
 
-func genStream(fs Tree, parsers *IncludeParserManager, targets []string, hostP, targetP *Platform, onNode func(*Node, InputChunks, *DenseMap[STR, NodeRef]), onWarn func(Warn), tests *TestOpts, keepGoing, addModulesToResults, stripPackagesFromResults bool) []NodeRef {
+func genStream(fs FS, parsers *IncludeParserManager, targets []string, hostP, targetP *Platform, onNode func(*Node, InputChunks, *DenseMap[STR, NodeRef]), onWarn func(Warn), tests *TestOpts, keepGoing, addModulesToResults, stripPackagesFromResults bool) []NodeRef {
 	emitter := newStreamingEmitter(onNode)
 
 	emitter.addModulesToResults = addModulesToResults

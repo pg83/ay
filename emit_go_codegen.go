@@ -517,7 +517,7 @@ func goPackageName(_ string, d *ModuleData) string {
 	return d.setVars.get(envREALPRJNAME.str()).string()
 }
 
-func applyGoResource(fs Tree, modulePath string, entries []ResourceEntry, d *ModuleData) {
+func applyGoResource(fs FS, modulePath string, entries []ResourceEntry, d *ModuleData) {
 	hashArgs := make([]string, 0, 2*len(entries))
 	args := make([]ANY, 0, 2*len(entries))
 
@@ -558,7 +558,7 @@ type GoEmbed struct {
 	files   []VFS
 }
 
-func newGoEmbed(fs Tree, xtest bool, importPath string, pattern ANY) GoEmbed {
+func newGoEmbed(fs FS, xtest bool, importPath string, pattern ANY) GoEmbed {
 	base := importPath + "/" + pattern.string()
 	em := GoEmbed{xtest: xtest, root: source(importPath), pattern: pattern}
 
@@ -609,7 +609,7 @@ func newGoEmbedBindir(xtest bool, importPath string, args []ANY) GoEmbed {
 	return em
 }
 
-func newGoEmbedDir(fs Tree, xtest bool, importPath, dir string, all bool) GoEmbed {
+func newGoEmbedDir(fs FS, xtest bool, importPath, dir string, all bool) GoEmbed {
 	base := importPath + "/" + dir
 	em := GoEmbed{xtest: xtest, root: source(importPath), pattern: internStr(dir).any()}
 

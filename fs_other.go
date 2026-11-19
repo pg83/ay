@@ -1,78 +1,71 @@
-//go:build !linux
+//go:build !linux && !aygate
 
 package main
 
 import (
-	"errors"
 	"io"
 	"os"
-	"syscall"
 )
 
-func (b *DirBackend) platformInit() {
+func (fs *OsFS) platformInit() {
 }
 
-func osErrno(err error) syscall.Errno {
-	var errno syscall.Errno
-
-	if errors.As(err, &errno) {
-		return errno
-	}
-
-	return syscall.EIO
-}
-
-func (b *DirBackend) readFile(rel string) ([][]byte, syscall.Errno) {
-	f, err := os.Open(b.rootSlash + rel)
-
-	if err != nil {
-		return nil, osErrno(err)
-	}
+func (fs *OsFS) readFileRel(rel string) [][]byte {
+	f := throw2(os.Open(fs.rootSlash + rel))
 
 	defer f.Close()
 
-	n, err := io.ReadFull(f, b.readBuf)
+	n, err := io.ReadFull(f, fs.readBuf)
 
 	if err != nil && err != io.EOF && err != io.ErrUnexpectedEOF {
 		throw(err)
 	}
 
-	b.readResult[0] = b.readBuf[:n]
+	fs.readResult[0] = fs.readBuf[:n]
 
-	if n < len(b.readBuf) {
-		return b.readResult[:1], 0
+	if n < len(fs.readBuf) {
+		return fs.readResult[:1]
 	}
 
 	info := throw2(f.Stat())
 	tailSize := int(info.Size()) - n
 
 	if tailSize <= 0 {
-		return b.readResult[:1], 0
+		return fs.readResult[:1]
 	}
 
 	tail := make([]byte, tailSize)
 
 	_, err = io.ReadFull(f, tail)
 	throw(err)
-	b.readResult[1] = tail
+	fs.readResult[1] = tail
 
-	return b.readResult[:2], 0
+	return fs.readResult[:2]
 }
 
-func (b *DirBackend) readDir(rel string, sink DirSink) syscall.Errno {
-	full := b.rootSlash + rel
+func (fs *OsFS) dirHas(v DirView, name string) (present bool, isDir bool) {
+	return fs.dirHasInterned(v, name)
+}
+
+func (fs *OsFS) readDirViewRel(dir STR, rel string) DirView {
+	full := fs.rootSlash + rel
 
 	if rel == "" {
-		full = b.root
+		full = fs.srcRoot
 	}
 
 	entries, err := os.ReadDir(full)
 
 	if err != nil {
-		return osErrno(err)
+		return DirView{}
 	}
 
-	sink.dirBegin(len(entries))
+	if len(entries) == 0 {
+		return DirView{dir: dir, names: emptyDirNames}
+	}
+
+	block := fs.dirNames.alloc(len(entries))
+	k := 0
 
 	for _, e := range entries {
 		isDir := e.IsDir()
@@ -87,8 +80,19 @@ func (b *DirBackend) readDir(rel string, sink DirSink) syscall.Errno {
 			isDir = info.IsDir()
 		}
 
-		sink.dirEntry([]byte(e.Name()), isDir)
+		id := internStr(e.Name())
+		packed := uint32(id) << 1
+
+		if isDir {
+			packed |= 1
+		}
+
+		block[k] = packed
+		k++
+		fs.dirEntries.put(splitMix64(uint32(dir), uint32(id)), isDir)
 	}
 
-	return 0
+	fs.dirNames.commit(k)
+
+	return DirView{dir: dir, names: block[:k]}
 }

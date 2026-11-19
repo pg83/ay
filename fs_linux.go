@@ -1,42 +1,44 @@
-//go:build linux
+//go:build !aygate
 
 package main
 
 import (
 	"bytes"
 	"encoding/binary"
+	"slices"
+	"strings"
 	"syscall"
 )
 
 const direntBlock = 1 << 16
 
-func (b *DirBackend) platformInit() {
+func (fs *OsFS) platformInit() {
 	for {
-		fd, err := chaosOpen(b.root, syscall.O_RDONLY|syscall.O_CLOEXEC|syscall.O_DIRECTORY, 0)
+		fd, err := chaosOpen(fs.srcRoot, syscall.O_RDONLY|syscall.O_CLOEXEC|syscall.O_DIRECTORY, 0)
 
 		if err == syscall.EINTR {
 			continue
 		}
 
 		if err != nil {
-			throwFmt("open source root %s: %v", b.root, err)
+			throwFmt("open source root %s: %v", fs.srcRoot, err)
 		}
 
-		b.rootFD = fd
+		fs.rootFD = fd
 
 		return
 	}
 }
 
-func (b *DirBackend) openatRel(dirFD int, rel string, flags int) (int, syscall.Errno) {
+func (fs *OsFS) openatRel(dirFD int, rel string, flags int) (int, syscall.Errno) {
 	if rel == "" {
 		rel = "."
 	}
 
-	p := append(b.pathBuf[:0], rel...)
+	p := append(fs.pathBuf[:0], rel...)
 
 	p = append(p, 0)
-	b.pathBuf = p
+	fs.pathBuf = p
 
 	for {
 		fd, errno := chaosOpenat(dirFD, &p[0], flags)
@@ -49,36 +51,43 @@ func (b *DirBackend) openatRel(dirFD int, rel string, flags int) (int, syscall.E
 	}
 }
 
-func (b *DirBackend) readFile(rel string) ([][]byte, syscall.Errno) {
-	if b.mmapCur != nil {
-		throw(syscall.Munmap(b.mmapCur))
+func (fs *OsFS) readFileRel(rel string) [][]byte {
+	if fs.mmapCur != nil {
+		throw(syscall.Munmap(fs.mmapCur))
 
-		b.mmapCur = nil
+		fs.mmapCur = nil
 	}
 
 	dir, name := splitDirName(rel)
-	dirFD, openRel := b.rootFD, rel
+	dirFD, openRel := fs.rootFD, rel
 
-	if dir == b.dirFDRel && b.dirFD >= 0 {
-		dirFD, openRel = b.dirFD, name
-	} else if cached, ok := b.dirFDs[dir]; ok {
+	if dir == fs.dirFDRel && fs.dirFD >= 0 {
+		dirFD, openRel = fs.dirFD, name
+	} else if cached, ok := fs.dirFDs[dir]; ok {
 		dirFD, openRel = cached, name
 	}
 
-	fd, errno := b.openatRel(dirFD, openRel, syscall.O_RDONLY|syscall.O_CLOEXEC)
+	fd, errno := fs.openatRel(dirFD, openRel, syscall.O_RDONLY|syscall.O_CLOEXEC)
 
-	if errno != 0 {
-		return nil, errno
+	if errno != 0 && errno != syscall.ENOENT && fs.onReadError != nil {
+		fs.onReadError(rel, errno)
+		fs.readResult[0] = nil
+
+		return fs.readResult[:1]
 	}
 
-	defer b.closeFile(fd)
+	if errno != 0 {
+		throwFmt("open %s: %v", rel, errno)
+	}
 
-	n := readEINTR(fd, b.readBuf)
+	defer fs.closeFile(fd)
 
-	b.readResult[0] = b.readBuf[:n]
+	n := readEINTR(fd, fs.readBuf)
 
-	if n < len(b.readBuf) {
-		return b.readResult[:1], 0
+	fs.readResult[0] = fs.readBuf[:n]
+
+	if n < len(fs.readBuf) {
+		return fs.readResult[:1]
 	}
 
 	var st syscall.Stat_t
@@ -88,13 +97,13 @@ func (b *DirBackend) readFile(rel string) ([][]byte, syscall.Errno) {
 	tailSize := int(st.Size) - n
 
 	if tailSize <= 0 {
-		return b.readResult[:1], 0
+		return fs.readResult[:1]
 	}
 
-	b.mmapCur = throw2(syscall.Mmap(fd, int64(n), tailSize, syscall.PROT_READ, syscall.MAP_PRIVATE|syscall.MAP_POPULATE))
-	b.readResult[1] = b.mmapCur
+	fs.mmapCur = throw2(syscall.Mmap(fd, int64(n), tailSize, syscall.PROT_READ, syscall.MAP_PRIVATE|syscall.MAP_POPULATE))
+	fs.readResult[1] = fs.mmapCur
 
-	return b.readResult[:2], 0
+	return fs.readResult[:2]
 }
 
 func readEINTR(fd int, p []byte) int {
@@ -111,14 +120,14 @@ func readEINTR(fd int, p []byte) int {
 	}
 }
 
-func (b *DirBackend) fstatatRel(rel string, st *syscall.Stat_t) bool {
-	p := append(b.pathBuf[:0], rel...)
+func (fs *OsFS) fstatatRel(rel string, st *syscall.Stat_t) bool {
+	p := append(fs.pathBuf[:0], rel...)
 
 	p = append(p, 0)
-	b.pathBuf = p
+	fs.pathBuf = p
 
 	for {
-		errno := chaosFstatat(b.rootFD, &p[0], st)
+		errno := chaosFstatat(fs.rootFD, &p[0], st)
 
 		if errno == syscall.EINTR {
 			continue
@@ -128,11 +137,19 @@ func (b *DirBackend) fstatatRel(rel string, st *syscall.Stat_t) bool {
 	}
 }
 
-func (b *DirBackend) readDirAll(rel string, buf *[]byte) (int, syscall.Errno) {
-	fd, errno := b.openatRel(b.rootFD, rel, syscall.O_RDONLY|syscall.O_CLOEXEC|syscall.O_DIRECTORY)
+func (fs *OsFS) readDirAll(rel string, buf *[]byte) (int, bool) {
+	fd, errno := fs.openatRel(fs.rootFD, rel, syscall.O_RDONLY|syscall.O_CLOEXEC|syscall.O_DIRECTORY)
+
+	if errno == syscall.EACCES || errno == syscall.EPERM {
+		if fs.unreadableDirs == nil {
+			fs.unreadableDirs = map[string]syscall.Errno{}
+		}
+
+		fs.unreadableDirs[rel] = errno
+	}
 
 	if errno != 0 {
-		return 0, errno
+		return 0, false
 	}
 
 	total := 0
@@ -160,45 +177,49 @@ func (b *DirBackend) readDirAll(rel string, buf *[]byte) (int, syscall.Errno) {
 		if err != nil {
 			syscall.Close(fd)
 
-			return 0, syscall.EIO
+			return 0, false
 		}
 
 		if n == 0 {
-			slot := &b.dirFDRing[b.dirFDNext]
+			slot := &fs.dirFDRing[fs.dirFDNext]
 
 			if slot.fd > 0 {
 				syscall.Close(slot.fd)
-				delete(b.dirFDs, slot.rel)
+				delete(fs.dirFDs, slot.rel)
 			}
 
 			*slot = dirFDCacheEntry{rel: rel, fd: fd}
-			b.dirFDNext++
+			fs.dirFDNext++
 
-			if b.dirFDNext == dirFDCacheSize {
-				b.dirFDNext = 0
+			if fs.dirFDNext == dirFDCacheSize {
+				fs.dirFDNext = 0
 			}
 
-			b.dirFDs[rel] = fd
-			b.dirFD = fd
-			b.dirFDRel = rel
+			fs.dirFDs[rel] = fd
+			fs.dirFD = fd
+			fs.dirFDRel = rel
 
-			return total, 0
+			return total, true
 		}
 
 		total += n
 	}
 }
 
-func (b *DirBackend) readDir(rel string, sink DirSink) syscall.Errno {
-	n, errno := b.readDirAll(rel, &b.direntBuf)
+func (fs *OsFS) dirHas(v DirView, name string) (present bool, isDir bool) {
+	return fs.dirHasInterned(v, name)
+}
 
-	if errno != 0 {
-		return errno
+func (fs *OsFS) readDirViewRel(dir STR, rel string) DirView {
+	n, ok := fs.readDirAll(rel, &fs.direntBuf)
+
+	if !ok {
+		return DirView{}
 	}
 
-	ents := b.direntBuf[:n]
-
-	sink.dirBegin(len(ents) / 24)
+	ents := fs.direntBuf[:n]
+	block := fs.dirNames.alloc(len(ents) / 24)
+	k := 0
 
 	for off := 0; off < len(ents); {
 		reclen := int(binary.LittleEndian.Uint16(ents[off+16:]))
@@ -220,15 +241,36 @@ func (b *DirBackend) readDir(rel string, sink DirSink) syscall.Errno {
 		if typ == syscall.DT_UNKNOWN || typ == syscall.DT_LNK {
 			var st syscall.Stat_t
 
-			if !b.fstatatRel(joinRel(rel, string(name)), &st) {
+			if !fs.fstatatRel(joinRel(rel, string(name)), &st) {
 				continue
 			}
 
 			isDir = st.Mode&syscall.S_IFMT == syscall.S_IFDIR
 		}
 
-		sink.dirEntry(name, isDir)
+		id := internBytes(name)
+		packed := uint32(id) << 1
+
+		if isDir {
+			packed |= 1
+		}
+
+		block[k] = packed
+		k++
+		fs.dirEntries.put(splitMix64(uint32(dir), uint32(id)), isDir)
 	}
 
-	return 0
+	if k == 0 {
+		return DirView{dir: dir, names: emptyDirNames}
+	}
+
+	fs.dirNames.commit(k)
+
+	names := block[:k]
+
+	slices.SortFunc(names, func(a, b uint32) int {
+		return strings.Compare(STR(a>>1).string(), STR(b>>1).string())
+	})
+
+	return DirView{dir: dir, names: names}
 }

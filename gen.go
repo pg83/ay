@@ -185,7 +185,7 @@ type GenCtx struct {
 	dependencyInstances map[STR][]ModuleInstance
 	dependencyBuilds    map[STR][]TestBuildDependency
 	configuration       ConfigurationDependencies
-	fs                  Tree
+	fs                  FS
 	parsers             *IncludeParserManager
 	emit                *StreamingEmitter
 	onWarn              func(Warn)
@@ -316,7 +316,7 @@ type genPass struct {
 	excluded map[VFS]bool
 }
 
-func runGenIntoWithResources(fs Tree, parsers *IncludeParserManager, targets []string, hostP, targetP *Platform, emitter *StreamingEmitter, onWarn func(Warn), tests *TestOpts, keepGoing bool, rootDemand ModuleDemand, pass genPass) *GenCtx {
+func runGenIntoWithResources(fs FS, parsers *IncludeParserManager, targets []string, hostP, targetP *Platform, emitter *StreamingEmitter, onWarn func(Warn), tests *TestOpts, keepGoing bool, rootDemand ModuleDemand, pass genPass) *GenCtx {
 	ctx := newGenCtx(fs, parsers, hostP, targetP, emitter, onWarn, tests, keepGoing)
 
 	ctx.loops, ctx.excluded = pass.loops, pass.excluded
@@ -398,7 +398,7 @@ func cleanDir(dir string) string {
 	return ""
 }
 
-func newGenCtx(fs Tree, parsers *IncludeParserManager, hostP, targetP *Platform, emitter *StreamingEmitter, onWarn func(Warn), tests *TestOpts, keepGoing bool) *GenCtx {
+func newGenCtx(fs FS, parsers *IncludeParserManager, hostP, targetP *Platform, emitter *StreamingEmitter, onWarn func(Warn), tests *TestOpts, keepGoing bool) *GenCtx {
 	plainEmit := emitter
 	scriptTbl := buildScriptTable(fs)
 
@@ -471,7 +471,7 @@ func newGenCtx(fs Tree, parsers *IncludeParserManager, hostP, targetP *Platform,
 		}
 	}
 
-	fs.setReadErrorHook(func(rel string, errno syscall.Errno) {
+	fs.(*OsFS).onReadError = func(rel string, errno syscall.Errno) {
 		text := errno.Error()
 
 		if ctx.unreadable == nil {
@@ -481,7 +481,7 @@ func newGenCtx(fs Tree, parsers *IncludeParserManager, hostP, targetP *Platform,
 		ctx.unreadable[rel] = true
 
 		onWarn(Warn{Kind: WarnMisconfiguration, Where: "At top level", Error: "Cannot read source file $S/" + rel + ": " + strings.ToUpper(text[:1]) + text[1:] + " (" + strconv.Itoa(int(errno)) + ")"})
-	})
+	}
 
 	for _, p := range [...]*Platform{targetP, hostP} {
 		if policies := p.peerPolicies; policies != nil {
@@ -1236,7 +1236,7 @@ func discoverRecursedTargets(ctx *GenCtx, targetDir VFS) DiscoveredTargets {
 	return targets
 }
 
-func genDumpGraphWithResources(fs Tree, parsers *IncludeParserManager, targets []string, hostP, targetP *Platform, onWarn func(Warn), tests *TestOpts, keepGoing bool, rootDemand ModuleDemand, addModulesToResults, stripPackagesFromResults bool) *Graph {
+func genDumpGraphWithResources(fs FS, parsers *IncludeParserManager, targets []string, hostP, targetP *Platform, onWarn func(Warn), tests *TestOpts, keepGoing bool, rootDemand ModuleDemand, addModulesToResults, stripPackagesFromResults bool) *Graph {
 	newEmitter := func() *StreamingEmitter {
 		emitter := newStreamingEmitter(nil)
 

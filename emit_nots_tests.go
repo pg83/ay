@@ -512,7 +512,7 @@ func notsMissingConfigNames(check string) (string, string) {
 	return "", ""
 }
 
-func notsTypecheckConfigError(fs Tree, dir string, c *NotsModule, config string) string {
+func notsTypecheckConfigError(fs FS, dir string, c *NotsModule, config string) string {
 	switch {
 	case len(c.TypecheckConfigs) > 1:
 		return "You have set several tsconfig files for TS_TYPECHECK: " + pyListRepr(c.TypecheckConfigs) + ". Only one tsconfig is allowed for `TS_TYPECHECK(<config_filename>)` macro."
