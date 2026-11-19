@@ -115,7 +115,7 @@ func newSharedParseCache() *SharedParseCache {
 }
 
 type IncludeParserManager struct {
-	fs              *Tree
+	fs              FS
 	cache           *SharedParseCache
 	scanConfigs     map[uint64]*ScanConfig
 	scanConfigCount uint32
@@ -125,7 +125,7 @@ type IncludeParserManager struct {
 	registry        IncludeDirectiveParserRegistry
 }
 
-func newIncludeParserManagerFS(fs *Tree, cache *SharedParseCache) *IncludeParserManager {
+func newIncludeParserManagerFS(fs FS, cache *SharedParseCache) *IncludeParserManager {
 	return &IncludeParserManager{
 		fs:           fs,
 		cache:        cache,

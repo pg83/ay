@@ -460,7 +460,7 @@ func pyxSourceRel(modulePath, src string) (string, bool) {
 	return path.Join(modulePath, src), true
 }
 
-func reportPyxMissingIncludes(fs *Tree, rel string, py3 bool, seen map[string]bool, report func(string)) {
+func reportPyxMissingIncludes(fs FS, rel string, py3 bool, seen map[string]bool, report func(string)) {
 	if seen[rel] {
 		return
 	}

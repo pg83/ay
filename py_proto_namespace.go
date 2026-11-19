@@ -2,7 +2,7 @@ package main
 
 import "strings"
 
-func applyInlinePySrcs(fs *Tree, modulePath string, args []ANY, d *ModuleData, env Environment, onWarn func(Warn)) {
+func applyInlinePySrcs(fs FS, modulePath string, args []ANY, d *ModuleData, env Environment, onWarn func(Warn)) {
 	before := len(d.pySrcGroups)
 
 	applyUnknownStmt(fs, modulePath, UnknownStmt{Name: tokPySrcs, Args: args}, d, env, onWarn)
@@ -12,7 +12,7 @@ func applyInlinePySrcs(fs *Tree, modulePath string, args []ANY, d *ModuleData, e
 	}
 }
 
-func collectProtoToNamespace(fs *Tree, modulePath string, stmt UnknownStmt, d *ModuleData, env Environment, onWarn func(Warn)) {
+func collectProtoToNamespace(fs FS, modulePath string, stmt UnknownStmt, d *ModuleData, env Environment, onWarn func(Warn)) {
 	report := func(msg string) {
 		onWarn(Warn{Kind: WarnMisconfiguration, Where: makeFileWhere(modulePath), Error: msg})
 	}

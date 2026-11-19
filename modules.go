@@ -606,7 +606,7 @@ func parseCopyFileEntry(args []string, withContext bool, line int) CopyFileEntry
 	return entry
 }
 
-func sourceInputVFS(fs *Tree, moduleDir VFS, path string) (VFS, bool) {
+func sourceInputVFS(fs FS, moduleDir VFS, path string) (VFS, bool) {
 	modulePath := moduleDir.relString()
 
 	if vfs, ok := moduleRootedVFS(modulePath, path); ok {
@@ -649,7 +649,7 @@ func sourceInputVFS(fs *Tree, moduleDir VFS, path string) (VFS, bool) {
 	return 0, false
 }
 
-func sourceInputID(fs *Tree, moduleDir VFS, rel STR) (VFS, bool) {
+func sourceInputID(fs FS, moduleDir VFS, rel STR) (VFS, bool) {
 	modulePath := moduleDir.relString()
 	clean := rel.string()
 
@@ -672,7 +672,7 @@ func sourceInputID(fs *Tree, moduleDir VFS, rel STR) (VFS, bool) {
 	return 0, false
 }
 
-func copyFileInputVFSOf(fs *Tree, moduleDir VFS, src ANY) VFS {
+func copyFileInputVFSOf(fs FS, moduleDir VFS, src ANY) VFS {
 	if s := src.str(); s != 0 && s.cleanPath() && !strHasDollar(src) {
 		if vfs, ok := sourceInputID(fs, moduleDir, s); ok {
 			return vfs
@@ -684,7 +684,7 @@ func copyFileInputVFSOf(fs *Tree, moduleDir VFS, src ANY) VFS {
 	return copyFileInputVFS(fs, moduleDir, src.string())
 }
 
-func copyFileInputVFS(fs *Tree, moduleDir VFS, src string) VFS {
+func copyFileInputVFS(fs FS, moduleDir VFS, src string) VFS {
 	if vfs, ok := sourceInputVFS(fs, moduleDir, src); ok {
 		return vfs
 	}
@@ -1203,7 +1203,7 @@ func (d *ModuleData) sourceCommandDirs(moduleID STR, env Environment, platform *
 	return peers, addincls
 }
 
-func applyResourceFiles(fs *Tree, modulePath string, args []string, line int, d *ModuleData) {
+func applyResourceFiles(fs FS, modulePath string, args []string, line int, d *ModuleData) {
 	if isGoModuleType(d.unit.Type) {
 		applyGoResource(fs, modulePath, expandResourceFiles(d, nil, args), d)
 
@@ -1243,7 +1243,7 @@ func ensureResourcePeer(modulePath string, d *ModuleData) {
 	d.peerdirs = append(d.peerdirs, strLibraryCppResource.any())
 }
 
-func filterInvalidAddIncl(fs *Tree, d *ModuleData, modulePath string, onWarn func(Warn)) {
+func filterInvalidAddIncl(fs FS, d *ModuleData, modulePath string, onWarn func(Warn)) {
 	d.addIncl = filterOwnAddIncl(fs, d.addIncl, modulePath, onWarn)
 	d.addInclGlobal = filterOwnAddIncl(fs, d.addInclGlobal, modulePath, onWarn)
 	d.cythonAddIncl = filterOwnAddIncl(fs, d.cythonAddIncl, modulePath, onWarn)
@@ -1296,7 +1296,7 @@ func filterInvalidAddIncl(fs *Tree, d *ModuleData, modulePath string, onWarn fun
 	})
 }
 
-func filterOwnAddIncl(fs *Tree, paths []VFS, modulePath string, onWarn func(Warn)) []VFS {
+func filterOwnAddIncl(fs FS, paths []VFS, modulePath string, onWarn func(Warn)) []VFS {
 	out := paths
 	copied := false
 
@@ -1555,7 +1555,7 @@ func endModule(ctx *GenCtx, modulePath string, kind ModuleKind, language Languag
 	}
 }
 
-func (d *ModuleData) processModuleEnd(fs *Tree, modulePath string, line int, onWarn func(Warn)) bool {
+func (d *ModuleData) processModuleEnd(fs FS, modulePath string, line int, onWarn func(Warn)) bool {
 	if d.moduleStmt != nil && !d.moduleEnded && !(d.readModuleContentOnly && d.readModuleContentDone) {
 		if d.readModuleContentOnly {
 			d.readModuleContentDone = true
@@ -3557,7 +3557,7 @@ func warnUnmodelledMacro(onWarn func(Warn), modulePath string, name TOK) {
 	onWarn(Warn{Kind: WarnUnknownMacro, Message: fmt.Sprintf("%s: macro %q not modelled — implement its upstream semantics (see yatool/build/conf, yatool/build/ymake.core.conf); skipped", modulePath, name.string())})
 }
 
-func applyUnknownStmt(fs *Tree, modulePath string, v UnknownStmt, d *ModuleData, env Environment, onWarn func(Warn)) bool {
+func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, env Environment, onWarn func(Warn)) bool {
 	if applyRustMacro(v, modulePath, env, d) {
 		return true
 	}
@@ -5281,7 +5281,7 @@ func collectPythonSourceEntry(d *ModuleData, env Environment, peers *[]ANY) {
 	}
 }
 
-func collectPySrcGroup(fs *Tree, modulePath string, v UnknownStmt, d *ModuleData, env Environment, onWarn func(Warn), group int) {
+func collectPySrcGroup(fs FS, modulePath string, v UnknownStmt, d *ModuleData, env Environment, onWarn func(Warn), group int) {
 	if isGoModuleType(d.unit.Type) && env.bool(envGO_PROTO) {
 		return
 	}
@@ -6370,7 +6370,7 @@ func expandStmtTokenAny(item ANY, env Environment) ANY {
 	return internAny(expandStmtToken(item.string(), env))
 }
 
-func applyDeclareInDirs(fs *Tree, modulePath string, v UnknownStmt, env Environment, onWarn func(Warn)) {
+func applyDeclareInDirs(fs FS, modulePath string, v UnknownStmt, env Environment, onWarn func(Warn)) {
 	if len(v.Args) < 2 {
 		throwFmt("gen: %s: DECLARE_IN_DIRS expects a var prefix and a pattern", modulePath)
 	}
@@ -6551,7 +6551,7 @@ func expandSourceScalarVarRef(s string, env Environment) string {
 	return expandMakeExpression(s, env, pathArgumentsReservedVar)
 }
 
-func allPySrcArgs(fs *Tree, modulePath string, v UnknownStmt) []ANY {
+func allPySrcArgs(fs FS, modulePath string, v UnknownStmt) []ANY {
 	dirs := []string{"."}
 	noTestFiles := false
 	recursive := false
@@ -6778,11 +6778,11 @@ func applyCompileNlg(modulePath string, v UnknownStmt, d *ModuleData) {
 }
 
 type ConfPluginKey struct {
-	fs    *Tree
+	fs    FS
 	macro string
 }
 
-func confPluginDeps(fs *Tree, confRel, macro string) []string {
+func confPluginDeps(fs FS, confRel, macro string) []string {
 	return confProtoPlugin(fs, confRel, macro).deps
 }
 
@@ -6791,7 +6791,7 @@ type ConfProtoPlugin struct {
 	namespace string
 }
 
-func confProtoPlugin(fs *Tree, confRel, macro string) ConfProtoPlugin {
+func confProtoPlugin(fs FS, confRel, macro string) ConfProtoPlugin {
 	key := ConfPluginKey{fs: fs, macro: macro}
 
 	if v, ok := confPluginDepsCache.Load(key); ok {
@@ -7045,7 +7045,7 @@ func (d *ModuleData) multimoduleTagsAllowed(env Environment) bool {
 }
 
 func (ctx *GenCtx) unreadableSourceDir(modulePath string, sources []ANY, onWarn func(Warn)) bool {
-	osfs := ctx.fs.OsFS
+	osfs := ctx.fs.(*OsFS)
 
 	for _, src := range sources {
 		if src.vfs() != 0 {

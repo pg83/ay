@@ -193,7 +193,7 @@ func validateTest(meta TestMeta) []string {
 	return errs
 }
 
-func treePluginMacro(fs *Tree, name STR) bool {
+func treePluginMacro(fs FS, name STR) bool {
 	if pluginMacroNames[name] {
 		return true
 	}
@@ -231,7 +231,7 @@ func missingIncludeError(v *MissingIncludeStmt) string {
 	return "file [[alt1]]$S/" + v.Path + "[[rst]] specified in INCLUDE command (in $S/" + v.File + ") doesn't exist."
 }
 
-func makefileParseError(fs *Tree, pe *ParseError) string {
+func makefileParseError(fs FS, pe *ParseError) string {
 	if pe.IncludeLoop != nil {
 		var b strings.Builder
 
@@ -1221,7 +1221,7 @@ func grpcLinterDataError(args []string) string {
 	return ""
 }
 
-func sandboxImportExists(fs *Tree, modulePath string, arg ANY) bool {
+func sandboxImportExists(fs FS, modulePath string, arg ANY) bool {
 	if strings.HasPrefix(arg.string(), "/") {
 		return false
 	}
@@ -1308,7 +1308,7 @@ func contribCreditsMissing(modulePath string, args []string, env Environment) bo
 	return false
 }
 
-func aiReferenceMissing(fs *Tree, args []string) []string {
+func aiReferenceMissing(fs FS, args []string) []string {
 	var missing []string
 
 	for _, arg := range args {
@@ -1332,11 +1332,11 @@ func clangWarningsErrors(args []ANY) []string {
 	return errs
 }
 
-func fsStatementEnd(fs *Tree, dir string, line int, name string) (int, int) {
+func fsStatementEnd(fs FS, dir string, line int, name string) (int, int) {
 	return statementEnd(concatChunks(fs.read(joinRel(dir, "ya.make"))), line, name)
 }
 
-func dataStatementErrors(fs *Tree, modulePath string, v UnknownStmt, onWarn func(Warn)) {
+func dataStatementErrors(fs FS, modulePath string, v UnknownStmt, onWarn func(Warn)) {
 	report := func(msg string) {
 		row, col := fsStatementEnd(fs, modulePath, v.Line, "DATA")
 

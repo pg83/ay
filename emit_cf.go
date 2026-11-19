@@ -95,7 +95,7 @@ func (e *EmitContext) emitConfigureFile(srcVFS, outVFS VFS) NodeRef {
 	return cfRef
 }
 
-func buildCFGVars(fs *Tree, rel string, env Environment) []string {
+func buildCFGVars(fs FS, rel string, env Environment) []string {
 	names := cfgVarNames(concatChunks(fs.read(rel)))
 	vars := make([]string, len(names))
 

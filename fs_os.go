@@ -89,7 +89,7 @@ type OsFS struct {
 	unreadableDirs map[string]syscall.Errno
 }
 
-func newFS(srcRoot string) *OsFS {
+func newFS(srcRoot string) FS {
 	fs := &OsFS{
 		srcRoot:     srcRoot,
 		rootSlash:   srcRoot + "/",

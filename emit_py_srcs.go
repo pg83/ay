@@ -98,7 +98,7 @@ func (e *EmitContext) resolvePythonSource(src string) ResolvedSource {
 	return resolveSource(e.ctx, e.instance, path.Clean(src), e.d.srcDirs)
 }
 
-func resolvePySrcRelKnown(fs *Tree, srcDirs []VFS, moduleVFS VFS, target STR, srcRelClean bool) STR {
+func resolvePySrcRelKnown(fs FS, srcDirs []VFS, moduleVFS VFS, target STR, srcRelClean bool) STR {
 	srcRel := target.string()
 
 	if srcRelClean {
@@ -1052,7 +1052,7 @@ func (e *EmitContext) pyGenResourceItems(entries []PyGenResEntry) []ResourceItem
 	return items
 }
 
-func yaConfFormulaResources(fs *Tree, confPath string) []string {
+func yaConfFormulaResources(fs FS, confPath string) []string {
 	raw := concatChunks(fs.read(confPath))
 
 	var out []string

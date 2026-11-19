@@ -9,7 +9,7 @@ const buildScriptsRoot = "build/scripts"
 
 type ScriptDeps map[STR][]VFS
 
-func buildScriptTable(fs *Tree) ScriptDeps {
+func buildScriptTable(fs FS) ScriptDeps {
 	texts := map[string]string{}
 
 	fs.walk(buildScriptsRoot, func(rel string, isDir bool) bool {
