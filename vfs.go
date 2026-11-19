@@ -40,7 +40,7 @@ func (v VFS) relString() string {
 }
 
 func (v VFS) sharedRel() string {
-	return internTable.cells.get(uint32(v) >> 1).str
+	return internShared(uint32(v) >> 1).str
 }
 
 func (v VFS) prefix() string {

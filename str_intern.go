@@ -1,6 +1,7 @@
 package main
 
 import (
+	"sync/atomic"
 	"unsafe"
 
 	"github.com/zeebo/xxh3"
@@ -9,12 +10,8 @@ import (
 var internTable = struct {
 	ids      *IntMap[STR]
 	overflow map[string]STR
-	flatStr  []string
-	flatLo   Vec[uint64]
-	cells    PageVec[InternCell]
-	cellPage []InternCell
-	cellBase uint32
-	cellIdx  int
+	cells    []InternCell
+	shared   atomic.Pointer[[]InternCell]
 	count    uint32
 	bound    uint32
 	bytes    *BumpAllocator[byte]
@@ -24,10 +21,13 @@ var internTable = struct {
 }{
 	ids:      newIntMap[STR](1 << 19),
 	overflow: make(map[string]STR),
-	flatStr:  make([]string, 1, 1<<20),
-	flatLo:   Vec[uint64]{s: make([]uint64, 1, bumpChunkInitial)},
+	cells:    make([]InternCell, 1, 1<<20),
 	count:    1,
 	bytes:    newBumpAllocator[byte](),
+}
+
+func init() {
+	internPublish()
 }
 
 type InternCell struct {
@@ -36,11 +36,30 @@ type InternCell struct {
 }
 
 func internString(id STR) string {
-	return *unsafeAt(internTable.flatStr, uint64(id))
+	return unsafeAt(internTable.cells, uint64(id)).str
 }
 
 func internLo(id STR) uint64 {
-	return *unsafeAt(internTable.flatLo.s, uint64(id))
+	return unsafeAt(internTable.cells, uint64(id)).lo
+}
+
+func internShared(id uint32) *InternCell {
+	return unsafeAt(*internTable.shared.Load(), uint64(id))
+}
+
+func internPublish() {
+	view := internTable.cells[:cap(internTable.cells)]
+
+	internTable.shared.Store(&view)
+}
+
+func internGrow(n int) {
+	grown := make([]InternCell, len(internTable.cells), max(n, 2*cap(internTable.cells)))
+
+	copy(grown, internTable.cells)
+	internTable.cells = grown
+
+	internPublish()
 }
 
 func internOwnedCopy(b []byte) string {
@@ -73,10 +92,6 @@ func strBound() uint32 {
 }
 
 func internPlace(s string, lo uint64) STR {
-	if internTable.count == 1 {
-		internTable.cells.set(0, InternCell{})
-	}
-
 	id := chaosInternID(internTable.count)
 
 	internTable.count++
@@ -85,14 +100,15 @@ func internPlace(s string, lo uint64) STR {
 		internTable.bound = id + 1
 	}
 
-	if grow := int(id) + 1 - len(internTable.flatStr); grow > 0 {
-		internTable.flatStr = append(internTable.flatStr, make([]string, grow)...)
-		internTable.flatLo.ensureLen(int(id) + 1)
+	if n := int(id) + 1; n > len(internTable.cells) {
+		if n > cap(internTable.cells) {
+			internGrow(n)
+		}
+
+		internTable.cells = internTable.cells[:n]
 	}
 
-	internTable.flatStr[id] = s
-	internTable.flatLo.s[id] = lo
-	internTable.cells.set(id, InternCell{str: s, lo: lo})
+	internTable.cells[id] = InternCell{str: s, lo: lo}
 
 	return STR(id)
 }
@@ -103,49 +119,12 @@ func internAppend(s string, lo uint64) STR {
 	}
 
 	id := STR(internTable.count)
-	cell := InternCell{str: s, lo: lo}
 
-	if len(internTable.flatStr) == cap(internTable.flatStr) {
-		grown := make([]string, len(internTable.flatStr), 2*cap(internTable.flatStr))
-
-		copy(grown, internTable.flatStr)
-		internTable.flatStr = grown
+	if len(internTable.cells) == cap(internTable.cells) {
+		internGrow(0)
 	}
 
-	internTable.flatStr = append(internTable.flatStr, s)
-	internTable.flatLo.pushBack(lo)
-
-	if internTable.cellPage == nil {
-		zeroPage := make([]InternCell, 1)
-		page := make([]InternCell, 2)
-
-		page[0] = cell
-
-		internTable.cellPage = page
-		internTable.cellBase = internTable.count
-		internTable.cellIdx = 1
-		internTable.cells.pages[0].Store(&zeroPage)
-		internTable.cells.pages[1].Store(&page)
-		internTable.count++
-
-		return id
-	}
-
-	off := internTable.count - internTable.cellBase
-
-	if int(off) == len(internTable.cellPage) {
-		page := make([]InternCell, 2*len(internTable.cellPage))
-
-		internTable.cellPage = page
-		internTable.cellBase = internTable.count
-		internTable.cellIdx++
-		off = 0
-		page[0] = cell
-		internTable.cells.pages[internTable.cellIdx].Store(&page)
-	} else {
-		internTable.cellPage[off] = cell
-	}
-
+	internTable.cells = append(internTable.cells, InternCell{str: s, lo: lo})
 	internTable.count++
 
 	return id
@@ -327,7 +306,7 @@ func (id STR) string() string {
 }
 
 func (id STR) sharedString() string {
-	return internTable.cells.get(uint32(id)).str
+	return internShared(uint32(id)).str
 }
 
 func interned(s string) STR {
