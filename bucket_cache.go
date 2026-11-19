@@ -221,11 +221,11 @@ func (c *BucketCache) resetScratch(self VFS) {
 func (c *BucketCache) spliceOne(seen *IdSet, v VFS) {
 	id := v.strID()
 
-	if seen.gen.s[id] == seen.epoch {
+	if idSetCells.gen.s[id] == seen.epoch {
 		return
 	}
 
-	seen.gen.s[id] = seen.epoch
+	idSetCells.gen.s[id] = seen.epoch
 
 	r := closureBucketIndex(v)
 
@@ -234,7 +234,7 @@ func (c *BucketCache) spliceOne(seen *IdSet, v VFS) {
 
 //go:noinline
 func (c *BucketCache) spliceBucketSlow(seen *IdSet, bucket []VFS) {
-	gen := unsafe.SliceData(seen.gen.s)
+	gen := unsafe.SliceData(idSetCells.gen.s)
 	epoch := seen.epoch
 	r := closureBucketIndex(bucket[0])
 	dst := c.scratch[r]
@@ -262,7 +262,7 @@ func (c *BucketCache) spliceBucket(seen *IdSet, bucket []VFS) {
 	r := closureBucketIndex(bucket[0])
 
 	if len(c.scratch[r]) == 0 && r != c.selfBucket {
-		gen := unsafe.SliceData(seen.gen.s)
+		gen := unsafe.SliceData(idSetCells.gen.s)
 		epoch := seen.epoch
 
 		for _, v := range bucket {
