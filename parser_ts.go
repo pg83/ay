@@ -17,7 +17,7 @@ const (
 type TSIncludeDirectiveParser struct{}
 
 func (TSIncludeDirectiveParser) parse(_ string, data [][]byte, a *BumpAllocator[IncludeDirective]) ParsedIncludeSet {
-	b := concatChunksSentinel(data)
+	b := joinChunksScratch(data, true)
 	s := bytesString(b[:len(b)-1])
 	block := a.alloc(directiveBlockHint)
 	k := 0
@@ -187,20 +187,4 @@ func (pm *IncludeParserManager) resolveTSImport(dir, target string) VFS {
 	}
 
 	return 0
-}
-
-func concatChunksSentinel(chunks [][]byte) []byte {
-	n := 1
-
-	for _, chunk := range chunks {
-		n += len(chunk)
-	}
-
-	data := make([]byte, 0, n)
-
-	for _, chunk := range chunks {
-		data = append(data, chunk...)
-	}
-
-	return append(data, 0)
 }

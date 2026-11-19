@@ -2,6 +2,8 @@ package main
 
 import "github.com/zeebo/xxh3"
 
+var parseJoinScratch []byte
+
 type FS interface {
 	root() string
 	listdir(dir STR) DirView
@@ -51,6 +53,38 @@ func concatChunks(chunks [][]byte) []byte {
 
 	for _, chunk := range chunks {
 		data = append(data, chunk...)
+	}
+
+	return data
+}
+
+func joinChunksScratch(chunks [][]byte, sentinel bool) []byte {
+	if len(chunks) == 1 && !sentinel {
+		return chunks[0]
+	}
+
+	n := 0
+
+	for _, chunk := range chunks {
+		n += len(chunk)
+	}
+
+	if sentinel {
+		n++
+	}
+
+	if cap(parseJoinScratch) < n {
+		parseJoinScratch = make([]byte, 0, max(n, 2*cap(parseJoinScratch)))
+	}
+
+	data := parseJoinScratch[:0]
+
+	for _, chunk := range chunks {
+		data = append(data, chunk...)
+	}
+
+	if sentinel {
+		data = append(data, 0)
 	}
 
 	return data

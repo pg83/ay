@@ -140,7 +140,7 @@ func isGoIdentStart(c byte) bool {
 type GoCgoIncludeDirectiveParser struct{}
 
 func (GoCgoIncludeDirectiveParser) parse(rel string, data [][]byte, a *BumpAllocator[IncludeDirective]) ParsedIncludeSet {
-	src := concatChunks(data)
+	src := joinChunksScratch(data, false)
 
 	var set ParsedIncludeSet
 

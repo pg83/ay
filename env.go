@@ -101,8 +101,8 @@ func (s *EnvStore) settle(e ENV) {
 
 			ranges := s.textInputs[e]
 
-			if vfsHasPrefix(string(buf)) {
-				Environment{s: s}.setVFS(e, intern(string(buf)))
+			if text := bytesString(buf); vfsHasPrefix(text) {
+				Environment{s: s}.setVFS(e, intern(text))
 			} else {
 				Environment{s: s}.setStrID(e, internBytes(buf))
 			}
