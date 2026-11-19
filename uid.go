@@ -55,7 +55,7 @@ func (c *CanonBuf) inputVal(v VFS) uint64 {
 	}
 
 	if !c.eSeen[id] {
-		e := internTable.cells.get(id>>1).lo ^ uint64(id&1)
+		e := internLo(STR(id>>1)) ^ uint64(id&1)
 
 		if v.isSource() {
 			e ^= c.sourceHash(v)
@@ -98,7 +98,7 @@ func (c *CanonBuf) writeBytes(s string) {
 }
 
 func (c *CanonBuf) writeSTR(s STR) {
-	c.writeUint64(internTable.cells.get(uint32(s)).lo)
+	c.writeUint64(internLo(s))
 }
 
 func (c *CanonBuf) writeRefUIDs(refs []NodeRef) {
@@ -205,19 +205,19 @@ func (c *CanonBuf) writeVFSSliceBody(vs []VFS) {
 
 func (c *CanonBuf) writeVFS(v VFS) {
 	c.writeByte(byte(uint32(v) & 1))
-	c.writeUint64(internTable.cells.get(uint32(v) >> 1).lo)
+	c.writeUint64(internLo(STR(uint32(v) >> 1)))
 }
 
 func (c *CanonBuf) writeANY(a ANY) {
 	if v := a.vfs(); v != 0 {
 		c.writeByte(1 | byte(uint32(v)&1)<<1)
-		c.writeUint64(internTable.cells.get(uint32(v) >> 1).lo)
+		c.writeUint64(internLo(STR(uint32(v) >> 1)))
 
 		return
 	}
 
 	c.writeByte(0)
-	c.writeUint64(internTable.cells.get(uint32(a.str())).lo)
+	c.writeUint64(internLo(a.str()))
 }
 
 func (c *CanonBuf) writeAnyChunks(chunks ArgChunks) {

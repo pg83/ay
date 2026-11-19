@@ -6,56 +6,71 @@ import (
 	"github.com/zeebo/xxh3"
 )
 
-var internTable = struct {
+var internTable = newInternTable()
+
+type InternTable struct {
 	ids      *IntMap[STR]
 	overflow map[string]STR
-	flatStr  []string
-	flatLo   Vec[uint64]
-	cells    PageVec[InternCell]
-	cellPage []InternCell
-	cellBase uint32
-	cellIdx  int
+	bytes    ReservedArena
+	pos      ReservedArena
+	lo       ReservedArena
 	count    uint32
 	bound    uint32
-	bytes    *BumpAllocator[byte]
+	mapped   uint32
 
 	cleanSeen BitSet
 	cleanYes  BitSet
-}{
-	ids:      newIntMap[STR](1 << 19),
-	overflow: make(map[string]STR),
-	flatStr:  make([]string, 1, 1<<20),
-	flatLo:   Vec[uint64]{s: make([]uint64, 1, bumpChunkInitial)},
-	count:    1,
-	bytes:    newBumpAllocator[byte](),
 }
 
-type InternCell struct {
-	str string
-	lo  uint64
+func newInternTable() InternTable {
+	t := InternTable{
+		ids:      newIntMap[STR](1 << 19),
+		overflow: make(map[string]STR),
+		bytes:    reserveArena(strTextReserve),
+		pos:      reserveArena(strIDReserve * 8),
+		lo:       reserveArena(strIDReserve * 8),
+		count:    1,
+	}
+
+	t.mapIDs(0)
+
+	return t
+}
+
+func (t *InternTable) mapIDs(id uint32) {
+	need := (int(id) + 1) * 8
+
+	t.pos.grow(need)
+	t.lo.grow(need)
+	t.mapped = uint32(min(t.pos.mapped, t.lo.mapped) / 8)
 }
 
 func internString(id STR) string {
-	return *unsafeAt(internTable.flatStr, uint64(id))
+	e := *(*uint64)(unsafe.Add(internTable.pos.base, uintptr(id)<<3))
+
+	return unsafe.String((*byte)(unsafe.Add(internTable.bytes.base, e&strOffMask)), e>>strOffBits)
 }
 
 func internLo(id STR) uint64 {
-	return *unsafeAt(internTable.flatLo.s, uint64(id))
+	return *(*uint64)(unsafe.Add(internTable.lo.base, uintptr(id)<<3))
 }
 
 func internOwnedCopy(b []byte) string {
-	n := len(b)
-
-	if n == 0 {
+	if len(b) == 0 {
 		return ""
 	}
 
-	block := internTable.bytes.alloc(n)
+	return unsafe.String((*byte)(unsafe.Add(internTable.bytes.base, internStore(bytesString(b)))), len(b))
+}
 
-	copy(block, b)
+func internStore(s string) int {
+	n := len(s)
+	off := internTable.bytes.used
+
+	copy(internTable.bytes.alloc(n), s)
 	internTable.bytes.commit(n)
 
-	return unsafe.String(&block[0], n)
+	return off
 }
 
 type STR uint32
@@ -72,76 +87,35 @@ func strBound() uint32 {
 	return internTable.count
 }
 
-func internPlace(s string, lo uint64) STR {
-	if internTable.count == 1 {
-		internTable.cells.set(0, InternCell{})
+func internSet(id uint32, off, n int, lo uint64) {
+	if n > strLenMax {
+		throwFmt("interned string of %d bytes is longer than %d", n, strLenMax)
 	}
 
-	id := chaosInternID(internTable.count)
-
-	internTable.count++
-
-	if id >= internTable.bound {
-		internTable.bound = id + 1
+	if id >= internTable.mapped {
+		internTable.mapIDs(id)
 	}
 
-	if grow := int(id) + 1 - len(internTable.flatStr); grow > 0 {
-		internTable.flatStr = append(internTable.flatStr, make([]string, grow)...)
-		internTable.flatLo.ensureLen(int(id) + 1)
-	}
-
-	internTable.flatStr[id] = s
-	internTable.flatLo.s[id] = lo
-	internTable.cells.set(id, InternCell{str: s, lo: lo})
-
-	return STR(id)
+	*(*uint64)(unsafe.Add(internTable.pos.base, uintptr(id)<<3)) = uint64(off) | uint64(n)<<strOffBits
+	*(*uint64)(unsafe.Add(internTable.lo.base, uintptr(id)<<3)) = lo
 }
 
-func internAppend(s string, lo uint64) STR {
+func internAppend(off, n int, lo uint64) STR {
+	id := internTable.count
+
 	if chaosInternShuffle {
-		return internPlace(s, lo)
+		id = chaosInternID(id)
+
+		if id >= internTable.bound {
+			internTable.bound = id + 1
+		}
 	}
 
-	id := STR(internTable.count)
-	cell := InternCell{str: s, lo: lo}
-
-	internTable.flatStr = append(internTable.flatStr, s)
-	internTable.flatLo.pushBack(lo)
-
-	if internTable.cellPage == nil {
-		zeroPage := make([]InternCell, 1)
-		page := make([]InternCell, 2)
-
-		page[0] = cell
-
-		internTable.cellPage = page
-		internTable.cellBase = internTable.count
-		internTable.cellIdx = 1
-		internTable.cells.pages[0].Store(&zeroPage)
-		internTable.cells.pages[1].Store(&page)
-		internTable.count++
-
-		return id
-	}
-
-	off := internTable.count - internTable.cellBase
-
-	if int(off) == len(internTable.cellPage) {
-		page := make([]InternCell, 2*len(internTable.cellPage))
-
-		internTable.cellPage = page
-		internTable.cellBase = internTable.count
-		internTable.cellIdx++
-		off = 0
-		page[0] = cell
-		internTable.cells.pages[internTable.cellIdx].Store(&page)
-	} else {
-		internTable.cellPage[off] = cell
-	}
+	internSet(id, off, n, lo)
 
 	internTable.count++
 
-	return id
+	return STR(id)
 }
 
 func internStr(s string) STR {
@@ -156,15 +130,14 @@ func internStr(s string) STR {
 			return oid
 		}
 
-		owned := internOwnedCopy(unsafe.Slice(unsafe.StringData(s), len(s)))
-		id := internAppend(owned, h.Lo)
+		id := internAppend(internStore(s), len(s), h.Lo)
 
-		internTable.overflow[owned] = id
+		internTable.overflow[id.string()] = id
 
 		return id
 	}
 
-	id := internAppend(internOwnedCopy(unsafe.Slice(unsafe.StringData(s), len(s))), h.Lo)
+	id := internAppend(internStore(s), len(s), h.Lo)
 
 	internTable.ids.put(h.Hi, id)
 
@@ -248,28 +221,26 @@ func internBlock(block []byte, n int) STR {
 			return oid
 		}
 
-		s := internCommitBlock(block, n)
-		id := internAppend(s, h.Lo)
+		id := internAppend(internCommitBlock(n), n, h.Lo)
 
-		internTable.overflow[s] = id
+		internTable.overflow[id.string()] = id
 
 		return id
 	}
 
-	s := internCommitBlock(block, n)
-	id := internAppend(s, h.Lo)
+	id := internAppend(internCommitBlock(n), n, h.Lo)
 
 	internTable.ids.put(h.Hi, id)
 
 	return id
 }
 
-func internCommitBlock(block []byte, n int) string {
-	s := unsafe.String(&block[0], n)
+func internCommitBlock(n int) int {
+	off := internTable.bytes.used
 
 	internTable.bytes.commit(n)
 
-	return s
+	return off
 }
 
 func internBytes(b []byte) STR {
@@ -284,15 +255,14 @@ func internBytes(b []byte) STR {
 			return oid
 		}
 
-		s := internOwnedCopy(b)
-		id := internAppend(s, h.Lo)
+		id := internAppend(internStore(bytesString(b)), len(b), h.Lo)
 
-		internTable.overflow[s] = id
+		internTable.overflow[id.string()] = id
 
 		return id
 	}
 
-	id := internAppend(internOwnedCopy(b), h.Lo)
+	id := internAppend(internStore(bytesString(b)), len(b), h.Lo)
 
 	internTable.ids.put(h.Hi, id)
 
@@ -320,7 +290,7 @@ func (id STR) string() string {
 }
 
 func (id STR) sharedString() string {
-	return internTable.cells.get(uint32(id)).str
+	return internString(id)
 }
 
 func interned(s string) STR {
