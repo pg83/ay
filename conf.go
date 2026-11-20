@@ -967,6 +967,7 @@ type confModule struct {
 	originals     []ENV
 	read          []bool
 	planned       bool
+	lang          uint8
 	checkProvides int8
 	noLicense     int8
 }
@@ -2477,8 +2478,16 @@ func (c *Conf) expandArgs(env Environment, text STR) []ANY {
 	return memo.args
 }
 
-func (c *Conf) planSets(module *confModule, variable ENV) bool {
-	return slices.ContainsFunc(c.tables.plan(module).steps, func(step confInitStep) bool { return step.variable == variable && step.value != 0 })
+func (c *Conf) setsModuleLang(module *confModule) bool {
+	if module.lang == 0 {
+		module.lang = 1
+
+		if slices.ContainsFunc(c.tables.plan(module).steps, func(step confInitStep) bool { return step.variable == envMODULE_LANG && step.value != 0 }) {
+			module.lang = 2
+		}
+	}
+
+	return module.lang == 2
 }
 
 func (c *Conf) moduleTag(name STR) STR {
@@ -3279,9 +3288,10 @@ func (c *Conf) macroCalls(macro *ConfMacro, v UnknownStmt, env Environment, dept
 
 	state := c.state
 	args := v.Args
+	undefined := func(arg ANY) bool { return strHasDollar(arg) && undefinedVariableArg(arg.string(), env) }
 
-	if slices.ContainsFunc(args, func(arg ANY) bool { return undefinedVariableArg(arg.string(), env) }) {
-		args = slices.DeleteFunc(slices.Clone(args), func(arg ANY) bool { return undefinedVariableArg(arg.string(), env) })
+	if slices.ContainsFunc(args, undefined) {
+		args = slices.DeleteFunc(slices.Clone(args), undefined)
 	}
 
 	expansion := state.bind(macro, args)

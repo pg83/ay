@@ -66,6 +66,14 @@ func (d IncludeDirective) quotedLike() bool {
 	return d.kind == includeQuoted || d.cythonProbe()
 }
 
+func cythonRequiredImport(d IncludeDirective) IncludeDirective {
+	if d.kind == includeCythonImportEnd {
+		d.kind = includeQuoted
+	}
+
+	return d
+}
+
 func (d IncludeDirective) cythonProbe() bool {
 	return d.kind == includeCythonOptional || d.kind == includeCythonModule || d.kind == includeCythonName || d.kind == includeCythonFallback || d.kind == includeCythonSibling || d.kind == includeCythonImportEnd
 }
@@ -589,7 +597,7 @@ func (sc *ScanCtx) appendResolvedChildren(out []VFS, vfsPath VFS, previous Scann
 
 	if previous.Deferred && previous.Diagnostics != nil {
 		for _, diagnostic := range previous.Diagnostics.Entries {
-			out = sc.resolve(out, vfsPath, incDir, diagnostic.Directive)
+			out = sc.resolve(out, vfsPath, incDir, cythonRequiredImport(diagnostic.Directive))
 		}
 
 		return out
@@ -613,8 +621,12 @@ func (sc *ScanCtx) appendResolvedChildren(out []VFS, vfsPath VFS, previous Scann
 			}
 
 			if entry.kind == includeCythonImportEnd {
-				if sc.initialOnly && len(out) == cimportStart {
-					sc.diagnostics = append(sc.diagnostics, IncludeDiagnostic{Directive: entry})
+				if len(out) == cimportStart {
+					if sc.initialOnly {
+						sc.diagnostics = append(sc.diagnostics, IncludeDiagnostic{Directive: entry})
+					} else {
+						out = sc.resolve(out, vfsPath, incDir, cythonRequiredImport(entry))
+					}
 				}
 
 				continue

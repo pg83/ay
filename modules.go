@@ -2558,7 +2558,7 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 				moduleLang = moduleLangTokenPy3
 			}
 
-			if moduleAssignsLang(d.moduleStmt.Name) && (d.confModule == nil || platform.conf.planSets(d.confModule, envMODULE_LANG)) {
+			if moduleAssignsLang(d.moduleStmt.Name) && (d.confModule == nil || platform.conf.setsModuleLang(d.confModule)) {
 				env.setStringID(envMODULE_LANG, moduleLang)
 			}
 
