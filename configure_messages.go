@@ -370,6 +370,7 @@ func diagnoseAddIncl(args []ANY) *addInclDiag {
 		case arg == kwGLOBAL.any() || arg == kwONE_LEVEL.any():
 			scoped = true
 		case arg == kwLOCAL.any():
+		case arg.string() == "" || arg.string() == `""` || arg.string() == `''`:
 		default:
 			dirs = append(dirs, arg)
 			lang, scoped = 0, false

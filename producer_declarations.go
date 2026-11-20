@@ -93,8 +93,6 @@ func (e *EmitContext) producerSeq(pos ProducerPos, cythonPlans []CythonStmtPlan)
 		return d.pyRegister[i].DeclSeq
 	case prodPyMain:
 		return d.pyMainDeclSeq
-	case prodYaConf:
-		return d.yaConfDeclSeq
 	case prodUsrvFile:
 		return d.usrvFiles[i].DeclSeq
 	}
@@ -189,10 +187,6 @@ func (e *EmitContext) orderedProducerPositions(positions []ProducerPos, cythonPl
 
 			if e.d.pyMain != nil {
 				positions = append(positions, ProducerPos{kind: prodPyMain})
-			}
-
-			if len(e.d.yaConfJSON) > 0 {
-				positions = append(positions, ProducerPos{kind: prodYaConf})
 			}
 		}
 	}

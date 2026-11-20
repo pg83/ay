@@ -56,7 +56,6 @@ const (
 	prodPyRegister
 	prodPyNoCheck
 	prodPyMain
-	prodYaConf
 	prodUsrvFile
 	prodKindCount
 )
@@ -1191,8 +1190,6 @@ func (e *EmitContext) drainCommands(cythonPlans []CythonStmtPlan, srcs []SrcMeta
 			e.emitNoCheckImportsObjcopy()
 		case prodPyMain:
 			e.emitPyMainObjcopy()
-		case prodYaConf:
-			e.emitYaConfJSONObjcopy()
 		case prodQueuedSrc:
 			meta := e.srcs[pos.index]
 

@@ -78,6 +78,13 @@ func (e *EmitContext) emitFromSandbox(stmt *FromSandboxStmt) (memberRefs []NodeR
 
 	ctx := e.ctx
 	node, outVFSs, auto := fromSandboxNode(ctx.emit.nodeArenas(), e.instance, e.d.tc.Python3, stmt)
+
+	if len(outVFSs) == 0 {
+		ctx.onWarn(Warn{Kind: WarnMisconfiguration, Where: makeFileWhere(e.instance.Path.relString()), Error: "macro 0 resulted in no outputs, can't add to graph"})
+
+		return nil, nil
+	}
+
 	ref := ctx.emit.reserve()
 	pending := e.pendingEmit(func() { e.emitReservedNode(node, ref) })
 	parsed := extractionOutputIncludes(ctx.na, stmt.OutputIncludes)

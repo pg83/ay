@@ -585,23 +585,20 @@ func (s *ConfState) parseCondition(rel, expr string) []CondNode {
 	for i := range p.condScratch {
 		switch p.condScratch[i].Kind {
 		case ckIdent:
-			if name, reference := strings.CutPrefix(p.condScratch[i].Name, "$"); reference {
-				p.condScratch[i].Kind = ckConfIdent
-				p.condScratch[i].Name = name
-				p.condScratch[i].Env = internEnv(name)
-			} else if p.condScratch[i].Name == "yes" || p.condScratch[i].Name == "no" {
-				p.condScratch[i].Kind = ckString
-			} else {
+			name, reference := strings.CutPrefix(p.condScratch[i].Name, "$")
+
+			if !reference {
 				throwFmt("conf: %s: bare configuration variable %q needs $", rel, p.condScratch[i].Name)
 			}
+
+			p.condScratch[i].Kind = ckConfIdent
+			p.condScratch[i].Name = name
+			p.condScratch[i].Env = internEnv(name)
 		case ckEq:
 			p.condScratch[i].Kind = ckConfEq
-		case ckGt:
-			p.condScratch[i].L, p.condScratch[i].R = p.condScratch[i].R, p.condScratch[i].L
-
-			fallthrough
-		case ckLt:
-			p.condScratch[i].Kind = ckConfLt
+		case ckString, ckNot, ckAnd, ckOr:
+		default:
+			throwFmt("conf: %s: unsupported condition %s", rel, expr)
 		}
 	}
 
@@ -809,7 +806,7 @@ func (c *ConfFile) condInputs(b int32, add func(ENV, bool), literal *bool) {
 func condOperand(nodes []CondNode, i int32) bool {
 	for _, node := range nodes {
 		switch node.Kind {
-		case ckEq, ckConfEq, ckLt, ckGt, ckConfLt, ckStartsWith, ckEndsWith, ckVersionCmp, ckMatches:
+		case ckEq, ckConfEq, ckLt, ckGt, ckStartsWith, ckEndsWith, ckVersionCmp, ckMatches:
 			if node.L == i || node.R == i {
 				return true
 			}

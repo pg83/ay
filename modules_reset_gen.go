@@ -84,7 +84,6 @@ func (x *ModuleData) reset() {
 		checkConfigHeaders:   x.checkConfigHeaders[:0],
 		cythonCpp:            scrub(x.cythonCpp),
 		swigC:                scrub(x.swigC),
-		yaConfJSON:           x.yaConfJSON[:0],
 		archives:             scrub(x.archives),
 		archiveAsm:           scrub(x.archiveAsm),
 		copyFiles:            scrub(x.copyFiles),

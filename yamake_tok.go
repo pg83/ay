@@ -406,7 +406,6 @@ var tokName = [...]STR{
 	tokWithKotlinGrpc:                           kwWITH_KOTLIN_GRPC,
 	tokYaff:                                     internStr("YAFF"),
 	tokYaffSchema:                               internStr("YAFF_SCHEMA"),
-	tokYaConfJson:                               internStr("YA_CONF_JSON"),
 	tokYqlAbiVersion:                            internStr("YQL_ABI_VERSION"),
 	tokYqlLastAbiVersion:                        internStr("YQL_LAST_ABI_VERSION"),
 	tokYqlUdfContrib:                            kwYQL_UDF_CONTRIB,
@@ -839,7 +838,6 @@ const (
 	tokWithKotlinGrpc
 	tokYaff
 	tokYaffSchema
-	tokYaConfJson
 	tokYqlAbiVersion
 	tokYqlLastAbiVersion
 	tokYqlUdfContrib

@@ -252,10 +252,11 @@ type goImportKey struct {
 	std   *GoStd
 	imp   STR
 	inStd bool
+	inCmd bool
 }
 
-func goImportDir(ctx *GenCtx, std *GoStd, inStd bool, impID STR) STR {
-	key := goImportKey{std: std, imp: impID, inStd: inStd}
+func goImportDir(ctx *GenCtx, std *GoStd, inStd, inCmd bool, impID STR) STR {
+	key := goImportKey{std: std, imp: impID, inStd: inStd, inCmd: inCmd}
 
 	if dir, ok := ctx.goImportDirs[key]; ok {
 		return dir
@@ -264,23 +265,7 @@ func goImportDir(ctx *GenCtx, std *GoStd, inStd bool, impID STR) STR {
 	var dir STR
 
 	if imp := impID.string(); imp != "unsafe" && imp != "C" {
-		if rest, ok := strings.CutPrefix(imp, goArcPrefix); ok {
-			imp = rest
-		}
-
-		candidates := []string{goVendorPrefix + "/" + imp, std.Prefix + "/" + imp, imp}
-
-		if inStd {
-			candidates = []string{std.Prefix + "/vendor/" + imp, std.Prefix + "/" + imp, imp}
-		}
-
-		for _, cand := range candidates {
-			if id := internStr(cand); ctx.fs.isFileID(id, strYaMake) {
-				dir = id
-
-				break
-			}
-		}
+		dir = internStr(goImportPath(std.Prefix, inStd, inCmd, imp))
 	}
 
 	ctx.goImportDirs[key] = dir
@@ -288,11 +273,36 @@ func goImportDir(ctx *GenCtx, std *GoStd, inStd bool, impID STR) STR {
 	return dir
 }
 
+func goImportPath(stdPrefix string, inStd, inCmd bool, imp string) string {
+	slash := strings.IndexByte(imp, '/')
+	dot := strings.IndexByte(imp, '.')
+
+	if slash >= 0 {
+		dot = strings.LastIndexByte(imp[:slash], '.')
+	}
+
+	switch {
+	case dot < 0 && slash >= 0 && strings.HasPrefix(imp, "golang_org/"):
+		return stdPrefix + "/vendor/" + imp
+	case dot < 0:
+		return stdPrefix + "/" + imp
+	case strings.HasPrefix(imp, goArcPrefix):
+		return imp[len(goArcPrefix):]
+	case inCmd:
+		return stdPrefix + "/cmd/vendor/" + imp
+	case inStd:
+		return stdPrefix + "/vendor/" + imp
+	}
+
+	return goVendorPrefix + "/" + imp
+}
+
 func applyGoImplicitPeerdirs(ctx *GenCtx, instance ModuleInstance, d *ModuleData) {
 	dir := instance.Path.relString()
 	dirID := instance.Path.rel()
 	std := instance.Platform.Go
 	inStd := strings.HasPrefix(dir, std.Prefix+"/")
+	inCmd := strings.HasPrefix(dir, std.Prefix+"/cmd/")
 
 	addPeer := func(p STR) {
 		if p == 0 || p == dirID || slices.Contains(d.peerdirs, p.any()) {
@@ -355,7 +365,7 @@ func applyGoImplicitPeerdirs(ctx *GenCtx, instance ModuleInstance, d *ModuleData
 		}
 
 		for _, imp := range ctx.parsers.sourceParsedBuckets(path, nil)[parsedIncludesGoImports] {
-			if id := goImportDir(ctx, std, inStd, imp.target.str()); id != 0 && instance.Platform.allowPeer(dirID, id, ctx.onWarn) {
+			if id := goImportDir(ctx, std, inStd, inCmd, imp.target.str()); id != 0 && instance.Platform.allowPeer(dirID, id, ctx.onWarn) {
 				addPeer(id)
 			}
 		}

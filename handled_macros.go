@@ -194,7 +194,6 @@ var handledMacroTokens = map[TOK]bool{
 	tokUsrvStyleJSON:                        true,
 	tokUsrvStyleYAML:                        true,
 	tokWithKotlinGrpc:                       true,
-	tokYaConfJson:                           true,
 	tokYaToolsConf:                          true,
 	tokYaff:                                 true,
 	tokYaffSchema:                           true,

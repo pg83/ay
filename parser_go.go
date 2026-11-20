@@ -116,14 +116,14 @@ func scanGoImports(data []byte, emit func(importPath []byte)) {
 						break
 					}
 
-					if p := importPath(); len(p) > 0 {
+					if p := importPath(); p != nil {
 						emit(p)
 					} else {
 						i++
 					}
 				}
 			} else {
-				if p := importPath(); len(p) > 0 {
+				if p := importPath(); p != nil {
 					emit(p)
 				}
 			}

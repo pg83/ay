@@ -84,7 +84,6 @@ var (
 	kwFULL_JAVA_SRCS                                                                         = internStr("FULL_JAVA_SRCS")
 	kwFUNCNAME                                                                               = internStr("FUNCNAME")
 	kwGENERATE_ENUM_SERIALIZATION                                                            = internStr("GENERATE_ENUM_SERIALIZATION")
-	kwGENERATE_ENUM_SERIALIZATION_NOUTF                                                      = internStr("GENERATE_ENUM_SERIALIZATION_NOUTF")
 	kwGENERATE_ENUM_SERIALIZATION_WITH_HEADER                                                = internStr("GENERATE_ENUM_SERIALIZATION_WITH_HEADER")
 	kwGENERATE_MACHINE_CODE                                                                  = internStr("GENERATE_MACHINE_CODE")
 	kwGLOBAL                                                                                 = internStr("GLOBAL")

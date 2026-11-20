@@ -51,8 +51,6 @@ func evalCondAt(nodes []CondNode, i int32, env Environment) bool {
 		return evalConfEq(nodes, n, env)
 	case ckLt, ckGt:
 		return evalLt(nodes, n, env)
-	case ckConfLt:
-		return evalConfLt(nodes, n, env)
 	case ckStartsWith:
 		return strings.HasPrefix(evalIfAtomString(nodes, n.L, env), evalIfAtomString(nodes, n.R, env))
 	case ckEndsWith:
@@ -232,14 +230,6 @@ func evalConfEq(nodes []CondNode, n *CondNode, env Environment) bool {
 	return confNumber(nodes, n.L, env) == confNumber(nodes, n.R, env)
 }
 
-func evalConfLt(nodes []CondNode, n *CondNode, env Environment) bool {
-	if confStringOperand(&nodes[n.L]) && confStringOperand(&nodes[n.R]) {
-		return evalConfAtomString(nodes, n.L, env) < evalConfAtomString(nodes, n.R, env)
-	}
-
-	return confNumber(nodes, n.L, env) < confNumber(nodes, n.R, env)
-}
-
 func confStringOperand(n *CondNode) bool {
 	return n.Kind == ckConfIdent || n.Kind == ckString
 }
@@ -248,8 +238,6 @@ func confNumber(nodes []CondNode, i int32, env Environment) int {
 	n := &nodes[i]
 
 	switch n.Kind {
-	case ckInt:
-		return n.Ival
 	case ckConfIdent, ckString:
 		if evalConfAtomString(nodes, i, env) != "" {
 			return 1

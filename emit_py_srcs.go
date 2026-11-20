@@ -6,7 +6,6 @@ import (
 	enchex "encoding/hex"
 	"path"
 	"slices"
-	"sort"
 	"strings"
 )
 
@@ -812,59 +811,6 @@ func (e *EmitContext) emitNoCheckImportsObjcopy() ([]NodeRef, []VFS) {
 	return e.packResources(ResourcePack{Tag: d.unit.HashTag, DontCompress: true, Items: []ResourceItem{item}})
 }
 
-func (e *EmitContext) emitYaConfJSONObjcopy() ([]NodeRef, []VFS) {
-	ctx, _, d := e.ctx, e.instance, e.d
-
-	type yaConfResource struct {
-		sourcePath string
-		keyPath    string
-		hashPath   string
-	}
-
-	var resources []yaConfResource
-
-	for _, file := range d.yaConfJSON {
-		resources = append(resources, yaConfResource{
-			sourcePath: file.string(),
-			keyPath:    "ya.conf.json",
-			hashPath:   "ya.conf.json",
-		})
-
-		formulas := yaConfFormulaResources(ctx.fs, file.string())
-
-		sort.Strings(formulas)
-
-		for _, formula := range formulas {
-			resources = append(resources, yaConfResource{
-				sourcePath: formula,
-				keyPath:    formula,
-				hashPath:   formula,
-			})
-		}
-	}
-
-	outRefs := make([]NodeRef, 0, len(resources))
-	outPaths := make([]VFS, 0, len(resources))
-	moduleTag := d.unit.HashTag
-
-	for _, res := range resources {
-		key := "resfs/file/" + res.keyPath
-		kvHash := "resfs/src/" + key + "=${rootrel;context=TEXT;input=TEXT:\"" + res.hashPath + "\"}"
-		kvCmd := internStr("resfs/src/" + key + "=" + res.sourcePath)
-		input := source(res.sourcePath)
-
-		refs, outs := e.packResources(ResourcePack{DontCompress: true, Tag: moduleTag, Items: []ResourceItem{
-			{Path: "-", Key: kvHash, Cmd: kvCmd},
-			{Path: res.hashPath, Key: key, SourceInput: input},
-		}})
-
-		outRefs = append(outRefs, refs...)
-		outPaths = append(outPaths, outs...)
-	}
-
-	return outRefs, outPaths
-}
-
 func pyProtoAuxObjSuf(d *ModuleData) STR {
 	if d.unit.Tag == unitTagPy3Proto {
 		return tagPy3
@@ -1050,58 +996,6 @@ func (e *EmitContext) pyGenResourceItems(entries []PyGenResEntry) []ResourceItem
 	e.resItems = retainMaxLen(e.resItems, items)
 
 	return items
-}
-
-func yaConfFormulaResources(fs FS, confPath string) []string {
-	raw := concatChunks(fs.read(confPath))
-
-	var out []string
-
-	seen := map[string]struct{}{}
-
-	for pos := 0; ; {
-		ps, pe, next, ok := yaConfFormulaNext(raw, pos)
-
-		if !ok {
-			break
-		}
-
-		pos = next
-
-		formula := string(raw[ps:pe])
-
-		if _, dup := seen[formula]; dup {
-			continue
-		}
-
-		seen[formula] = struct{}{}
-		out = append(out, formula)
-	}
-
-	for pos := 0; ; {
-		ps, pe, next, ok := yaConfResourceNext(raw, pos)
-
-		if !ok {
-			break
-		}
-
-		pos = next
-
-		path := "build/external_resources/" + string(raw[ps:pe]) + "/resources.json"
-
-		if _, dup := seen[path]; dup {
-			continue
-		}
-
-		if !fs.isFile(srcRootRel, path) {
-			continue
-		}
-
-		seen[path] = struct{}{}
-		out = append(out, path)
-	}
-
-	return out
 }
 
 func (e *EmitContext) resolvePythonDeclaration(src ANY, sourceRoot bool) ResolvedSource {

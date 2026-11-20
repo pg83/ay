@@ -347,8 +347,6 @@ type ModuleData struct {
 	swigC                   []SwigSrc
 	bisonGenExt             STR
 	grpc                    bool
-	yaConfJSON              []ANY
-	yaConfDeclSeq           int
 	archives                []ArchiveEntry
 	archiveAsm              []ArchiveAsmEntry
 	lj21                    *Lj21Archive
@@ -756,6 +754,28 @@ func rootedPathSTR(module VFS, path STR) (VFS, bool) {
 	rootedPaths.put(uint64(path), v)
 
 	return v, true
+}
+
+func srcDirTokens(dirs []ANY, env Environment) []ANY {
+	if !slices.ContainsFunc(dirs, bareRootShorthand) {
+		return expandStmtTokens(dirs, env)
+	}
+
+	var out []ANY
+
+	for _, dir := range dirs {
+		if bareRootShorthand(dir) {
+			out = append(out, dir)
+		} else {
+			out = append(out, expandStmtTokens([]ANY{dir}, env)...)
+		}
+	}
+
+	return out
+}
+
+func bareRootShorthand(arg ANY) bool {
+	return arg.string() == "$S" || arg.string() == "$B"
 }
 
 func moduleRootedVFS(modulePath string, path string) (VFS, bool) {
@@ -2660,14 +2680,6 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 					continue
 				}
 
-				if pTok == kwGLOBAL.any() {
-					continue
-				}
-
-				if strHasDollar(pTok) && strings.Contains(pTok.string(), "${") {
-					continue
-				}
-
 				if dir := pTok.string(); pTok.vfs() == 0 && len(dir) > 1 && dir[len(dir)-1] == '/' && dir[0] != '/' {
 					onWarn(Warn{Kind: WarnMisconfiguration, Where: makeFileWhere(modulePath), Error: dir + " has trailing /"})
 				}
@@ -2840,8 +2852,7 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 
 			d.ldFlags = append(d.ldFlags, internAny(expandSourceScalarVarRef(value, env)))
 		case *SrcDirStmt:
-
-			for _, dirTok := range expandStmtTokens(v.Dirs, env) {
+			for _, dirTok := range srcDirTokens(v.Dirs, env) {
 				dir := dirTok.string()
 
 				if rel := strings.TrimPrefix(dir, "./"); rel == "." || rel == ".." || strings.HasPrefix(rel, "../") {
@@ -4370,16 +4381,6 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 		for _, argTok := range v.Args {
 			d.excludeTags[argTok.str()] = v.Name == tokExcludeTags
 		}
-	case tokYaConfJson:
-		if len(v.Args) != 1 {
-			throwFmt("YA_CONF_JSON expects exactly 1 argument, got %d", len(v.Args))
-		}
-
-		if len(d.yaConfJSON) == 0 {
-			d.yaConfDeclSeq = d.nextDeclSeq()
-		}
-
-		d.yaConfJSON = append(d.yaConfJSON, v.Args[0])
 	case tokArchive:
 
 		applyArchiveStmt(v, d)
@@ -4704,12 +4705,18 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 			arg += ":main"
 		}
 
+		if !collectPythonSourceEntry(d, env, &d.macroPeerdirs) {
+			reportPythonPluginTypeError(modulePath, "PY_MAIN", v.Args, onWarn)
+
+			return true
+		}
+
 		d.pyMain = ptr(internStr(arg).any())
 		d.pyMainDeclSeq = d.nextDeclSeq()
-
-		collectPythonSourceEntry(d, env, &d.macroPeerdirs)
 	case tokPyProgramPlugin:
-		pyProgram(d, env)
+		if !pyProgram(d, env) {
+			reportPythonPluginTypeError(modulePath, "_PY_PROGRAM", v.Args, onWarn)
+		}
 	case tokRegisterSandboxImport:
 
 		for _, arg := range v.Args {
@@ -5274,9 +5281,9 @@ func confModuleType(name TOK, d *ModuleData) STR {
 	return pythonSourceModuleType(d.unit.Type)
 }
 
-func pyProgram(d *ModuleData, env Environment) {
+func pyProgram(d *ModuleData, env Environment) bool {
 	if !env.is(envUSE_ARCADIA_PYTHON, strYes) {
-		return
+		return true
 	}
 
 	sqlite := !env.is(envPYTHON_SQLITE3, strNo)
@@ -5288,23 +5295,35 @@ func pyProgram(d *ModuleData, env Environment) {
 			d.peerdirs = append(d.peerdirs, strContribToolsPythonSrcModulesSqlite.any())
 		}
 
-		return
+		return true
+	}
+
+	toolPeer, bound := env.lookupENV(envPYTHON3_TOOL_PEERDIR)
+
+	if sqlite && !bound {
+		return false
 	}
 
 	d.peerdirs = append(d.peerdirs, strLibraryPythonRuntimePy3Main.any())
 
 	if sqlite {
-		d.peerdirs = append(d.peerdirs, internV(env.string(envPYTHON3_TOOL_PEERDIR), "/Modules/_sqlite").any())
+		d.peerdirs = append(d.peerdirs, internV(toolPeer, "/Modules/_sqlite").any())
 	}
+
+	return true
 }
 
-func collectPythonSourceEntry(d *ModuleData, env Environment, peers *[]ANY) {
+func reportPythonPluginTypeError(modulePath, macro string, args []ANY, onWarn func(Warn)) {
+	onWarn(Warn{Kind: WarnSyntax, Where: makeFileWhere(modulePath), Error: macro + "(" + joinAnys(args, " ") + ") was not processed properly: unsupported operand type(s) for +: 'NoneType' and 'str'. Skip " + macro})
+}
+
+func collectPythonSourceEntry(d *ModuleData, env Environment, peers *[]ANY) bool {
 	d.pythonSourceCallback = true
 
 	moduleType := env.string(envMODULE_TYPE)
 
 	if isPyProgramType(d.moduleStmt.Name) || moduleType != "PROGRAM" && moduleType != "DLL" {
-		return
+		return true
 	}
 
 	d.pythonSourceEntry = true
@@ -5319,8 +5338,8 @@ func collectPythonSourceEntry(d *ModuleData, env Environment, peers *[]ANY) {
 			sqlitePeer = "contrib/tools/python/src"
 		} else if value, ok := env.lookupENV(envPYTHON3_TOOL_PEERDIR); ok {
 			sqlitePeer = value
-		} else if env.is(envUSE_PYTHON3_PREV, strYes) {
-			sqlitePeer = "contrib/tools/python3_prev"
+		} else if d.pythonSQLite3 {
+			return false
 		}
 
 		*peers = append(*peers, internStr(mainPeer).any())
@@ -5333,6 +5352,8 @@ func collectPythonSourceEntry(d *ModuleData, env Environment, peers *[]ANY) {
 	if d.pythonSourceProgram && !d.noCheckImportsDisabled && !env.bool(envCppAnalysisMode) {
 		*peers = append(*peers, strLibraryPythonTestingImportTest.any())
 	}
+
+	return true
 }
 
 func collectPySrcGroup(fs FS, modulePath string, v UnknownStmt, d *ModuleData, env Environment, onWarn func(Warn), group int) {
@@ -5340,7 +5361,12 @@ func collectPySrcGroup(fs FS, modulePath string, v UnknownStmt, d *ModuleData, e
 		return
 	}
 
-	collectPythonSourceEntry(d, env, &d.peerdirs)
+	if !collectPythonSourceEntry(d, env, &d.peerdirs) {
+		reportPythonPluginTypeError(modulePath, "PY_SRCS", v.Args, onWarn)
+
+		return
+	}
+
 	reportPythonVersion(modulePath, "PY_SRCS", env, onWarn)
 
 	v.Args = expandRootDeferredTokens(v.Args, env, tokenExpandPathArguments)

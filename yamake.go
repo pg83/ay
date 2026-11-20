@@ -120,25 +120,24 @@ var stmtKindNames = [...][]string{
 	stmtKindGenerateEnumSerialization: {"GENERATE_ENUM_SERIALIZATION"},
 	stmtKindAliceGenerateNoexceptEnumSerialization: {"ALICE_GENERATE_NOEXCEPT_ENUM_SERIALIZATION"},
 	stmtKindGenerateEnumSerializationWithHeader:    {"GENERATE_ENUM_SERIALIZATION_WITH_HEADER"},
-	stmtKindGenerateEnumSerializationNoutf:         {"GENERATE_ENUM_SERIALIZATION_NOUTF"},
-	stmtKindDefault:                                {"DEFAULT"},
-	stmtKindConfigureFile:                          {"CONFIGURE_FILE"},
-	stmtKindCreateBuildinfoFor:                     {"CREATE_BUILDINFO_FOR"},
-	stmtKindRunAntlr4Cpp:                           {"RUN_ANTLR4_CPP"},
-	stmtKindRunAntlr4CppSplit:                      {"RUN_ANTLR4_CPP_SPLIT"},
-	stmtKindRunAntlr4Python2:                       {"RUN_ANTLR4_PYTHON2", "RUN_ANTLR4_PYTHON3"},
-	stmtKindRunAntlr:                               {"RUN_ANTLR", "RUN_ANTLR4"},
-	stmtKindRunProgram:                             {"RUN_PROGRAM", "RUN_PY3_PROGRAM"},
-	stmtKindRunPython3:                             {"RUN_PYTHON3"},
-	stmtKindRunLua:                                 {"RUN_LUA"},
-	stmtKindSplitCodegen:                           {"SPLIT_CODEGEN"},
-	stmtKindBaseCodegen:                            {"BASE_CODEGEN"},
-	stmtKindStructCodegen:                          {"STRUCT_CODEGEN"},
-	stmtKindFromSandbox:                            {"FROM_SANDBOX"},
-	stmtKindResource:                               {"RESOURCE"},
-	stmtKindResourceFiles:                          {"RESOURCE_FILES"},
-	stmtKindAllResourceFiles:                       {"ALL_RESOURCE_FILES"},
-	stmtKindAllResourceFilesFromDirs:               {"ALL_RESOURCE_FILES_FROM_DIRS"},
+	stmtKindDefault:                  {"DEFAULT"},
+	stmtKindConfigureFile:            {"CONFIGURE_FILE"},
+	stmtKindCreateBuildinfoFor:       {"CREATE_BUILDINFO_FOR"},
+	stmtKindRunAntlr4Cpp:             {"RUN_ANTLR4_CPP"},
+	stmtKindRunAntlr4CppSplit:        {"RUN_ANTLR4_CPP_SPLIT"},
+	stmtKindRunAntlr4Python2:         {"RUN_ANTLR4_PYTHON2", "RUN_ANTLR4_PYTHON3"},
+	stmtKindRunAntlr:                 {"RUN_ANTLR", "RUN_ANTLR4"},
+	stmtKindRunProgram:               {"RUN_PROGRAM", "RUN_PY3_PROGRAM"},
+	stmtKindRunPython3:               {"RUN_PYTHON3"},
+	stmtKindRunLua:                   {"RUN_LUA"},
+	stmtKindSplitCodegen:             {"SPLIT_CODEGEN"},
+	stmtKindBaseCodegen:              {"BASE_CODEGEN"},
+	stmtKindStructCodegen:            {"STRUCT_CODEGEN"},
+	stmtKindFromSandbox:              {"FROM_SANDBOX"},
+	stmtKindResource:                 {"RESOURCE"},
+	stmtKindResourceFiles:            {"RESOURCE_FILES"},
+	stmtKindAllResourceFiles:         {"ALL_RESOURCE_FILES"},
+	stmtKindAllResourceFilesFromDirs: {"ALL_RESOURCE_FILES_FROM_DIRS"},
 }
 
 var stmtKinds = func() []uint8 {
@@ -181,7 +180,6 @@ const (
 	ckVersionCmp
 	ckDefined
 	ckUnsupportedOp
-	ckConfLt
 	ckConfEq
 	ckConfIdent
 	ckGt
@@ -236,7 +234,6 @@ const (
 	stmtKindGenerateEnumSerialization
 	stmtKindAliceGenerateNoexceptEnumSerialization
 	stmtKindGenerateEnumSerializationWithHeader
-	stmtKindGenerateEnumSerializationNoutf
 	stmtKindDefault
 	stmtKindConfigureFile
 	stmtKindCreateBuildinfoFor
@@ -720,17 +717,6 @@ func (l *Lexer) advance() byte {
 		l.line++
 		l.col = 1
 		l.prevByte = b
-	case b == '\r':
-
-		l.line++
-		l.col = 1
-
-		if l.pos < len(l.src) && l.src[l.pos] == '\n' {
-			l.pos++
-			l.prevByte = '\n'
-		} else {
-			l.prevByte = b
-		}
 	default:
 		l.col++
 		l.prevByte = b
@@ -765,9 +751,12 @@ func (l *Lexer) skipTrivia() {
 		case isWhitespace(b):
 			l.advance()
 		case b == '#' && commentBoundary(l.prevByte):
-
-			for l.pos < len(l.src) && l.src[l.pos] != '\n' && l.src[l.pos] != '\r' {
+			for l.pos < len(l.src) && l.src[l.pos] != '\n' {
 				l.advance()
+			}
+
+			if l.pos == len(l.src) {
+				l.throwLexer(l.line, l.col, "comment without a line end")
 			}
 		default:
 			return
@@ -1605,12 +1594,6 @@ func buildStmtForID(nameID STR, args []ANY, line int, fail func(format string, a
 		}
 
 		return &GenerateEnumSerializationStmt{Macro: kwGENERATE_ENUM_SERIALIZATION_WITH_HEADER, Header: args[0], Variant: "with_header", Line: line}
-	case stmtKindGenerateEnumSerializationNoutf:
-		if len(args) != 1 {
-			fail("GENERATE_ENUM_SERIALIZATION_NOUTF expects exactly 1 argument (header path), got %d", len(args))
-		}
-
-		return &GenerateEnumSerializationStmt{Macro: kwGENERATE_ENUM_SERIALIZATION_NOUTF, Header: args[0], Variant: "noutf", Line: line}
 	case stmtKindDefault:
 
 		varName := ""
