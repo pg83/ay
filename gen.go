@@ -88,6 +88,12 @@ const (
 	memoChunkMax         = 32
 )
 
+const (
+	moduleEntered moduleRedirect = iota
+	moduleExcluded
+	moduleReentered
+)
+
 type ModuleEmitResult struct {
 	excluded                        bool
 	dynamicLink                     bool
@@ -602,6 +608,8 @@ type DirEvaluation struct {
 	subscribers  []STR
 	recurseKinds []TOK
 	path         VFS
+	module       *ModuleStmt
+	scanned      bool
 }
 
 type DirEvaluations struct {
@@ -655,8 +663,20 @@ func (ctx *GenCtx) evaluateDir(dir string, platform *Platform) *DirEvaluation {
 	return ctx.evaluateDirVFS(source(cleanDir(dir)), platform)
 }
 
-func (ctx *GenCtx) evaluateDirVFS(dir VFS, platform *Platform) *DirEvaluation {
+func (ctx *GenCtx) dirEntry(dir VFS, platform *Platform) *DirEvaluation {
 	if evaluation := ctx.dirs.get(dir, platform); evaluation != nil {
+		return evaluation
+	}
+
+	evaluation := &DirEvaluation{path: dir}
+
+	ctx.dirs.put(evaluation, platform)
+
+	return evaluation
+}
+
+func (ctx *GenCtx) evaluateDirVFS(dir VFS, platform *Platform) *DirEvaluation {
+	if evaluation := ctx.dirs.get(dir, platform); evaluation != nil && evaluation.scanned {
 		return evaluation
 	}
 
@@ -665,9 +685,10 @@ func (ctx *GenCtx) evaluateDirVFS(dir VFS, platform *Platform) *DirEvaluation {
 	instance.Platform = platform
 
 	declaration, recurses, recurseKinds, subscribers := ctx.scanModuleConfiguration(instance)
-	evaluation := &DirEvaluation{declaration: declaration, recurses: recurses, subscribers: subscribers, recurseKinds: recurseKinds, path: dir}
+	evaluation := ctx.dirEntry(dir, platform)
 
-	ctx.dirs.put(evaluation, platform)
+	evaluation.declaration, evaluation.recurses, evaluation.subscribers, evaluation.recurseKinds = declaration, recurses, subscribers, recurseKinds
+	evaluation.scanned = true
 
 	return evaluation
 }
@@ -1771,10 +1792,12 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 
 	defer delete(ctx.walking, identity)
 
+	var declaration *ModuleStmt
+
 	if ctx.loops != nil && instance.Platform == ctx.target {
 		defer func() {
 			if result != nil {
-				ctx.loops.finish(instance.Path, moduleNodeName(instance, result, ctx.dirs.get(instance.Path, instance.Platform).declaration))
+				ctx.loops.finish(instance.Path, moduleNodeName(instance, result, declaration))
 			}
 		}()
 	}
@@ -1787,110 +1810,40 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 
 	stmts := moduleStmts(ctx, instance.Path.relString())
 
-	var moduleName TOK
+	var py3After bool
 
-	evaluation := ctx.evaluateDirVFS(instance.Path, instance.Platform)
-	declaration := evaluation.declaration
-
-	if declaration != nil {
-		moduleName = declaration.Name
-	}
-
-	var sandboxVariants uint16
-
-	if isSandboxPythonTask(moduleName) {
-		first := sandboxPythonTaskFirstInstance(instance, moduleName)
-
-		if instance.Kind != first.Kind || instance.Language != first.Language {
-			sandboxVariants = ctx.sandboxPythonTaskVariants(instance, moduleName)
-
-			if sandboxVariants&sandboxPythonTaskVariantBit(instance) == 0 {
-				result = &ModuleEmitResult{ModuleVariants: sandboxVariants, excluded: true}
-
-				ctx.memoPut(instance, result)
-
-				return result
-			}
+	defer func() {
+		if !py3After || result == nil {
+			return
 		}
-	}
 
-	if moduleName == tokPy23Library || moduleName == tokPy23NativeLibrary {
-		if instance.Language == LangPy2 {
-			defer func() {
-				if result == nil {
-					return
-				}
+		py3 := instance
 
-				py3 := instance
+		py3.Language = LangCPP
 
-				py3.Language = LangCPP
+		identity := py3
 
-				identity := py3
+		identity.Demand = demandNone
 
-				identity.Demand = demandNone
-
-				if !ctx.walking[identity] {
-					persistResult(ctx, instance, result)
-					genSiblingModule(ctx, py3)
-				}
-			}()
-		} else {
-			py2 := instance
-
-			py2.Language = LangPy2
-			genSiblingModule(ctx, py2)
+		if !ctx.walking[identity] {
+			persistResult(ctx, instance, result)
+			genSiblingModule(ctx, py3)
 		}
-	}
-
-	if moduleName == tokProtoLibrary && (instance.Language == LangGo || instance.Language == LangJava) {
-		cpp := instance
-
-		cpp.Language = LangCPP
-		cpp.Kind = KindLib
-		genSiblingModule(ctx, cpp)
-	}
-
-	if moduleName == tokYqlUdf && instance.Kind == KindBin && !instance.Platform.PIC {
-		library := instance
-
-		library.Kind = KindLib
-
-		for _, current := range []bool{false, true} {
-			library.YqlCurrent = current
-			genModule(ctx, library)
-		}
-	}
-
-	if !instance.Platform.PIC && instance.Language == LangCPP && instance.Kind != KindForeignDescent && picTransition(moduleName) && (moduleName != tokYqlUdf && moduleName != tokYqlUdfContrib || instance.Kind != KindLib) {
-		descent := instance
-
-		descent.Kind = KindForeignDescent
-		descent.Demand = demandNone
-
-		genModule(ctx, descent)
-
-		pic := instance
-
-		pic.Platform = instance.Platform.pic()
-
-		r := genModule(ctx, pic)
-
-		ctx.memoPut(instance, r)
-
-		return r
-	}
+	}()
 
 	frame := ctx.pushFrame()
 	env := buildIfEnvInto(&frame.ifEnv, instance)
+	dir := ctx.dirEntry(instance.Path, instance.Platform)
 
-	frame.owned = &evaluation.owned
+	frame.entry = moduleEntry{instance: instance, dir: dir}
+	frame.owned = &dir.owned
 
 	defer ctx.popFrame()
 
 	var variantOrder int
 
 	defer func() {
-		if result != nil {
+		if result != nil && frame.entry.redirect == moduleEntered {
 			result.testProject = instance.Path
 			result.testPeers = ctx.appendPeerList(result.testPeers, frame.testPeers)
 			result.variantOrder = variantOrder
@@ -1899,10 +1852,36 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 	}()
 
 	if instance.Language == LangJava {
-		return genJavaModule(ctx, instance, moduleName, stmts, env)
+		if scanned := ctx.evaluateDirVFS(instance.Path, instance.Platform).declaration; scanned != nil {
+			ctx.declareModule(&frame.d, scanned)
+		}
+
+		declaration = frame.entry.declaration
+
+		return genJavaModule(ctx, instance, frame.entry.moduleName(), stmts, env)
 	}
 
 	d := collectModuleInto(ctx, instance, stmts, env, ctx.onWarn, &frame.d, nil)
+
+	declaration, py3After = frame.entry.declaration, frame.entry.py3After
+
+	switch frame.entry.redirect {
+	case moduleExcluded:
+		result = &ModuleEmitResult{ModuleVariants: frame.entry.sandboxVariants, excluded: true}
+
+		ctx.memoPut(instance, result)
+
+		return result
+	case moduleReentered:
+		r := genModule(ctx, frame.entry.target)
+
+		ctx.memoPut(instance, r)
+
+		return r
+	}
+
+	moduleName := frame.entry.moduleName()
+	sandboxVariants := frame.entry.sandboxVariants
 	e := newEmitContextIn(frame, ctx, instance, d, nil)
 
 	if d.confModule != nil {
@@ -1950,18 +1929,6 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 	configurationDepends := append(slices.Clone(d.test.depends), d.configurationDepends...)
 
 	ctx.recordConfiguration(instance, nil, configurationDepends)
-
-	if instance.Language == LangPy && d.moduleStmt != nil && d.moduleStmt.Name != tokProtoLibrary && d.multimodule != tokRosLibrary && d.multimodule != tokFbsLibrary {
-		cpp := instance
-
-		cpp.Language = LangCPP
-
-		result := genModule(ctx, cpp)
-
-		ctx.memoPut(instance, result)
-
-		return result
-	}
 
 	defer func() {
 		if result != nil {
@@ -3603,6 +3570,123 @@ type ModuleFrame struct {
 	peerLinkCmdPaths     []VFS
 	tools                []*ModuleEmitResult
 	parked               bool
+	entry                moduleEntry
+}
+
+type moduleRedirect uint8
+
+type moduleEntry struct {
+	instance        ModuleInstance
+	target          ModuleInstance
+	dir             *DirEvaluation
+	declaration     *ModuleStmt
+	sandboxVariants uint16
+	redirect        moduleRedirect
+	declared        bool
+	py3After        bool
+}
+
+func (e *moduleEntry) moduleName() TOK {
+	if e.declaration != nil {
+		return e.declaration.Name
+	}
+
+	return 0
+}
+
+func (ctx *GenCtx) declareModule(d *ModuleData, declaration *ModuleStmt) bool {
+	if ctx.frameDepth == 0 {
+		return true
+	}
+
+	frame := ctx.frames[ctx.frameDepth-1]
+	entry := &frame.entry
+
+	if &frame.d != d || entry.dir == nil || entry.declared {
+		return true
+	}
+
+	entry.declared = true
+	entry.declaration = declaration
+	entry.dir.module = declaration
+
+	instance := entry.instance
+	moduleName := declaration.Name
+
+	if isSandboxPythonTask(moduleName) {
+		first := sandboxPythonTaskFirstInstance(instance, moduleName)
+
+		if instance.Kind != first.Kind || instance.Language != first.Language {
+			entry.sandboxVariants = ctx.sandboxPythonTaskVariants(instance, moduleName)
+
+			if entry.sandboxVariants&sandboxPythonTaskVariantBit(instance) == 0 {
+				entry.redirect = moduleExcluded
+
+				return false
+			}
+		}
+	}
+
+	if moduleName == tokPy23Library || moduleName == tokPy23NativeLibrary {
+		if instance.Language == LangPy2 {
+			entry.py3After = true
+		} else {
+			py2 := instance
+
+			py2.Language = LangPy2
+			genSiblingModule(ctx, py2)
+		}
+	}
+
+	if moduleName == tokProtoLibrary && (instance.Language == LangGo || instance.Language == LangJava) {
+		cpp := instance
+
+		cpp.Language = LangCPP
+		cpp.Kind = KindLib
+		genSiblingModule(ctx, cpp)
+	}
+
+	if moduleName == tokYqlUdf && instance.Kind == KindBin && !instance.Platform.PIC {
+		library := instance
+
+		library.Kind = KindLib
+
+		for _, current := range []bool{false, true} {
+			library.YqlCurrent = current
+			genModule(ctx, library)
+		}
+	}
+
+	target := declaredInstance(instance, moduleName)
+
+	if target == instance {
+		return true
+	}
+
+	if target.Platform != instance.Platform {
+		descent := instance
+
+		descent.Kind = KindForeignDescent
+		descent.Demand = demandNone
+
+		genModule(ctx, descent)
+	}
+
+	entry.redirect, entry.target = moduleReentered, target
+
+	return false
+}
+
+func declaredInstance(instance ModuleInstance, name TOK) ModuleInstance {
+	if !instance.Platform.PIC && instance.Language == LangCPP && instance.Kind != KindForeignDescent && picTransition(name) && (name != tokYqlUdf && name != tokYqlUdfContrib || instance.Kind != KindLib) {
+		instance.Platform = instance.Platform.pic()
+	}
+
+	if instance.Language == LangPy && name != tokProtoLibrary && name != tokRosLibrary && name != tokFbsLibrary {
+		instance.Language = LangCPP
+	}
+
+	return instance
 }
 
 func (ctx *GenCtx) spareFrame() *ModuleFrame {
@@ -3637,6 +3721,7 @@ func (ctx *GenCtx) pushFrame() *ModuleFrame {
 	f.testPeers = f.testPeers[:0]
 	f.tools = f.tools[:0]
 	f.d.license, f.d.features, f.d.transitive = 0, 0, nil
+	f.entry = moduleEntry{}
 
 	return f
 }

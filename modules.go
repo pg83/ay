@@ -2271,6 +2271,12 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 				continue
 			}
 
+			if !ctx.declareModule(d, v) {
+				d.discarded = true
+
+				return
+			}
+
 			d.moduleOpening = true
 
 			expanded := *v
