@@ -123,7 +123,7 @@ func (ctx *GenCtx) configureDependencies() {
 
 		seen[dir] = true
 
-		declaration := ctx.evaluateDirVFS(dir, ctx.target).declaration
+		declaration := ctx.dirDeclaration(dir, ctx.target)
 
 		if declaration != nil {
 			root := ctx.roots[ctx.rootInstanceForDeclarationVFS(dir, demandNone, declaration)]

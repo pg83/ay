@@ -14,7 +14,13 @@ type ForeignTool struct {
 func (e *EmitContext) foreignToolResult(path ARG) *ModuleEmitResult {
 	ctx := e.ctx
 
-	if e.instance.Platform == ctx.host || e.instance.Platform == ctx.host.picVariant || isJavaModuleType(ctx.moduleNameVFS(dirSourceOf(path.str()))) {
+	if e.instance.Platform == ctx.host || e.instance.Platform == ctx.host.picVariant {
+		return e.toolResult(path)
+	}
+
+	dirError := ctx.reportToolDir(path)
+
+	if isJavaModuleType(ctx.moduleNameVFS(dirSourceOf(path.str()))) {
 		return e.toolResult(path)
 	}
 
@@ -36,6 +42,8 @@ func (e *EmitContext) foreignToolResult(path ARG) *ModuleEmitResult {
 
 		return genModule(ctx, instance)
 	}()
+
+	ctx.reportToolResult(path, dirError, result, true)
 
 	ctx.consumeModuleWarnings(result)
 

@@ -1469,29 +1469,10 @@ func (ctx *GenCtx) toolDirError(dir STR) string {
 }
 
 func (ctx *GenCtx) toolWithoutModules(dir STR) string {
-	ctx.evaluateDirVFS(dir.source(), ctx.target)
+	ctx.dirEntry(dir.source(), ctx.target)
 	ctx.noModuleRef(dir.source())
 
 	return "[[alt1]]TOOL[[rst]] not found: no modules in $S/" + dir.string()
-}
-
-func (ctx *GenCtx) checkRunProgramTool(tool ANY, modulePath string, onWarn func(Warn)) {
-	if rel := tool.str(); rel != 0 && tool.vfs() == 0 && !strHasDollar(tool) {
-		msg := ctx.toolDirError(rel)
-
-		if msg == "" {
-			switch declaration := ctx.evaluateDirVFS(rel.source(), ctx.host).declaration; {
-			case declaration == nil:
-				msg = ctx.toolWithoutModules(rel)
-			case libraryModuleTypes[declaration.Name]:
-				msg = "No suitable [[alt1]]TOOL[[rst]] module found in $S/" + rel.string()
-			}
-		}
-
-		if msg != "" {
-			onWarn(Warn{Kind: WarnModuleFailed, Where: makeFileWhere(modulePath), Error: msg})
-		}
-	}
 }
 
 func (ctx *GenCtx) dependsDirError(dir STR) string {
@@ -1502,7 +1483,7 @@ func (ctx *GenCtx) dependsDirError(dir STR) string {
 		return "DEPENDS to non-directory $S/" + rel.string()
 	case !present || !ctx.fs.isFileID(rel, strYaMake):
 		return "[[alt1]]DEPENDS[[rst]] to " + ctx.missingDirectory(rel) + "$S/" + rel.string()
-	case ctx.evaluateDirVFS(dir.sourceClean(), ctx.target).declaration == nil:
+	case ctx.dirDeclaration(dir.sourceClean(), ctx.target) == nil:
 		return "[[alt1]]DEPENDS[[rst]] to directory without module: $S/" + rel.string()
 	}
 

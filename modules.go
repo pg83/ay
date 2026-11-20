@@ -2979,10 +2979,6 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 
 			d.antlrRuns = append(d.antlrRuns, expanded)
 		case *RunProgramStmt:
-			if v.ToolPath != 0 {
-				ctx.checkRunProgramTool(expandStmtTokenAny(v.ToolPath, env), modulePath, onWarn)
-			}
-
 			appendRunProgram(v, env, d)
 		case *SplitCodegenStmt:
 			expanded := *v

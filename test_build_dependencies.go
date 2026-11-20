@@ -25,7 +25,7 @@ func (ctx *GenCtx) testDependencyInstances(dir STR) []ModuleInstance {
 
 func (ctx *GenCtx) selectDependencyInstances(dirID STR) []ModuleInstance {
 	dir := dirID.string()
-	declaration := ctx.evaluateDirVFS(dirID.sourceClean(), ctx.target).declaration
+	declaration := ctx.dirDeclaration(dirID.sourceClean(), ctx.target)
 
 	if declaration == nil {
 		throwFmt("gen: %s has no module declaration (PROGRAM/LIBRARY)", dir)

@@ -191,7 +191,6 @@ type GenCtx struct {
 	peerTagSets         map[STR][]STR
 	varWordCache        map[STR][]ANY
 	varMacroStmtCache   map[varMacroKey][]Stmt
-	scanData            ModuleData
 	dirs                DirEvaluations
 	dependencyInstances map[STR][]ModuleInstance
 	dependencyBuilds    map[STR][]TestBuildDependency
@@ -229,7 +228,6 @@ type GenCtx struct {
 	javaRuleExpansions  map[javaRuleExpansion][]ANY
 	dllForStack         []string
 	includeStack        []STR
-	ifEnvScratch        EnvStore
 	walking             map[ModuleInstance]bool
 	cyclesTolerated     int
 	traceStack          []string
@@ -602,14 +600,12 @@ func newGenCtx(fs FS, parsers *IncludeParserManager, hostP, targetP *Platform, e
 }
 
 type DirEvaluation struct {
-	declaration  *ModuleStmt
 	recurses     []VFS
 	owned        ownerChain
 	subscribers  []STR
 	recurseKinds []TOK
 	path         VFS
 	module       *ModuleStmt
-	scanned      bool
 	declared     bool
 	recorded     bool
 }
@@ -665,10 +661,6 @@ func (d *DirEvaluations) eachPlatform(first *Platform, visit func(*DirEvaluation
 	}
 }
 
-func (ctx *GenCtx) evaluateDir(dir string, platform *Platform) *DirEvaluation {
-	return ctx.evaluateDirVFS(source(cleanDir(dir)), platform)
-}
-
 func (ctx *GenCtx) dirEntry(dir VFS, platform *Platform) *DirEvaluation {
 	if evaluation := ctx.dirs.get(dir, platform); evaluation != nil {
 		return evaluation
@@ -681,22 +673,12 @@ func (ctx *GenCtx) dirEntry(dir VFS, platform *Platform) *DirEvaluation {
 	return evaluation
 }
 
-func (ctx *GenCtx) evaluateDirVFS(dir VFS, platform *Platform) *DirEvaluation {
-	if evaluation := ctx.dirs.get(dir, platform); evaluation != nil && evaluation.scanned {
-		return evaluation
-	}
-
+func (ctx *GenCtx) dirDeclaration(dir VFS, platform *Platform) *ModuleStmt {
 	instance := ctx.rootInstanceForDeclarationVFS(dir, demandNone, nil)
 
 	instance.Platform = platform
 
-	declaration, recurses, recurseKinds, subscribers := ctx.scanModuleConfiguration(instance)
-	evaluation := ctx.dirEntry(dir, platform)
-
-	evaluation.declaration, evaluation.recurses, evaluation.subscribers, evaluation.recurseKinds = declaration, recurses, subscribers, recurseKinds
-	evaluation.scanned = true
-
-	return evaluation
+	return ctx.declaredModule(instance)
 }
 
 func dirSourceOf(dir STR) VFS {
@@ -712,7 +694,7 @@ func (ctx *GenCtx) moduleName(dir string) TOK {
 }
 
 func (ctx *GenCtx) moduleNameVFS(dir VFS) TOK {
-	if declaration := ctx.evaluateDirVFS(dir, ctx.target).declaration; declaration != nil {
+	if declaration := ctx.dirDeclaration(dir, ctx.target); declaration != nil {
 		return declaration.Name
 	}
 
@@ -720,11 +702,11 @@ func (ctx *GenCtx) moduleNameVFS(dir VFS) TOK {
 }
 
 func (ctx *GenCtx) rootInstance(dir string, demand ModuleDemand) ModuleInstance {
-	return ctx.rootInstanceForDeclaration(dir, demand, ctx.evaluateDir(dir, ctx.target).declaration)
+	return ctx.rootInstanceVFS(source(cleanDir(dir)), demand)
 }
 
 func (ctx *GenCtx) rootInstanceVFS(dir VFS, demand ModuleDemand) ModuleInstance {
-	return ctx.rootInstanceForDeclarationVFS(dir, demand, ctx.evaluateDirVFS(dir, ctx.target).declaration)
+	return ctx.rootInstanceForDeclarationVFS(dir, demand, ctx.dirDeclaration(dir, ctx.target))
 }
 
 func (ctx *GenCtx) rootInstanceForDeclaration(dir string, demand ModuleDemand, decl *ModuleStmt) ModuleInstance {
@@ -856,193 +838,6 @@ func (ctx *GenCtx) ownedBy(owner VFS, platform *Platform) ownerChain {
 	return ownerChain{}
 }
 
-func (ctx *GenCtx) scanModuleConfiguration(instance ModuleInstance) (*ModuleStmt, []VFS, []TOK, []STR) {
-	dir := instance.Path.relString()
-	platform := instance.Platform
-	env := buildIfEnvInto(&ctx.ifEnvScratch, instance)
-	d := &ctx.scanData
-
-	d.reset()
-
-	d.pathID = instance.Path.rel()
-
-	var kinds []TOK
-
-	var pending *ModuleStmt
-
-	applyModule := func() {
-		if pending != nil {
-			stmt := pending
-
-			pending = nil
-			collectStmts(ctx, dir, instance.Kind, instance.Language, []Stmt{stmt}, env, d, ctx.onWarn, instance.Platform)
-		}
-	}
-
-	apply := func(stmt Stmt) {
-		applyModule()
-		collectStmts(ctx, dir, instance.Kind, instance.Language, []Stmt{stmt}, env, d, ctx.onWarn, instance.Platform)
-	}
-
-	var module *ModuleStmt
-	var children []VFS
-	var subscribers []STR
-
-	failedModule := false
-
-	var scan func(stmts []Stmt)
-
-	scan = func(stmts []Stmt) {
-		for _, st := range stmts {
-			if failedModule && module == nil && !allowedOutsideModule(st) {
-				name := stmtMacroName(st)
-				row, col := ctx.statementEnd(dir, stmtLine(st), name)
-
-				ctx.onWarn(Warn{Kind: WarnSyntax, Message: fmt.Sprintf("%s: unexpected command %s outside of a module", dir, name), Where: makeFileWhere(dir), Error: "unexpected command [[alt1]]" + name + "[[rst]] outside of a module", Row: row, Column: col})
-
-				continue
-			}
-
-			switch v := st.(type) {
-			case *IncludeStmt:
-				ctx.withIncludedStmts(v, env, scan)
-			case *MissingIncludeStmt, *ConfigureErrorStmt:
-				if module == nil {
-					apply(st)
-				}
-			case *ModuleStmt:
-				if (v.Name == tokUnittestFor || v.Name == tokJtestFor) && len(v.Args) == 0 {
-					name := v.Name.string()
-					row, col := ctx.statementEnd(dir, v.Line, name)
-
-					for _, msg := range [...]string{"[[alt1]]" + name + "[[rst]] without arguments is invalid.. Skip [[alt1]]" + name + "[[rst]] macro.", "module cannot be constructed from [[alt1]]" + name + "[[rst]] statement"} {
-						ctx.onWarn(Warn{Kind: WarnMisconfiguration, Where: makeFileWhere(dir), Error: msg, Row: row, Column: col})
-					}
-
-					failedModule = true
-
-					continue
-				}
-
-				applyModule()
-
-				v = d.moduleContentDeclaration(v)
-				module = v
-
-				if rel := instance.Path.rel(); rel.cleanPath() {
-					instance = ctx.rootInstanceForDeclarationVFS(rel.source(), demandNone, v)
-				} else {
-					instance = ctx.rootInstanceForDeclaration(dir, demandNone, v)
-				}
-
-				instance.Platform = platform
-
-				if d.readModuleContentOnly {
-					apply(st)
-				} else {
-					pending = v
-				}
-			case *EndStmt:
-				if pending != nil && !d.moduleEnded {
-					d.moduleEnded = true
-				} else if d.processModuleEnd(ctx.fs, dir, v.Line, ctx.onWarn) {
-					d.moduleEnded = true
-				}
-			case *SetStmt, *DefaultVarStmt:
-				apply(st)
-			case *IfStmt:
-				applyModule()
-
-				if evalCond(v.Cond, env) {
-					scan(v.Then)
-				} else {
-					scan(v.Else)
-				}
-			case *UnknownStmt:
-				if v.Name == tokSubscriber {
-					for _, arg := range expandStmtTokens(v.Args, env) {
-						subscribers = append(subscribers, arg.str())
-					}
-
-					continue
-				}
-
-				if d.skipModuleContentStmt(v.Name) {
-					continue
-				}
-
-				if v.Name == tokDllFor {
-					applyModule()
-
-					failedModule = !withDllForStmts(ctx, dir, v, scan)
-
-					continue
-				}
-
-				if v.Name == tokGoTestFor {
-					applyModule()
-
-					failedModule = !d.withGoTestForStmts(ctx, dir, v, scan)
-
-					if !failedModule && module == nil {
-						ctx.onWarn(Warn{Kind: WarnMisconfiguration, Where: makeFileWhere(dir), Error: "No module defined in [[imp]]$S/" + d.goTestFor.string() + "/ya.make[[rst]]"})
-					}
-
-					continue
-				}
-
-				switch v.Name {
-				case tokEnable, tokDisable, tokSetAppend, tokSetListPreSuf,
-					tokUsePython2, tokPython2Addincl, tokUsePython3, tokPython3Addincl,
-					tokValidateDataRestart, tokPack, tokSetCudaNodeRAMRequirement, tokNoCow, tokNoNeedCheck,
-					tokWindowsManifest, tokWindowsLongPathManifest, tokNoBuildIf, tokBuildOnlyIf:
-					apply(st)
-				}
-
-				if (v.Name == tokRecurse || v.Name == tokRecurseForTests) && module != nil && !d.moduleEnded {
-					ctx.onWarn(Warn{Kind: WarnMisconfiguration, Where: makeFileWhere(dir), Error: "[[alt1]]" + v.Raw.string() + "[[rst]] inside module " + moduleNodeName(instance, &ModuleEmitResult{}, module) + "; ymake skip this."})
-
-					continue
-				}
-
-				if partitioned := v.Name == tokPartitionedRecurse || v.Name == tokPartitionedRecurseForTests || v.Name == tokPartitionedRecurseRootRelative; partitioned || v.Name == tokRecurse || v.Name == tokRecurseRootRelative || v.Name == tokRecurseForTests {
-					expanded := *v
-
-					for _, arg := range v.Args {
-						if strHasDollar(arg.str().any()) {
-							applyModule()
-
-							break
-						}
-					}
-
-					expanded.Args = expandStmtTokens(v.Args, env)
-
-					if partitioned {
-						expanded = ctx.partitionedRecurse(dir, expanded, env, ctx.onWarn)
-					}
-
-					children = appendConfigurationRecurses(children, dir, expanded, platform)
-
-					for len(kinds) < len(children) {
-						kinds = append(kinds, expanded.Name)
-					}
-				}
-			}
-		}
-	}
-
-	scan(moduleStmts(ctx, dir))
-
-	if d.discarded {
-		children, kinds = nil, nil
-	}
-
-	ctx.recordConfiguration(instance, children, nil)
-
-	return module, children, kinds, subscribers
-}
-
 func (ctx *GenCtx) makeFiles() []MakeFileEntry {
 	withModule := map[VFS]bool{}
 
@@ -1061,7 +856,7 @@ func (ctx *GenCtx) makeFiles() []MakeFileEntry {
 
 		seen[dir] = true
 
-		has := evaluation.declaration != nil || evaluation.module != nil
+		has := evaluation.module != nil
 
 		for _, child := range evaluation.recurses {
 			has = below(child, seen) || has
@@ -1866,8 +1661,8 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 	}()
 
 	if instance.Language == LangJava {
-		if scanned := ctx.evaluateDirVFS(instance.Path, instance.Platform).declaration; scanned != nil {
-			ctx.declareModule(&frame.d, scanned)
+		if declared := ctx.declaredModule(instance); declared != nil {
+			ctx.declareModule(&frame.d, declared)
 		}
 
 		declaration = frame.entry.declaration
@@ -2264,7 +2059,7 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 
 		peerResult := genModule(ctx, peerInstance)
 
-		if explicit && (peerResult == nil || peerResult.ModuleStmtName == 0) && ctx.fs.isFileID(p, strYaMake) && ctx.evaluateDirVFS(peerVFS, ctx.target).declaration == nil {
+		if explicit && (peerResult == nil || peerResult.ModuleStmtName == 0) && ctx.fs.isFileID(p, strYaMake) && ctx.dirDeclaration(peerVFS, ctx.target) == nil {
 			ctx.noModuleRef(peerVFS)
 			ctx.onWarn(Warn{Kind: WarnModuleFailed, Where: makeFileWhere(instance.Path.relString()), Error: "No modules for [[alt1]]PEERDIR[[rst]] in [[imp]]$S/" + p.string() + "[[rst]]"})
 
@@ -3426,6 +3221,27 @@ func filterBuildRootSelfPaths(instancePath STR, peer, own []VFS) []VFS {
 	return out
 }
 
+func (ctx *GenCtx) reportToolDir(modulePath ARG) string {
+	dirError := ctx.toolDirError(modulePath.str())
+
+	if dirError != "" {
+		ctx.onWarn(Warn{Kind: WarnModuleFailed, Where: makeFileWhere(ctx.whereModule.relString()), Error: dirError})
+	}
+
+	return dirError
+}
+
+func (ctx *GenCtx) reportToolResult(modulePath ARG, dirError string, res *ModuleEmitResult, libraries bool) {
+	where := makeFileWhere(ctx.whereModule.relString())
+
+	switch {
+	case dirError == "" && res.ModuleStmtName == 0:
+		ctx.onWarn(Warn{Kind: WarnModuleFailed, Where: where, Error: ctx.toolWithoutModules(modulePath.str())})
+	case res.LDRef == NodeRef(0) && res.ARPath != nil || libraries && libraryModuleTypes[res.ModuleStmtName]:
+		ctx.onWarn(Warn{Kind: WarnModuleFailed, Where: where, Error: "No suitable [[alt1]]TOOL[[rst]] module found in $S/" + modulePath.string()})
+	}
+}
+
 func (ctx *GenCtx) toolResult(modulePath ARG) *ModuleEmitResult {
 	if res, ok := ctx.tools.get(modulePath); ok {
 		ctx.consumeModuleWarnings(res)
@@ -3436,25 +3252,14 @@ func (ctx *GenCtx) toolResult(modulePath ARG) *ModuleEmitResult {
 
 	var res *ModuleEmitResult
 
-	user := ctx.whereModule
+	dirError := ctx.reportToolDir(modulePath)
 
 	if dir := modulePath.string(); isJavaModuleType(ctx.moduleNameVFS(dirSourceOf(modulePath.str()))) {
 		res = ctx.javaToolResult(dir)
 	} else {
-		dirError := ctx.toolDirError(modulePath.str())
-
-		if dirError != "" {
-			ctx.onWarn(Warn{Kind: WarnModuleFailed, Where: makeFileWhere(user.relString()), Error: dirError})
-		}
-
 		res = genModule(ctx, newToolInstance(ctx.host, dir))
 
-		switch {
-		case dirError == "" && res.ModuleStmtName == 0:
-			ctx.onWarn(Warn{Kind: WarnModuleFailed, Where: makeFileWhere(user.relString()), Error: ctx.toolWithoutModules(modulePath.str())})
-		case res.LDRef == NodeRef(0) && res.ARPath != nil:
-			ctx.onWarn(Warn{Kind: WarnModuleFailed, Where: makeFileWhere(user.relString()), Error: "No suitable [[alt1]]TOOL[[rst]] module found in $S/" + dir})
-		}
+		ctx.reportToolResult(modulePath, dirError, res, false)
 	}
 
 	ctx.consumeModuleWarnings(res)
@@ -3760,7 +3565,7 @@ func (ctx *GenCtx) enterToDeclaration(instance ModuleInstance, dir *DirEvaluatio
 func (dir *DirEvaluation) record(d *ModuleData) {
 	dir.declared = true
 
-	if dir.scanned || dir.recorded {
+	if dir.recorded {
 		return
 	}
 
@@ -3776,7 +3581,7 @@ func (dir *DirEvaluation) record(d *ModuleData) {
 func (ctx *GenCtx) discoverDir(dir VFS) *DirEvaluation {
 	evaluation := ctx.dirEntry(dir, ctx.target)
 
-	if !evaluation.recorded && !evaluation.scanned {
+	if !evaluation.recorded {
 		stmts := moduleStmts(ctx, dir.relString())
 		instance := ctx.rootInstanceForDeclarationVFS(dir, demandNone, nil)
 
