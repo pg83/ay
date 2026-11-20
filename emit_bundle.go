@@ -36,6 +36,7 @@ func (e *EmitContext) emitBundle(b BundleEntry) {
 
 func (e *EmitContext) resolveBundleSource(target string) (VFS, NodeRef, bool) {
 	ctx := e.ctx
+	dirError := ctx.reportToolDir(internArg(target))
 
 	if !peerYaMakeExists(ctx.fs, dirKey(target).source()) {
 		return 0, 0, false
@@ -50,6 +51,16 @@ func (e *EmitContext) resolveBundleSource(target string) (VFS, NodeRef, bool) {
 	}
 
 	res := genModule(ctx, bundleInstance)
+
+	if where := makeFileWhere(ctx.whereModule.relString()); dirError == "" {
+		switch {
+		case res.LDPath != nil && !libraryModuleTypes[res.ModuleStmtName]:
+		case res.LDPath == nil && res.ModuleStmtName == 0:
+			ctx.onWarn(Warn{Kind: WarnModuleFailed, Where: where, Error: ctx.toolWithoutModules(internStr(target))})
+		default:
+			ctx.onWarn(Warn{Kind: WarnModuleFailed, Where: where, Error: "No suitable [[alt1]]TOOL[[rst]] module found in $S/" + target})
+		}
+	}
 
 	if res.LDPath != nil {
 		return *res.LDPath, res.LDRef, true

@@ -24,12 +24,14 @@ func (e *EmitContext) emitDocsProtoSubmodule() *ModuleEmitResult {
 		peerDirs = append(peerDirs, protosFromProtocPeer)
 	}
 
+	declared := len(peerDirs)
+
 	peerDirs = append(peerDirs, anyStrings(d.peerdirs)...)
 
 	var resourcePeers []string
 
-	for _, peer := range peerDirs {
-		if peer == instance.Path.relString() {
+	for i, peer := range peerDirs {
+		if peer == instance.Path.relString() || i >= declared && !e.declaredPeer(source(peer)) {
 			continue
 		}
 

@@ -776,7 +776,9 @@ func srcDirTokens(dirs []ANY, env Environment) []ANY {
 }
 
 func bareRootShorthand(arg ANY) bool {
-	return arg.string() == "$S" || arg.string() == "$B"
+	text := arg.string()
+
+	return text == "$S" || text == "$B" || strings.HasPrefix(text, "${BINDIR}") || strings.HasPrefix(text, "${CURDIR}")
 }
 
 func moduleRootedVFS(modulePath string, path string) (VFS, bool) {
@@ -2553,7 +2555,7 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 				moduleLang = moduleLangTokenPy3
 			}
 
-			if moduleAssignsLang(d.moduleStmt.Name) {
+			if moduleAssignsLang(d.moduleStmt.Name) && (d.confModule == nil || platform.conf.planSets(d.confModule, envMODULE_LANG)) {
 				env.setStringID(envMODULE_LANG, moduleLang)
 			}
 
@@ -2868,7 +2870,7 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 				rooted, ok := moduleRootedVFS(modulePath, dir)
 
 				switch id := dirTok.str(); {
-				case ok:
+				case ok && !strings.HasPrefix(dir, "${CURDIR}") && !strings.HasPrefix(dir, "${BINDIR}"):
 				case dir == "$(S)" || dir == "$(B)":
 					rooted = cwdVFS(dir)
 				case id != 0 && id.cleanPath():
@@ -4090,17 +4092,17 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 		}
 
 		env.setBool(envUseAllSrcs, true)
-		applyHeaders(fs, modulePath, []ANY{str4.any()}, d)
+		d.headers(fs, modulePath, []ANY{str4.any()}, onWarn)
 
 		if noLint := env.string(envNoLintValue); noLint != "none" && noLint != "none_internal" {
 			d.peerdirs = append(d.peerdirs, strBuildPlatformClangFormat.any())
 		}
 	case tokHeaders:
-		applyHeaders(fs, modulePath, v.Args, d)
+		d.headers(fs, modulePath, v.Args, onWarn)
 	case tokStyleCppUserSessions, tokStyleCppYt, tokStyleCppMaps:
 		d.collectCPPStyle(v, env)
 		env.setBool(envUseAllSrcs, true)
-		applyHeaders(fs, modulePath, []ANY{str4.any()}, d)
+		d.headers(fs, modulePath, []ANY{str4.any()}, onWarn)
 	case tokSetCustomClangTidy:
 		if len(v.Args) != 2 {
 			throwFmt("SET_CUSTOM_CLANG_TIDY expects a resource module and variable name")
@@ -6727,7 +6729,7 @@ func allPySrcArgs(fs FS, modulePath string, v UnknownStmt) []ANY {
 	appendPyFile := func(rel string) {
 		name := baseName(rel)
 
-		if filepath.Ext(name) != ".py" {
+		if filepath.Ext(name) != ".py" && (!recursive || name != "ya.make" || rel == moduleRootRel+"/ya.make") {
 			return
 		}
 
@@ -6749,15 +6751,11 @@ func allPySrcArgs(fs FS, modulePath string, v UnknownStmt) []ANY {
 
 		if recursive {
 			fs.walkDirID(walkRootID, func(rel string, id STR, isDir bool) bool {
-				if id == walkRootID {
+				if id == walkRootID || isDir {
 					return true
 				}
 
-				if isDir {
-					return !fs.isFileID(id, strYaMake)
-				}
-
-				if pathDir(rel) != walkRoot && filepath.Ext(rel) == ".py" {
+				if pathDir(rel) != walkRoot {
 					appendPyFile(strings.Clone(rel))
 				}
 

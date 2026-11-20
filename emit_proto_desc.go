@@ -130,7 +130,9 @@ func descPeerClosure(e *EmitContext, peerdirs []ANY, injectBuiltins, commonGoogl
 			continue
 		}
 
-		enter(p.peerSource())
+		if e.declaredPeer(p.peerSource()) {
+			enter(p.peerSource())
+		}
 	}
 
 	dedupers.with(func(deduper *DeDuper) {

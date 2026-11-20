@@ -87,7 +87,9 @@ func applyLargeFiles(fs FS, codegen *CodegenRegistry, modulePath string, stmt Un
 			continue
 		}
 
-		if src := resolveLargeFileSource(fs, codegen, modulePath, arg, d.srcDirs); src != 0 && src.isSource() {
+		_, rooted := moduleRootedVFS(modulePath, arg)
+
+		if src := resolveLargeFileSource(fs, codegen, modulePath, arg, d.srcDirs); !rooted && src != 0 && src.isSource() {
 			onWarn(Warn{Kind: WarnPlugin, Message: "Used local large file " + src.string() + ". Don't forget to run 'ya upload --update-external' and commit " + src.string() + ".external"})
 
 			d.copyFiles = append(d.copyFiles, CopyFileEntry{Src: src.string(), Dst: arg, DeclSeq: d.nextDeclSeq()})
@@ -104,6 +106,12 @@ func applyLargeFiles(fs FS, codegen *CodegenRegistry, modulePath string, stmt Un
 
 		if placeholder == 0 || !placeholder.isSource() {
 			report("LARGE_FILES: neither actual data nor placeholder is found for \"" + arg + "\"")
+
+			return
+		}
+
+		if !fs.isFileVFS(placeholder) {
+			report("LARGE_FILES: error processing placeholder file \"" + external + ".\": [Errno 2] No such file or directory: '" + fs.root() + "/" + placeholder.relString() + "'")
 
 			return
 		}

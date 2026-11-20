@@ -225,6 +225,30 @@ func treePluginMacro(fs FS, name STR) bool {
 	return treePluginMacros[name.string()]
 }
 
+func (e *EmitContext) declaredPeer(peer VFS) bool {
+	ctx, where := e.ctx, makeFileWhere(e.instance.Path.relString())
+
+	if !peerYaMakeExists(ctx.fs, peer) {
+		ctx.onWarn(Warn{Kind: WarnModuleFailed, Where: where, Error: "[[alt1]]PEERDIR[[rst]] to " + ctx.missingDirectory(peer.rel()) + "[[imp]]$S/" + peer.relString() + "[[rst]]"})
+
+		return false
+	}
+
+	if ctx.moduleNameVFS(peer) == 0 {
+		ctx.onWarn(Warn{Kind: WarnModuleFailed, Where: where, Error: "No modules for [[alt1]]PEERDIR[[rst]] in [[imp]]$S/" + peer.relString() + "[[rst]]"})
+
+		return false
+	}
+
+	return true
+}
+
+func (e *EmitContext) incompatiblePeer(peer string) {
+	tag := Environment{s: &e.frame.ifEnv}.string(envMODULE_TAG)
+
+	e.ctx.onWarn(Warn{Kind: WarnModuleFailed, Where: makeFileWhere(e.instance.Path.relString()), Error: "[[alt1]]PEERDIR[[rst]] from module tagged [[alt1]]" + tag + "[[rst]] to [[imp]]$S/" + peer + "[[rst]] is prohibited by incompatible tags and skipped"})
+}
+
 func (ctx *GenCtx) missingDirectory(dir STR) string {
 	if present, isDir := ctx.fs.existsID(srcRootRel, dir); present && isDir {
 		return "directory without ya.make: "

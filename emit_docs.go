@@ -30,13 +30,19 @@ func (e *EmitContext) genDocs() *ModuleEmitResult {
 			resourcePeers = append(resourcePeers, peer)
 
 			continue
+		case 0:
+			continue
 		default:
+			e.incompatiblePeer(peer)
+
 			continue
 		}
 
 		res := e.genPeerModule(e.derivePeerInstance(peer))
 
 		if res == nil || res.excluded {
+			e.incompatiblePeer(peer)
+
 			continue
 		}
 

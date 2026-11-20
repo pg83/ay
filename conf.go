@@ -2477,6 +2477,10 @@ func (c *Conf) expandArgs(env Environment, text STR) []ANY {
 	return memo.args
 }
 
+func (c *Conf) planSets(module *confModule, variable ENV) bool {
+	return slices.ContainsFunc(c.tables.plan(module).steps, func(step confInitStep) bool { return step.variable == variable && step.value != 0 })
+}
+
 func (c *Conf) moduleTag(name STR) STR {
 	module := c.tables.module(name, "")
 

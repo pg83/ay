@@ -2,6 +2,12 @@ package main
 
 import "path"
 
+func (d *ModuleData) headers(fs FS, modulePath string, args []ANY, onWarn func(Warn)) {
+	if !dropsMacro(d, modulePath, kwSRCS, onWarn) {
+		applyHeaders(fs, modulePath, args, d)
+	}
+}
+
 func applyHeaders(fs FS, modulePath string, args []ANY, d *ModuleData) {
 	files := headerFiles(fs, modulePath, args)
 	stmt := d.nextDeclSeq()

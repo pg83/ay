@@ -1347,7 +1347,15 @@ func (ctx *GenCtx) autoincludeStmts(dir string, onWarn func(Warn)) []Stmt {
 		return nil
 	}
 
-	return ctx.parseFileCached(inc.rel())
+	stmts := ctx.parseFileCached(inc.rel())
+
+	if slices.ContainsFunc(stmts, func(s Stmt) bool { _, end := s.(*EndStmt); return end }) {
+		onWarn(Warn{Kind: WarnMisconfiguration, Where: makeFileWhere(dir), Error: makefileParseError(ctx.fs, &ParseError{IncludeLoop: []string{dir + "/ya.make", inc.relString(), inc.relString()}})})
+
+		return nil
+	}
+
+	return stmts
 }
 
 func applyImplicitPeerdirs(ctx *GenCtx, instance ModuleInstance, d *ModuleData) {
@@ -2024,7 +2032,7 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 		kind := peerKinds[i]
 
 		if instance.Language == LangFbsJavaNative {
-			parent := JavaModule{dir: instance.Path.relString(), instance: instance, owned: frame.owned, unit: javaUnitFbs, data: &JavaData{peerdirTags: javaTags(instance.Platform.conf, env, envPeerdirTags)}}
+			parent := JavaModule{dir: instance.Path.relString(), instance: instance, owned: frame.owned, unit: javaUnitFbs, data: &JavaData{peerdirTags: javaTags(instance.Platform.conf, env, envPeerdirTags), moduleTag: internStr(javaUnitFbs.confTag(instance.Platform.conf, tokFbsLibrary))}}
 
 			if result := ctx.javaPeerResult(&parent, p, slices.Contains(d.explicitPeers, p.any())); result != nil {
 				resolved = append(resolved, ResolvedPeer{path: p, result: result, kind: kind})

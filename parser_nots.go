@@ -114,10 +114,6 @@ func (pm *IncludeParserManager) notsJSONID(key STR) map[string]any {
 		parsed.Error.throw()
 	}
 
-	if parsed.Value == nil {
-		return nil
-	}
-
 	object, ok := parsed.Value.(map[string]any)
 
 	if !ok {
