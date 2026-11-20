@@ -321,6 +321,12 @@ func (jm *JavaModule) acceptsInput(out VFS) bool {
 func (ctx *GenCtx) javaRegisterFiles(jm *JavaModule) {
 	reg := ctx.javaReg(jm)
 
+	for _, file := range jm.data.buildFiles {
+		if v, _ := moduleRootedVFS(jm.dir, file); strings.HasPrefix(v.relString(), jm.dir+"/") && reg.lookup(v) != nil {
+			ctx.onWarn(Warn{Kind: WarnDupSrc, Where: makeFileWhere(jm.dir), Error: ymakeVFS(v) + " was already added in this project. Skip command: 0"})
+		}
+	}
+
 	for _, file := range jm.data.files {
 		dst := copyFileOutputVFS(jm.dir, file)
 

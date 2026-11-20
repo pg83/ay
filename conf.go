@@ -3244,6 +3244,26 @@ func (d *ModuleData) deferBodyGuards(platform *Platform, macro *ConfMacro, depth
 	}
 }
 
+func undefinedVariableArg(text string, env Environment) bool {
+	name, braced := strings.CutPrefix(text, "${")
+
+	if braced {
+		name, braced = strings.CutSuffix(name, "}")
+
+		if !braced {
+			return false
+		}
+	} else if name, braced = strings.CutPrefix(text, "$"); !braced {
+		return false
+	}
+
+	if cmdIdentLen(name) != len(name) || name == "" || keepDeferredVar(name) || rootVar(name) {
+		return false
+	}
+
+	return !env.hasBindingID(internedEnv(name))
+}
+
 func markImplicitPeers(stmts []Stmt) {
 	for _, s := range stmts {
 		if p, ok := s.(*PeerdirStmt); ok {
@@ -3258,7 +3278,13 @@ func (c *Conf) macroCalls(macro *ConfMacro, v UnknownStmt, env Environment, dept
 	}
 
 	state := c.state
-	expansion := state.bind(macro, v.Args)
+	args := v.Args
+
+	if slices.ContainsFunc(args, func(arg ANY) bool { return undefinedVariableArg(arg.string(), env) }) {
+		args = slices.DeleteFunc(slices.Clone(args), func(arg ANY) bool { return undefinedVariableArg(arg.string(), env) })
+	}
+
+	expansion := state.bind(macro, args)
 	locals, failure := expansion.locals, expansion.failure
 
 	if failure != "" {

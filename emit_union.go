@@ -16,6 +16,8 @@ func (d *ModuleData) addFiles(files []ANY) {
 		name := file.string()
 
 		if strings.HasPrefix(name, "$(B)/") || strings.HasPrefix(name, "${ARCADIA_BUILD_ROOT}") {
+			d.unionBuildFiles = append(d.unionBuildFiles, name)
+
 			continue
 		}
 
@@ -53,6 +55,14 @@ func (e *EmitContext) genUnion() *ModuleEmitResult {
 
 	e.globalSources = dedup(e.globalSources, own)
 	e.emitDeclaredProducers(nil)
+
+	for _, name := range e.d.unionBuildFiles {
+		if v, _ := moduleRootedVFS(e.instance.Path.relString(), name); v != 0 {
+			if info := e.codegen.lookup(v); info != nil && info.OwnerModule == e.instance.Path && info.OwnerSerial == e.frame.serial {
+				e.ctx.onWarn(Warn{Kind: WarnDupSrc, Where: makeFileWhere(e.instance.Path.relString()), Error: ymakeVFS(v) + " was already added in this project. Skip command: 0"})
+			}
+		}
+	}
 
 	generated := slices.DeleteFunc(dedup(e.outs), func(out VFS) bool { return slices.Contains(own, out) })
 

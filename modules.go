@@ -258,6 +258,7 @@ type ModuleData struct {
 	cFlags                  []ANY
 	cFlagsGlobal            []ANY
 	flagSyntax              string
+	unionBuildFiles         []string
 	compilerFlagUses        [3]CompilerFlagResourceUses
 	cxxFlags                []ANY
 	cxxFlagsVar             []ANY

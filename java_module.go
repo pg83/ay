@@ -306,6 +306,7 @@ type JavaData struct {
 	runPython              []*RunPythonStmt
 	fromSandboxes          []*FromSandboxStmt
 	files                  []string
+	buildFiles             []string
 	srcDirs                []VFS
 	srcs                   []string
 	kotlinProto            bool

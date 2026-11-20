@@ -697,6 +697,14 @@ func applyJavaMacro(ctx *GenCtx, jm *JavaModule, d *JavaData, name STR, args []s
 	if name == kwFILES {
 		for _, file := range args {
 			if strings.HasPrefix(file, "${ARCADIA_BUILD_ROOT}") || strings.HasPrefix(file, "$(B)/") {
+				d.buildFiles = append(d.buildFiles, file)
+
+				continue
+			}
+
+			if slices.Contains(d.files, file) {
+				ctx.onWarn(Warn{Kind: WarnDupSrc, Where: makeFileWhere(jm.dir), Error: ymakeVFS(copyFileOutputVFS(jm.dir, file)) + " was already added in this project. Skip command: 0"})
+
 				continue
 			}
 
@@ -943,6 +951,10 @@ func applyJavaMacro(ctx *GenCtx, jm *JavaModule, d *JavaData, name STR, args []s
 
 			spec.salt = javaSrcsSalt(rawSpec)
 			spec.varSrcDir = strings.HasPrefix(rawSpec.srcDir, "$") && !strings.HasPrefix(rawSpec.srcDir, "$S")
+
+			if dir := javaMissingSrcDir(ctx.fs, jm.dir, spec, rawSpec); dir != "" {
+				javaReport(ctx, jm, "[[alt1]]SRCDIR[[rst]] to non existent directory $S/"+dir)
+			}
 
 			d.javaSrcs = append(d.javaSrcs, spec)
 		}
@@ -1719,6 +1731,27 @@ func replaceJavaRunProgramRefs(value string, fn func(string) string) string {
 	b.WriteString(value[from:])
 
 	return b.String()
+}
+
+func javaMissingSrcDir(fs FS, moduleDir string, spec, raw JavaSrcsSpec) string {
+	dir := ""
+
+	switch {
+	case spec.skipCheckSrcdir:
+		return ""
+	case !strings.Contains(raw.srcDir, "$"):
+		dir = path.Join(moduleDir, raw.srcDir)
+	case strings.HasPrefix(spec.srcDir, "$(S)/"):
+		dir = strings.TrimPrefix(spec.srcDir, "$(S)/")
+	default:
+		return ""
+	}
+
+	if fs.isDir(srcRootRel, dir) {
+		return ""
+	}
+
+	return dir
 }
 
 func javaReport(ctx *GenCtx, jm *JavaModule, msg string) {

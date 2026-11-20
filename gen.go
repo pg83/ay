@@ -236,6 +236,7 @@ type GenCtx struct {
 	buckets             *BucketCache
 	moduleByRef         DenseMap[NodeRef, *ModuleEmitResult]
 	tools               DenseMap[ARG, *ModuleEmitResult]
+	toolsBuilding       []ARG
 	targetTools         DenseMap[ARG, *ModuleEmitResult]
 	frames              []*ModuleFrame
 	frameDepth          int
@@ -3257,6 +3258,16 @@ func (ctx *GenCtx) toolResult(modulePath ARG) *ModuleEmitResult {
 
 		return res
 	}
+
+	if slices.Contains(ctx.toolsBuilding, modulePath) {
+		ctx.onWarn(Warn{Kind: WarnModuleFailed, Where: makeFileWhere(ctx.whereModule.relString()), Error: "[[alt1]]TOOL[[rst]] $S/" + modulePath.string() + " is required to build itself"})
+
+		return &ModuleEmitResult{}
+	}
+
+	ctx.toolsBuilding = append(ctx.toolsBuilding, modulePath)
+
+	defer func() { ctx.toolsBuilding = ctx.toolsBuilding[:len(ctx.toolsBuilding)-1] }()
 
 	var res *ModuleEmitResult
 
