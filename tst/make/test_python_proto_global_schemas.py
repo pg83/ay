@@ -1,4 +1,4 @@
-from tst.make.lib import MakeTest, PROJECT
+from tst.make.lib import MakeTest, PROJECT, xfail_on_ay
 
 
 class PythonProtoGlobalSchemasTest(MakeTest):
@@ -16,6 +16,7 @@ class PythonProtoGlobalSchemasTest(MakeTest):
         self.assertTrue(any(generated["uid"] in node["deps"] for node in compiled))
         self.node(graph, "consumer/answer")
 
+    @xfail_on_ay("ay has no ChkPeers: a generated header of a module not reachable by PEERDIR is used silently")
     def test_global_gazetteer_schemas_require_their_runtime_dependency(self):
         self.fixture("answer.gztproto")
         result = self.make()

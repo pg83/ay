@@ -70,6 +70,10 @@ def main():
             "tests": result.testsRun,
             "success": result.wasSuccessful(),
             "skipped": [{"test": str(test), "reason": reason} for test, reason in result.skipped],
+            "expected_failures": [
+                {"test": str(test), "reason": getattr(getattr(test, test._testMethodName), "ay_xfail_reason", "")}
+                for test, _ in result.expectedFailures
+            ],
             "failures": [{"test": str(test), "traceback": trace} for test, trace in result.failures],
             "errors": [{"test": str(test), "traceback": trace} for test, trace in result.errors],
         }, indent=2))

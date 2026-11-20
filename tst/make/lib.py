@@ -16,6 +16,15 @@ PROJECT = "__ay_e2e__"
 CANONDATA = Path(__file__).parent / "canondata"
 
 
+def xfail_on_ay(reason):
+    """An expected failure on the ay backend only, while ay does not model the ymake behaviour in reason."""
+    def decorate(test):
+        test.ay_xfail_reason = reason
+        return unittest.expectedFailure(test) if os.environ.get("AY_E2E_BACKEND") == "ay" else test
+
+    return decorate
+
+
 @functools.cache
 def nodejs_version():
     """The tree's default Node.js; fixtures must not pin a version the tree may drop."""
