@@ -97,11 +97,7 @@ cases). It does not generate or truncate new reference graphs.
 | `p12_python_contexts` | Python module contexts, including FlatBuffers | 3,057 |
 | `p12_proto` | Protobuf generators | 4,832 |
 | `p12_go` | Go graph generation | 18,043 |
-| `feature_mlaunch_go` | Real Go consumer of MLAUNCH_COMPONENT, Go tool SBOM and SDC metadata order | 5,160 |
 | `p12_java` | Java graph generation | 14,569 |
-| `feature_java_sources_debug`, `feature_java_sbom` | Debug source JARs and Java SBOM | 13 |
-| `feature_ts_proto` | TypeScript proto variants and non-recursive package dependencies | 29 |
-| `feature_antlr4_cpp` | ANTLR C++ runtime includes and generated listeners/visitors | 6 |
 | `p12_typescript` | TypeScript graph generation | 8,444 |
 | `p12_cuda` | CUDA generation and platform resources | 2,651 |
 | `p12_docs` | Documentation graphs | 18 |
@@ -114,13 +110,6 @@ case when changing a mechanism outside this subset, for example
 `validate_p12_tests`, `validate_p12_codegen_tail`, `validate_p12_config`, or
 `validate_p12_packaging`. Run `validate` before concluding that the complete
 corpus still has parity.
-
-`feature_mlaunch_go` pins
-`sdg/sdc/ros/motion_safety/ml_postprocessing/tests/one_tick/golaunch` with
-`USE_PREBUILT_TOOLS=no` on host and target, as in `p12_go`. The shared make
-tests separately exercise component selection through `ONLY_TAGS`,
-`INCLUDE_TAGS` and `EXCLUDE_TAGS`. ROS component variants are not covered by
-this case.
 
 Small source-feature cases provide a quicker loop for Cython inputs, resource
 ordering, and late source-file edges. Run all four with:
@@ -145,19 +134,6 @@ reusing a closure after its file edges have changed. All four cases use
 `xfail: false`; differences fail their gates normally. These focused cases
 supplement the larger corpus cases.
 
-The `feature_rust_cryptography` case uses
-`contrib/python/cryptography/next/tests`, a real Python test binary linking
-cryptography, Temporal, and librsvg with a shared Rust runtime. Its complete
-release graph includes Rust libraries, host crates, procedural macros, and
-build-script programs: 11,336 normalized nodes, including 554 Rust commands.
-Run it independently when changing Rust support:
-
-```sh
-./build validate_feature_rust_cryptography
-```
-
-It is included in the full corpus with `xfail: false`.
-
 Rust support includes `CRATE` target and host variants, `RUST_BUILD_SCRIPT`,
 `CRATE_PROC_MACRO`, `RUST_RUNTIME`, and the `CRATE_*` configuration macros.
 The Rust emitter uses the existing peer closures, tool bindings, and lazy
@@ -174,34 +150,6 @@ each test installs the upstream Rust support of 3b36097f
 
 The ay collection target stores assertions in `.build/e2e/ay/test_rust.json`;
 use `ay_e2e` to enforce the complete make-test suite's pass/fail status.
-
-Two small Java cases use real targets from `devtools/dummy_arcadia`:
-
-| Case ID | Target below `devtools/dummy_arcadia/` | Build type | Reference nodes |
-|---|---|---|---:|
-| `feature_java_sources_debug` | `hello_java/hello` | Debug | 9 |
-| `feature_java_sbom` | `sbom/java/lib` | Release | 4 |
-
-The first covers source JARs for a Java program and its library, plus SBOM
-dependencies. Upstream enables source JARs by default in Debug, so a Release
-graph does not cover this default. The second covers explicit `EMBED_SBOM`,
-dependency component metadata, and toolchain metadata. Each source slice is
-verified by rerunning upstream `ya` and comparing all graph nodes and result
-roots with the original tree. Both cases use `xfail: false` and belong to
-`validate` and `validate_quick`.
-
-```sh
-./build -j2 -k validate_feature_java_sources_debug validate_feature_java_sbom
-```
-
-Two more strict cases use `devtools/dummy_arcadia/typescript/proto/non_recursive/consumer`
-and `devtools/dummy_arcadia/antlr4/cppexpr`. Their complete Release graphs contain
-29 and 6 nodes respectively. Both source slices reproduce upstream's complete
-nodes and result roots. They belong to both `validate` and `validate_quick`:
-
-```sh
-./build -j2 -k validate_feature_ts_proto validate_feature_antlr4_cpp
-```
 
 Sandbox archives are ordinary CAS outputs and do not depend on the candidate
 `ay` binary. New resources provisioned by `dev/provision.py` are uploaded as

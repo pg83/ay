@@ -1,8 +1,8 @@
 """Rust build support for trees that predate Rust modules.
 
 Arcadia d02375f8 predates Rust modules. The files below are trunk's Rust
-module and macro definitions (2026-11) and the Rust support of 3b36097f (the
-feature_rust_cryptography slice): the ymake plugin, the toolchain and the
+module and macro definitions (2026-11) and the Rust support of Arcadia
+3b36097f: the ymake plugin, the toolchain and the
 shared runtime, and the two ymake.core.conf lines that enable them. A tree
 with its own build/conf/rust.conf keeps it.
 
