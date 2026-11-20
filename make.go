@@ -193,6 +193,10 @@ func cmdMake(g GlobalFlags, args []string) int {
 
 	errs := newConfigureErrors()
 
+	if mf.warningModes == nil {
+		mf.warningModes = []string{"dirloops", "ChkPeers"}
+	}
+
 	dirLoopsReported, makeFilesReported = slices.Contains(mf.warningModes, "dirloops"), mf.outputs.context != ""
 
 	onWarn := warnHandler(mf.keepGoing, mf.threads == 0, mf.verbose, errs, func(line string) {

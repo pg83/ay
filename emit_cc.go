@@ -177,32 +177,10 @@ func (e *EmitContext) emitCCWith(srcVFS, out VFS, in ModuleCCInputs, reserved No
 		return ref, out, true
 	}
 
-	configuration := e.instance.Demand == demandLinked && ctx.emit.deferPublication > 0 && srcVFS.isSource()
-
-	if configuration {
-		sc := e.scanner.getFileScanCtx(srcVFS, e.d.scanCtx, scanDomainCC, e.scanner.parsers.registry.defaultParser)
-
-		defer e.scanner.putScanCtx(sc)
-
-		sc.initialOnly = true
-		in.IncludeView = sc.closureOf(srcVFS)
-	} else {
-		in.IncludeView = e.scanner.walkClosure(srcVFS, e.d.scanCtx, scanDomainCC)
-	}
+	in.IncludeView = e.scanner.walkClosure(srcVFS, e.d.scanCtx, scanDomainCC)
 
 	if in.MainOutInducedInputs {
 		in.IncludeInputs = e.mainOutInducedInputs(ctx.na, in.IncludeView)
-	}
-
-	if configuration && in.IncludeView.incomplete {
-		id := e.scanner.includeFix(in.IncludeView.self, fixIncludes)
-		fix := &e.scanner.fixer.entries.s[id-1]
-
-		if fix.pending == nil {
-			fix.pending = e.pendingEmit(func() {
-				e.scanner.walkClosure(srcVFS, e.d.scanCtx, scanDomainCC)
-			})
-		}
 	}
 
 	if e.d.multimodule == tokFbsLibrary {

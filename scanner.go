@@ -1030,6 +1030,10 @@ func (sc *ScanCtx) resolve(out []VFS, includerAbs, incDir VFS, d IncludeDirectiv
 	}
 
 	if v := d.target.vfs(); v != 0 {
+		if v.isBuild() && !sc.noResolve && s.codegen.lookup(v) == nil {
+			sc.warnUnresolved(includerAbs, d, false)
+		}
+
 		return append(out, v)
 	}
 
