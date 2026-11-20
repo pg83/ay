@@ -92,7 +92,7 @@ func (fs *OsFS) dirHas(v DirView, name string) (present bool, isDir bool) {
 
 	i := fs.tree.child(int(v.node)-1, name)
 
-	if i < 0 {
+	if i < 0 || fs.tree.mode(i)&indexedModeLink != 0 {
 		return false, false
 	}
 
@@ -142,9 +142,15 @@ func (fs *OsFS) readDirViewRel(dir STR, rel string) DirView {
 	}
 
 	block := fs.dirNames.alloc(count)
+	n := 0
 
 	for k := range count {
 		child := first + k
+
+		if fs.tree.mode(child)&indexedModeLink != 0 {
+			continue
+		}
+
 		id := internStr(fs.tree.name(child))
 		isDir := fs.tree.isDir(child)
 		packed := uint32(id) << 1
@@ -153,13 +159,14 @@ func (fs *OsFS) readDirViewRel(dir STR, rel string) DirView {
 			packed |= 1
 		}
 
-		block[k] = packed
+		block[n] = packed
+		n++
 		fs.dirEntries.put(splitMix64(uint32(dir), uint32(id)), isDir)
 	}
 
-	fs.dirNames.commit(count)
+	fs.dirNames.commit(n)
 
-	return DirView{dir: dir, node: int32(i + 1), names: block[:count]}
+	return DirView{dir: dir, node: int32(i + 1), names: block[:n]}
 }
 
 func (fs *OsFS) sourcePathExists(rel string) bool {

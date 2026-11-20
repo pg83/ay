@@ -552,7 +552,7 @@ func genJavaModule(ctx *GenCtx, instance ModuleInstance, moduleName TOK, stmts [
 	jm.result = result
 
 	ctx.memoPut(instance, result)
-	ctx.javaResolvePeers(jm)
+	ctx.javaResolvePeersInOrder(jm)
 
 	if unit.transparent {
 		jm.direct = make([]javaResolvedPeer, 0, len(jm.managedPeers))
@@ -712,6 +712,10 @@ func (ctx *GenCtx) javaResolvePeers(jm *JavaModule) {
 			return
 		}
 
+		if explicit && (res.java != nil && !res.java.closureReady || slices.Contains(ctx.javaPeerStack, dir.string())) {
+			ctx.javaPeerLoop(dir.string())
+		}
+
 		if res.java != nil {
 			jm.managedPeers = append(jm.managedPeers, res.java)
 		} else {
@@ -834,6 +838,20 @@ func (ctx *GenCtx) javaPeerResult(parent *JavaModule, dir STR, explicit bool) *M
 	}
 
 	return res
+}
+
+func (ctx *GenCtx) javaResolvePeersInOrder(jm *JavaModule) {
+	ctx.javaPeerStack = append(ctx.javaPeerStack, jm.dir)
+
+	defer func() { ctx.javaPeerStack = ctx.javaPeerStack[:len(ctx.javaPeerStack)-1] }()
+
+	ctx.javaResolvePeers(jm)
+}
+
+func (ctx *GenCtx) javaPeerLoop(dir string) {
+	chain := slices.Compact(append(slices.Clone(ctx.javaPeerStack[max(slices.Index(ctx.javaPeerStack, dir), 0):]), dir))
+
+	ctx.onWarn(Warn{Kind: WarnMisconfiguration, Where: "At top level", Error: "Loop detected: $S/" + strings.Join(chain, " --> $S/")})
 }
 
 func javaIncompatiblePeer(parent *JavaModule, dir STR) Warn {

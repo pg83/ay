@@ -237,6 +237,7 @@ type GenCtx struct {
 	moduleByRef         DenseMap[NodeRef, *ModuleEmitResult]
 	tools               DenseMap[ARG, *ModuleEmitResult]
 	toolsBuilding       []ARG
+	javaPeerStack       []string
 	targetTools         DenseMap[ARG, *ModuleEmitResult]
 	frames              []*ModuleFrame
 	frameDepth          int
