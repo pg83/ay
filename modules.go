@@ -393,6 +393,8 @@ type ModuleData struct {
 	extraPytestBins         int
 	declared                *ModuleStmt
 	subscribers             []STR
+	recurseKinds            []TOK
+	discovering             bool
 }
 
 type DeclaredToken struct {
@@ -887,7 +889,15 @@ func collectModuleInto(ctx *GenCtx, instance ModuleInstance, stmts []Stmt, env E
 	d.yqlCurrent = instance.YqlCurrent
 	initPythonImportMask(env, d)
 
+	entry := ctx.entryOf(d)
+
+	d.discovering = entry != nil && entry.discovering
+
 	collectStmts(ctx, modulePath, kind, instance.Language, stmts, env, d, onWarn, instance.Platform)
+
+	if entry != nil && (entry.discovering || entry.declareOnly || entry.redirect != moduleEntered) {
+		return d
+	}
 
 	if d.moduleStmt != nil && !d.discarded && !d.moduleEnded {
 		makeFile := makeFileWhere(modulePath)
@@ -2240,7 +2250,7 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 			continue
 		}
 
-		if d.moduleStmt != nil && !d.moduleEnded && !d.interpreting && !parseTimeStmt(s) && d.deferStmt(ctx, modulePath, kind, language, s, env, onWarn, platform) {
+		if d.moduleStmt != nil && !d.moduleEnded && !d.interpreting && !parseTimeStmt(s) && (d.discovering || d.deferStmt(ctx, modulePath, kind, language, s, env, onWarn, platform)) {
 			continue
 		}
 
@@ -2269,6 +2279,17 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 				}
 
 				onWarn(Warn{Kind: WarnMisconfiguration, Where: makeFileWhere(modulePath), Error: message, Row: row, Column: col})
+
+				continue
+			}
+
+			if (v.Name == tokUnittestFor || v.Name == tokJtestFor) && len(v.Args) == 0 {
+				name := v.Name.string()
+				row, col := ctx.statementEnd(modulePath, v.Line, name)
+
+				for _, msg := range [...]string{"[[alt1]]" + name + "[[rst]] without arguments is invalid.. Skip [[alt1]]" + name + "[[rst]] macro.", "module cannot be constructed from [[alt1]]" + name + "[[rst]] statement"} {
+					onWarn(Warn{Kind: WarnMisconfiguration, Where: makeFileWhere(modulePath), Error: msg, Row: row, Column: col})
+				}
 
 				continue
 			}
@@ -2737,6 +2758,12 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 				continue
 			}
 
+			if d.discovering {
+				d.moduleEnded = true
+
+				continue
+			}
+
 			endModule(ctx, modulePath, kind, language, env, d, onWarn, platform)
 
 		case *JoinSrcsStmt:
@@ -3200,9 +3227,11 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 					collectStmts(ctx, modulePath, kind, language, stmts, env, d, onWarn, platform)
 				})
 			} else if v.Name == tokGoTestFor {
-				d.withGoTestForStmts(ctx, modulePath, v, func(stmts []Stmt) {
+				if d.withGoTestForStmts(ctx, modulePath, v, func(stmts []Stmt) {
 					collectStmts(ctx, modulePath, kind, language, stmts, env, d, onWarn, platform)
-				})
+				}) && d.moduleStmt == nil && !d.discarded {
+					onWarn(Warn{Kind: WarnMisconfiguration, Where: makeFileWhere(modulePath), Error: "No module defined in [[imp]]$S/" + d.goTestFor.string() + "/ya.make[[rst]]"})
+				}
 			} else {
 				if v.Name == tokNoCheckImports {
 					expanded.Args = prepareRunProgramArguments(runProgramSourceArguments(v.LexicalArgs, env), runProgramSourceEnv(env, &d.sourceEnv))

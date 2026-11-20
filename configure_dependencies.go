@@ -79,6 +79,10 @@ func (d *ModuleData) recordRecurse(ctx *GenCtx, modulePath string, stmt UnknownS
 	}
 
 	d.recurses = appendConfigurationRecurses(d.recurses, modulePath, stmt, platform)
+
+	for len(d.recurseKinds) < len(d.recurses) {
+		d.recurseKinds = append(d.recurseKinds, stmt.Name)
+	}
 }
 
 func (ctx *GenCtx) recordConfiguration(instance ModuleInstance, recurses []VFS, depends []STR) {

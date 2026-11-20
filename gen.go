@@ -611,6 +611,7 @@ type DirEvaluation struct {
 	module       *ModuleStmt
 	scanned      bool
 	declared     bool
+	recorded     bool
 }
 
 type DirEvaluations struct {
@@ -833,7 +834,7 @@ func (ctx *GenCtx) recurseClosure(root VFS) []VFS {
 		seen[dir] = true
 		out = append(out, dir)
 
-		for _, child := range ctx.evaluateDirVFS(dir, ctx.target).recurses {
+		for _, child := range ctx.discoverDir(dir).recurses {
 			walk(child)
 		}
 	}
@@ -1306,8 +1307,8 @@ func discoverRecursedTargets(ctx *GenCtx, targetDir VFS) DiscoveredTargets {
 			continue
 		}
 
-		evaluation := ctx.evaluateDirVFS(dir, ctx.target)
-		module, children := evaluation.declaration, evaluation.recurses
+		evaluation := ctx.discoverDir(dir)
+		module, children := evaluation.module, evaluation.recurses
 
 		if ctx.testMode {
 			recurses[dir] = children
@@ -1876,7 +1877,11 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 
 	d := collectModuleInto(ctx, instance, stmts, env, ctx.onWarn, &frame.d, nil)
 
-	dir.record(d)
+	if frame.entry.redirect == moduleEntered {
+		dir.record(d)
+	}
+
+	dir.declared = true
 	declaration, py3After = frame.entry.declaration, frame.entry.py3After
 
 	switch frame.entry.redirect {
@@ -3599,6 +3604,21 @@ type moduleEntry struct {
 	declared        bool
 	py3After        bool
 	declareOnly     bool
+	discovering     bool
+}
+
+func (ctx *GenCtx) entryOf(d *ModuleData) *moduleEntry {
+	if ctx.frameDepth == 0 {
+		return nil
+	}
+
+	frame := ctx.frames[ctx.frameDepth-1]
+
+	if &frame.d != d || frame.entry.dir == nil {
+		return nil
+	}
+
+	return &frame.entry
 }
 
 func (e *moduleEntry) moduleName() TOK {
@@ -3610,14 +3630,9 @@ func (e *moduleEntry) moduleName() TOK {
 }
 
 func (ctx *GenCtx) declareModule(d *ModuleData, declaration *ModuleStmt) bool {
-	if ctx.frameDepth == 0 {
-		return true
-	}
+	entry := ctx.entryOf(d)
 
-	frame := ctx.frames[ctx.frameDepth-1]
-	entry := &frame.entry
-
-	if &frame.d != d || entry.dir == nil || entry.declared {
+	if entry == nil || entry.declared {
 		return true
 	}
 
@@ -3630,6 +3645,21 @@ func (ctx *GenCtx) declareModule(d *ModuleData, declaration *ModuleStmt) bool {
 	}
 
 	instance := entry.instance
+
+	if entry.discovering {
+		target := ctx.rootInstanceForDeclarationVFS(instance.Path, demandNone, declaration)
+
+		target.Platform = instance.Platform
+
+		if target.Kind == instance.Kind && target.Language == instance.Language {
+			return true
+		}
+
+		entry.redirect, entry.target = moduleReentered, target
+
+		return false
+	}
+
 	moduleName := declaration.Name
 
 	if isSandboxPythonTask(moduleName) {
@@ -3722,16 +3752,82 @@ func (ctx *GenCtx) enterToDeclaration(instance ModuleInstance, dir *DirEvaluatio
 
 	frame.entry = moduleEntry{instance: instance, dir: dir, declareOnly: true}
 
-	dir.record(collectModuleInto(ctx, instance, stmts, env, ctx.onWarn, &frame.d, nil))
+	collectModuleInto(ctx, instance, stmts, env, ctx.onWarn, &frame.d, nil)
+
+	dir.declared = true
 }
 
 func (dir *DirEvaluation) record(d *ModuleData) {
 	dir.declared = true
 
-	if !dir.scanned {
-		dir.subscribers = append(dir.subscribers[:0], d.subscribers...)
-		dir.recurses = append(dir.recurses[:0], d.recurses...)
+	if dir.scanned || dir.recorded {
+		return
 	}
+
+	dir.recorded = true
+	dir.subscribers = append(dir.subscribers[:0], d.subscribers...)
+
+	if !d.discarded {
+		dir.recurses = append(dir.recurses[:0], d.recurses...)
+		dir.recurseKinds = append(dir.recurseKinds[:0], d.recurseKinds...)
+	}
+}
+
+func (ctx *GenCtx) discoverDir(dir VFS) *DirEvaluation {
+	evaluation := ctx.dirEntry(dir, ctx.target)
+
+	if !evaluation.recorded && !evaluation.scanned {
+		stmts := moduleStmts(ctx, dir.relString())
+		instance := ctx.rootInstanceForDeclarationVFS(dir, demandNone, nil)
+
+		instance.Platform = ctx.target
+
+		for {
+			next := instance
+
+			try(func() { next = ctx.enterDirectory(instance, evaluation, stmts) })
+
+			if next == instance {
+				break
+			}
+
+			instance = next
+		}
+
+		ctx.recordConfiguration(instance, evaluation.recurses, nil)
+	}
+
+	return evaluation
+}
+
+func (ctx *GenCtx) enterDirectory(instance ModuleInstance, dir *DirEvaluation, stmts []Stmt) ModuleInstance {
+	where := ctx.whereModule
+
+	ctx.whereModule = instance.Path
+
+	defer func() { ctx.whereModule = where }()
+
+	frame := ctx.pushFrame()
+
+	defer ctx.popFrame()
+
+	env := buildIfEnvInto(&frame.ifEnv, instance)
+
+	frame.entry = moduleEntry{instance: instance, dir: dir, discovering: true}
+
+	defer func() {
+		if frame.entry.redirect != moduleReentered {
+			dir.record(&frame.d)
+		}
+	}()
+
+	collectModuleInto(ctx, instance, stmts, env, ctx.onWarn, &frame.d, nil)
+
+	if frame.entry.redirect == moduleReentered {
+		return frame.entry.target
+	}
+
+	return instance
 }
 
 func declaredInstance(instance ModuleInstance, name TOK) ModuleInstance {
