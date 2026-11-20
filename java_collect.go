@@ -468,7 +468,7 @@ func collectJavaStmts(ctx *GenCtx, jm *JavaModule, d *JavaData, stmts []Stmt, en
 				continue
 			}
 
-			if list, ok := d.ruleList(jm, v.Raw); ok {
+			if list, ok := d.ruleList(ctx, jm, v, env); ok {
 				if list != nil {
 					*list = javaAppendResolved(*list, v.Args, ctx.javaExpandRuleArgs(v.Args, env))
 				}
@@ -814,6 +814,12 @@ func applyJavaMacro(ctx *GenCtx, jm *JavaModule, d *JavaData, name STR, args []s
 		d.abiJarRequested = true
 		d.recalcKotlincOpts(jm)
 	case kwJAVAC_FLAGS:
+		if text := joinAnys(raw, " "); strings.Contains(text, "${") {
+			if message := cmdSyntaxError("$JAVAC_OPTS " + text); message != "" {
+				javaReport(ctx, jm, "Command processing error (module "+jm.stmt.string()+"): "+message)
+			}
+		}
+
 		if slices.Contains(args, "-proc:full") || slices.Contains(args, "-proc:only") {
 			javaReport(ctx, jm, "Usage -proc:full and -proc:only is forbidden in JAVAC_FLAGS, please, use ANNOTATION_PROCESSOR or USE_ANNOTATION_PROCESSOR macroses")
 		}
@@ -860,7 +866,7 @@ func applyJavaMacro(ctx *GenCtx, jm *JavaModule, d *JavaData, name STR, args []s
 			d.depsConfig |= ctx.javaDependenciesConfiguration(jm, args)
 		}
 	case kwJAVA_TEST_PEERDIR, kwJAVA_RUNTIME_PEERDIR:
-		if !javaMacroIsAlias(jm, name) {
+		if d.javaAlias(ctx, jm, name, ids) != kwPEERDIR {
 			return true
 		}
 
@@ -1146,13 +1152,16 @@ func javaEnableFlag(d *JavaData, name string, on bool) {
 	}
 }
 
-func javaMacroIsAlias(jm *JavaModule, name STR) bool {
-	switch name {
-	case kwJAVA_RUNTIME_PEERDIR, kwJAVA_RUNTIME_EXCLUDE:
-		return jm.unit.kind == juRunnable
-	default:
-		return jm.unit.kind == juTest
+func (d *JavaData) javaAlias(ctx *GenCtx, jm *JavaModule, name STR, args []ANY) STR {
+	if d.confModule != nil {
+		if alias := jm.instance.Platform.conf.moduleAlias(d.confModule, name); alias != name {
+			return alias
+		}
 	}
+
+	ctx.onWarn(Warn{Kind: WarnUnknownMacro, Message: fmt.Sprintf("%s: %s has no alias in %s", jm.dir, name.string(), jm.stmt.string()), Where: makeFileWhere(jm.dir), Error: "skip unknown statement: " + name.string() + " " + vecDump(args)})
+
+	return 0
 }
 
 type javaErrorProneInfo struct {
@@ -1473,14 +1482,14 @@ func javaRunProgramRawArgs(raw []string, env Environment, rawVars map[STR]javaRa
 	return out
 }
 
-func (d *JavaData) ruleList(jm *JavaModule, name STR) (*[]ANY, bool) {
-	switch name {
+func (d *JavaData) ruleList(ctx *GenCtx, jm *JavaModule, v *UnknownStmt, env Environment) (*[]ANY, bool) {
+	switch name := v.Raw; name {
 	case kwDEPENDENCY_MANAGEMENT:
 		return &d.dm, true
 	case kwEXCLUDE:
 		return &d.excludes, true
 	case kwJAVA_RUNTIME_EXCLUDE, kwJAVA_TEST_EXCLUDE:
-		if !javaMacroIsAlias(jm, name) {
+		if d.javaAlias(ctx, jm, name, expandStmtTokens(v.Args, env)) != kwEXCLUDE {
 			return nil, true
 		}
 

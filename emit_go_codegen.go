@@ -553,6 +553,7 @@ func applyGoResource(fs FS, modulePath string, entries []ResourceEntry, d *Modul
 
 type GoEmbed struct {
 	xtest   bool
+	bindir  bool
 	root    VFS
 	pattern ANY
 	files   []VFS
@@ -600,13 +601,27 @@ func newGoEmbedBindir(xtest bool, importPath string, args []ANY) GoEmbed {
 		throwFmt("GO_EMBED_BINDIR expects a pattern")
 	}
 
-	em.root = build(importPath)
+	em.root, em.bindir = build(importPath), true
 
 	for _, file := range files {
-		em.files = append(em.files, build(importPath, "/", file.string()))
+		em.files = append(em.files, buildClean(path.Join(importPath, file.string())))
 	}
 
 	return em
+}
+
+func (e *EmitContext) checkGoEmbedProducers() {
+	for _, em := range e.d.goEmbeds {
+		if !em.bindir {
+			continue
+		}
+
+		for _, file := range em.files {
+			if e.codegen.lookupSTR(file.rel()) == nil {
+				e.ctx.onWarn(Warn{Kind: WarnMissingSource, Message: "source file not found: " + file.string(), Where: makeFileWhere(e.instance.Path.relString()), Error: "cannot find source file: " + ymakeVFS(file)})
+			}
+		}
+	}
 }
 
 func newGoEmbedDir(fs FS, xtest bool, importPath, dir string, all bool) GoEmbed {

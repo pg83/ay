@@ -30,6 +30,10 @@ func (e *EmitContext) emitCopyFileStmt(entry CopyFileEntry) {
 		return
 	}
 
+	if !e.submitOutput(copyFileOutputVFS(e.instance.Path.relString(), entry.Dst)) {
+		return
+	}
+
 	st, info := e.registerCopyFile(entry)
 	demanded := !e.producersOnly()
 

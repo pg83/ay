@@ -995,6 +995,9 @@ func (e *EmitContext) emitGoPackage(resolved []ResolvedPeer, objRefs []NodeRef, 
 	srcArgs, cgoSrcArgs, ownInputs, ownSources, ownBuilds := e.goSrcList(goRes, objOuts)
 	localARs, _, _ := e.goClassifyClosure(resolved, peerArchivePaths)
 	embedArgs, embedInputs := goEmbedArgs(na, d.goEmbeds)
+
+	e.checkGoEmbedProducers()
+
 	tail := na.anys.alloc(4 + len(d.goLinkFlags) + len(cgoSrcArgs) + len(embedArgs) + len(localARs))
 	nt := 0
 	pushTail := func(x STR) { tail[nt] = x.any(); nt++ }
@@ -1134,6 +1137,7 @@ func (e *EmitContext) emitGoPackage(resolved []ResolvedPeer, objRefs []NodeRef, 
 		Resources: goToolResources(na, resourceGlobals)}, input: InputSpec{root: outPath},
 	}
 
+	e.checkDeclaredInputs(&NodeSpec{Node: Node{Inputs: na.inputList(ownSourceInputs)}})
 	e.resolveGoBuildFromDeps(&node, na.inputList(ownBuildInputs, embedInputs))
 
 	ref := e.emitModuleNode(node, false)
@@ -1182,7 +1186,7 @@ func (e *EmitContext) emitGoExe(resolved []ResolvedPeer, objRefs []NodeRef, objO
 		strGoArcPrefix.any(),
 	)), Env: goVcsEnv}
 
-	srcArgs, cgoSrcArgs, ownInputs, _, ownBuilds := e.goSrcList(goRes, objOuts)
+	srcArgs, cgoSrcArgs, ownInputs, ownSources, ownBuilds := e.goSrcList(goRes, objOuts)
 	localARs, nonLocalARs, cgoARs := e.goClassifyClosure(resolved, peerArchivePaths)
 	tail := na.anys.alloc(4 + len(localARs) + len(nonLocalARs) + len(cgoARs))
 	nt := 0
@@ -1276,6 +1280,8 @@ func (e *EmitContext) emitGoExe(resolved []ResolvedPeer, objRefs []NodeRef, objO
 	}
 
 	embedArgs, embedInputs := goEmbedArgs(na, d.goEmbeds)
+
+	e.checkGoEmbedProducers()
 
 	var cgoBuilds []VFS
 
@@ -1420,6 +1426,7 @@ func (e *EmitContext) emitGoExe(resolved []ResolvedPeer, objRefs []NodeRef, objO
 	na.cmds.commit(kc)
 	node.Cmds = cmds[:kc:kc]
 
+	e.checkDeclaredInputs(&NodeSpec{Node: Node{Inputs: na.inputList(ownSources)}})
 	e.resolveGoBuildFromDeps(&node, na.inputList(ownBuilds, embedInputs))
 
 	return e.emitModuleNode(node, true), outPath

@@ -175,10 +175,12 @@ func (e *EmitContext) emitGoCgoCopyStmt(meta SrcMeta) {
 	srcRel := meta.Source
 	module := e.instance.Path.relString()
 	dstVFS := build(module, "/", srcRel.string())
+	exportH := build(module, "/_cgo_export.h")
 
 	if len(e.d.cgoSrcs) > 0 {
-		e.emitGoCopyWithContext(meta.Resolved.Path, dstVFS, scanDomainCC, build(module, "/_cgo_export.h"))
+		e.emitGoCopyWithContext(meta.Resolved.Path, dstVFS, scanDomainCC, exportH)
 	} else {
+		e.ctx.onWarn(IncludeDiagnostic{Directive: IncludeDirective{kind: includeQuoted, target: exportH.any()}, Includer: dstVFS, Unresolved: true}.warn())
 		e.emitGoCopyWithContext(meta.Resolved.Path, dstVFS, scanDomainCC)
 	}
 }
@@ -263,6 +265,10 @@ func (e *EmitContext) emitGoCgo1Stmt() {
 			cgo1:  e.goCgoOut(f, ".cgo1.go"),
 			cgo2C: e.goCgoOut(f, ".cgo2.c"),
 		})
+
+		if v, ok := moduleRootedVFS(dir, f.string()); ok && v.isSource() {
+			ctx.onWarn(Warn{Kind: WarnMissingSource, Where: makeFileWhere(dir), Error: "cannot find source file: " + ymakeVFS(source(strings.TrimSuffix(v.relString(), ".go"), ".cgo2.c"))})
+		}
 	}
 
 	exportH := build(dir, "/_cgo_export.h")

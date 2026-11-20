@@ -354,6 +354,10 @@ func (e *EmitContext) producerPositions(cythonPlans []CythonStmtPlan) ([]Produce
 		})
 	}
 
+	if d.flagSyntax != "" {
+		reportFlagSyntax(d, module, e.ctx.onWarn)
+	}
+
 	if n == 0 {
 		return nil, nil
 	}

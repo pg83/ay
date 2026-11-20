@@ -699,6 +699,12 @@ func (ctx *GenCtx) javaResolvePeers(jm *JavaModule) {
 
 		seen[dir] = true
 
+		if explicit && dir.string() == jm.dir {
+			ctx.onWarn(Warn{Kind: WarnMisconfiguration, Where: makeFileWhere(jm.dir), Error: ymakeVFS(jm.target) + " has PEERDIR to its own dir"})
+
+			return
+		}
+
 		res := ctx.javaPeerResult(jm, dir, explicit)
 
 		if res == nil {
@@ -775,13 +781,13 @@ func (ctx *GenCtx) javaPeerResult(parent *JavaModule, dir STR, explicit bool) *M
 		}
 
 		if !picked {
-			ctx.onWarn(Warn{Kind: WarnModuleFailed, Message: fmt.Sprintf("%s: PEERDIR to %s is prohibited by incompatible tags and skipped", parent.dir, dir.string())})
+			ctx.onWarn(javaIncompatiblePeer(parent, dir))
 
 			return nil
 		}
 	case len(units) == 1:
 		if explicit && !javaTagIn(inst.Platform.conf.moduleTag(name.str()), tags) {
-			ctx.onWarn(Warn{Kind: WarnModuleFailed, Message: fmt.Sprintf("%s: PEERDIR to %s is prohibited by incompatible tags and skipped", parent.dir, dir.string())})
+			ctx.onWarn(javaIncompatiblePeer(parent, dir))
 
 			return nil
 		}
@@ -790,6 +796,12 @@ func (ctx *GenCtx) javaPeerResult(parent *JavaModule, dir STR, explicit bool) *M
 	case name == tokProtoLibrary || name == tokFbsLibrary:
 		inst.Kind = KindJavaMain
 	default:
+		if explicit && name != 0 && multimoduleShapes[name.str()] == nil && !javaTagIn(inst.Platform.conf.moduleTag(name.str()), tags) {
+			ctx.onWarn(javaIncompatiblePeer(parent, dir))
+
+			return nil
+		}
+
 		inst.Language = LangCPP
 		inst.Kind = KindLib
 		inst.Demand = demandLinked
@@ -802,6 +814,10 @@ func (ctx *GenCtx) javaPeerResult(parent *JavaModule, dir STR, explicit bool) *M
 	res := genModule(ctx, inst)
 
 	if res.java == nil && inst.Language == LangJava {
+		if explicit && (name == tokProtoLibrary || name == tokFbsLibrary) {
+			ctx.onWarn(javaIncompatiblePeer(parent, dir))
+		}
+
 		return nil
 	}
 
@@ -817,6 +833,10 @@ func (ctx *GenCtx) javaPeerResult(parent *JavaModule, dir STR, explicit bool) *M
 	}
 
 	return res
+}
+
+func javaIncompatiblePeer(parent *JavaModule, dir STR) Warn {
+	return Warn{Kind: WarnModuleFailed, Where: makeFileWhere(parent.dir), Error: "[[alt1]]PEERDIR[[rst]] from module tagged [[alt1]]" + parent.data.moduleTag.string() + "[[rst]] to [[imp]]$S/" + dir.string() + "[[rst]] is prohibited by incompatible tags and skipped"}
 }
 
 func (ctx *GenCtx) javaContrib(parent *JavaModule, dirID STR) *JavaModule {

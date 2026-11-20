@@ -100,7 +100,13 @@ func unresolvedIncludeError(w Warn) string {
 		return "Failed to resolve import in " + ymakeVFS(w.includer) + ": " + w.target.string()
 	}
 
-	return "could not resolve include file: [[imp]]" + w.target.string() + "[[rst]] included from here: [[imp]]" + ymakeVFS(w.includer) + "[[rst]]"
+	target := w.target.string()
+
+	if v := w.target.vfs(); v != 0 {
+		target = ymakeVFS(v)
+	}
+
+	return "could not resolve include file: [[imp]]" + target + "[[rst]] included from here: [[imp]]" + ymakeVFS(w.includer) + "[[rst]]"
 }
 
 func validateTest(meta TestMeta) []string {

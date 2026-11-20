@@ -1595,6 +1595,9 @@ func buildStmtForID(nameID STR, args []ANY, line int, fail func(format string, a
 
 		return &GenerateEnumSerializationStmt{Macro: kwGENERATE_ENUM_SERIALIZATION_WITH_HEADER, Header: args[0], Variant: "with_header", Line: line}
 	case stmtKindDefault:
+		if len(args) == 0 {
+			fail("%s", varNameAssertion(kwDEFAULT))
+		}
 
 		varName := ""
 		nameID := strEmpty
@@ -1711,8 +1714,27 @@ func buildStmtForID(nameID STR, args []ANY, line int, fail func(format string, a
 	case stmtKindAllResourceFilesFromDirs:
 		return &AllResourceFilesStmt{Args: astArgs.list(args...), FromDirs: true, Line: line}
 	default:
+		if assertion := varNameAssertion(nameID); assertion != "" && len(args) == 0 {
+			fail("%s", assertion)
+		}
+
 		return astOne(astUnknowns, UnknownStmt{Name: internTokMaybeSTR(nameID), Raw: nameID, Args: args, Line: line})
 	}
+}
+
+func varNameAssertion(nameID STR) string {
+	switch nameID {
+	case tokSetAppend.str():
+		return "devtools/ymake/lang/eval_context.cpp:332: Assertion failed: !args.empty() -- need var name"
+	case kwDEFAULT:
+		return "devtools/ymake/lang/eval_context.cpp:338: Assertion failed: args.size() -- need var name"
+	case tokEnable.str():
+		return "devtools/ymake/lang/eval_context.cpp:342: Assertion failed: args.size() -- need var name"
+	case tokDisable.str():
+		return "devtools/ymake/lang/eval_context.cpp:345: Assertion failed: args.size() -- need var name"
+	}
+
+	return ""
 }
 
 func parseRunAntlr4Cpp(args []ANY, line int) *RunAntlr4CppStmt {

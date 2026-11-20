@@ -257,6 +257,7 @@ type ModuleData struct {
 	luaCompile              []LuaCompileStmt
 	cFlags                  []ANY
 	cFlagsGlobal            []ANY
+	flagSyntax              string
 	compilerFlagUses        [3]CompilerFlagResourceUses
 	cxxFlags                []ANY
 	cxxFlagsVar             []ANY
@@ -2838,12 +2839,15 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 			d.scAddInclGlobal = append(d.scAddInclGlobal, expandConfigVFSPaths(v.ScGlobalPaths, env)...)
 			d.scAddInclExport = append(d.scAddInclExport, expandConfigVFSPaths(v.ScExportPaths, env)...)
 		case *CFlagsStmt:
+			d.checkFlagSyntax("USER_CFLAGS", v.Flags)
 
 			d.cFlagsGlobal, d.cFlags = appendCompilerFlags(v.Flags, env, "USER_CFLAGS", v.Global, d.cFlagsGlobal, d.cFlags, &d.compilerFlagUses[compilerFlagsCommon])
 		case *CXXFlagsStmt:
+			d.checkFlagSyntax("USER_CXXFLAGS", v.Flags)
 
 			d.cxxFlagsGlobal, d.cxxFlags = appendCompilerFlags(v.Flags, env, "USER_CXXFLAGS", false, d.cxxFlagsGlobal, d.cxxFlags, &d.compilerFlagUses[compilerFlagsCxx])
 		case *CONLYFlagsStmt:
+			d.checkFlagSyntax("USER_CONLYFLAGS", v.Flags)
 
 			d.cOnlyFlagsGlobal, d.cOnlyFlags = appendCompilerFlags(v.Flags, env, "USER_CONLYFLAGS", false, d.cOnlyFlagsGlobal, d.cOnlyFlags, &d.compilerFlagUses[compilerFlagsCOnly])
 		case *LDFlagsStmt:
@@ -3043,6 +3047,12 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 			}
 
 			pairs, dontParse, dontCompress := expandResourcePairs(v.Args, v.Line, env)
+
+			if message := resourceSyntaxError(pairs); message != "" {
+				onWarn(Warn{Kind: WarnSyntax, Where: makeFileWhere(modulePath), Error: message})
+
+				break
+			}
 
 			for _, pair := range pairs {
 				if pair.Path != "-" || dontCompress {
@@ -4022,10 +4032,6 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 	case tokGoEmbedBindir, tokGoTestEmbedBindir, tokGoXtestEmbedBindir:
 		if v.Name == tokGoEmbedBindir || d.moduleStmt != nil && d.moduleStmt.Name == tokGoTest {
 			importPath := env.expand(env.string(env_GO_IMPORT_PATH))
-
-			if importPath == "" {
-				importPath = modulePath
-			}
 
 			d.goEmbeds = append(d.goEmbeds, newGoEmbedBindir(v.Name == tokGoXtestEmbedBindir, importPath, v.Args))
 		}
@@ -5311,6 +5317,52 @@ func pyProgram(d *ModuleData, env Environment) bool {
 	}
 
 	return true
+}
+
+func (d *ModuleData) checkFlagSyntax(name string, flags []ANY) {
+	if d.flagSyntax == "" && slices.ContainsFunc(flags, func(flag ANY) bool { return strings.Contains(flag.string(), "${") }) {
+		d.flagSyntax = cmdSyntaxError("$" + name + " " + joinAnys(flags, " "))
+	}
+}
+
+func resourceSyntaxError(pairs []ResourcePair) string {
+	for _, pair := range pairs {
+		for _, text := range [2]string{pair.Path, pair.Key} {
+			if !strings.Contains(text, "${") {
+				continue
+			}
+
+			if message := cmdSyntaxError(text); message != "" {
+				args := make([]string, 0, 2*len(pairs))
+
+				for _, pair := range pairs {
+					args = append(args, pair.Path, pair.Key)
+				}
+
+				return "RESOURCE(" + strings.Join(args, " ") + ") was not processed properly: " + message + ". Skip RESOURCE"
+			}
+		}
+	}
+
+	return ""
+}
+
+func reportFlagSyntax(d *ModuleData, modulePath string, onWarn func(Warn)) {
+	first := slices.IndexFunc(d.srcs, func(meta SrcMeta) bool { return isNativeSourceExt(meta.Source.string()) })
+
+	if first < 0 {
+		return
+	}
+
+	var args []ANY
+
+	for _, meta := range d.srcs {
+		if meta.Stmt == d.srcs[first].Stmt {
+			args = append(args, meta.Source)
+		}
+	}
+
+	onWarn(Warn{Kind: WarnSyntax, Where: makeFileWhere(modulePath), Error: "SRCS(" + joinAnys(args, " ") + ") was not processed properly: " + d.flagSyntax + ". Skip SRCS"})
 }
 
 func reportPythonPluginTypeError(modulePath, macro string, args []ANY, onWarn func(Warn)) {
