@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 )
 
@@ -183,6 +184,10 @@ func (e *EmitContext) emitOneSource(meta SrcMeta) {
 			return
 		}
 
+		if path := meta.Resolved.Path; path.isSource() && !meta.Resolved.Existing && !e.ctx.fs.isFileVFS(path) && e.codegen.lookup(path) == nil {
+			e.ctx.onWarn(Warn{Kind: WarnMissingSource, Message: "source file not found: " + path.string(), Where: makeFileWhere(e.instance.Path.relString()), Error: "cannot find source file: " + meta.Source.string()})
+		}
+
 		e.ctx.onWarn(Warn{
 			Kind:    WarnBadSrc,
 			Message: fmt.Sprintf("%s: can't build anything from %q", e.instance.Path.relString(), src.string()),
@@ -204,6 +209,12 @@ func (e *EmitContext) collectObjectSource(meta SrcMeta) bool {
 		return false
 	}
 
+	if input.isBuild() && e.noAutoOutput(input) {
+		e.ctx.onWarn(Warn{Kind: WarnMisconfiguration, Where: makeFileWhere(e.instance.Path.relString()), Error: "resolved to non-configured include file : $U/" + input.relString() + " included from here: " + ymakeVFS(e.moduleMainOutput())})
+
+		return true
+	}
+
 	if e.producersOnly() {
 		return true
 	}
@@ -217,6 +228,32 @@ func (e *EmitContext) collectObjectSource(meta SrcMeta) bool {
 	e.collectObj(ref, input, meta)
 
 	return true
+}
+
+func (e *EmitContext) noAutoOutput(v VFS) bool {
+	module := e.instance.Path.relString()
+
+	declared := func(files []ANY, stdout *ANY, stdoutNoAuto bool) bool {
+		if stdoutNoAuto && stdout != nil && copyFileOutputVFS(module, stdout.string()) == v {
+			return true
+		}
+
+		return slices.ContainsFunc(files, func(f ANY) bool { return copyFileOutputVFS(module, f.string()) == v })
+	}
+
+	for _, stmt := range e.d.runPrograms {
+		if declared(stmt.OUTNoAutoFiles, stmt.StdoutFile, stmt.StdoutNoAuto) {
+			return true
+		}
+	}
+
+	for _, stmt := range e.d.runPython {
+		if declared(stmt.OUTNoAutoFiles, stmt.StdoutFile, stmt.StdoutNoAuto) {
+			return true
+		}
+	}
+
+	return false
 }
 
 func (na *NodeArenas) objectBuildRefs(refs []NodeRef, paths []VFS) []NodeRef {

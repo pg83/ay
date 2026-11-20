@@ -127,7 +127,7 @@ func (e *EmitContext) emitFromSandbox(stmt *FromSandboxStmt) (memberRefs []NodeR
 func (e *EmitContext) moduleMainOutput() VFS {
 	instance, d := e.instance, e.d
 
-	if instance.Kind != KindLib {
+	if instance.Kind != KindLib || isProgramModuleType(d.moduleStmt.Name) && d.unit.Tag != unitTagPy3BinLib {
 		return lDOutputPath(instance, programBinaryName(instance, d.moduleStmt))
 	}
 

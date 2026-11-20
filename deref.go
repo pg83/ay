@@ -1,6 +1,9 @@
 package main
 
-import "strings"
+import (
+	"slices"
+	"strings"
+)
 
 func derefStmt(s Stmt, env Environment) Stmt {
 	switch v := s.(type) {
@@ -27,7 +30,7 @@ func derefStmt(s Stmt, env Environment) Stmt {
 			return &c
 		}
 	case *SrcsStmt:
-		if sources, ok := derefList(v.Sources, env); ok {
+		if sources, ok := derefSources(v.Sources, env); ok {
 			c := *v
 
 			c.Sources = sources
@@ -246,6 +249,14 @@ func derefList(items []ANY, env Environment) ([]ANY, bool) {
 		if derefChanges(item) {
 			return expandTokens(items, env, false, tokenExpandStatement), true
 		}
+	}
+
+	return items, false
+}
+
+func derefSources(items []ANY, env Environment) ([]ANY, bool) {
+	if slices.ContainsFunc(items, derefChanges) {
+		return expandUnescapedTokens(items, env, tokenExpandStatement), true
 	}
 
 	return items, false

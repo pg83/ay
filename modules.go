@@ -2605,11 +2605,10 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 			srcToks := dropAbsoluteSources(v.Sources, modulePath, onWarn)
 
 			if !d.interpreting {
-				srcToks = expandTokens(srcToks, env, false, tokenExpandStatement)
+				srcToks = expandUnescapedTokens(srcToks, env, tokenExpandStatement)
 			}
 
-			srcToks = expandTokens(srcToks, env, false, tokenExpandRoots)
-
+			srcToks, escapedSrcs := expandEscapedTokens(srcToks, env, tokenExpandRoots)
 			stmt := d.nextDeclSeq()
 
 			if d.unit.SwigLang == strSwigLangJniCpp {
@@ -2637,7 +2636,7 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 					continue
 				}
 
-				if strHasDollar(srcTok) && strings.Contains(srcTok.string(), "${") {
+				if strHasDollar(srcTok) && strings.Contains(srcTok.string(), "${") && !escapedSrcs[srcTok] {
 					continue
 				}
 
@@ -6411,6 +6410,52 @@ func expandSingleRef(text string, env Environment, phase TokenExpansion) ([]ANY,
 	}
 
 	return valueWords(v), true
+}
+
+func expandEscapedTokens(items []ANY, env Environment, phase TokenExpansion) ([]ANY, map[ANY]bool) {
+	escaped := func(item ANY) bool { return strings.Contains(item.string(), `\$`) }
+
+	if !slices.ContainsFunc(items, escaped) {
+		return expandTokens(items, env, false, phase), nil
+	}
+
+	var out []ANY
+
+	literal := map[ANY]bool{}
+
+	for _, item := range items {
+		expanded := expandTokens([]ANY{item}, env, false, phase)
+
+		if escaped(item) {
+			for _, word := range expanded {
+				literal[word] = true
+			}
+		}
+
+		out = append(out, expanded...)
+	}
+
+	return out, literal
+}
+
+func expandUnescapedTokens(items []ANY, env Environment, phase TokenExpansion) []ANY {
+	escaped := func(item ANY) bool { return strings.Contains(item.string(), `\$`) }
+
+	if !slices.ContainsFunc(items, escaped) {
+		return expandTokens(items, env, false, phase)
+	}
+
+	var out []ANY
+
+	for _, item := range items {
+		if escaped(item) {
+			out = append(out, item)
+		} else {
+			out = append(out, expandTokens([]ANY{item}, env, false, phase)...)
+		}
+	}
+
+	return out
 }
 
 func expandTokens(items []ANY, env Environment, command bool, phase TokenExpansion) []ANY {

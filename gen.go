@@ -2116,6 +2116,12 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 			continue
 		}
 
+		if parent := d.moduleStmt.Name; kind == peerKindUserPeer && isDllModuleType(peerResult.ModuleStmtName) && (isLinkingModuleType(parent) || parent == tokLibrary || isPyLibraryType(parent)) {
+			ctx.onWarn(incompatiblePeerWarn(instance, p))
+
+			continue
+		}
+
 		e.recordPeerModule(peerResult)
 		resolved = append(resolved, ResolvedPeer{path: p, result: peerResult, kind: kind})
 	}
