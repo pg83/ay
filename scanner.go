@@ -399,12 +399,27 @@ func (ctx *ScanContext) config(domain ScanDomain) *ScanConfig {
 
 	if cfg == nil {
 		own, peer := ctx.modulePaths(domain)
+		base := ctx.base
 
-		cfg = ctx.parsers.resolveScanConfig(own, peer, ctx.base)
+		if domain == scanDomainCython {
+			base = cythonBasePaths(base)
+		}
+
+		cfg = ctx.parsers.resolveScanConfig(own, peer, base)
 		ctx.configs[domain] = cfg
 	}
 
 	return cfg
+}
+
+func cythonBasePaths(base []VFS) []VFS {
+	linuxHeaders := func(v VFS) bool { return v == contribLibsLinuxHeaders || v == contribLibsLinuxHeadersNf }
+
+	if !slices.ContainsFunc(base, linuxHeaders) {
+		return base
+	}
+
+	return slices.DeleteFunc(slices.Clone(base), linuxHeaders)
 }
 
 func (s *IncludeScanner) getScanCtx(ctx *ScanContext, domain ScanDomain, parser IncludeDirectiveParser) *ScanCtx {
