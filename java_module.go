@@ -786,13 +786,13 @@ func (ctx *GenCtx) javaPeerResult(parent *JavaModule, dir STR, explicit bool) *M
 		}
 
 		if !picked {
-			ctx.onWarn(javaIncompatiblePeer(parent, dir))
+			ctx.reportIncompatibleJavaPeer(parent, dir)
 
 			return nil
 		}
 	case len(units) == 1:
 		if explicit && !javaTagIn(inst.Platform.conf.moduleTag(name.str()), tags) {
-			ctx.onWarn(javaIncompatiblePeer(parent, dir))
+			ctx.reportIncompatibleJavaPeer(parent, dir)
 
 			return nil
 		}
@@ -802,7 +802,7 @@ func (ctx *GenCtx) javaPeerResult(parent *JavaModule, dir STR, explicit bool) *M
 		inst.Kind = KindJavaMain
 	default:
 		if explicit && name != 0 && multimoduleShapes[name.str()] == nil && !javaTagIn(inst.Platform.conf.moduleTag(name.str()), tags) {
-			ctx.onWarn(javaIncompatiblePeer(parent, dir))
+			ctx.reportIncompatibleJavaPeer(parent, dir)
 
 			return nil
 		}
@@ -820,7 +820,7 @@ func (ctx *GenCtx) javaPeerResult(parent *JavaModule, dir STR, explicit bool) *M
 
 	if res.java == nil && inst.Language == LangJava {
 		if explicit && (name == tokProtoLibrary || name == tokFbsLibrary) {
-			ctx.onWarn(javaIncompatiblePeer(parent, dir))
+			ctx.reportIncompatibleJavaPeer(parent, dir)
 		}
 
 		return nil
@@ -852,6 +852,12 @@ func (ctx *GenCtx) javaPeerLoop(dir string) {
 	chain := slices.Compact(append(slices.Clone(ctx.javaPeerStack[max(slices.Index(ctx.javaPeerStack, dir), 0):]), dir))
 
 	ctx.onWarn(Warn{Kind: WarnMisconfiguration, Where: "At top level", Error: "Loop detected: $S/" + strings.Join(chain, " --> $S/")})
+}
+
+func (ctx *GenCtx) reportIncompatibleJavaPeer(parent *JavaModule, dir STR) {
+	if parent.instance.Language != LangFbsJavaNative || ctx.rootPaths[parent.instance.Path] {
+		ctx.onWarn(javaIncompatiblePeer(parent, dir))
+	}
 }
 
 func javaIncompatiblePeer(parent *JavaModule, dir STR) Warn {
