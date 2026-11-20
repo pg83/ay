@@ -52,8 +52,12 @@ func genRequestedPeer(ctx *GenCtx, request ModuleInstance) *ModuleEmitResult {
 
 	var declaration *ModuleStmt
 
+	entered := request
+
+	entered.Peer, entered.PeerFrom, entered.PeerTags = 0, 0, 0
+
 	exc := try(func() {
-		declaration = ctx.evaluateDirVFS(request.Path, ctx.target).declaration
+		declaration = ctx.declaredModule(entered)
 	})
 
 	if exc != nil {

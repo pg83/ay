@@ -391,6 +391,8 @@ type ModuleData struct {
 	versionSet              bool
 	lintersTop              bool
 	extraPytestBins         int
+	declared                *ModuleStmt
+	subscribers             []STR
 }
 
 type DeclaredToken struct {
@@ -2277,6 +2279,7 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 				return
 			}
 
+			d.declared = v
 			d.moduleOpening = true
 
 			expanded := *v
@@ -3110,6 +3113,12 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 			d.lintersTop = linters
 			collectStmts(ctx, modulePath, kind, language, taken, env, d, onWarn, platform)
 		case *UnknownStmt:
+			if v.Name == tokSubscriber {
+				for _, arg := range expandStmtTokens(v.Args, env) {
+					d.subscribers = append(d.subscribers, arg.str())
+				}
+			}
+
 			if d.skipModuleContentStmt(v.Name) {
 				continue
 			}
@@ -3219,7 +3228,7 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 					}
 				}
 
-				d.recurses = appendConfigurationRecurses(d.recurses, modulePath, expanded, platform)
+				d.recordRecurse(ctx, modulePath, expanded, env, onWarn, platform)
 
 				if expanded.Name == tokVersion && d.moduleStmt != nil && !d.moduleEnded {
 					d.versionSet = true

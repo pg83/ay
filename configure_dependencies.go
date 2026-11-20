@@ -62,6 +62,25 @@ func appendConfigurationRecurses(out []VFS, dir string, stmt UnknownStmt, platfo
 	return out
 }
 
+func (d *ModuleData) recordRecurse(ctx *GenCtx, modulePath string, stmt UnknownStmt, env Environment, onWarn func(Warn), platform *Platform) {
+	switch stmt.Name {
+	case tokRecurse, tokRecurseForTests:
+		if d.moduleStmt != nil && !d.moduleEnded {
+			instance := ctx.rootInstanceForDeclaration(modulePath, demandNone, d.declared)
+
+			instance.Platform = platform
+
+			onWarn(Warn{Kind: WarnMisconfiguration, Where: makeFileWhere(modulePath), Error: "[[alt1]]" + stmt.Raw.string() + "[[rst]] inside module " + moduleNodeName(instance, &ModuleEmitResult{}, d.declared) + "; ymake skip this."})
+
+			return
+		}
+	case tokPartitionedRecurse, tokPartitionedRecurseForTests, tokPartitionedRecurseRootRelative:
+		stmt = ctx.partitionedRecurse(modulePath, stmt, env, onWarn)
+	}
+
+	d.recurses = appendConfigurationRecurses(d.recurses, modulePath, stmt, platform)
+}
+
 func (ctx *GenCtx) recordConfiguration(instance ModuleInstance, recurses []VFS, depends []STR) {
 	if instance.Platform == ctx.host || !instance.Platform.ifEnv.bool(envTraverseDepends) {
 		return

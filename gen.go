@@ -610,6 +610,7 @@ type DirEvaluation struct {
 	path         VFS
 	module       *ModuleStmt
 	scanned      bool
+	declared     bool
 }
 
 type DirEvaluations struct {
@@ -651,10 +652,14 @@ func (d *DirEvaluations) put(evaluation *DirEvaluation, platform *Platform) {
 	d.rows[i][row] = evaluation
 }
 
-func (d *DirEvaluations) each(platform *Platform, visit func(*DirEvaluation)) {
-	for _, evaluation := range d.rows[d.slot(platform)] {
-		if evaluation != nil {
-			visit(evaluation)
+func (d *DirEvaluations) eachPlatform(first *Platform, visit func(*DirEvaluation)) {
+	start := d.slot(first)
+
+	for i := range d.rows {
+		for _, evaluation := range d.rows[(start+i)%len(d.rows)] {
+			if evaluation != nil {
+				visit(evaluation)
+			}
 		}
 	}
 }
@@ -1055,7 +1060,7 @@ func (ctx *GenCtx) makeFiles() []MakeFileEntry {
 
 		seen[dir] = true
 
-		has := evaluation.declaration != nil
+		has := evaluation.declaration != nil || evaluation.module != nil
 
 		for _, child := range evaluation.recurses {
 			has = below(child, seen) || has
@@ -1068,10 +1073,18 @@ func (ctx *GenCtx) makeFiles() []MakeFileEntry {
 
 	var out []MakeFileEntry
 
-	ctx.dirs.each(ctx.target, func(evaluation *DirEvaluation) {
-		if !below(evaluation.path, map[VFS]bool{}) && !ctx.noModuleRefs[evaluation.path] {
+	listed := map[VFS]bool{}
+
+	ctx.dirs.eachPlatform(ctx.target, func(evaluation *DirEvaluation) {
+		if listed[evaluation.path] {
 			return
 		}
+
+		if evaluation.module == nil && !below(evaluation.path, map[VFS]bool{}) && !ctx.noModuleRefs[evaluation.path] {
+			return
+		}
+
+		listed[evaluation.path] = true
 
 		path := "$S"
 
@@ -1863,6 +1876,7 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 
 	d := collectModuleInto(ctx, instance, stmts, env, ctx.onWarn, &frame.d, nil)
 
+	dir.record(d)
 	declaration, py3After = frame.entry.declaration, frame.entry.py3After
 
 	switch frame.entry.redirect {
@@ -1928,7 +1942,7 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 
 	configurationDepends := append(slices.Clone(d.test.depends), d.configurationDepends...)
 
-	ctx.recordConfiguration(instance, nil, configurationDepends)
+	ctx.recordConfiguration(instance, d.recurses, configurationDepends)
 
 	defer func() {
 		if result != nil {
@@ -3584,6 +3598,7 @@ type moduleEntry struct {
 	redirect        moduleRedirect
 	declared        bool
 	py3After        bool
+	declareOnly     bool
 }
 
 func (e *moduleEntry) moduleName() TOK {
@@ -3608,7 +3623,11 @@ func (ctx *GenCtx) declareModule(d *ModuleData, declaration *ModuleStmt) bool {
 
 	entry.declared = true
 	entry.declaration = declaration
-	entry.dir.module = declaration
+	entry.dir.module, entry.dir.declared = declaration, true
+
+	if entry.declareOnly {
+		return false
+	}
 
 	instance := entry.instance
 	moduleName := declaration.Name
@@ -3675,6 +3694,44 @@ func (ctx *GenCtx) declareModule(d *ModuleData, declaration *ModuleStmt) bool {
 	entry.redirect, entry.target = moduleReentered, target
 
 	return false
+}
+
+func (ctx *GenCtx) declaredModule(instance ModuleInstance) *ModuleStmt {
+	dir := ctx.dirEntry(instance.Path, instance.Platform)
+
+	if !dir.declared {
+		ctx.enterToDeclaration(instance, dir)
+	}
+
+	return dir.module
+}
+
+func (ctx *GenCtx) enterToDeclaration(instance ModuleInstance, dir *DirEvaluation) {
+	stmts := moduleStmts(ctx, instance.Path.relString())
+	where := ctx.whereModule
+
+	ctx.whereModule = instance.Path
+
+	defer func() { ctx.whereModule = where }()
+
+	frame := ctx.pushFrame()
+
+	defer ctx.popFrame()
+
+	env := buildIfEnvInto(&frame.ifEnv, instance)
+
+	frame.entry = moduleEntry{instance: instance, dir: dir, declareOnly: true}
+
+	dir.record(collectModuleInto(ctx, instance, stmts, env, ctx.onWarn, &frame.d, nil))
+}
+
+func (dir *DirEvaluation) record(d *ModuleData) {
+	dir.declared = true
+
+	if !dir.scanned {
+		dir.subscribers = append(dir.subscribers[:0], d.subscribers...)
+		dir.recurses = append(dir.recurses[:0], d.recurses...)
+	}
 }
 
 func declaredInstance(instance ModuleInstance, name TOK) ModuleInstance {
