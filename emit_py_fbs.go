@@ -71,8 +71,15 @@ func (e *EmitContext) emitPyFbsGroup(files []PyFbsSource) {
 
 	name := pyFbsListID(files) + "." + version.string() + ".fbs"
 	out := build(dir, "/", name, ".pysrc")
+	cc := build(dir, "/", name, ".", version.string(), "_raw.cpp")
 
-	if e.codegen.lookup(out) != nil {
+	if info := e.codegen.lookup(out); info != nil {
+		if info.OwnerModule == instance.Path && info.OwnerSerial == e.frame.serial {
+			for _, output := range [2]VFS{out, cc} {
+				ctx.onWarn(Warn{Kind: WarnDupSrc, Where: makeFileWhere(dir), Error: ymakeVFS(output) + " was already added in this project. Skip command: 0"})
+			}
+		}
+
 		return
 	}
 
@@ -116,7 +123,6 @@ func (e *EmitContext) emitPyFbsGroup(files []PyFbsSource) {
 
 	e.register(GeneratedFileSpec{OutputPath: out, ProducerRef: fp})
 
-	cc := build(dir, "/", name, ".", version.string(), "_raw.cpp")
 	script := buildScriptsCompilePysrcPy
 	resRef, res := e.tool(argToolsRescompiler)
 	pycc := e.pyccTool()

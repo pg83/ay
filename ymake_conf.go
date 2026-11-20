@@ -327,6 +327,16 @@ func newToolchain(fs FS, cfg *YaConfToolchains, key string, descr, tool, host, t
 	env, _ := descr["env"].(map[string]any)
 	bottle, _ := tool["bottle"].(string)
 
+	if local, _ := params["local"].(bool); !local {
+		if _, ok := params["match_root"]; !ok {
+			throwFmt("KeyError: 'match_root'")
+		}
+
+		if bottle == "" {
+			throwFmt("json.decoder.JSONDecodeError: Expecting value: line 1 column 1 (char 0)")
+		}
+	}
+
 	var formula any
 
 	if bottle != "" {

@@ -2,9 +2,10 @@ package main
 
 import (
 	"fmt"
+	"maps"
 	"os"
 	"runtime"
-	"strconv"
+	"slices"
 
 	"github.com/BurntSushi/toml"
 )
@@ -34,28 +35,40 @@ func yaConfStringTable(v any) map[string]string {
 
 	out := make(map[string]string, len(tbl))
 
-	for k, val := range tbl {
-		if s, ok := yaConfScalar(val); ok {
-			out[k] = s
-		}
+	for _, k := range slices.Sorted(maps.Keys(tbl)) {
+		out[k] = yaConfFlagValue(tbl[k])
 	}
 
 	return out
 }
 
-func yaConfScalar(v any) (string, bool) {
-	switch x := v.(type) {
-	case string:
-		return x, true
-	case bool:
-		return strconv.FormatBool(x), true
-	case int64:
-		return strconv.FormatInt(x, 10), true
-	case float64:
-		return strconv.FormatFloat(x, 'g', -1, 64), true
+func yaConfFlagValue(v any) string {
+	s, ok := v.(string)
+
+	if !ok {
+		throwFmt("can only concatenate str (not \"%s\") to str", pythonTypeName(v))
 	}
 
-	return "", false
+	return s
+}
+
+func pythonTypeName(v any) string {
+	switch v.(type) {
+	case nil:
+		return "NoneType"
+	case bool:
+		return "bool"
+	case int64, int:
+		return "int"
+	case float64:
+		return "float"
+	case []any, []map[string]any:
+		return "list"
+	case map[string]any:
+		return "dict"
+	}
+
+	return fmt.Sprintf("%T", v)
 }
 
 func hostOS() OS {

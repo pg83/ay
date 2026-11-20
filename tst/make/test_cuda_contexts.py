@@ -45,7 +45,8 @@ class CudaContextsTest(MakeTest):
         graph = self.graph()
         plain = self.args(self.node(graph, "plain.c.o"))
         self.assertIn("-I$(S)/contrib/libs/nvidia/cccl/libcudacxx/include", plain)
-        self.assertIn("-I$(CUDA_TARGET)/include", plain)
+        # trunk adds the toolkit as $(CUDA_TARGET), the e2e Arcadia revision as $(CUDA)
+        self.assertTrue({"-I$(CUDA_TARGET)/include", "-I$(CUDA)/include"} & set(plain), plain)
         self.assertTrue(any(arg.startswith("-DCUDA_VERSION_FOR_CACHE_INVALIDATION=") for arg in plain), plain)
         self.assertIn("$(CUDA)/bin/nvcc", self.args(self.node(graph, "kernel.cu.o")))
 
@@ -58,7 +59,7 @@ class CudaContextsTest(MakeTest):
         link = self.node(graph, "answer")
         args = self.args(link)
         self.assertIn("$(B)/build/internal/platform/cuda/plugin/00-cuda.py.pyplugin", link["inputs"])
-        self.assertIn("-L$(CUDA_TARGET)/lib64", args)
+        self.assertTrue({"-L$(CUDA_TARGET)/lib64", "-L$(CUDA)/lib64"} & set(args), args)
         self.assertIn("-lcudart_static", args)
 
     def test_repeated_sysincl_macro_header_keeps_every_target(self):

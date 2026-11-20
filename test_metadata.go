@@ -161,8 +161,9 @@ func normalizedTestData(data []string) []string {
 	return values
 }
 
-func (t *TestMeta) expandValues(env Environment) {
-	words := splitShellWords(expandTestEnvValue(env.string(envTestEnvValue), env))
+func (t *TestMeta) expandValues(env Environment) string {
+	value := expandTestEnvValue(env.string(envTestEnvValue), env)
+	words := splitShellWords(value)
 
 	if len(words) > 0 {
 		t.env = append(t.env, strings.Split(strings.Trim(strings.Join(words, ";"), `"`), ";")...)
@@ -171,6 +172,39 @@ func (t *TestMeta) expandValues(env Environment) {
 	for i, value := range t.recipes {
 		t.recipes[i] = expandConfigMacroBody(value, env)
 	}
+
+	return shlexSplitError(value)
+}
+
+func shlexSplitError(s string) string {
+	quote := byte(0)
+
+	for i := 0; i < len(s); i++ {
+		switch c := s[i]; {
+		case quote == '\'':
+			if c == '\'' {
+				quote = 0
+			}
+		case c == '\\':
+			if i+1 == len(s) {
+				return "No escaped character"
+			}
+
+			i++
+		case quote == '"':
+			if c == '"' {
+				quote = 0
+			}
+		case c == '"' || c == '\'':
+			quote = c
+		}
+	}
+
+	if quote != 0 {
+		return "No closing quotation"
+	}
+
+	return ""
 }
 
 func collectTestRecipe(args []ANY, env Environment) string {

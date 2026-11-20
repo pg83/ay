@@ -11,11 +11,15 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"unicode/utf8"
 
 	"github.com/jon-codes/getopt"
 )
 
-var fatalOnce sync.Once
+var (
+	fatalOnce      sync.Once
+	userBuildTypes = []string{"debug", "release", "profile", "gprof", "valgrind", "valgrind-release", "coverage", "relwithdebinfo", "minsizerel", "debugnoasserts", "fastdebug"}
+)
 
 var yaHostToolchainFlags = map[string]string{
 	"NO_DEBUGINFO":     "yes",
@@ -106,6 +110,24 @@ func compilerFlagsFromConfig(primary, internal map[string]string, key, env strin
 	return joinCompilerFlagStrings(primary[key], internal[key], env)
 }
 
+func checkEnvironmentEncoding() {
+	for _, kv := range os.Environ() {
+		name, value, _ := strings.Cut(kv, "=")
+
+		for _, text := range [2]string{name, value} {
+			for position, offset := 0, 0; offset < len(text); position++ {
+				r, size := utf8.DecodeRuneInString(text[offset:])
+
+				if r == utf8.RuneError && size == 1 {
+					throwFmt("UnicodeEncodeError: 'utf-8' codec can't encode character '\\udc%02x' in position %d: surrogates not allowed", text[offset], position)
+				}
+
+				offset += size
+			}
+		}
+	}
+}
+
 func warnHandler(keepGoing, verbose bool, errs *ConfigureErrors, emit func(line string)) func(Warn) {
 	seen := map[string]bool{}
 
@@ -139,6 +161,8 @@ func warnHandler(keepGoing, verbose bool, errs *ConfigureErrors, emit func(line 
 }
 
 func cmdMake(g GlobalFlags, args []string) int {
+	checkEnvironmentEncoding()
+
 	mf := parseMakeFlags(args)
 
 	mf.verbose = mf.verbose || g.Verbose
@@ -345,10 +369,8 @@ func makePlatforms(fs FS, mf *MakeFlags, parsers *IncludeParserManager, rootYaCo
 func yaToolchainFlags(flags map[string]string, tc *Toolchain, tcFlags map[string]string) {
 	if params, ok := tc.Params["params"].(map[string]any); ok {
 		if extra, ok := params["extra_flags"].(map[string]any); ok {
-			for k, v := range extra {
-				if s, ok := yaConfScalar(v); ok {
-					flags[k] = s
-				}
+			for _, k := range slices.Sorted(maps.Keys(extra)) {
+				flags[k] = yaConfFlagValue(extra[k])
 			}
 		}
 	}
@@ -460,6 +482,10 @@ func parseMakeFlags(args []string) *MakeFlags {
 				}
 			}
 		case opt.Name == "build":
+			if !slices.Contains(userBuildTypes, opt.OptArg) {
+				throwFmt("Invalid choice (build_type): %s (choose from '%s')", opt.OptArg, strings.Join(userBuildTypes, "', '"))
+			}
+
 			mf.buildType = opt.OptArg
 		case opt.Name == "target-platform-build-type":
 			mf.targetBuildType = ptr(opt.OptArg)

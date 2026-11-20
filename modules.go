@@ -1001,7 +1001,9 @@ func collectModuleInto(ctx *GenCtx, instance ModuleInstance, stmts []Stmt, env E
 		d.runJavaJdk = env.string(envJdkRealVersion)
 	}
 
-	d.test.expandValues(env)
+	if message := d.test.expandValues(env); message != "" && (isUnitTestModule(d.moduleStmt.Name) || isPythonTestModule(d.moduleStmt.Name)) {
+		onWarn(Warn{Kind: WarnMisconfiguration, Where: makeFileWhere(instance.Path.relString()), Error: "Unexpected error while creating dart record ValueError('" + message + "'), field TEST-ENV"})
+	}
 
 	if !d.pythonLint.bound {
 		d.pythonLint.bind(env)
