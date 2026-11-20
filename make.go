@@ -128,7 +128,7 @@ func checkEnvironmentEncoding() {
 	}
 }
 
-func warnHandler(keepGoing, verbose bool, errs *ConfigureErrors, emit func(line string)) func(Warn) {
+func warnHandler(keepGoing, deferFatal, verbose bool, errs *ConfigureErrors, emit func(line string)) func(Warn) {
 	seen := map[string]bool{}
 
 	return func(w Warn) {
@@ -142,7 +142,18 @@ func warnHandler(keepGoing, verbose bool, errs *ConfigureErrors, emit func(line 
 			w.Kind == WarnMisconfiguration || w.Kind == WarnSyntax
 
 		if fatalable && !keepGoing {
-			throwFmt("%s: %s", w.Kind, w.text())
+			if !deferFatal {
+				throwFmt("%s: %s", w.Kind, w.text())
+			}
+
+			errs.fatal.Add(1)
+
+			if line := fmt.Sprintf("\x1b[31m%s: %s\x1b[0m", w.Kind, w.text()); !seen[line] {
+				seen[line] = true
+				emit(line)
+			}
+
+			return
 		}
 
 		if !(fatalable || w.Kind == WarnMissingAddincl || w.Kind == WarnPlugin || w.Kind == WarnTestDependency || w.Kind == WarnBadSrc || w.Kind == WarnUnknownLocation || verbose) {
@@ -184,7 +195,7 @@ func cmdMake(g GlobalFlags, args []string) int {
 
 	dirLoopsReported, makeFilesReported = slices.Contains(mf.warningModes, "dirloops"), mf.outputs.context != ""
 
-	onWarn := warnHandler(mf.keepGoing, mf.verbose, errs, func(line string) {
+	onWarn := warnHandler(mf.keepGoing, mf.threads == 0, mf.verbose, errs, func(line string) {
 		errs.addLog(line)
 
 		events.post(func() {
@@ -196,6 +207,7 @@ func cmdMake(g GlobalFlags, args []string) int {
 		g := genDumpGraphWithResources(fs, parsers, mf.targets, hostP, targetP, onWarn, tests, mf.keepGoing, demandSelf, mf.addModulesToResults, mf.stripPackagesFromResults)
 
 		events.sync()
+		errs.failConfigure()
 		writeGenerationOutputs(mf.outputs, g, !mf.sandboxing, errs, g.makeFiles)
 
 		return 0
@@ -205,9 +217,13 @@ func cmdMake(g GlobalFlags, args []string) int {
 		if mf.dumpGraph {
 			g := genDumpGraphWithResources(fs, parsers, mf.targets, hostP, targetP, onWarn, tests, mf.keepGoing, demandSelf, mf.addModulesToResults, mf.stripPackagesFromResults)
 
+			events.sync()
+			errs.failConfigure()
 			writeGraph(g, !mf.sandboxing)
 		} else {
 			genStream(fs, parsers, mf.targets, hostP, targetP, func(*Node, InputChunks, *DenseMap[STR, NodeRef]) {}, onWarn, tests, mf.keepGoing, mf.addModulesToResults, mf.stripPackagesFromResults)
+			events.sync()
+			errs.failConfigure()
 		}
 
 		if mf.dumpIgnoredMacros {

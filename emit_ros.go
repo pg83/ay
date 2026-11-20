@@ -69,6 +69,8 @@ func (e *EmitContext) emitRosSource(meta SrcMeta, outputs []VFS) {
 	ctx, d := e.ctx, e.d
 
 	if d.ros == nil {
+		ctx.onWarn(Warn{Kind: WarnMisconfiguration, Where: makeFileWhere(e.instance.Path.relString()), Error: "macro 8 resulted in no outputs, can't add to graph"})
+
 		return
 	}
 

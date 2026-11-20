@@ -11,6 +11,7 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/klauspost/compress/zstd"
@@ -38,6 +39,13 @@ type ConfigureErrors struct {
 	mu    sync.Mutex
 	byDir map[string]map[ConfigureError]bool
 	log   []string
+	fatal atomic.Int64
+}
+
+func (c *ConfigureErrors) failConfigure() {
+	if c.fatal.Load() > 0 {
+		throwFmt("Configure error (use -k to proceed)")
+	}
 }
 
 func newConfigureErrors() *ConfigureErrors {

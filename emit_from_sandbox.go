@@ -64,6 +64,16 @@ func (r *SandboxRecipe) linkMembers(ref NodeRef) (memberRefs []NodeRef, memberPa
 }
 
 func (e *EmitContext) emitFromSandbox(stmt *FromSandboxStmt) (memberRefs []NodeRef, memberPaths []VFS) {
+	dir, main := e.instance.Path.relString(), e.moduleMainOutput()
+
+	for _, f := range concat(stmt.OUTFiles, stmt.OUTNoAutoFiles) {
+		if copyFileOutputVFS(dir, f.string()) == main {
+			e.ctx.onWarn(Warn{Kind: WarnMisconfiguration, Where: makeFileWhere(dir), Error: "The name of intermediate output " + ymakeVFS(main) + " matches the module name. Skip command: 0"})
+
+			return nil, nil
+		}
+	}
+
 	if info := e.existingSandbox(stmt); info != nil {
 		for _, out := range info.sandbox().Outputs {
 			local := info.specification()
@@ -112,6 +122,22 @@ func (e *EmitContext) emitFromSandbox(stmt *FromSandboxStmt) (memberRefs []NodeR
 	}
 
 	return recipe.linkMembers(ref)
+}
+
+func (e *EmitContext) moduleMainOutput() VFS {
+	instance, d := e.instance, e.d
+
+	if instance.Kind != KindLib {
+		return lDOutputPath(instance, programBinaryName(instance, d.moduleStmt))
+	}
+
+	name := ""
+
+	if len(d.moduleStmt.Args) > 0 {
+		name = d.moduleStmt.Args[0].string()
+	}
+
+	return buildJoined(instance.Path.relString(), e.arName(instance.Path.relString(), d.unit.ARPrefix, name))
 }
 
 func appendSandboxOutput(outs []VFS, out VFS) []VFS {
