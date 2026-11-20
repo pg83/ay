@@ -6,6 +6,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"sync/atomic"
 )
 
 var macroAudit = &MacroAuditState{
@@ -64,6 +65,11 @@ type MacroAuditState struct {
 	ignored  map[string]int
 	services map[string]map[string]int
 	unknown  map[string]map[string]int
+	muted    atomic.Int32
+}
+
+func (s *MacroAuditState) off() bool {
+	return !s.enabled || s.muted.Load() != 0
 }
 
 func enableMacroAudit() {
@@ -75,7 +81,7 @@ func enableMacroAudit() {
 }
 
 func recordIgnoredMacro(name TOK) {
-	if !macroAudit.enabled {
+	if macroAudit.off() {
 		return
 	}
 
@@ -109,7 +115,7 @@ func recordHandledMacro(name TOK, args []ANY) {
 		}
 	}
 
-	if !macroAudit.enabled {
+	if macroAudit.off() {
 		return
 	}
 

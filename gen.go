@@ -3556,6 +3556,9 @@ func (ctx *GenCtx) enterToDeclaration(instance ModuleInstance, dir *DirEvaluatio
 	env := buildIfEnvInto(&frame.ifEnv, instance)
 
 	frame.entry = moduleEntry{instance: instance, dir: dir, declareOnly: true}
+	macroAudit.muted.Add(1)
+
+	defer macroAudit.muted.Add(-1)
 
 	collectModuleInto(ctx, instance, stmts, env, ctx.onWarn, &frame.d, nil)
 
@@ -3590,7 +3593,9 @@ func (ctx *GenCtx) discoverDir(dir VFS) *DirEvaluation {
 		for {
 			next := instance
 
-			try(func() { next = ctx.enterDirectory(instance, evaluation, stmts) })
+			if exc := try(func() { next = ctx.enterDirectory(instance, evaluation, stmts) }); exc != nil && (!ctx.keepGoing || evaluation.module == nil) {
+				exc.throw()
+			}
 
 			if next == instance {
 				break
@@ -3619,6 +3624,9 @@ func (ctx *GenCtx) enterDirectory(instance ModuleInstance, dir *DirEvaluation, s
 	env := buildIfEnvInto(&frame.ifEnv, instance)
 
 	frame.entry = moduleEntry{instance: instance, dir: dir, discovering: true}
+	macroAudit.muted.Add(1)
+
+	defer macroAudit.muted.Add(-1)
 
 	defer func() {
 		if frame.entry.redirect != moduleReentered {
